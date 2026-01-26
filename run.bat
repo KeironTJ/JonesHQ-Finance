@@ -9,5 +9,8 @@ echo Starting Flask application...
 echo The app will be available at http://localhost:5000
 echo Press Ctrl+C to stop the server
 echo.
+echo SECURITY NOTE: Debug mode is OFF for safety
+echo To enable debug mode: set FLASK_DEBUG=1 before running
+echo.
 
-python app.py
+flask run

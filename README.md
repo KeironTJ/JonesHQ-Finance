@@ -15,8 +15,8 @@ A comprehensive personal finance management web application built with Flask, de
 
 - **Account Management**: Track multiple bank accounts (Joint, Personal, Savings)
 - **Transaction Tracking**: Record and categorize all financial transactions
-- **Vendor Management**: Standardize merchant names for better analytics
-- **Category Management**: Organize transactions with generic, reusable categories
+- **✅ Vendor Management**: Standardize merchant names for better analytics (177 vendors imported)
+- **✅ Category Management**: Organize transactions with generic, reusable categories (42 categories imported)
 - **Credit Card Management**: Monitor credit cards with interest tracking
 - **Loan & Mortgage Tracking**: Track loan payments, interest, and amortization
 - **Budget Planning**: Set and monitor budgets by category

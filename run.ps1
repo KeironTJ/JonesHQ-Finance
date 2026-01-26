@@ -8,5 +8,8 @@ Write-Host "Starting Flask application..." -ForegroundColor Green
 Write-Host "The app will be available at http://localhost:5000" -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop the server" -ForegroundColor Yellow
 Write-Host ""
+Write-Host "SECURITY NOTE: Debug mode is OFF for safety" -ForegroundColor Magenta
+Write-Host "To enable debug mode: set `$env:FLASK_DEBUG=1 before running" -ForegroundColor Gray
+Write-Host ""
 
 python app.py

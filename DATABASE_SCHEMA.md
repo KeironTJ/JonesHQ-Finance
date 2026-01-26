@@ -27,14 +27,31 @@ Hierarchical budget categories matching your Excel "Head Budget" and "Sub Budget
 - Self-referential (parent/children categories)
 - One-to-many with `Transaction`
 - One-to-many with `Budget`
+- One-to-many with `Vendor` (as default_category)
+
+### 2a. **Vendor** (vendors.py)
+Standardized vendor/merchant tracking for consistent transaction categorization
+- `name`: Unique vendor name (indexed, e.g., "Tesco", "Amazon")
+- `vendor_type`: Category of vendor (Grocery, Fuel, Restaurant, Online, Utility, etc.)
+- `default_category_id`: Default category for transactions with this vendor
+- `website`: Vendor's website URL
+- `notes`: Additional information
+- `is_active`: Whether vendor is active (allows deactivation without deletion)
+- `created_at`, `updated_at`: Timestamps
+
+**Relationships:**
+- Many-to-one with `Category` (default category)
+- One-to-many with `Transaction`
 
 ### 3. **Transaction** (transactions.py)
 Main transaction table combining data from JOINTACCOUNT and SECONDBANKACCOUNT sheets
 - `account_id`: Link to account
 - `category_id`: Link to category (Head Budget + Sub Budget)
+- `vendor_id`: Link to vendor/merchant (standardized names)
 - `amount`: Transaction amount
 - `transaction_date`: Date of transaction
-- `item`: Specific merchant/item name
+- `description`: Transaction description
+- `item`: Specific item/details (e.g., "Weekly shop" when vendor=Tesco)
 - `assigned_to`: Person (Keiron, Emma, Ivy, etc.)
 - `payment_type`: BACS, Direct Debit, Card Payment, Transfer
 - `running_balance`: Balance after transaction
@@ -48,6 +65,7 @@ Main transaction table combining data from JOINTACCOUNT and SECONDBANKACCOUNT sh
 **Relationships:**
 - Many-to-one with `Account`
 - Many-to-one with `Category`
+- Many-to-one with `Vendor` (optional)
 - Many-to-one with `CreditCard` (optional)
 - Many-to-one with `Loan` (optional)
 

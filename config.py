@@ -10,7 +10,7 @@ class Config:
     
     # Database configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'joneshq_finance.db')
+        'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'joneshq_finance.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False  # Set to True for SQL query logging during development
     
@@ -26,8 +26,13 @@ class Config:
 
 class DevelopmentConfig(Config):
     """Development configuration"""
-    DEBUG = True
-    SQLALCHEMY_ECHO = True  # Log SQL queries in development
+    # Safe for localhost development, but disable before sharing/deploying
+    DEBUG = True  # Convenient for local development
+    SQLALCHEMY_ECHO = True  # Set to True only when debugging SQL queries
+    
+    # SECURITY: Only safe because Flask binds to 127.0.0.1 by default
+    # Never use --host=0.0.0.0 with debug mode enabled
+    # Never share screenshots showing debugger PIN
 
 
 class ProductionConfig(Config):
