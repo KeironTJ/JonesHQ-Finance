@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Categories - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Budget Categories</h1>
+        <a href="{{ url_for('categories.add') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Add Category
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        {% for head_budget, categories in categories_by_head.items() %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">{{ head_budget }}</h5>
+                    <small>{{ categories|length }} sub-categories</small>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        {% for category in categories %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center p-2">
+                            <div>
+                                {% if category.sub_budget %}
+                                    <strong>{{ category.sub_budget }}</strong>
+                                {% else %}
+                                    <em class="text-muted">(No sub-category)</em>
+                                {% endif %}
+                                <br>
+                                <small class="text-muted">
+                                    <span class="badge 
+                                        {% if category.category_type == 'income' %}bg-success
+                                        {% elif category.category_type == 'expense' %}bg-danger
+                                        {% else %}bg-info{% endif %}">
+                                        {{ category.category_type }}
+                                    </span>
+                                </small>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('categories.edit', id=category.id) }}" 
+                                   class="btn btn-outline-primary btn-sm"
+                                   title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button" 
+                                        class="btn btn-outline-danger btn-sm"
+                                        onclick="confirmDelete({{ category.id }}, '{{ category.name }}')"
+                                        title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not categories_by_head %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No categories found. 
+        <a href="{{ url_for('categories.add') }}">Add your first category</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete category <strong id="deleteCategoryName"></strong>?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(categoryId, categoryName) {
+    document.getElementById('deleteCategoryName').textContent = categoryName;
+    document.getElementById('deleteForm').action = '{{ url_for("categories.delete", id=0) }}'.replace('0', categoryId);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}

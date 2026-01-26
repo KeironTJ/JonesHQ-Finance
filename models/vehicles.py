@@ -1,0 +1,27 @@
+from extensions import db
+from datetime import datetime
+
+
+class Vehicle(db.Model):
+    __tablename__ = 'vehicles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))  # Vauxhall Zafira, Audi A6
+    make = db.Column(db.String(50), nullable=False)
+    model = db.Column(db.String(50), nullable=False)
+    year = db.Column(db.Integer)
+    registration = db.Column(db.String(20), nullable=False, unique=True)  # VRN
+    tank_size = db.Column(db.Numeric(5, 2))  # Gallons
+    fuel_type = db.Column(db.String(20))  # Diesel, Petrol
+    purchase_date = db.Column(db.Date)
+    purchase_price = db.Column(db.Numeric(10, 2))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    fuel_records = db.relationship('FuelRecord', backref='vehicle', lazy=True)
+    trips = db.relationship('Trip', backref='vehicle', lazy=True)
+    
+    def __repr__(self):
+        return f'<Vehicle {self.registration}: {self.name}>'

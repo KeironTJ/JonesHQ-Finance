@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Pensions - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Pensions</h1>
+    
+    <div class="mb-3">
+        <button class="btn btn-primary">Add Pension</button>
+    </div>
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Provider</th>
+                <th>Account Number</th>
+                <th>Current Value</th>
+                <th>Contribution Rate</th>
+                <th>Employer Contribution</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pension in pensions %}
+            <tr>
+                <td>{{ pension.provider }}</td>
+                <td>{{ pension.account_number }}</td>
+                <td>£{{ pension.current_value }}</td>
+                <td>{{ pension.contribution_rate }}%</td>
+                <td>{{ pension.employer_contribution }}%</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary">Edit</button>
+                    <button class="btn btn-sm btn-danger">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

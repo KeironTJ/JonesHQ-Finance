@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Category - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">Edit Category</h3>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="head_budget" class="form-label">Head Budget *</label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="head_budget" 
+                                   name="head_budget" 
+                                   value="{{ category.head_budget }}"
+                                   list="existing_heads"
+                                   required>
+                            <datalist id="existing_heads">
+                                {% for head in existing_heads %}
+                                <option value="{{ head }}">
+                                {% endfor %}
+                            </datalist>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sub_budget" class="form-label">Sub Budget</label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="sub_budget" 
+                                   name="sub_budget"
+                                   value="{{ category.sub_budget or '' }}"
+                                   placeholder="Leave blank for head budget only">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="category_type" class="form-label">Category Type *</label>
+                            <select class="form-select" id="category_type" name="category_type" required>
+                                <option value="income" {% if category.category_type == 'income' %}selected{% endif %}>Income</option>
+                                <option value="expense" {% if category.category_type == 'expense' %}selected{% endif %}>Expense</option>
+                                <option value="transfer" {% if category.category_type == 'transfer' %}selected{% endif %}>Transfer</option>
+                            </select>
+                        </div>
+
+                        {% if category.transactions or category.budgets %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Warning:</strong> This category is currently in use:
+                            <ul class="mb-0 mt-2">
+                                {% if category.transactions %}
+                                <li>{{ category.transactions|length }} transaction(s)</li>
+                                {% endif %}
+                                {% if category.budgets %}
+                                <li>{{ category.budgets|length }} budget(s)</li>
+                                {% endif %}
+                            </ul>
+                            Changing this category will affect existing records.
+                        </div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('categories.index') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Update Category
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

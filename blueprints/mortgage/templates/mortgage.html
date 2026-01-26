@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Mortgage - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Mortgages</h1>
+    
+    <div class="mb-3">
+        <button class="btn btn-primary">Add Mortgage</button>
+    </div>
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Property Address</th>
+                <th>Principal</th>
+                <th>Interest Rate</th>
+                <th>Monthly Payment</th>
+                <th>Term</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mortgage in mortgages %}
+            <tr>
+                <td>{{ mortgage.property_address }}</td>
+                <td>£{{ mortgage.principal }}</td>
+                <td>{{ mortgage.interest_rate }}%</td>
+                <td>£{{ mortgage.monthly_payment }}</td>
+                <td>{{ mortgage.term_years }} years</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary">Edit</button>
+                    <button class="btn btn-sm btn-danger">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

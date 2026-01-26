@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Budgets - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Budgets</h1>
+    
+    <div class="mb-3">
+        <button class="btn btn-primary">Add Budget</button>
+    </div>
+    
+    <div class="row">
+        {% for budget in budgets %}
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Budget {{ budget.id }}</h5>
+                    <p class="card-text">Amount: £{{ budget.amount }}</p>
+                    <p class="card-text">Period: {{ budget.period_start }} to {{ budget.period_end }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

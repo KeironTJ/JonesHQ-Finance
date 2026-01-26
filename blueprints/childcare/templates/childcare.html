@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Childcare - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Childcare Records</h1>
+    
+    <div class="mb-3">
+        <button class="btn btn-primary">Add Record</button>
+    </div>
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Child Name</th>
+                <th>Provider</th>
+                <th>Amount</th>
+                <th>Description</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in records %}
+            <tr>
+                <td>{{ record.date }}</td>
+                <td>{{ record.child_name }}</td>
+                <td>{{ record.provider }}</td>
+                <td>£{{ record.amount }}</td>
+                <td>{{ record.description }}</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary">Edit</button>
+                    <button class="btn btn-sm btn-danger">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
