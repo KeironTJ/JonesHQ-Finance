@@ -74,3 +74,12 @@ Thumbs.db
 # Sensitive data
 config_local.py
 secrets.py
+
+# SENSITIVE: Actual financial import data (DO NOT COMMIT)
+scripts/import_credit_cards_ACTUAL.py
+scripts/import_loans_ACTUAL.py
+scripts/import_accounts_ACTUAL.py
+scripts/*_ACTUAL.py
+scripts/data/*.csv
+scripts/data/*.xlsx
+scripts/data/*.json
