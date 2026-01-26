@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action }} Transaction - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>{{ action }} Transaction</h2>
+                <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Transactions
+                </a>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="row">
+                            <!-- Account -->
+                            <div class="col-md-6 mb-3">
+                                <label for="account_id" class="form-label">Account *</label>
+                                <select class="form-select" id="account_id" name="account_id" required>
+                                    <option value="">Select Account...</option>
+                                    {% for account in accounts %}
+                                    <option value="{{ account.id }}" 
+                                        {% if transaction and transaction.account_id == account.id %}selected{% endif %}>
+                                        {{ account.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Category -->
+                            <div class="col-md-6 mb-3">
+                                <label for="category_id" class="form-label">Category *</label>
+                                <select class="form-select" id="category_id" name="category_id" required>
+                                    <option value="">Select Category...</option>
+                                    {% for category in categories %}
+                                    <option value="{{ category.id }}"
+                                        {% if transaction and transaction.category_id == category.id %}selected{% endif %}>
+                                        {{ category.head_budget }} > {{ category.sub_budget }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Vendor -->
+                            <div class="col-md-6 mb-3">
+                                <label for="vendor_id" class="form-label">Vendor</label>
+                                <select class="form-select" id="vendor_id" name="vendor_id">
+                                    <option value="">Select Vendor...</option>
+                                    {% for vendor in vendors %}
+                                    <option value="{{ vendor.id }}"
+                                        {% if transaction and transaction.vendor_id == vendor.id %}selected{% endif %}>
+                                        {{ vendor.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Amount -->
+                            <div class="col-md-6 mb-3">
+                                <label for="amount" class="form-label">Amount (£) *</label>
+                                <input type="number" step="0.01" class="form-control" id="amount" name="amount" 
+                                    value="{{ transaction.amount if transaction else '' }}" required>
+                                <small class="form-text text-muted">
+                                    Positive = Expense, Negative = Income
+                                </small>
+                            </div>
+
+                            <!-- Transaction Date -->
+                            <div class="col-md-6 mb-3">
+                                <label for="transaction_date" class="form-label">Date *</label>
+                                <input type="date" class="form-control" id="transaction_date" name="transaction_date"
+                                    value="{{ transaction.transaction_date.strftime('%Y-%m-%d') if transaction else '' }}" required>
+                            </div>
+
+                            <!-- Payment Type -->
+                            <div class="col-md-6 mb-3">
+                                <label for="payment_type" class="form-label">Payment Type</label>
+                                <select class="form-select" id="payment_type" name="payment_type">
+                                    <option value="">Select...</option>
+                                    <option value="Transfer" {% if transaction and transaction.payment_type == 'Transfer' %}selected{% endif %}>Transfer</option>
+                                    <option value="Direct Debit" {% if transaction and transaction.payment_type == 'Direct Debit' %}selected{% endif %}>Direct Debit</option>
+                                    <option value="Card Payment" {% if transaction and transaction.payment_type == 'Card Payment' %}selected{% endif %}>Card Payment</option>
+                                    <option value="BACS" {% if transaction and transaction.payment_type == 'BACS' %}selected{% endif %}>BACS</option>
+                                    <option value="Standing Order" {% if transaction and transaction.payment_type == 'Standing Order' %}selected{% endif %}>Standing Order</option>
+                                    <option value="Cash" {% if transaction and transaction.payment_type == 'Cash' %}selected{% endif %}>Cash</option>
+                                </select>
+                            </div>
+
+                            <!-- Description -->
+                            <div class="col-md-12 mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <input type="text" class="form-control" id="description" name="description"
+                                    value="{{ transaction.description if transaction else '' }}">
+                            </div>
+
+                            <!-- Item -->
+                            <div class="col-md-6 mb-3">
+                                <label for="item" class="form-label">Item/Details</label>
+                                <input type="text" class="form-control" id="item" name="item"
+                                    value="{{ transaction.item if transaction else '' }}">
+                            </div>
+
+                            <!-- Assigned To -->
+                            <div class="col-md-6 mb-3">
+                                <label for="assigned_to" class="form-label">Assigned To</label>
+                                <select class="form-select" id="assigned_to" name="assigned_to">
+                                    <option value="">Select...</option>
+                                    <option value="Keiron" {% if transaction and transaction.assigned_to == 'Keiron' %}selected{% endif %}>Keiron</option>
+                                    <option value="Emma" {% if transaction and transaction.assigned_to == 'Emma' %}selected{% endif %}>Emma</option>
+                                    <option value="Both" {% if transaction and transaction.assigned_to == 'Both' %}selected{% endif %}>Both</option>
+                                    <option value="Michael" {% if transaction and transaction.assigned_to == 'Michael' %}selected{% endif %}>Michael</option>
+                                    <option value="Emily" {% if transaction and transaction.assigned_to == 'Emily' %}selected{% endif %}>Emily</option>
+                                    <option value="Ivy" {% if transaction and transaction.assigned_to == 'Ivy' %}selected{% endif %}>Ivy</option>
+                                </select>
+                            </div>
+
+                            <!-- Is Paid -->
+                            <div class="col-md-12 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="is_paid" name="is_paid"
+                                        {% if transaction and transaction.is_paid %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_paid">
+                                        Paid
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if not transaction %}
+                        <!-- Recurring Transaction Options (only for new transactions) -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-calendar-repeat me-2"></i>Recurring Transaction Options
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="is_recurring" name="is_recurring">
+                                    <label class="form-check-label" for="is_recurring">
+                                        <strong>Create Multiple Transactions</strong>
+                                        <small class="d-block text-muted">Useful for recreating regular payments (e.g., monthly bills)</small>
+                                    </label>
+                                </div>
+                                
+                                <div id="recurring_options" style="display: none;">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="frequency" class="form-label">Frequency</label>
+                                            <select class="form-select" id="frequency" name="frequency">
+                                                <option value="weekly">Weekly</option>
+                                                <option value="monthly" selected>Monthly</option>
+                                                <option value="yearly">Yearly</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="occurrences" class="form-label">Number of Transactions</label>
+                                            <input type="number" class="form-control" id="occurrences" name="occurrences" 
+                                                   value="12" min="1" max="365">
+                                            <small class="text-muted">How many to create</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="alert alert-info" id="recurring_preview">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        <span id="preview_text">Will create <strong>12</strong> monthly transactions starting from selected date</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> <span id="submit-text">Save Transaction{% if not transaction %}(s){% endif %}</span>
+                            </button>
+                            <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if transaction %}
+            <div class="card mt-3">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">Danger Zone</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">Delete this transaction permanently. This action cannot be undone.</p>
+                    <form method="POST" action="{{ url_for('transactions.delete', id=transaction.id) }}" 
+                          onsubmit="return confirm('Are you sure you want to delete this transaction? This will update the account balance.');">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash"></i> Delete Transaction
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Recurring transaction toggle
+    const isRecurringCheckbox = document.getElementById('is_recurring');
+    if (isRecurringCheckbox) {
+        isRecurringCheckbox.addEventListener('change', function() {
+            const recurringOptions = document.getElementById('recurring_options');
+            const submitText = document.getElementById('submit-text');
+            
+            if (this.checked) {
+                recurringOptions.style.display = 'block';
+                submitText.textContent = 'Save Transactions';
+                updateRecurringPreview();
+            } else {
+                recurringOptions.style.display = 'none';
+                submitText.textContent = 'Save Transaction(s)';
+            }
+        });
+        
+        // Update recurring preview
+        document.getElementById('frequency').addEventListener('change', updateRecurringPreview);
+        document.getElementById('occurrences').addEventListener('input', updateRecurringPreview);
+        document.getElementById('transaction_date').addEventListener('change', updateRecurringPreview);
+        
+        function updateRecurringPreview() {
+            const isRecurring = document.getElementById('is_recurring').checked;
+            if (!isRecurring) return;
+            
+            const frequency = document.getElementById('frequency').value;
+            const occurrences = document.getElementById('occurrences').value || 12;
+            const startDate = document.getElementById('transaction_date').value;
+            
+            const previewText = document.getElementById('preview_text');
+            
+            if (startDate) {
+                const date = new Date(startDate);
+                const startDateStr = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                
+                // Calculate end date
+                let endDate = new Date(startDate);
+                if (frequency === 'weekly') {
+                    endDate.setDate(endDate.getDate() + (7 * (occurrences - 1)));
+                } else if (frequency === 'monthly') {
+                    endDate.setMonth(endDate.getMonth() + (occurrences - 1));
+                } else if (frequency === 'yearly') {
+                    endDate.setFullYear(endDate.getFullYear() + (occurrences - 1));
+                }
+                const endDateStr = endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                
+                previewText.innerHTML = `Will create <strong>${occurrences}</strong> ${frequency} transactions from <strong>${startDateStr}</strong> to <strong>${endDateStr}</strong>`;
+            } else {
+                previewText.innerHTML = `Will create <strong>${occurrences}</strong> ${frequency} transactions starting from selected date`;
+            }
+        }
+    }
+</script>
+{% endblock %}

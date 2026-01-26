@@ -3,39 +3,238 @@
 {% block title %}Transactions - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Transactions</h1>
-    
-    <div class="mb-3">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTransactionModal">
-            Add Transaction
-        </button>
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Transactions</h1>
+        </div>
     </div>
     
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Description</th>
-                <th>Category</th>
-                <th>Amount</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for transaction in transactions %}
-            <tr>
-                <td>{{ transaction.transaction_date }}</td>
-                <td>{{ transaction.description }}</td>
-                <td>{{ transaction.category_id }}</td>
-                <td>£{{ transaction.amount }}</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary">Edit</button>
-                    <button class="btn btn-sm btn-danger">Delete</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Total Income</h6>
+                    <h3>£{{ "%.2f"|format(total_income) }}</h3>
+                    <small>{{ transactions|selectattr('amount', 'lt', 0)|list|length }} transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Total Expenses</h6>
+                    <h3>£{{ "%.2f"|format(total_expenses) }}</h3>
+                    <small>{{ transactions|selectattr('amount', 'gt', 0)|list|length }} transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card {% if net_balance >= 0 %}bg-info{% else %}bg-warning{% endif %} text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Net Balance</h6>
+                    <h3>£{{ "%.2f"|format(net_balance) }}</h3>
+                    <small>Filtered period</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Total Transactions</h6>
+                    <h3>{{ transaction_count }}</h3>
+                    <small>Showing {{ transactions|length }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="row mb-3">
+        <div class="col">
+            <a href="{{ url_for('transactions.create') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add New Transaction
+            </a>
+            <a href="{{ url_for('transactions.create_transfer') }}" class="btn btn-success">
+                <i class="bi bi-arrow-left-right"></i> Create Transfer
+            </a>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('transactions.index') }}" class="row g-3">
+                <div class="col-md-2">
+                    <label for="account_id" class="form-label">Account</label>
+                    <select name="account_id" id="account_id" class="form-select">
+                        <option value="">All Accounts</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}" {% if selected_account == account.id %}selected{% endif %}>
+                            {{ account.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="category_id" class="form-label">Category</label>
+                    <select name="category_id" id="category_id" class="form-select">
+                        <option value="">All Categories</option>
+                        {% for category in categories %}
+                        <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
+                            {{ category.head_budget }} > {{ category.sub_budget }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="vendor_id" class="form-label">Vendor</label>
+                    <select name="vendor_id" id="vendor_id" class="form-select">
+                        <option value="">All Vendors</option>
+                        {% for vendor in vendors %}
+                        <option value="{{ vendor.id }}" {% if selected_vendor == vendor.id %}selected{% endif %}>
+                            {{ vendor.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="year_month" class="form-label">Month</label>
+                    <select name="year_month" id="year_month" class="form-select">
+                        <option value="">All Months</option>
+                        {% for ym in year_months %}
+                        <option value="{{ ym }}" {% if selected_year_month == ym %}selected{% endif %}>
+                            {{ ym }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="search" class="form-label">Search</label>
+                    <input type="text" name="search" id="search" class="form-control" 
+                           placeholder="Search description..." value="{{ search_term }}">
+                </div>
+                
+                <div class="col-md-1">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                </div>
+            </form>
+            {% if selected_account or selected_category or selected_vendor or selected_year_month or search_term %}
+            <div class="mt-2">
+                <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Transactions Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 100px;">Date</th>
+                            <th style="width: 150px;">Account</th>
+                            <th style="width: 200px;">Category</th>
+                            <th style="width: 150px;">Vendor</th>
+                            <th>Description</th>
+                            <th style="width: 100px;">Assigned To</th>
+                            <th style="width: 120px;">Payment Type</th>
+                            <th style="width: 100px;" class="text-end">Amount</th>
+                            <th style="width: 60px;">Status</th>
+                            <th style="width: 100px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if transactions %}
+                            {% for transaction in transactions %}
+                            <tr class="{% if transaction.amount < 0 %}table-success{% endif %}">
+                                <td>{{ transaction.transaction_date.strftime('%d/%m/%Y') if transaction.transaction_date else '' }}</td>
+                                <td>
+                                    {% if transaction.account %}
+                                        {{ transaction.account.name }}
+                                    {% else %}
+                                        <span class="text-muted">No Account</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ transaction.category.head_budget }}</small><br>
+                                    <strong>{{ transaction.category.sub_budget }}</strong>
+                                </td>
+                                <td>{{ transaction.vendor.name if transaction.vendor else '-' }}</td>
+                                <td>
+                                    <strong>{{ transaction.item if transaction.item else transaction.description }}</strong>
+                                    {% if transaction.description and transaction.item and transaction.description != transaction.item %}
+                                        <br><small class="text-muted">{{ transaction.description }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>{{ transaction.assigned_to if transaction.assigned_to else '-' }}</td>
+                                <td><span class="badge bg-secondary">{{ transaction.payment_type }}</span></td>
+                                <td class="text-end">
+                                    {% if transaction.amount < 0 %}
+                                        <span class="text-success fw-bold">-£{{ "%.2f"|format(transaction.amount|abs) }}</span>
+                                    {% else %}
+                                        <span class="text-danger">£{{ "%.2f"|format(transaction.amount) }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if transaction.is_paid %}
+                                        <span class="badge bg-success">✓</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a href="{{ url_for('transactions.edit', id=transaction.id) }}" 
+                                           class="btn btn-outline-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form method="POST" action="{{ url_for('transactions.delete', id=transaction.id) }}" 
+                                              style="display: inline;"
+                                              onsubmit="return confirm('Delete this transaction? Account balance will be updated.');">
+                                            <input type="hidden" name="return_url" value="{{ request.url }}">
+                                            <button type="submit" class="btn btn-outline-danger" title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-4">
+                                    No transactions found. Try adjusting your filters.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
+
+<style>
+    .table-sm th, .table-sm td {
+        padding: 0.5rem;
+        vertical-align: middle;
+    }
+    
+    .card {
+        box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+    }
+    
+    .form-select, .form-control {
+        font-size: 0.875rem;
+    }
+</style>
 {% endblock %}

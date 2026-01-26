@@ -35,3 +35,18 @@ class Transaction(db.Model):
     
     def __repr__(self):
         return f'<Transaction {self.transaction_date}: {self.description} - £{self.amount}>'
+    
+    @staticmethod
+    def recalculate_account_balance(account_id):
+        """Recalculate and update account balance from all transactions"""
+        from models.accounts import Account
+        
+        account = Account.query.get(account_id)
+        if not account:
+            return
+        
+        transactions = Transaction.query.filter_by(account_id=account_id).all()
+        # Balance = sum of -amount (negative amounts are income, positive are expenses)
+        balance = float(sum([-t.amount for t in transactions]))
+        account.balance = balance
+        account.updated_at = datetime.now()
