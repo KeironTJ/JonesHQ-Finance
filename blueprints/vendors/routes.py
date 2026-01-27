@@ -10,8 +10,11 @@ from datetime import datetime
 @bp.route('/')
 def index():
     """List all vendors"""
+    from models.transactions import Transaction
+    
     vendor_type = request.args.get('type')
     search = request.args.get('search')
+    sort_by = request.args.get('sort', 'usage')  # Default sort by usage
     
     query = Vendor.query
     
@@ -21,7 +24,17 @@ def index():
     if search:
         query = query.filter(Vendor.name.ilike(f'%{search}%'))
     
-    vendors = query.order_by(Vendor.name).all()
+    vendors = query.all()
+    
+    # Add transaction count to each vendor
+    for vendor in vendors:
+        vendor.transaction_count = Transaction.query.filter_by(vendor_id=vendor.id).count()
+    
+    # Sort vendors
+    if sort_by == 'usage':
+        vendors = sorted(vendors, key=lambda v: v.transaction_count, reverse=True)
+    elif sort_by == 'name':
+        vendors = sorted(vendors, key=lambda v: v.name.lower())
     
     # Get vendor types for filter
     vendor_types = db.session.query(Vendor.vendor_type).distinct().filter(Vendor.vendor_type.isnot(None)).all()
@@ -31,7 +44,8 @@ def index():
                          vendors=vendors,
                          vendor_types=vendor_types,
                          current_type=vendor_type,
-                         current_search=search)
+                         current_search=search,
+                         current_sort=sort_by)
 
 @bp.route('/add', methods=['GET', 'POST'])
 def add():

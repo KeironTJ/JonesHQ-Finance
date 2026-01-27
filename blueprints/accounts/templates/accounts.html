@@ -24,9 +24,13 @@
         <tbody>
             {% for account in accounts %}
             <tr>
-                <td>{{ account.name }}</td>
+                <td>
+                    <a href="{{ url_for('transactions.index', account_id=account.id) }}" class="text-decoration-none">
+                        <i class="bi bi-bank"></i> {{ account.name }}
+                    </a>
+                </td>
                 <td>{{ account.account_type }}</td>
-                <td>£{{ account.balance }}</td>
+                <td>£{{ "%.2f"|format(account.balance or 0) }}</td>
                 <td>
                     <button class="btn btn-sm btn-secondary">Edit</button>
                     <button class="btn btn-sm btn-danger">Delete</button>

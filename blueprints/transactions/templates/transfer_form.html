@@ -82,6 +82,22 @@
                                     placeholder="e.g., Monthly savings transfer, Bill payment, etc.">
                                 <small class="form-text text-muted">Optional - helps identify the purpose of this transfer</small>
                             </div>
+
+                            <!-- Category -->
+                            <div class="col-md-12 mb-3">
+                                <label for="category_id" class="form-label">
+                                    <i class="bi bi-folder"></i> Category
+                                </label>
+                                <select class="form-select" id="category_id" name="category_id">
+                                    <option value="">Default (Transfer > Account Transfer)</option>
+                                    {% for category in categories %}
+                                    <option value="{{ category.id }}">
+                                        {{ category.head_budget }} > {{ category.sub_budget }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="form-text text-muted">Optional - categorize this transfer (e.g., Savings, Bills, etc.)</small>
+                            </div>
                         </div>
 
                         <!-- Recurring Transfer Options -->

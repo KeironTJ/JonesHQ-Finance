@@ -10,14 +10,32 @@ from datetime import datetime
 @bp.route('/')
 def index():
     """List all categories grouped by head budget"""
+    from models.transactions import Transaction
+    
     # Get all head budgets
     head_budgets = db.session.query(Category.head_budget).distinct().order_by(Category.head_budget).all()
     
-    # Organize categories by head budget
+    # Organize categories by head budget with transaction counts
     categories_by_head = {}
     for (head_budget,) in head_budgets:
         categories = Category.query.filter_by(head_budget=head_budget).order_by(Category.sub_budget).all()
-        categories_by_head[head_budget] = categories
+        
+        # Add transaction count to each category
+        for category in categories:
+            category.transaction_count = Transaction.query.filter_by(category_id=category.id).count()
+        
+        # Calculate total for head budget
+        head_transaction_count = sum(c.transaction_count for c in categories)
+        
+        categories_by_head[head_budget] = {
+            'categories': categories,
+            'total_count': head_transaction_count
+        }
+    
+    # Sort by transaction count (descending)
+    categories_by_head = dict(sorted(categories_by_head.items(), 
+                                     key=lambda x: x[1]['total_count'], 
+                                     reverse=True))
     
     return render_template('categories/categories.html', 
                          categories_by_head=categories_by_head)

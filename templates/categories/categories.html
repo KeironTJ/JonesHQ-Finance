@@ -11,7 +11,7 @@
         </a>
     </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% with messages = get_flashed_messages(with_categories=True) %}
         {% if messages %}
             {% for category, message in messages %}
                 <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
@@ -23,23 +23,36 @@
     {% endwith %}
 
     <div class="row">
-        {% for head_budget, categories in categories_by_head.items() %}
+        {% for head_budget, data in categories_by_head.items() %}
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">{{ head_budget }}</h5>
-                    <small>{{ categories|length }} sub-categories</small>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0">{{ head_budget }}</h5>
+                            <small>{{ data.categories|length }} sub-categories · {{ data.total_count }} transactions</small>
+                        </div>
+                        <a href="{{ url_for('transactions.index', head_budget=head_budget) }}" 
+                           class="btn btn-sm btn-light"
+                           title="View all transactions">
+                            <i class="bi bi-list-ul"></i>
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <ul class="list-group list-group-flush">
-                        {% for category in categories %}
+                        {% for category in data.categories %}
                         <li class="list-group-item d-flex justify-content-between align-items-center p-2">
-                            <div>
-                                {% if category.sub_budget %}
-                                    <strong>{{ category.sub_budget }}</strong>
-                                {% else %}
-                                    <em class="text-muted">(No sub-category)</em>
-                                {% endif %}
+                            <div class="flex-grow-1">
+                                <a href="{{ url_for('transactions.index', category_id=category.id) }}" 
+                                   class="text-decoration-none text-dark">
+                                    {% if category.sub_budget %}
+                                        <strong>{{ category.sub_budget }}</strong>
+                                    {% else %}
+                                        <em class="text-muted">(No sub-category)</em>
+                                    {% endif %}
+                                    <span class="badge bg-secondary ms-2">{{ category.transaction_count }}</span>
+                                </a>
                                 <br>
                                 <small class="text-muted">
                                     <span class="badge 

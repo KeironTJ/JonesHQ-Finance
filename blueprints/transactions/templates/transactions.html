@@ -79,12 +79,28 @@
                 </div>
                 
                 <div class="col-md-2">
-                    <label for="category_id" class="form-label">Category</label>
-                    <select name="category_id" id="category_id" class="form-select">
-                        <option value="">All Categories</option>
+                    <label for="head_budget" class="form-label">Category Group</label>
+                    <select name="head_budget" id="head_budget" class="form-select">
+                        <option value="">All Groups</option>
+                        {% for hb in head_budgets %}
+                        <option value="{{ hb }}" {% if selected_head_budget == hb %}selected{% endif %}>
+                            {{ hb }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="category_id" class="form-label">Sub-Category</label>
+                    <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %}>
+                        <option value="">All Sub-Categories</option>
                         {% for category in categories %}
                         <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
-                            {{ category.head_budget }} > {{ category.sub_budget }}
+                            {% if selected_head_budget %}
+                                {{ category.sub_budget }}
+                            {% else %}
+                                {{ category.head_budget }} > {{ category.sub_budget }}
+                            {% endif %}
                         </option>
                         {% endfor %}
                     </select>
@@ -133,6 +149,76 @@
         </div>
     </div>
     
+    <!-- Bulk Actions Panel -->
+    <div class="card mb-3" id="bulkActionsPanel" style="display: none;">
+        <div class="card-header bg-warning text-dark">
+            <h6 class="mb-0">
+                <i class="bi bi-check2-square"></i> Bulk Actions 
+                <span id="selectedCount" class="badge bg-dark">0</span> transactions selected
+            </h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('transactions.bulk_edit') }}" id="bulkEditForm">
+                <input type="hidden" name="return_url" value="{{ request.url }}">
+                <input type="hidden" name="transaction_ids" id="bulkTransactionIds">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="bulk_category_id" class="form-label">Change Category To:</label>
+                        <select class="form-select" name="bulk_category_id" id="bulk_category_id">
+                            <option value="">-- No Change --</option>
+                            {% for category in all_categories %}
+                            <option value="{{ category.id }}">
+                                {{ category.head_budget }} > {{ category.sub_budget }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="bulk_vendor_id" class="form-label">Change Vendor To:</label>
+                        <select class="form-select" name="bulk_vendor_id" id="bulk_vendor_id">
+                            <option value="">-- No Change --</option>
+                            {% for vendor in vendors %}
+                            <option value="{{ vendor.id }}">{{ vendor.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="bulk_payment_type" class="form-label">Change Payment Type To:</label>
+                        <select class="form-select" name="bulk_payment_type" id="bulk_payment_type">
+                            <option value="">-- No Change --</option>
+                            <option value="Transfer">Transfer</option>
+                            <option value="Direct Debit">Direct Debit</option>
+                            <option value="Card Payment">Card Payment</option>
+                            <option value="BACS">BACS</option>
+                            <option value="Standing Order">Standing Order</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="bulk_assigned_to" class="form-label">Change Assigned To:</label>
+                        <select class="form-select" name="bulk_assigned_to" id="bulk_assigned_to">
+                            <option value="">-- No Change --</option>
+                            <option value="Keiron">Keiron</option>
+                            <option value="Emma">Emma</option>
+                            <option value="Both">Both</option>
+                            <option value="Michael">Michael</option>
+                            <option value="Emily">Emily</option>
+                            <option value="Ivy">Ivy</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-save"></i> Update Selected Transactions
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="clearSelection()">
+                            <i class="bi bi-x-circle"></i> Clear Selection
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <!-- Transactions Table -->
     <div class="card">
         <div class="card-body">
@@ -140,6 +226,9 @@
                 <table class="table table-hover table-sm">
                     <thead class="table-light">
                         <tr>
+                            <th style="width: 40px;">
+                                <input type="checkbox" id="selectAll" onclick="toggleSelectAll()">
+                            </th>
                             <th style="width: 100px;">Date</th>
                             <th style="width: 150px;">Account</th>
                             <th style="width: 200px;">Category</th>
@@ -156,6 +245,9 @@
                         {% if transactions %}
                             {% for transaction in transactions %}
                             <tr class="{% if transaction.amount < 0 %}table-success{% endif %}">
+                                <td>
+                                    <input type="checkbox" class="transaction-checkbox" value="{{ transaction.id }}" onchange="updateBulkActions()">
+                                </td>
                                 <td>{{ transaction.transaction_date.strftime('%d/%m/%Y') if transaction.transaction_date else '' }}</td>
                                 <td>
                                     {% if transaction.account %}
@@ -222,6 +314,53 @@
         </div>
     </div>
 </div>
+
+<script>
+// Enable/disable sub-category based on head budget selection
+document.getElementById('head_budget').addEventListener('change', function() {
+    const categorySelect = document.getElementById('category_id');
+    if (this.value) {
+        categorySelect.disabled = false;
+        // Auto-submit form to reload categories
+        this.form.submit();
+    } else {
+        categorySelect.disabled = true;
+        categorySelect.value = '';
+    }
+});
+
+// Bulk selection functions
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.transaction-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+    updateBulkActions();
+}
+
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.transaction-checkbox:checked');
+    const count = checkboxes.length;
+    const panel = document.getElementById('bulkActionsPanel');
+    const countBadge = document.getElementById('selectedCount');
+    
+    countBadge.textContent = count;
+    
+    if (count > 0) {
+        panel.style.display = 'block';
+        // Collect IDs
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+        document.getElementById('bulkTransactionIds').value = ids.join(',');
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function clearSelection() {
+    document.getElementById('selectAll').checked = false;
+    document.querySelectorAll('.transaction-checkbox').forEach(cb => cb.checked = false);
+    updateBulkActions();
+}
+</script>
 
 <style>
     .table-sm th, .table-sm td {

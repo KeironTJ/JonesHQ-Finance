@@ -16,6 +16,7 @@
             <div class="card">
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="return_url" value="{{ request.referrer or url_for('transactions.index') }}">
                         <div class="row">
                             <!-- Account -->
                             <div class="col-md-6 mb-3">

@@ -15,7 +15,7 @@
     <div class="card mb-4">
         <div class="card-body">
             <form method="GET" class="row g-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="search" class="form-label">Search</label>
                     <input type="text" 
                            class="form-control" 
@@ -24,7 +24,7 @@
                            placeholder="Search vendors..." 
                            value="{{ current_search or '' }}">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="type" class="form-label">Vendor Type</label>
                     <select class="form-select" id="type" name="type">
                         <option value="">All Types</option>
@@ -33,7 +33,14 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-4 d-flex align-items-end">
+                <div class="col-md-3">
+                    <label for="sort" class="form-label">Sort By</label>
+                    <select class="form-select" id="sort" name="sort">
+                        <option value="usage" {% if current_sort == 'usage' %}selected{% endif %}>Most Used</option>
+                        <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Name (A-Z)</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-secondary me-2">
                         <i class="bi bi-funnel"></i> Filter
                     </button>
@@ -54,12 +61,19 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h5 class="card-title mb-0">
-                            {{ vendor.name }}
+                            <a href="{{ url_for('transactions.index', vendor_id=vendor.id) }}" 
+                               class="text-decoration-none text-dark">
+                                {{ vendor.name }}
+                            </a>
                             {% if not vendor.is_active %}
                             <span class="badge bg-secondary">Inactive</span>
                             {% endif %}
                         </h5>
                     </div>
+                    
+                    <p class="mb-2">
+                        <span class="badge bg-primary">{{ vendor.transaction_count }} transactions</span>
+                    </p>
                     
                     {% if vendor.vendor_type %}
                     <p class="text-muted mb-2">
