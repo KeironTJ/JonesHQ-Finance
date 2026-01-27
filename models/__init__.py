@@ -5,7 +5,7 @@ from models.balances import Balance
 from models.budgets import Budget
 from models.categories import Category
 from models.childcare import ChildcareRecord
-from models.credit_cards import CreditCard
+from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
 from models.expenses import Expense
 from models.fuel import FuelRecord
@@ -30,6 +30,7 @@ __all__ = [
     'Category',
     'ChildcareRecord',
     'CreditCard',
+    'CreditCardPromotion',
     'CreditCardTransaction',
     'Expense',
     'FuelRecord',

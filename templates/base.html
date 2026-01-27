@@ -19,47 +19,95 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/">JonesHQ Finance</a>
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-cash-stack"></i> JonesHQ Finance
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
+                    <!-- Dashboard -->
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Dashboard</a>
+                        <a class="nav-link" href="/">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/accounts">Accounts</a>
+                    
+                    <!-- Banking & Accounts -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-bank"></i> Banking
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/accounts">
+                                <i class="bi bi-wallet2"></i> Accounts
+                            </a></li>
+                            <li><a class="dropdown-item" href="/transactions">
+                                <i class="bi bi-list-ul"></i> Transactions
+                            </a></li>
+                            <li><a class="dropdown-item" href="/transactions/consolidated">
+                                <i class="bi bi-diagram-3"></i> Consolidated View
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/categories">
+                                <i class="bi bi-tags"></i> Categories
+                            </a></li>
+                            <li><a class="dropdown-item" href="/vendors">
+                                <i class="bi bi-shop"></i> Vendors
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/transactions">Transactions</a>
+                    
+                    <!-- Credit & Debt -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-credit-card"></i> Credit & Debt
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/credit-cards">
+                                <i class="bi bi-credit-card-2-front"></i> Credit Cards
+                            </a></li>
+                            <li><a class="dropdown-item" href="/loans">
+                                <i class="bi bi-cash-stack"></i> Loans
+                            </a></li>
+                            <li><a class="dropdown-item" href="/mortgage">
+                                <i class="bi bi-house-door"></i> Mortgage
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/categories">Categories</a>
+                    
+                    <!-- Planning & Wealth -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-graph-up"></i> Wealth
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/budgets">
+                                <i class="bi bi-pie-chart"></i> Budgets
+                            </a></li>
+                            <li><a class="dropdown-item" href="/pensions">
+                                <i class="bi bi-piggy-bank"></i> Pensions
+                            </a></li>
+                            <li><a class="dropdown-item" href="/networth">
+                                <i class="bi bi-trophy"></i> Net Worth
+                            </a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/vendors">Vendors</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/budgets">Budgets</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/loans">Loans</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/vehicles">Vehicles</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/childcare">Childcare</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/pensions">Pensions</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/mortgage">Mortgage</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/networth">Net Worth</a>
+                    
+                    <!-- Lifestyle -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-heart"></i> Lifestyle
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/vehicles">
+                                <i class="bi bi-car-front"></i> Vehicles
+                            </a></li>
+                            <li><a class="dropdown-item" href="/childcare">
+                                <i class="bi bi-people"></i> Childcare
+                            </a></li>
+                        </ul>
                     </li>
                 </ul>
             </div>

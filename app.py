@@ -29,6 +29,7 @@ def create_app(config_name=None):
     from blueprints.vendors import bp as vendors_bp
     from blueprints.budgets import budgets_bp
     from blueprints.loans import loans_bp
+    from blueprints.credit_cards import credit_cards_bp
     from blueprints.vehicles import vehicles_bp
     from blueprints.childcare import childcare_bp
     from blueprints.pensions import pensions_bp
@@ -42,6 +43,7 @@ def create_app(config_name=None):
     app.register_blueprint(vendors_bp)
     app.register_blueprint(budgets_bp)
     app.register_blueprint(loans_bp)
+    app.register_blueprint(credit_cards_bp)
     app.register_blueprint(vehicles_bp)
     app.register_blueprint(childcare_bp)
     app.register_blueprint(pensions_bp)

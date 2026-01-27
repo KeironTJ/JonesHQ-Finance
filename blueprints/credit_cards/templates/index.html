@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Credit Cards - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Credit Cards</h1>
+        <div>
+            <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#generateFutureModal">
+                <i class="bi bi-calendar-plus"></i> Generate Future Transactions
+            </button>
+            <a href="{{ url_for('credit_cards.add') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Credit Card
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Total Credit Limit</h6>
+                    <h3>£{{ "%.2f"|format(total_limit) }}</h3>
+                    <small>{{ cards|selectattr('is_active')|list|length }} active cards</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Total Balance</h6>
+                    <h3>£{{ "%.2f"|format(total_balance) }}</h3>
+                    <small>{{ ((total_balance / total_limit * 100) if total_limit > 0 else 0)|round(1) }}% utilization</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Available Credit</h6>
+                    <h3>£{{ "%.2f"|format(total_available) }}</h3>
+                    <small>Remaining credit</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h6 class="card-title">Monthly Payments</h6>
+                    <h3>£{{ "%.2f"|format(total_payments) }}</h3>
+                    <small>Avg APR: {{ "%.2f"|format(weighted_apr) }}%</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Credit Cards Table -->
+    <div class="card">
+        <div class="card-body">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Card Name</th>
+                        <th>APR</th>
+                        <th>Balance</th>
+                        <th>Limit</th>
+                        <th>Available</th>
+                        <th>Payment</th>
+                        <th>Statement</th>
+                        <th>0% Offers</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for card in cards %}
+                    <tr class="{% if not card.is_active %}table-secondary{% endif %}">
+                        <td>
+                            <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="text-decoration-none">
+                                <i class="bi bi-credit-card"></i> {{ card.card_name }}
+                            </a>
+                        </td>
+                        <td>{{ "%.2f"|format(card.monthly_apr) }}%</td>
+                        <td class="{% if card.current_balance > 0 %}text-danger{% endif %}">
+                            £{{ "%.2f"|format(card.current_balance) }}
+                        </td>
+                        <td>£{{ "%.2f"|format(card.credit_limit) }}</td>
+                        <td class="text-success">£{{ "%.2f"|format(card.available_credit or 0) }}</td>
+                        <td>£{{ "%.2f"|format(card.set_payment or 0) }}</td>
+                        <td>{{ card.statement_date }}{% if card.statement_date %}th{% endif %}</td>
+                        <td>
+                            {% set today = None %}
+                            {% if card.purchase_0_percent_until and card.purchase_0_percent_until >= today %}
+                            <span class="badge bg-success" title="0% Purchases until {{ card.purchase_0_percent_until }}">
+                                <i class="bi bi-cart"></i> 0%
+                            </span>
+                            {% endif %}
+                            {% if card.balance_transfer_0_percent_until and card.balance_transfer_0_percent_until >= today %}
+                            <span class="badge bg-info" title="0% Balance Transfer until {{ card.balance_transfer_0_percent_until }}">
+                                <i class="bi bi-arrow-left-right"></i> 0%
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if card.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('credit_cards.detail', id=card.id) }}" 
+                                   class="btn btn-outline-info" title="View Details">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ url_for('credit_cards.edit', id=card.id) }}" 
+                                   class="btn btn-outline-primary" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger" 
+                                        onclick="confirmDelete({{ card.id }}, '{{ card.card_name }}')" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete <strong id="cardName"></strong>? This will also delete all associated transactions.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Future Transactions Modal -->
+<div class="modal fade" id="generateFutureModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Generate Future Transactions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('credit_cards.generate_all_future') }}">
+                <div class="modal-body">
+                    <p>Generate interest and payment transactions for all active credit cards.</p>
+                    <div class="mb-3">
+                        <label for="end_date" class="form-label">Generate Until</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" 
+                               value="{{ (None|now + relativedelta(years=5)).strftime('%Y-%m-%d') }}">
+                        <small class="text-muted">Default: 5 years from today</small>
+                    </div>
+                    <div class="alert alert-info">
+                        <strong>Note:</strong> This will create monthly statement interest and payment transactions based on each card's settings.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Generate Transactions</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(id, name) {
+    document.getElementById('cardName').textContent = name;
+    document.getElementById('deleteForm').action = `/credit-cards/${id}/delete`;
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}

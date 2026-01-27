@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Consolidated Transactions{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Consolidated Transactions</h2>
+        <div>
+            <a href="{{ url_for('transactions.index') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Bank Transactions
+            </a>
+            <a href="{{ url_for('credit_cards.index') }}" class="btn btn-secondary">
+                <i class="bi bi-credit-card"></i> Credit Cards
+            </a>
+            <a href="{{ url_for('loans.index') }}" class="btn btn-secondary">
+                <i class="bi bi-cash-stack"></i> Loans
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h6 class="card-title">Total Inflows</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(total_inflows) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger">
+                <div class="card-body">
+                    <h6 class="card-title">Total Outflows</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(total_outflows) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white {% if net_position >= 0 %}bg-primary{% else %}bg-warning{% endif %}">
+                <div class="card-body">
+                    <h6 class="card-title">Net Position</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(net_position) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h6 class="card-title">Total Transactions</h6>
+                    <h3 class="mb-0">{{ transactions|length }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-funnel"></i> Filters
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" id="filterForm">
+                <div class="row g-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Source</label>
+                        <select class="form-select" name="source" id="sourceFilter">
+                            <option value="all" {% if not selected_source or selected_source == 'all' %}selected{% endif %}>All Sources</option>
+                            <option value="bank" {% if selected_source == 'bank' %}selected{% endif %}>Bank Accounts</option>
+                            <option value="credit_card" {% if selected_source == 'credit_card' %}selected{% endif %}>Credit Cards</option>
+                            <option value="loan" {% if selected_source == 'loan' %}selected{% endif %}>Loans</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Category</label>
+                        <select class="form-select" name="category_id" id="categoryFilter">
+                            <option value="">All Categories</option>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
+                                {{ category.head_budget }} > {{ category.sub_budget }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" class="form-control" name="start_date" value="{{ start_date or '' }}">
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control" name="end_date" value="{{ end_date or '' }}">
+                    </div>
+                    
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-search"></i> Filter
+                        </button>
+                        <a href="{{ url_for('transactions.consolidated') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Clear
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-list-ul"></i> All Transactions
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            {% if transactions %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Source</th>
+                            <th>Account/Card</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th class="text-end">Amount</th>
+                            <th class="text-end">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for txn in transactions %}
+                        <tr>
+                            <td>{{ txn.date.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                {% if txn.source_type == 'bank' %}
+                                    <span class="badge bg-primary">
+                                        <i class="bi bi-bank"></i> {{ txn.source }}
+                                    </span>
+                                {% elif txn.source_type == 'credit_card' %}
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="bi bi-credit-card"></i> {{ txn.source }}
+                                    </span>
+                                {% elif txn.source_type == 'loan' %}
+                                    <span class="badge bg-info text-dark">
+                                        <i class="bi bi-cash-stack"></i> {{ txn.source }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>{{ txn.source_name }}</td>
+                            <td>{{ txn.description }}</td>
+                            <td>
+                                <small class="text-muted">{{ txn.category }}</small>
+                            </td>
+                            <td>
+                                {% if txn.type == 'Income' %}
+                                    <span class="badge bg-success">{{ txn.type }}</span>
+                                {% elif txn.type == 'Expense' %}
+                                    <span class="badge bg-danger">{{ txn.type }}</span>
+                                {% elif txn.type == 'Purchase' %}
+                                    <span class="badge bg-warning text-dark">{{ txn.type }}</span>
+                                {% elif txn.type == 'Payment' %}
+                                    <span class="badge bg-success">{{ txn.type }}</span>
+                                {% elif txn.type == 'Interest' %}
+                                    <span class="badge bg-danger">{{ txn.type }}</span>
+                                {% elif txn.type == 'Loan Payment' %}
+                                    <span class="badge bg-info text-dark">{{ txn.type }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ txn.type }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if txn.amount < 0 %}
+                                    <span class="text-success fw-bold">£{{ "{:,.2f}".format(abs(txn.amount)) }}</span>
+                                {% else %}
+                                    <span class="text-danger fw-bold">£{{ "{:,.2f}".format(txn.amount) }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if txn.balance is not none %}
+                                    <span class="text-muted">£{{ "{:,.2f}".format(txn.balance) }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No transactions found matching your filters</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Export Options -->
+    <div class="mt-4 mb-5">
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                <i class="bi bi-printer"></i> Print
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="exportCSV">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-submit on filter change
+document.getElementById('sourceFilter').addEventListener('change', function() {
+    document.getElementById('filterForm').submit();
+});
+
+document.getElementById('categoryFilter').addEventListener('change', function() {
+    document.getElementById('filterForm').submit();
+});
+
+// CSV Export
+document.getElementById('exportCSV').addEventListener('click', function() {
+    let csv = 'Date,Source,Account/Card,Description,Category,Type,Amount,Balance\n';
+    
+    {% for txn in transactions %}
+    csv += '"{{ txn.date.strftime('%d/%m/%Y') }}",';
+    csv += '"{{ txn.source }}",';
+    csv += '"{{ txn.source_name }}",';
+    csv += '"{{ txn.description|replace('"', '""') }}",';
+    csv += '"{{ txn.category }}",';
+    csv += '"{{ txn.type }}",';
+    csv += '"{{ txn.amount }}",';
+    csv += '"{{ txn.balance if txn.balance is not none else '' }}"\n';
+    {% endfor %}
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    const today = new Date();
+    const filename = 'consolidated_transactions_' + today.getFullYear() + 
+                     String(today.getMonth() + 1).padStart(2, '0') + 
+                     String(today.getDate()).padStart(2, '0') + '.csv';
+    a.setAttribute('download', filename);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+});
+</script>
+{% endblock %}
