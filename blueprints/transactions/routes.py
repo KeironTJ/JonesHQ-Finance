@@ -52,6 +52,27 @@ def index():
     total_expenses = sum([t.amount for t in transactions if t.amount > 0])
     net_balance = total_income - total_expenses
     
+    # Calculate category summary for all filtered transactions
+    from collections import defaultdict
+    summary = defaultdict(lambda: {'categories': defaultdict(lambda: {'count': 0, 'total': 0})})
+    
+    for t in transactions:
+        if t.category:
+            head = t.category.head_budget
+            sub = t.category.sub_budget
+            summary[head]['categories'][sub]['count'] += 1
+            summary[head]['categories'][sub]['total'] += t.amount
+            
+    # Calculate totals for each head budget
+    for head in summary:
+        summary[head]['total_count'] = sum(cat['count'] for cat in summary[head]['categories'].values())
+        summary[head]['total_amount'] = sum(cat['total'] for cat in summary[head]['categories'].values())
+    
+    # Sort by total amount (descending)
+    category_summary = dict(sorted(summary.items(), 
+                                  key=lambda x: abs(x[1]['total_amount']), 
+                                  reverse=True))
+    
     # Get filter options
     accounts = Account.query.order_by(Account.name).all()
     
@@ -87,6 +108,7 @@ def index():
         total_expenses=total_expenses,
         net_balance=net_balance,
         transaction_count=len(transactions),
+        category_summary=category_summary,
         selected_account=account_id,
         selected_head_budget=head_budget,
         selected_category=category_id,

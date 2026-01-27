@@ -149,6 +149,52 @@
         </div>
     </div>
     
+    <!-- Category Summary (collapsible) -->
+    {% if category_summary %}
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#categorySummary">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Category Summary</h5>
+                <span class="badge bg-light text-dark">Click to toggle</span>
+            </div>
+        </div>
+        <div id="categorySummary" class="collapse">
+            <div class="card-body">
+                <div class="row">
+                    {% for head_budget, data in category_summary.items() %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card h-100">
+                            <div class="card-header {% if data.total_amount > 0 %}bg-danger{% else %}bg-success{% endif %} text-white">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong>{{ head_budget }}</strong>
+                                    <span class="badge bg-light text-dark">{{ data.total_count }}</span>
+                                </div>
+                                <h6 class="mb-0">£{{ "%.2f"|format(data.total_amount|abs) }}</h6>
+                            </div>
+                            <div class="card-body p-2">
+                                <ul class="list-group list-group-flush">
+                                    {% for sub_budget, cat_data in data.categories.items() %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center p-2">
+                                        <span>{{ sub_budget }}</span>
+                                        <div>
+                                            <span class="badge bg-secondary me-1">{{ cat_data.count }}</span>
+                                            <span class="badge {% if cat_data.total > 0 %}bg-danger{% else %}bg-success{% endif %}">
+                                                £{{ "%.2f"|format(cat_data.total|abs) }}
+                                            </span>
+                                        </div>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Bulk Actions Panel -->
     <div class="card mb-3" id="bulkActionsPanel" style="display: none;">
         <div class="card-header bg-warning text-dark">
@@ -316,16 +362,25 @@
 </div>
 
 <script>
-// Enable/disable sub-category based on head budget selection
-document.getElementById('head_budget').addEventListener('change', function() {
-    const categorySelect = document.getElementById('category_id');
-    if (this.value) {
-        categorySelect.disabled = false;
-        // Auto-submit form to reload categories
-        this.form.submit();
-    } else {
-        categorySelect.disabled = true;
-        categorySelect.value = '';
+// Auto-submit form when any filter dropdown changes
+const filterSelects = ['account_id', 'head_budget', 'category_id', 'vendor_id', 'year_month'];
+filterSelects.forEach(selectId => {
+    const selectElement = document.getElementById(selectId);
+    if (selectElement) {
+        selectElement.addEventListener('change', function() {
+            // Special handling for head_budget to enable/disable category
+            if (selectId === 'head_budget') {
+                const categorySelect = document.getElementById('category_id');
+                if (this.value) {
+                    categorySelect.disabled = false;
+                } else {
+                    categorySelect.disabled = true;
+                    categorySelect.value = '';
+                }
+            }
+            // Submit form for all dropdowns
+            this.form.submit();
+        });
     }
 });
 

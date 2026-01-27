@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for
+from flask import render_template, request, redirect, url_for, flash
 from . import accounts_bp
 from models.accounts import Account
 from extensions import db
@@ -14,7 +14,25 @@ def index():
 @accounts_bp.route('/accounts/create', methods=['POST'])
 def create():
     """Create a new account"""
-    # Implementation here
+    try:
+        name = request.form.get('name')
+        account_type = request.form.get('account_type')
+        balance = float(request.form.get('balance', 0))
+        
+        account = Account(
+            name=name,
+            account_type=account_type,
+            balance=balance
+        )
+        
+        db.session.add(account)
+        db.session.commit()
+        
+        flash(f'Account "{name}" created successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating account: {str(e)}', 'danger')
+    
     return redirect(url_for('accounts.index'))
 
 
