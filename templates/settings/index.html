@@ -36,15 +36,33 @@
                     </div>
                 </div>
 
-                <!-- Future Settings Sections (Placeholder) -->
+                <!-- Payday Settings -->
                 <div class="card mb-4">
-                    <div class="card-header bg-secondary text-white">
-                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> More Settings Coming Soon</h5>
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Payday Tracking</h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted mb-0">
-                            Additional configuration options will be added here as the application grows.
-                        </p>
+                        <div class="mb-3">
+                            <label for="payday_day" class="form-label">Payday (Day of Month)</label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="payday_day" 
+                                   name="payday_day" 
+                                   value="{{ payday_day }}"
+                                   min="1"
+                                   max="31"
+                                   required>
+                            <small class="text-muted">
+                                Set the day of the month when you get paid (e.g., 15 for the 15th). 
+                                If payday falls on a weekend, the system will automatically use the previous working day.
+                                This is used to track monthly budgets from payday to payday.
+                            </small>
+                        </div>
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle"></i> <strong>Payday Periods:</strong> 
+                            Your budget periods run from payday to payday. For example, if your payday is the 15th, 
+                            January's period runs from January 15th to February 14th.
+                        </div>
                     </div>
                 </div>
 

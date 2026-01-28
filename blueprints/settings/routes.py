@@ -9,9 +9,11 @@ def index():
     """Display application settings"""
     # Get or create default settings
     default_generation_years = Settings.get_value('default_generation_years', 10)
+    payday_day = Settings.get_value('payday_day', 15)
     
     return render_template('settings/index.html',
-                         default_generation_years=default_generation_years)
+                         default_generation_years=default_generation_years,
+                         payday_day=payday_day)
 
 
 @settings_bp.route('/settings/update', methods=['POST'])
@@ -21,9 +23,16 @@ def update():
         # Credit Card Settings
         generation_years = int(request.form.get('default_generation_years', 10))
         
+        # Payday Settings
+        payday_day = int(request.form.get('payday_day', 15))
+        
         # Validate
         if generation_years < 1 or generation_years > 50:
             flash('Generation period must be between 1 and 50 years!', 'danger')
+            return redirect(url_for('settings.index'))
+        
+        if payday_day < 1 or payday_day > 31:
+            flash('Payday must be between 1 and 31!', 'danger')
             return redirect(url_for('settings.index'))
         
         # Update settings
@@ -34,8 +43,15 @@ def update():
             'int'
         )
         
+        Settings.set_value(
+            'payday_day',
+            payday_day,
+            'Day of month when payday occurs (adjusted for weekends)',
+            'int'
+        )
+        
         db.session.commit()
-        flash(f'Settings updated successfully! Future generation will default to {generation_years} years.', 'success')
+        flash(f'Settings updated successfully! Payday set to {payday_day} of each month.', 'success')
         
     except ValueError:
         db.session.rollback()

@@ -3,45 +3,229 @@
 {% block title %}Dashboard - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Dashboard</h1>
-    
-    <div class="row">
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Total Balance</h5>
-                    <p class="card-text">£0.00</p>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+        <div>
+            <a href="{{ url_for('settings.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-gear"></i> Settings
+            </a>
+        </div>
+    </div>
+
+    {% if not selected_account %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> 
+        <strong>No Account Selected</strong><br>
+        Please create a "Joint" type account to track payday periods, or select an account below.
+    </div>
+    {% endif %}
+
+    <!-- Account Selector -->
+    {% if accounts %}
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-bank"></i> Account Selection</h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('dashboard.index') }}" class="row g-3">
+                <div class="col-md-10">
+                    <select name="account_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">Select an account to track...</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}" {% if selected_account and account.id == selected_account.id %}selected{% endif %}>
+                            {{ account.name }} ({{ account.account_type }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-arrow-repeat"></i> Update
+                    </button>
+                </div>
+            </form>
+            {% if selected_account %}
+            <div class="mt-3">
+                <strong>Tracking:</strong> {{ selected_account.name }} 
+                <span class="badge bg-info">{{ selected_account.account_type }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Payday Period Tracking -->
+    {% if payday_data %}
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-calendar-check"></i> Payday Period Tracking 
+                <small class="ms-2">(Payday: {{ payday_day }}{{ 'st' if payday_day == 1 or payday_day == 21 or payday_day == 31 else 'nd' if payday_day == 2 or payday_day == 22 else 'rd' if payday_day == 3 or payday_day == 23 else 'th' }} of each month)</small>
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                <i class="bi bi-info-circle"></i> 
+                Showing projected balances from payday to payday, including both paid and unpaid transactions. 
+                If payday falls on a weekend, it's adjusted to the previous working day.
+            </p>
+            
+            <!-- Table with scrollable body -->
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover table-sm">
+                    <thead class="table-dark sticky-top">
+                        <tr>
+                            <th>Period</th>
+                            <th>Date Range</th>
+                            <th class="text-end">Opening Balance</th>
+                            <th class="text-end bg-primary text-white">Rolling Balance</th>
+                            <th class="text-end bg-warning">MIN Balance</th>
+                            <th class="text-end bg-info text-white">Max Extra Spend</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for period in payday_data %}
+                        <tr>
+                            <td class="fw-bold">{{ period.period_label }}</td>
+                            <td>
+                                <small>
+                                    {{ period.start_date.strftime('%d %b') }} - {{ period.end_date.strftime('%d %b %Y') }}
+                                </small>
+                            </td>
+                            <td class="text-end">
+                                <span class="text-muted">£{{ "%.2f"|format(period.opening_balance) }}</span>
+                            </td>
+                            <td class="text-end bg-primary bg-opacity-10">
+                                <strong class="text-primary">£{{ "%.2f"|format(period.rolling_balance) }}</strong>
+                            </td>
+                            <td class="text-end bg-warning bg-opacity-10">
+                                <strong class="text-warning">£{{ "%.2f"|format(period.min_balance) }}</strong>
+                            </td>
+                            <td class="text-end bg-info bg-opacity-10">
+                                <strong class="text-info">£{{ "%.2f"|format(period.max_extra_spend) }}</strong>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row mt-4">
+                <div class="col-md-4">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h6 class="card-subtitle mb-2">Current Period Ending Balance</h6>
+                            <h3 class="card-title">£{{ "%.2f"|format(payday_data[0].rolling_balance) }}</h3>
+                            <small>{{ payday_data[0].period_label }}</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-warning text-dark">
+                        <div class="card-body text-center">
+                            <h6 class="card-subtitle mb-2">Current Period Minimum</h6>
+                            <h3 class="card-title">£{{ "%.2f"|format(payday_data[0].min_balance) }}</h3>
+                            <small>Lowest balance this period</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h6 class="card-subtitle mb-2">Safe Extra Spend</h6>
+                            <h3 class="card-title">£{{ "%.2f"|format(payday_data[0].max_extra_spend) }}</h3>
+                            <small>Available without going below minimum</small>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Monthly Income</h5>
-                    <p class="card-text">£0.00</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Monthly Expenses</h5>
-                    <p class="card-text">£0.00</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Net Worth</h5>
-                    <p class="card-text">£0.00</p>
+
+            <!-- Legend -->
+            <div class="alert alert-light mt-4 mb-0">
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong class="text-primary"><i class="bi bi-circle-fill"></i> Rolling Balance:</strong><br>
+                        <small>Expected balance at end of period</small>
+                    </div>
+                    <div class="col-md-3">
+                        <strong class="text-warning"><i class="bi bi-circle-fill"></i> MIN Balance:</strong><br>
+                        <small>Lowest point during the period</small>
+                    </div>
+                    <div class="col-md-3">
+                        <strong class="text-info"><i class="bi bi-circle-fill"></i> Max Extra Spend:</strong><br>
+                        <small>Difference between ending and minimum</small>
+                    </div>
+                    <div class="col-md-3">
+                        <strong><i class="bi bi-info-circle"></i> Note:</strong><br>
+                        <small>Includes unpaid transactions</small>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+    {% endif %}
+
+    <!-- Quick Links -->
+    <div class="row">
+        <div class="col-md-3 mb-3">
+            <a href="{{ url_for('transactions.index') }}" class="text-decoration-none">
+                <div class="card border-primary h-100 hover-shadow">
+                    <div class="card-body text-center">
+                        <i class="bi bi-receipt display-4 text-primary"></i>
+                        <h5 class="card-title mt-3">Transactions</h5>
+                        <p class="card-text text-muted">Manage income & expenses</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{{ url_for('accounts.index') }}" class="text-decoration-none">
+                <div class="card border-success h-100 hover-shadow">
+                    <div class="card-body text-center">
+                        <i class="bi bi-bank display-4 text-success"></i>
+                        <h5 class="card-title mt-3">Accounts</h5>
+                        <p class="card-text text-muted">Bank accounts overview</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{{ url_for('credit_cards.index') }}" class="text-decoration-none">
+                <div class="card border-danger h-100 hover-shadow">
+                    <div class="card-body text-center">
+                        <i class="bi bi-credit-card display-4 text-danger"></i>
+                        <h5 class="card-title mt-3">Credit Cards</h5>
+                        <p class="card-text text-muted">Track card balances</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-3">
+            <a href="{{ url_for('loans.index') }}" class="text-decoration-none">
+                <div class="card border-warning h-100 hover-shadow">
+                    <div class="card-body text-center">
+                        <i class="bi bi-cash-coin display-4 text-warning"></i>
+                        <h5 class="card-title mt-3">Loans</h5>
+                        <p class="card-text text-muted">Manage loan payments</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
 </div>
+
+<style>
+.hover-shadow:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-2px);
+    transition: all 0.3s ease;
+}
+.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+</style>
 {% endblock %}
