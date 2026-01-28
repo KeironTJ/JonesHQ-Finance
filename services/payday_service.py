@@ -111,23 +111,23 @@ class PaydayService:
             account_id: Bank account ID to track
             start_date: Period start date
             end_date: Period end date
-            include_unpaid: Whether to include unpaid transactions
+            include_unpaid: Whether to include unpaid transactions (default True for forecasting)
             
         Returns:
             dict with rolling_balance, min_balance, max_extra_spend
         """
-        # Get opening balance (balance at start_date - 1)
-        opening_balance = PaydayService.get_balance_at_date(account_id, start_date - timedelta(days=1), include_unpaid)
+        # Get opening balance (cumulative balance at start_date - 1)
+        opening_balance = PaydayService.get_balance_at_date(account_id, start_date - timedelta(days=1), include_unpaid=True)
         
-        # Get all transactions in the period
+        # Get all transactions in the period (regardless of paid status - we want to see forecast)
         query = Transaction.query.filter(
             Transaction.account_id == account_id,
             Transaction.transaction_date >= start_date,
             Transaction.transaction_date <= end_date
         )
         
-        if not include_unpaid:
-            query = query.filter(Transaction.is_paid == True)
+        # Always include unpaid for payday forecasting
+        # (The include_unpaid parameter is kept for consistency but we ignore it for now)
         
         transactions = query.order_by(Transaction.transaction_date).all()
         
@@ -163,12 +163,13 @@ class PaydayService:
     @staticmethod
     def get_balance_at_date(account_id, target_date, include_unpaid=True):
         """
-        Calculate account balance at a specific date.
+        Calculate cumulative account balance at a specific date.
+        Always includes all transactions (paid and unpaid) for forecasting.
         
         Args:
             account_id: Bank account ID
             target_date: Date to calculate balance for
-            include_unpaid: Whether to include unpaid transactions
+            include_unpaid: Whether to include unpaid transactions (kept for compatibility, always True for payday)
             
         Returns:
             Decimal balance
@@ -179,18 +180,16 @@ class PaydayService:
         if not account:
             return Decimal('0.00')
         
-        # Start with current balance and work backwards/forwards
-        # For simplicity, we'll calculate from the earliest transaction
+        # Start from zero and calculate cumulative balance
         balance = Decimal('0.00')
         
-        # Get all transactions up to target_date
+        # Get all transactions up to target_date (including unpaid for forecasting)
         query = Transaction.query.filter(
             Transaction.account_id == account_id,
             Transaction.transaction_date <= target_date
         )
         
-        if not include_unpaid:
-            query = query.filter(Transaction.is_paid == True)
+        # Always include all transactions for payday forecasting
         
         transactions = query.order_by(Transaction.transaction_date).all()
         

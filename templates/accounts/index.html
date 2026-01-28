@@ -3,64 +3,267 @@
 {% block title %}Accounts - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Accounts</h1>
-    
-    <div class="mb-3">
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-bank"></i> Bank Accounts</h1>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAccountModal">
-            Add Account
+            <i class="bi bi-plus-circle"></i> Add Account
         </button>
     </div>
-    
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Balance</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for account in accounts %}
-            <tr>
-                <td>
-                    <a href="{{ url_for('transactions.index', account_id=account.id) }}" class="text-decoration-none">
-                        <i class="bi bi-bank"></i> {{ account.name }}
-                    </a>
-                </td>
-                <td>{{ account.account_type }}</td>
-                <td>£{{ "%.2f"|format(account.balance or 0) }}</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary">Edit</button>
-                    <button class="btn btn-sm btn-danger">Delete</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-cash-stack display-4"></i>
+                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Total Balance</h6>
+                    <h2 class="card-title mb-0">£{{ "%.2f"|format(total_balance) }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-bank display-4"></i>
+                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Active Accounts</h6>
+                    <h2 class="card-title mb-0">{{ active_accounts|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-diagram-3 display-4"></i>
+                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Account Types</h6>
+                    <h2 class="card-title mb-0">{{ accounts_by_type|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-archive display-4"></i>
+                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Inactive</h6>
+                    <h2 class="card-title mb-0">{{ inactive_accounts|length }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounts by Type -->
+    {% for acc_type, type_accounts in accounts_by_type.items() %}
+    <div class="card mb-4">
+        <div class="card-header 
+            {% if acc_type == 'Joint' %}bg-primary{% elif acc_type == 'Savings' %}bg-success{% elif acc_type == 'Personal' %}bg-info{% else %}bg-secondary{% endif %} 
+            text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi 
+                    {% if acc_type == 'Joint' %}bi-people
+                    {% elif acc_type == 'Savings' %}bi-piggy-bank
+                    {% elif acc_type == 'Personal' %}bi-person
+                    {% elif acc_type == 'Current' %}bi-bank
+                    {% elif acc_type == 'Credit Card' %}bi-credit-card
+                    {% else %}bi-wallet2{% endif %}"></i>
+                {{ acc_type }} Accounts
+            </h5>
+            <span class="badge bg-white text-dark">
+                Total: £{{ "%.2f"|format(type_totals[acc_type]) }}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for account in type_accounts %}
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 shadow-sm hover-shadow">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-bank2 text-primary"></i>
+                                    {{ account.name }}
+                                </h5>
+                                {% if account.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </div>
+                            
+                            <hr class="my-2">
+                            
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Balance:</span>
+                                <h4 class="mb-0 {% if account.calculated_balance < 0 %}text-danger{% else %}text-success{% endif %}">
+                                    £{{ "%.2f"|format(account.calculated_balance) }}
+                                </h4>
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <a href="{{ url_for('transactions.index', account_id=account.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-list-ul"></i> View Transactions
+                                </a>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-secondary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editModal{{ account.id }}">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            onclick="confirmDelete('{{ account.name }}', {{ account.id }})">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer text-muted small">
+                            <i class="bi bi-clock"></i> Updated: {{ account.updated_at.strftime('%d %b %Y') if account.updated_at else 'N/A' }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Edit Modal for each account -->
+                <div class="modal fade" id="editModal{{ account.id }}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Edit Account: {{ account.name }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <form method="POST" action="{{ url_for('accounts.edit', id=account.id) }}">
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label for="edit_name{{ account.id }}" class="form-label">Account Name</label>
+                                        <input type="text" class="form-control" 
+                                               id="edit_name{{ account.id }}" 
+                                               name="name" 
+                                               value="{{ account.name }}" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="edit_type{{ account.id }}" class="form-label">Account Type</label>
+                                        <select class="form-select" 
+                                                id="edit_type{{ account.id }}" 
+                                                name="account_type" required>
+                                            <option value="Current" {% if account.account_type == 'Current' %}selected{% endif %}>Current</option>
+                                            <option value="Joint" {% if account.account_type == 'Joint' %}selected{% endif %}>Joint</option>
+                                            <option value="Savings" {% if account.account_type == 'Savings' %}selected{% endif %}>Savings</option>
+                                            <option value="Personal" {% if account.account_type == 'Personal' %}selected{% endif %}>Personal</option>
+                                            <option value="Credit Card" {% if account.account_type == 'Credit Card' %}selected{% endif %}>Credit Card</option>
+                                            <option value="Loan" {% if account.account_type == 'Loan' %}selected{% endif %}>Loan</option>
+                                            <option value="Investment" {% if account.account_type == 'Investment' %}selected{% endif %}>Investment</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="edit_balance{{ account.id }}" class="form-label">Balance</label>
+                                        <input type="number" step="0.01" class="form-control" 
+                                               id="edit_balance{{ account.id }}" 
+                                               name="balance" 
+                                               value="{{ account.balance }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   id="edit_active{{ account.id }}" 
+                                                   name="is_active"
+                                                   {% if account.is_active %}checked{% endif %}>
+                                            <label class="form-check-label" for="edit_active{{ account.id }}">
+                                                Active Account
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if inactive_accounts %}
+    <!-- Inactive Accounts -->
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-archive"></i> Inactive Accounts
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Balance</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for account in inactive_accounts %}
+                        <tr>
+                            <td><i class="bi bi-bank2"></i> {{ account.name }}</td>
+                            <td>{{ account.account_type }}</td>
+                            <td>£{{ "%.2f"|format(account.calculated_balance) }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#editModal{{ account.id }}">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not active_accounts %}
+    <div class="alert alert-info text-center">
+        <i class="bi bi-info-circle display-4"></i>
+        <h4 class="mt-3">No Accounts Yet</h4>
+        <p>Get started by adding your first bank account!</p>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAccountModal">
+            <i class="bi bi-plus-circle"></i> Add Your First Account
+        </button>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Add Account Modal -->
 <div class="modal fade" id="addAccountModal" tabindex="-1" aria-labelledby="addAccountModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addAccountModalLabel">Add New Account</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="addAccountModalLabel">
+                    <i class="bi bi-plus-circle"></i> Add New Account
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST" action="{{ url_for('accounts.create') }}">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="account_name" class="form-label">Account Name</label>
-                        <input type="text" class="form-control" id="account_name" name="name" required>
+                        <input type="text" class="form-control" id="account_name" name="name" 
+                               placeholder="e.g., Main Current Account" required>
                     </div>
                     <div class="mb-3">
                         <label for="account_type" class="form-label">Account Type</label>
                         <select class="form-select" id="account_type" name="account_type" required>
                             <option value="">Select Type</option>
                             <option value="Current">Current</option>
+                            <option value="Joint">Joint</option>
                             <option value="Savings">Savings</option>
+                            <option value="Personal">Personal</option>
                             <option value="Credit Card">Credit Card</option>
                             <option value="Loan">Loan</option>
                             <option value="Investment">Investment</option>
@@ -68,15 +271,58 @@
                     </div>
                     <div class="mb-3">
                         <label for="balance" class="form-label">Opening Balance</label>
-                        <input type="number" step="0.01" class="form-control" id="balance" name="balance" value="0.00">
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" step="0.01" class="form-control" 
+                                   id="balance" name="balance" value="0.00">
+                        </div>
+                        <small class="text-muted">Enter the current balance of this account</small>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="is_active" name="is_active" checked>
+                            <label class="form-check-label" for="is_active">
+                                Active Account
+                            </label>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Account</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Add Account
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<!-- Delete Confirmation Form (hidden) -->
+<form id="deleteForm" method="POST" style="display: none;">
+</form>
+
+<style>
+.hover-shadow {
+    transition: all 0.3s ease;
+}
+.hover-shadow:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-2px);
+}
+.card-footer {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+</style>
+
+<script>
+function confirmDelete(accountName, accountId) {
+    if (confirm(`Are you sure you want to delete "${accountName}"?\n\nThis will permanently delete the account and all associated data.`)) {
+        const form = document.getElementById('deleteForm');
+        form.action = `/accounts/${accountId}/delete`;
+        form.submit();
+    }
+}
+</script>
 {% endblock %}

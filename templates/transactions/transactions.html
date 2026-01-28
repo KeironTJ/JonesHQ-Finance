@@ -73,7 +73,7 @@
             <form method="get" action="{{ url_for('transactions.index') }}" class="row g-3">
                 <div class="col-md-2">
                     <label for="account_id" class="form-label">Account</label>
-                    <select name="account_id" id="account_id" class="form-select">
+                    <select name="account_id" id="account_id" class="form-select" onchange="this.form.submit()">
                         <option value="">All Accounts</option>
                         {% for account in accounts %}
                         <option value="{{ account.id }}" {% if selected_account == account.id %}selected{% endif %}>
@@ -85,7 +85,7 @@
                 
                 <div class="col-md-2">
                     <label for="head_budget" class="form-label">Category Group</label>
-                    <select name="head_budget" id="head_budget" class="form-select">
+                    <select name="head_budget" id="head_budget" class="form-select" onchange="handleHeadBudgetChange(this)">
                         <option value="">All Groups</option>
                         {% for hb in head_budgets %}
                         <option value="{{ hb }}" {% if selected_head_budget == hb %}selected{% endif %}>
@@ -97,7 +97,7 @@
                 
                 <div class="col-md-2">
                     <label for="category_id" class="form-label">Sub-Category</label>
-                    <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %}>
+                    <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %} onchange="this.form.submit()">
                         <option value="">All Sub-Categories</option>
                         {% for category in categories %}
                         <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
@@ -113,7 +113,7 @@
                 
                 <div class="col-md-2">
                     <label for="vendor_id" class="form-label">Vendor</label>
-                    <select name="vendor_id" id="vendor_id" class="form-select">
+                    <select name="vendor_id" id="vendor_id" class="form-select" onchange="this.form.submit()">
                         <option value="">All Vendors</option>
                         {% for vendor in vendors %}
                         <option value="{{ vendor.id }}" {% if selected_vendor == vendor.id %}selected{% endif %}>
@@ -125,13 +125,22 @@
                 
                 <div class="col-md-2">
                     <label for="year_month" class="form-label">Month</label>
-                    <select name="year_month" id="year_month" class="form-select">
+                    <select name="year_month" id="year_month" class="form-select" onchange="this.form.submit()">
                         <option value="">All Months</option>
                         {% for ym in year_months %}
                         <option value="{{ ym }}" {% if selected_year_month == ym %}selected{% endif %}>
                             {{ ym }}
                         </option>
                         {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="is_paid" class="form-label">Status</label>
+                    <select name="is_paid" id="is_paid" class="form-select" onchange="submitFilterForm()">
+                        <option value="">All Status</option>
+                        <option value="paid" {% if selected_is_paid == 'paid' %}selected{% endif %}>Paid</option>
+                        <option value="pending" {% if selected_is_paid == 'pending' %}selected{% endif %}>Pending</option>
                     </select>
                 </div>
                 
@@ -146,7 +155,7 @@
                     <button type="submit" class="btn btn-primary w-100">Filter</button>
                 </div>
             </form>
-            {% if selected_account or selected_category or selected_vendor or selected_year_month or search_term %}
+            {% if selected_account or selected_category or selected_vendor or selected_year_month or search_term or selected_is_paid %}
             <div class="mt-2">
                 <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
             </div>
@@ -508,62 +517,63 @@
 </div>
 
 <script>
-// Edit Transaction Modal - populate form
-const editTransactionModal = document.getElementById('editTransactionModal');
-if (editTransactionModal) {
-    editTransactionModal.addEventListener('show.bs.modal', function (event) {
-        const button = event.relatedTarget;
-        const txnId = button.getAttribute('data-txn-id');
-        const txnDate = button.getAttribute('data-txn-date');
-        const txnAmount = button.getAttribute('data-txn-amount');
-        const txnDescription = button.getAttribute('data-txn-description');
-        const txnItem = button.getAttribute('data-txn-item');
-        const txnCategory = button.getAttribute('data-txn-category');
-        const txnVendor = button.getAttribute('data-txn-vendor');
-        const txnAccount = button.getAttribute('data-txn-account');
-        const txnAssigned = button.getAttribute('data-txn-assigned');
-        const txnPaymentType = button.getAttribute('data-txn-payment-type');
-        const txnFixed = button.getAttribute('data-txn-fixed');
-        
-        // Set form action dynamically
-        const form = document.getElementById('editTransactionForm');
-        form.action = `/transactions/${txnId}/edit`;
-        
-        // Populate form fields
-        document.getElementById('edit_transaction_date').value = txnDate;
-        document.getElementById('edit_amount').value = txnAmount;
-        document.getElementById('edit_description').value = txnDescription;
-        document.getElementById('edit_item').value = txnItem;
-        document.getElementById('edit_category_id').value = txnCategory;
-        document.getElementById('edit_vendor_id').value = txnVendor;
-        document.getElementById('edit_account_id').value = txnAccount;
-        document.getElementById('edit_assigned_to').value = txnAssigned;
-        document.getElementById('edit_payment_type').value = txnPaymentType;
-        document.getElementById('edit_txn_fixed').checked = (txnFixed === '1');
-    });
-}
-
-// Auto-submit form when any filter dropdown changes
-const filterSelects = ['account_id', 'head_budget', 'category_id', 'vendor_id', 'year_month'];
-filterSelects.forEach(selectId => {
-    const selectElement = document.getElementById(selectId);
-    if (selectElement) {
-        selectElement.addEventListener('change', function() {
-            // Special handling for head_budget to enable/disable category
-            if (selectId === 'head_budget') {
-                const categorySelect = document.getElementById('category_id');
-                if (this.value) {
-                    categorySelect.disabled = false;
-                } else {
-                    categorySelect.disabled = true;
-                    categorySelect.value = '';
-                }
-            }
-            // Submit form for all dropdowns
-            this.form.submit();
+// Wait for DOM to be fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Edit Transaction Modal - populate form
+    const editTransactionModal = document.getElementById('editTransactionModal');
+    if (editTransactionModal) {
+        editTransactionModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const txnId = button.getAttribute('data-txn-id');
+            const txnDate = button.getAttribute('data-txn-date');
+            const txnAmount = button.getAttribute('data-txn-amount');
+            const txnDescription = button.getAttribute('data-txn-description');
+            const txnItem = button.getAttribute('data-txn-item');
+            const txnCategory = button.getAttribute('data-txn-category');
+            const txnVendor = button.getAttribute('data-txn-vendor');
+            const txnAccount = button.getAttribute('data-txn-account');
+            const txnAssigned = button.getAttribute('data-txn-assigned');
+            const txnPaymentType = button.getAttribute('data-txn-payment-type');
+            const txnFixed = button.getAttribute('data-txn-fixed');
+            
+            // Set form action dynamically
+            const form = document.getElementById('editTransactionForm');
+            form.action = `/transactions/${txnId}/edit`;
+            
+            // Populate form fields
+            document.getElementById('edit_transaction_date').value = txnDate;
+            document.getElementById('edit_amount').value = txnAmount;
+            document.getElementById('edit_description').value = txnDescription;
+            document.getElementById('edit_item').value = txnItem;
+            document.getElementById('edit_category_id').value = txnCategory;
+            document.getElementById('edit_vendor_id').value = txnVendor;
+            document.getElementById('edit_account_id').value = txnAccount;
+            document.getElementById('edit_assigned_to').value = txnAssigned;
+            document.getElementById('edit_payment_type').value = txnPaymentType;
+            document.getElementById('edit_txn_fixed').checked = (txnFixed === '1');
         });
     }
 });
+
+// Handle head budget change
+function handleHeadBudgetChange(selectElement) {
+    const categorySelect = document.getElementById('category_id');
+    if (selectElement.value) {
+        categorySelect.disabled = false;
+    } else {
+        categorySelect.disabled = true;
+        categorySelect.value = '';
+    }
+    selectElement.form.submit();
+}
+
+// Submit filter form
+function submitFilterForm() {
+    const form = document.querySelector('form[action*="transactions"]');
+    if (form) {
+        form.submit();
+    }
+}
 
 // Bulk selection functions
 function toggleSelectAll() {
