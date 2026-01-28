@@ -77,7 +77,7 @@ class LoanService:
             period = 1
         
         # Create actual payment schedule
-        while current_date <= end_date and opening_balance > 0:
+        while current_date <= end_date and opening_balance > Decimal('0.01'):  # Continue until balance is essentially zero
             # Check if payment already exists for this date
             existing = LoanPayment.query.filter_by(
                 loan_id=loan_id,
@@ -97,11 +97,15 @@ class LoanService:
                 # Calculate closing balance
                 closing_balance = opening_balance - amount_paid_off
                 
-                # Don't allow negative balance
-                if closing_balance < 0:
-                    amount_paid_off = opening_balance + interest_charge
+                # Handle final payment or overpayment
+                if closing_balance < Decimal('0.00') or current_date == end_date:
+                    # This is the final payment - pay off exact remaining balance
+                    amount_paid_off = opening_balance
                     payment_amount = amount_paid_off + interest_charge
                     closing_balance = Decimal('0.00')
+                
+                # Round to avoid floating point issues
+                closing_balance = closing_balance.quantize(Decimal('0.01'))
                 
                 # Create payment record
                 payment = LoanPayment(

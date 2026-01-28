@@ -277,6 +277,14 @@
                                         title="Toggle paid status">
                                     <i class="bi bi-check-circle"></i>
                                 </button>
+                                {% if not payment.is_paid or payment.period == 0 %}
+                                <button class="btn btn-sm btn-outline-warning" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#editPaymentModal{{ payment.id }}"
+                                        title="Edit payment">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                {% endif %}
                                 <form method="POST" 
                                       action="{{ url_for('loans.delete_payment', id=loan.id, payment_id=payment.id) }}" 
                                       style="display: inline;"
@@ -324,6 +332,56 @@
         </div>
     </div>
 </div>
+
+<!-- Edit Payment Modals -->
+{% for payment in payments %}
+{% if not payment.is_paid or payment.period == 0 %}
+<div class="modal fade" id="editPaymentModal{{ payment.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Payment - Period {{ payment.period }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('loans.edit_payment', id=loan.id, payment_id=payment.id) }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Date</label>
+                        <input type="date" class="form-control" name="payment_date" 
+                               value="{{ payment.date.strftime('%Y-%m-%d') }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Payment Amount (£)</label>
+                        <input type="number" step="0.01" class="form-control" name="payment_amount" 
+                               value="{{ '%.2f'|format(payment.payment_amount) }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Interest Charge (£)</label>
+                        <input type="number" step="0.01" class="form-control" name="interest_charge" 
+                               value="{{ '%.2f'|format(payment.interest_charge) }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Principal Paid Off (£)</label>
+                        <input type="number" step="0.01" class="form-control" name="amount_paid_off" 
+                               value="{{ '%.2f'|format(payment.amount_paid_off) }}">
+                    </div>
+                    <div class="alert alert-info">
+                        <small>
+                            <strong>Opening Balance:</strong> £{{ "%.2f"|format(payment.opening_balance) }}<br>
+                            <strong>Period:</strong> {{ payment.period }}
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

@@ -185,10 +185,10 @@ def detail(id):
         credit_card_id=id
     ).order_by(CreditCardTransaction.date.desc()).all()
     
-    # Calculate summary stats
-    total_purchases = sum([float(t.amount) for t in transactions if t.transaction_type == 'Purchase'])
-    total_payments = sum([abs(float(t.amount)) for t in transactions if t.transaction_type == 'Payment'])
-    total_interest = sum([float(t.amount) for t in transactions if t.transaction_type == 'Interest'])
+    # Calculate summary stats (only PAID transactions)
+    total_purchases = sum([float(t.amount) for t in transactions if t.transaction_type == 'Purchase' and t.is_paid])
+    total_payments = sum([abs(float(t.amount)) for t in transactions if t.transaction_type == 'Payment' and t.is_paid])
+    total_interest = sum([float(t.amount) for t in transactions if t.transaction_type == 'Interest' and t.is_paid])
     
     # Get promotional offers
     promotions = CreditCardPromotion.query.filter_by(credit_card_id=id).order_by(

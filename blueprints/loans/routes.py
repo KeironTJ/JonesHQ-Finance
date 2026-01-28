@@ -291,6 +291,79 @@ def toggle_payment_paid(id, payment_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@loans_bp.route('/<int:id>/payment/<int:payment_id>/edit', methods=['POST'])
+def edit_payment(id, payment_id):
+    """Edit a loan payment"""
+    try:
+        loan = Loan.query.get_or_404(id)
+        payment = LoanPayment.query.get_or_404(payment_id)
+        
+        # Verify payment belongs to this loan
+        if payment.loan_id != loan.id:
+            flash('Payment does not belong to this loan!', 'danger')
+            return redirect(url_for('loans.detail', id=id))
+        
+        # Only allow editing Period 0 or unpaid payments
+        if payment.is_paid and payment.period > 0:
+            flash('Cannot edit a paid payment!', 'danger')
+            return redirect(url_for('loans.detail', id=id))
+        
+        # Get form data
+        payment_date_str = request.form.get('payment_date')
+        payment_amount = request.form.get('payment_amount')
+        interest_charge = request.form.get('interest_charge')
+        amount_paid_off = request.form.get('amount_paid_off')
+        
+        # Update payment
+        if payment_date_str:
+            payment.date = datetime.strptime(payment_date_str, '%Y-%m-%d').date()
+            payment.year_month = payment.date.strftime('%Y-%m')
+        
+        if payment_amount:
+            payment.payment_amount = float(payment_amount)
+        
+        if interest_charge:
+            payment.interest_charge = float(interest_charge)
+        
+        if amount_paid_off:
+            payment.amount_paid_off = float(amount_paid_off)
+        
+        # Recalculate closing balance
+        payment.closing_balance = payment.opening_balance - payment.amount_paid_off
+        
+        db.session.commit()
+        
+        # Sync changes to linked bank transaction if exists
+        if payment.bank_transaction_id:
+            bank_txn = Transaction.query.get(payment.bank_transaction_id)
+            if bank_txn:
+                # Update all relevant transaction fields
+                bank_txn.transaction_date = payment.date
+                bank_txn.amount = float(payment.payment_amount)
+                bank_txn.description = f"Loan Payment - {loan.name}"
+                bank_txn.item = f"Period {payment.period}"
+                bank_txn.year_month = payment.date.strftime('%Y-%m')
+                bank_txn.week_year = f"{payment.date.isocalendar()[1]:02d}-{payment.date.year}"
+                bank_txn.day_name = payment.date.strftime('%a')
+                bank_txn.updated_at = datetime.utcnow()
+                
+                db.session.commit()
+                # Recalculate bank account balance
+                Transaction.recalculate_account_balance(bank_txn.account_id)
+        
+        flash('Payment updated successfully!', 'success')
+        return redirect(url_for('loans.detail', id=id))
+        
+    except ValueError:
+        db.session.rollback()
+        flash('Invalid payment data!', 'danger')
+        return redirect(url_for('loans.detail', id=id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating payment: {str(e)}', 'danger')
+        return redirect(url_for('loans.detail', id=id))
+
+
 @loans_bp.route('/<int:id>/payment/<int:payment_id>/delete', methods=['POST'])
 def delete_payment(id, payment_id):
     """Delete a loan payment and linked bank transaction"""
