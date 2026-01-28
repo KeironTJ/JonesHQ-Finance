@@ -1,94 +1,161 @@
-# Import Scripts
+# Scripts Directory
 
-Scripts for populating the JonesHQ Finance database with initial data.
+Scripts for managing and maintaining the JonesHQ Finance database.
 
 ## 📁 Structure
 
 ```
 scripts/
-├── README.md              # This file
-├── import_categories.py   # Import 42 generic categories
-├── import_vendors.py      # Import vendors from curated list
-└── data/                  # Sample data files (future use)
+├── README.md                  # This file
+├── imports/                   # Data import scripts
+│   ├── import_accounts.py
+│   ├── import_accounts_ACTUAL.py
+│   ├── import_categories.py
+│   ├── import_credit_cards.py
+│   ├── import_credit_cards_ACTUAL.py
+│   ├── import_credit_card_transactions.py
+│   ├── import_loans.py
+│   ├── import_loans_ACTUAL.py
+│   ├── import_transactions_csv.py
+│   ├── import_transactions_nationwide.py
+│   └── import_vendors.py
+├── checks/                    # Verification & validation scripts
+│   ├── check_active_cards.py
+│   ├── check_card_balances.py
+│   ├── check_paid_status.py
+│   └── check_vendors.py
+├── maintenance/               # Data maintenance & recalculation scripts
+│   ├── delete_future_txns.py
+│   ├── mark_past_transactions_paid.py
+│   ├── migrate_credit_cards.py
+│   ├── recalculate_active_cards.py
+│   ├── recalculate_balances.py
+│   ├── recalculate_credit_available.py
+│   ├── reset_credit_cards.py
+│   ├── sync_transfer_transactions.py
+│   ├── update_account_balance.py
+│   └── update_savings_balances.py
+├── database/                  # Database initialization scripts
+│   ├── init_db.py
+│   └── populate_sample_data.py
+└── data/                      # Sample data files
 ```
 
 ## 🚀 Usage
 
-### 1. Import Categories ✅ COMPLETED
+### Database Initialization
+
+**Initialize Database:**
 ```powershell
 cd "c:\Users\keiro\OneDrive\Documents\Programming\JonesHQ Finance"
 .\.venv\Scripts\Activate.ps1
-python scripts\import_categories.py
+python scripts\database\init_db.py
 ```
 
-**Status:** ✅ Complete - 42 categories across 10 head budgets imported
-
-### 2. Import Vendors ✅ COMPLETED
+**Populate Sample Data:**
 ```powershell
-cd "c:\Users\keiro\OneDrive\Documents\Programming\JonesHQ Finance"
-.\.venv\Scripts\Activate.ps1
-python scripts\import_vendors.py
+python scripts\database\populate_sample_data.py
 ```
 
-**Status:** ✅ Complete - 177 vendors imported and categorized
+### Import Scripts
 
-**What it does:**
-- Imports 177 vendors from curated Excel list
-- Auto-categorizes by type (Grocery, Fuel, Restaurant, etc.)
-- Sets default categories where applicable
-- Skips duplicates
-- Shows progress for each vendor
+**Import Categories:** ✅ COMPLETED
+```powershell
+python scripts\imports\import_categories.py
+```
+- 42 categories across 10 head budgets imported
 
-**Vendor types included:**
-- Grocery stores (Tesco, Asda, Aldi, etc.)
-- Fuel stations (Esso, BP, etc.)
-- Restaurants & takeaways (McDonald's, Greggs, etc.)
-- Retail stores (Primark, B&M, Argos, etc.)
-- Online retailers (Amazon, eBay, SHEIN, etc.)
-- Utilities (EE, Sky, Octopus Energy, etc.)
-- Insurance providers
-- Schools & childcare
-- Entertainment venues
-- Health & fitness
-- Services (barbers, car wash, etc.)
+**Import Vendors:** ✅ COMPLETED
+```powershell
+python scripts\imports\import_vendors.py
+```
+- 177 vendors imported and categorized by type
+
+**Import Accounts:** ✅ COMPLETED
+```powershell
+python scripts\imports\import_accounts_ACTUAL.py
+```
+
+**Import Credit Cards:** ✅ COMPLETED
+```powershell
+python scripts\imports\import_credit_cards_ACTUAL.py
+```
+
+**Import Loans:** ✅ COMPLETED
+```powershell
+python scripts\imports\import_loans_ACTUAL.py
+```
+
+**Import Transactions:**
+```powershell
+python scripts\imports\import_transactions_csv.py
+# or
+python scripts\imports\import_transactions_nationwide.py
+```
+
+### Verification Scripts
+
+**Check Active Cards:**
+```powershell
+python scripts\checks\check_active_cards.py
+```
+
+**Check Card Balances:**
+```powershell
+python scripts\checks\check_card_balances.py
+```
+
+**Check Payment Status:**
+```powershell
+python scripts\checks\check_paid_status.py
+```
+
+**Check Vendors:**
+```powershell
+python scripts\checks\check_vendors.py
+```
+
+### Maintenance Scripts
+
+**Recalculate Balances:**
+```powershell
+python scripts\maintenance\recalculate_balances.py
+python scripts\maintenance\recalculate_credit_available.py
+python scripts\maintenance\update_account_balance.py
+```
+
+**Clean Up Data:**
+```powershell
+python scripts\maintenance\delete_future_txns.py
+python scripts\maintenance\reset_credit_cards.py
+```
+
+**Sync Transactions:**
+```powershell
+python scripts\maintenance\sync_transfer_transactions.py
+python scripts\maintenance\mark_past_transactions_paid.py
+```
 
 ## 📝 Notes
 
-### Excluded from Import
-These items from your Excel were excluded as they're not vendors:
-- **Year markers** (2024, 2025, 2026) - These are savings pots, handled elsewhere
-- **Generic terms** (Payment, Transfer, IN, OUT, Credit)
-- **Personal transfers** (Emma Transfer, Keiron Transfer, etc.)
-- **Family names** (Paula & Chris, Michael and Emily, etc.)
-- **Interest categories** (Holiday Interest, Christmas Interest, etc.)
-- **Specific vehicle names** (Vauxhall Zafira, Fiat Punto, Audi A6) - These go in Vehicles table
-
-### Cleaned Names
-Some vendor names were standardized:
-- "Coop" → "Co-op"
-- Multiple barber entries consolidated where appropriate
-- School names kept as distinct vendors
-
-## 🎯 Next Steps
-
-After importing vendors, you can:
-1. **Review vendors** at http://127.0.0.1:5000/vendors
-2. **Add missing vendors** manually through the web interface
-3. **Set default categories** for vendors that don't have them
-4. **Mark inactive vendors** for ones you no longer use
-
-## 🔄 Future Import Scripts
-
-Planned scripts:
-- `import_accounts.py` - Bank accounts
-- `import_loans.py` - Loan details
-- `import_credit_cards.py` - Credit card accounts
-- `import_vehicles.py` - Vehicle registry
-- `import_transactions.py` - Bulk transaction import from Excel
-
-## ⚠️ Important
-
+- All import scripts check for duplicates before inserting
+- Maintenance scripts include safety confirmations where appropriate
+- Check scripts provide verification without modifying data
+- Database scripts should be run before imports
 - Scripts are idempotent - safe to run multiple times
-- Existing data won't be duplicated
-- Always backup your database before running bulk imports
-- Review imported data in the web interface after running
+- Always backup database before running bulk operations
+
+## ✅ Completed Imports
+
+- **Categories:** 42 categories across 10 head budgets
+- **Vendors:** 177 vendors with type classification
+- **Accounts:** Bank accounts with balances
+- **Credit Cards:** 11 cards (3 active, 8 inactive)
+- **Loans:** Active loan accounts
+
+## 🎯 Script Organization
+
+- **imports/** - One-time data import from Excel/CSV
+- **checks/** - Verification and validation (read-only)
+- **maintenance/** - Data cleanup and recalculation
+- **database/** - Database initialization and setup
