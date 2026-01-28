@@ -24,8 +24,9 @@ class CreditCardTransaction(db.Model):
     transaction_type = db.Column(db.String(50), nullable=False)  
     # Types: 'Purchase', 'Balance Transfer', 'Payment', 'Interest', 'Reward', 'Fee'
     amount = db.Column(db.Numeric(10, 2), nullable=False)
-    # Negative = reduces balance (payment, reward)
-    # Positive = increases balance (purchase, interest, fee)
+    # CREDIT CARD CONVENTION (negative balance = you owe money):
+    # Positive = reduces what you owe (payment, reward)
+    # Negative = increases what you owe (purchase, interest, fee)
     
     # Interest Tracking (for Interest transactions)
     applied_apr = db.Column(db.Numeric(5, 2))  # APR used for this interest charge
@@ -33,6 +34,7 @@ class CreditCardTransaction(db.Model):
     
     # Payment Status
     is_paid = db.Column(db.Boolean, default=False)  # Has this been reconciled?
+    is_fixed = db.Column(db.Boolean, default=False)  # Is this transaction locked from regeneration?
     
     # Balances After Transaction
     balance = db.Column(db.Numeric(10, 2))  # Card balance after transaction
@@ -64,15 +66,18 @@ class CreditCardTransaction(db.Model):
         
         running_balance = 0.0
         for txn in transactions:
-            # Purchases, Interest, Fees increase balance (positive amount)
-            # Payments, Rewards decrease balance (negative amount)
+            # CREDIT CARD CONVENTION:
+            # Negative amounts (purchases, interest) INCREASE debt (make balance more negative)
+            # Positive amounts (payments, rewards) DECREASE debt (make balance less negative)
             running_balance += float(txn.amount)
             txn.balance = round(running_balance, 2)
-            txn.credit_available = round(float(card.credit_limit) - running_balance, 2)
+            # Available credit = limit - amount owed (use abs since negative = owe)
+            txn.credit_available = round(float(card.credit_limit) - abs(running_balance), 2)
         
         # Update card's current balance
         card.current_balance = round(running_balance, 2)
-        card.available_credit = round(float(card.credit_limit) - running_balance, 2)
+        # Available credit = limit - amount owed (use abs since negative = owe)
+        card.available_credit = round(float(card.credit_limit) - abs(running_balance), 2)
         
         db.session.commit()
     

@@ -91,7 +91,6 @@
                         <td>£{{ "%.2f"|format(card.set_payment or 0) }}</td>
                         <td>{{ card.statement_date }}{% if card.statement_date %}th{% endif %}</td>
                         <td>
-                            {% set today = None %}
                             {% if card.purchase_0_percent_until and card.purchase_0_percent_until >= today %}
                             <span class="badge bg-success" title="0% Purchases until {{ card.purchase_0_percent_until }}">
                                 <i class="bi bi-cart"></i> 0%

@@ -4,6 +4,7 @@ from dateutil.relativedelta import relativedelta
 from . import credit_cards_bp
 from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
+from models.settings import Settings
 from services.credit_card_service import CreditCardService
 from extensions import db
 
@@ -13,15 +14,33 @@ def index():
     """List all credit cards with summary"""
     cards = CreditCard.query.order_by(CreditCard.is_active.desc(), CreditCard.card_name).all()
     
-    # Calculate totals
+    # Calculate actual balance from paid transactions only for each card
+    for card in cards:
+        if card.is_active:
+            # Get the latest PAID transaction
+            latest_paid = CreditCardTransaction.query.filter_by(
+                credit_card_id=card.id,
+                is_paid=True
+            ).order_by(CreditCardTransaction.date.desc()).first()
+            
+            if latest_paid:
+                card.current_balance = latest_paid.balance
+                card.available_credit = latest_paid.credit_available
+            else:
+                # No paid transactions yet, use opening balance
+                card.current_balance = 0.00
+                card.available_credit = float(card.credit_limit)
+    
+    # Calculate totals based on actual paid balances
     total_limit = sum([float(c.credit_limit) for c in cards if c.is_active])
     total_balance = sum([float(c.current_balance) for c in cards if c.is_active])
     total_available = sum([float(c.available_credit or 0) for c in cards if c.is_active])
     total_payments = sum([float(c.set_payment or 0) for c in cards if c.is_active])
     
-    # Calculate weighted average APR
-    if total_balance > 0:
-        weighted_apr = sum([float(c.monthly_apr) * float(c.current_balance) for c in cards if c.is_active]) / total_balance
+    # Calculate weighted average APR based on absolute balance (debt owed)
+    total_debt = sum([abs(float(c.current_balance)) for c in cards if c.is_active and c.current_balance < 0])
+    if total_debt > 0:
+        weighted_apr = sum([float(c.monthly_apr) * abs(float(c.current_balance)) for c in cards if c.is_active and c.current_balance < 0]) / total_debt
     else:
         weighted_apr = 0
     
@@ -31,7 +50,8 @@ def index():
                          total_balance=total_balance,
                          total_available=total_available,
                          total_payments=total_payments,
-                         weighted_apr=weighted_apr)
+                         weighted_apr=weighted_apr,
+                         today=date.today())
 
 
 @credit_cards_bp.route('/credit-cards/add', methods=['GET', 'POST'])
@@ -177,12 +197,168 @@ def detail(id):
                          total_payments=total_payments,
                          total_interest=total_interest,
                          active_purchase_promo=active_purchase_promo,
-                         active_bt_promo=active_bt_promo)
+                         active_bt_promo=active_bt_promo,
+                         today=today)
+
+
+@credit_cards_bp.route('/credit-cards/transaction/<int:txn_id>/toggle-fixed', methods=['POST'])
+def toggle_fixed(txn_id):
+    """Toggle is_fixed flag on a transaction"""
+    try:
+        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        txn.is_fixed = not txn.is_fixed
+        db.session.commit()
+        
+        status = "locked" if txn.is_fixed else "unlocked"
+        flash(f'Transaction {status} successfully!', 'success')
+        
+        return redirect(url_for('credit_cards.detail', id=txn.credit_card_id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error toggling transaction: {str(e)}', 'danger')
+        return redirect(request.referrer or url_for('credit_cards.index'))
+
+
+@credit_cards_bp.route('/credit-cards/<int:id>/transaction/<int:txn_id>/edit', methods=['POST'])
+def edit_transaction(id, txn_id):
+    """Edit a credit card transaction"""
+    try:
+        card = CreditCard.query.get_or_404(id)
+        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        
+        # Verify transaction belongs to this card
+        if txn.credit_card_id != card.id:
+            flash('Transaction does not belong to this card!', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Only allow editing unpaid transactions
+        if txn.is_paid:
+            flash('Cannot edit a paid transaction!', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Get form data
+        txn_date_str = request.form.get('txn_date')
+        txn_type = request.form.get('txn_type')
+        txn_item = request.form.get('txn_item')
+        txn_amount = float(request.form.get('txn_amount'))
+        txn_fixed = request.form.get('txn_fixed') == '1'
+        
+        # Update transaction
+        if txn_date_str:
+            txn.date = datetime.strptime(txn_date_str, '%Y-%m-%d').date()
+            txn.day_name = txn.date.strftime('%A')
+            txn.week = int(txn.date.strftime('%U'))
+            txn.month = txn.date.strftime('%Y-%m')
+        
+        txn.transaction_type = txn_type
+        txn.item = txn_item
+        txn.amount = txn_amount
+        txn.is_fixed = txn_fixed
+        
+        db.session.commit()
+        
+        # Recalculate balance
+        CreditCardTransaction.recalculate_card_balance(card.id)
+        db.session.commit()
+        
+        flash(f'Transaction updated successfully!', 'success')
+        return redirect(url_for('credit_cards.detail', id=id))
+        
+    except ValueError:
+        db.session.rollback()
+        flash('Invalid transaction data!', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating transaction: {str(e)}', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+
+
+@credit_cards_bp.route('/credit-cards/<int:id>/payment/<int:txn_id>/edit', methods=['POST'])
+def edit_payment(id, txn_id):
+    """Edit a payment transaction amount and automatically lock it"""
+    try:
+        card = CreditCard.query.get_or_404(id)
+        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        
+        # Verify transaction belongs to this card
+        if txn.credit_card_id != card.id:
+            flash('Transaction does not belong to this card!', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Only allow editing Payment transactions
+        if txn.transaction_type != 'Payment':
+            flash('Only Payment transactions can be edited!', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Only allow editing future unpaid transactions
+        if txn.is_paid:
+            flash('Cannot edit a paid transaction!', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Get form data
+        payment_date_str = request.form.get('payment_date')
+        payment_amount = float(request.form.get('payment_amount'))
+        
+        # Update transaction
+        if payment_date_str:
+            txn.date = datetime.strptime(payment_date_str, '%Y-%m-%d').date()
+            # Update day/week/month for date
+            txn.day_name = txn.date.strftime('%A')
+            txn.week = int(txn.date.strftime('%U'))
+            txn.month = txn.date.strftime('%Y-%m')
+        
+        # Store as positive amount (reduces debt)
+        txn.amount = abs(payment_amount)
+        
+        # Automatically lock when edited
+        txn.is_fixed = True
+        
+        db.session.commit()
+        
+        # Recalculate balance with new payment amount
+        CreditCardTransaction.recalculate_card_balance(card.id)
+        db.session.commit()
+        
+        flash(f'Payment updated to £{payment_amount:.2f} and locked successfully!', 'success')
+        return redirect(url_for('credit_cards.detail', id=id))
+        
+    except ValueError:
+        db.session.rollback()
+        flash('Invalid payment amount!', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating payment: {str(e)}', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+
+
+@credit_cards_bp.route('/credit-cards/transaction/<int:txn_id>/toggle-paid', methods=['POST'])
+def toggle_paid(txn_id):
+    """Toggle is_paid flag on a transaction and lock it when paid"""
+    try:
+        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        txn.is_paid = not txn.is_paid
+        
+        # When marking as paid, also lock it to prevent regeneration
+        if txn.is_paid:
+            txn.is_fixed = True
+        
+        db.session.commit()
+        
+        status = "paid and locked" if txn.is_paid else "unpaid"
+        flash(f'Transaction marked as {status} successfully!', 'success')
+        
+        return redirect(url_for('credit_cards.detail', id=txn.credit_card_id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error toggling paid status: {str(e)}', 'danger')
+        return redirect(request.referrer or url_for('credit_cards.index'))
 
 
 @credit_cards_bp.route('/credit-cards/<int:id>/generate-future', methods=['POST'])
 def generate_future(id):
-    """Generate future monthly statements with intelligent payment triggering"""
+    """Regenerate future monthly statements (deletes unlocked, keeps locked)"""
     try:
         card = CreditCard.query.get_or_404(id)
         
@@ -194,17 +370,20 @@ def generate_future(id):
         if end_date_str:
             end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         else:
-            end_date = start_date + relativedelta(years=5)  # Default 5 years
+            # Use configured default or 10 years
+            default_years = Settings.get_value('default_generation_years', 10)
+            end_date = start_date + relativedelta(years=default_years)
         
-        # Use intelligent statement generation
-        results = CreditCardService.generate_future_monthly_statements(
+        # Use regenerate to delete non-fixed and recreate
+        results = CreditCardService.regenerate_future_transactions(
             id, start_date, end_date, payment_offset_days=payment_offset
         )
         
         flash(
-            f'Generated {results["statements_created"]} statements for {card.card_name}. '
-            f'{results["payments_created"]} payments created, '
-            f'{results["zero_balance_statements"]} zero-balance statements (no payment needed).',
+            f'Regenerated transactions for {card.card_name}. '
+            f'Deleted {results["deleted_count"]} unlocked transactions, '
+            f'created {results["statements_created"]} statements and '
+            f'{results["payments_created"]} payments.',
             'success'
         )
         
@@ -216,7 +395,7 @@ def generate_future(id):
 
 @credit_cards_bp.route('/credit-cards/generate-all-future', methods=['POST'])
 def generate_all_future():
-    """Generate future monthly statements for all active cards with intelligent payment triggering"""
+    """Regenerate future monthly statements for all active cards (deletes unlocked, keeps locked)"""
     try:
         end_date_str = request.form.get('end_date')
         payment_offset = int(request.form.get('payment_offset', 14))
@@ -224,18 +403,20 @@ def generate_all_future():
         if end_date_str:
             end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         else:
-            end_date = date.today() + relativedelta(years=5)
+            # Use configured default or 10 years
+            default_years = Settings.get_value('default_generation_years', 10)
+            end_date = date.today() + relativedelta(years=default_years)
         
-        # Use intelligent statement generation
-        results = CreditCardService.generate_all_monthly_statements(
+        # Use regenerate to delete non-fixed and recreate
+        results = CreditCardService.regenerate_all_future_transactions(
             end_date=end_date,
             payment_offset_days=payment_offset
         )
         
         flash(
             f'Processed {results["cards_processed"]} cards. '
-            f'Created {results["statements_created"]} statements and {results["payments_created"]} payments. '
-            f'{results["zero_balance_statements"]} statements had zero balance (no payment needed).',
+            f'Deleted {results["total_deleted"]} unlocked transactions. '
+            f'Created {results["total_statements"]} statements and {results["total_payments"]} payments.',
             'success'
         )
         

@@ -110,6 +110,7 @@
                             <th>Balance</th>
                             <th>Available</th>
                             <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -147,11 +148,121 @@
                                 <span class="badge bg-secondary">Pending</span>
                                 {% endif %}
                             </td>
+                            <td>
+                                {% if not txn.is_paid %}
+                                    {% if txn.date >= today and txn.transaction_type == 'Payment' %}
+                                    <button class="btn btn-sm btn-warning" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editPaymentModal"
+                                            data-txn-id="{{ txn.id }}"
+                                            data-txn-date="{{ txn.date.strftime('%Y-%m-%d') }}"
+                                            data-txn-amount="{{ txn.amount }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-primary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editTransactionModal"
+                                            data-txn-id="{{ txn.id }}"
+                                            data-txn-date="{{ txn.date.strftime('%Y-%m-%d') }}"
+                                            data-txn-type="{{ txn.transaction_type }}"
+                                            data-txn-item="{{ txn.item }}"
+                                            data-txn-amount="{{ txn.amount }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if txn.is_fixed %}
+                                    <span class="badge bg-warning ms-1"><i class="bi bi-lock-fill"></i> Fixed</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Transaction Modal -->
+<div class="modal fade" id="editTransactionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="editTransactionForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="txn_date" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="txn_date" name="txn_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="txn_type" class="form-label">Type</label>
+                        <select class="form-control" id="txn_type" name="txn_type" required>
+                            <option value="Purchase">Purchase</option>
+                            <option value="Payment">Payment</option>
+                            <option value="Interest">Interest</option>
+                            <option value="Reward">Reward</option>
+                            <option value="Fee">Fee</option>
+                            <option value="Balance Transfer">Balance Transfer</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="txn_item" class="form-label">Description</label>
+                        <input type="text" class="form-control" id="txn_item" name="txn_item" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="txn_amount" class="form-label">Amount (£)</label>
+                        <input type="number" class="form-control" id="txn_amount" name="txn_amount" step="0.01" required>
+                        <small class="text-muted">Positive = reduces debt (payment/reward), Negative = increases debt (purchase/fee)</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Payment Modal -->
+<div class="modal fade" id="editPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Payment Amount</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="editPaymentForm">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> Editing this payment will automatically <strong>lock</strong> it to prevent regeneration.
+                    </div>
+                    <div class="mb-3">
+                        <label for="payment_date" class="form-label">Payment Date</label>
+                        <input type="date" class="form-control" id="payment_date" name="payment_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="payment_amount" class="form-label">Payment Amount (£)</label>
+                        <input type="number" class="form-control" id="payment_amount" name="payment_amount" step="0.01" required>
+                        <small class="text-muted">Enter positive amount to reduce debt</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-lock-fill"></i> Save & Lock
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -170,7 +281,7 @@
                     <div class="mb-3">
                         <label for="end_date" class="form-label">Generate Until</label>
                         <input type="date" class="form-control" id="end_date" name="end_date">
-                        <small class="text-muted">Leave blank for 5 years from today</small>
+                        <small class="text-muted">Leave blank to use configured default (check Settings)</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -181,4 +292,40 @@
         </div>
     </div>
 </div>
+
+<script>
+// Set up edit transaction modal
+var editTransactionModal = document.getElementById('editTransactionModal');
+editTransactionModal.addEventListener('show.bs.modal', function (event) {
+    var button = event.relatedTarget;
+    var txnId = button.getAttribute('data-txn-id');
+    var txnDate = button.getAttribute('data-txn-date');
+    var txnType = button.getAttribute('data-txn-type');
+    var txnItem = button.getAttribute('data-txn-item');
+    var txnAmount = button.getAttribute('data-txn-amount');
+    
+    var form = document.getElementById('editTransactionForm');
+    form.action = '{{ url_for("credit_cards.edit_transaction", id=card.id) }}/' + txnId;
+    
+    document.getElementById('txn_date').value = txnDate;
+    document.getElementById('txn_type').value = txnType;
+    document.getElementById('txn_item').value = txnItem;
+    document.getElementById('txn_amount').value = parseFloat(txnAmount);
+});
+
+// Set up edit payment modal with transaction data
+var editPaymentModal = document.getElementById('editPaymentModal');
+editPaymentModal.addEventListener('show.bs.modal', function (event) {
+    var button = event.relatedTarget;
+    var txnId = button.getAttribute('data-txn-id');
+    var txnDate = button.getAttribute('data-txn-date');
+    var txnAmount = button.getAttribute('data-txn-amount');
+    
+    var form = document.getElementById('editPaymentForm');
+    form.action = '{{ url_for("credit_cards.edit_payment", id=card.id) }}/' + txnId;
+    
+    document.getElementById('payment_date').value = txnDate;
+    document.getElementById('payment_amount').value = Math.abs(parseFloat(txnAmount));
+});
+</script>
 {% endblock %}

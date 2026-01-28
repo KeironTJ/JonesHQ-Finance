@@ -51,19 +51,21 @@ class CreditCard(db.Model):
         return float(self.monthly_apr)
     
     def calculate_minimum_payment(self):
-        """Calculate minimum payment based on balance and min_payment_percent"""
-        if not self.current_balance or self.current_balance <= 0:
+        """Calculate minimum payment based on balance and min_payment_percent (negative = owe)"""
+        if not self.current_balance or self.current_balance >= 0:
             return 0.0
-        min_payment = float(self.current_balance) * (float(self.min_payment_percent) / 100)
+        # Use absolute value since negative balance means we owe money
+        min_payment = abs(float(self.current_balance)) * (float(self.min_payment_percent) / 100)
         return round(min_payment, 2)
     
     def calculate_actual_payment(self):
-        """Calculate actual payment: MIN(set_payment, current_balance)"""
-        if not self.current_balance or self.current_balance <= 0:
+        """Calculate actual payment: MIN(set_payment, abs(current_balance)) - negative balance = owe money"""
+        if not self.current_balance or self.current_balance >= 0:
             return 0.0
         if not self.set_payment:
             return self.calculate_minimum_payment()
-        return round(min(float(self.set_payment), float(self.current_balance)), 2)
+        # Use absolute value since negative balance means we owe money
+        return round(min(float(self.set_payment), abs(float(self.current_balance))), 2)
     
     def __repr__(self):
         return f'<CreditCard {self.card_name}: £{self.current_balance}>'

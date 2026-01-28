@@ -168,9 +168,8 @@
                     <p>Generate interest and payment transactions for all active credit cards.</p>
                     <div class="mb-3">
                         <label for="end_date" class="form-label">Generate Until</label>
-                        <input type="date" class="form-control" id="end_date" name="end_date" 
-                               value="{{ (None|now + relativedelta(years=5)).strftime('%Y-%m-%d') }}">
-                        <small class="text-muted">Default: 5 years from today</small>
+                        <input type="date" class="form-control" id="end_date" name="end_date">
+                        <small class="text-muted">Leave blank to use configured default (check Settings)</small>
                     </div>
                     <div class="alert alert-info">
                         <strong>Note:</strong> This will create monthly statement interest and payment transactions based on each card's settings.

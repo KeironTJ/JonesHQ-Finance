@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-gear"></i> Application Settings</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <form method="POST" action="{{ url_for('settings.update') }}">
+                
+                <!-- Credit Card Settings -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-credit-card"></i> Credit Card Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="default_generation_years" class="form-label">Default Generation Period (Years)</label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="default_generation_years" 
+                                   name="default_generation_years" 
+                                   value="{{ default_generation_years }}"
+                                   min="1"
+                                   max="50"
+                                   required>
+                            <small class="text-muted">
+                                When generating future credit card transactions, this sets the default time period. 
+                                Applies to both individual card generation and "Generate All" operations.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Future Settings Sections (Placeholder) -->
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> More Settings Coming Soon</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-0">
+                            Additional configuration options will be added here as the application grows.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Save Button -->
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Save Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Help/Info Sidebar -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-question-circle"></i> About Settings</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Generation Period</h6>
+                    <p class="small">
+                        This controls how far into the future the system generates interest and payment transactions.
+                        A longer period gives you better long-term visibility of your debt repayment journey.
+                    </p>
+                    <hr>
+                    <h6>Default: 10 Years</h6>
+                    <p class="small mb-0">
+                        The default is set to 10 years, which is suitable for most credit card repayment scenarios.
+                        You can adjust this from 1 to 50 years based on your planning needs.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
