@@ -8,7 +8,7 @@ from extensions import db
 def index():
     """List all pensions"""
     pensions = Pension.query.all()
-    return render_template('pensions.html', pensions=pensions)
+    return render_template('pensions/index.html', pensions=pensions)
 
 
 @pensions_bp.route('/pensions/create', methods=['POST'])

@@ -266,6 +266,15 @@ def edit(id):
                 from services.credit_card_service import CreditCardService
                 CreditCardService.sync_bank_transaction_to_payment(transaction)
             
+            # Sync changes to linked loan payment if exists
+            if transaction.loan_id:
+                from models.loan_payments import LoanPayment
+                loan_payment = LoanPayment.query.filter_by(
+                    bank_transaction_id=transaction.id
+                ).first()
+                if loan_payment:
+                    loan_payment.is_paid = transaction.is_paid
+            
             # Recalculate balances for affected accounts
             if old_account_id and old_account_id != transaction.account_id:
                 # Account changed - update both old and new
@@ -349,12 +358,31 @@ def delete(id):
 
 @transactions_bp.route('/transactions/<int:id>/toggle_paid', methods=['POST'])
 def toggle_paid(id):
-    """Toggle the paid status of a transaction"""
+    """Toggle the paid status of a transaction and sync with linked loan/credit card payments"""
     transaction = Transaction.query.get_or_404(id)
     
     try:
         transaction.is_paid = not transaction.is_paid
         transaction.updated_at = datetime.now()
+        
+        # Sync with linked loan payment if exists
+        if transaction.loan_id:
+            from models.loan_payments import LoanPayment
+            loan_payment = LoanPayment.query.filter_by(
+                bank_transaction_id=transaction.id
+            ).first()
+            if loan_payment:
+                loan_payment.is_paid = transaction.is_paid
+        
+        # Sync with linked credit card payment if exists
+        if transaction.credit_card_id:
+            from models.credit_card_transactions import CreditCardTransaction
+            cc_payment = CreditCardTransaction.query.filter_by(
+                bank_transaction_id=transaction.id
+            ).first()
+            if cc_payment:
+                cc_payment.is_paid = transaction.is_paid
+        
         db.session.commit()
         
         status_text = "paid" if transaction.is_paid else "pending"

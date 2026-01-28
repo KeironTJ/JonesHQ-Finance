@@ -17,6 +17,10 @@ class Loan(db.Model):
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date)
     term_months = db.Column(db.Integer, nullable=False)
+    
+    # Default Payment Account
+    default_payment_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
+    
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -24,6 +28,7 @@ class Loan(db.Model):
     # Relationships
     payments = db.relationship('LoanPayment', backref='loan', lazy=True)
     transactions = db.relationship('Transaction', backref='loan', lazy=True)
+    default_payment_account = db.relationship('Account', foreign_keys=[default_payment_account_id])
     
     def __repr__(self):
         return f'<Loan {self.name}: £{self.current_balance}>'

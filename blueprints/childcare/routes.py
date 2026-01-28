@@ -8,7 +8,7 @@ from extensions import db
 def index():
     """List all childcare records"""
     records = ChildcareRecord.query.all()
-    return render_template('childcare.html', records=records)
+    return render_template('childcare/index.html', records=records)
 
 
 @childcare_bp.route('/childcare/create', methods=['POST'])

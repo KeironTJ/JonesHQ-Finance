@@ -8,7 +8,7 @@ from extensions import db
 def index():
     """List all accounts"""
     accounts = Account.query.all()
-    return render_template('accounts.html', accounts=accounts)
+    return render_template('accounts/index.html', accounts=accounts)
 
 
 @accounts_bp.route('/accounts/create', methods=['POST'])

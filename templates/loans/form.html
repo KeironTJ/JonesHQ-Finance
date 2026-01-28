@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if loan else 'Add' }} Loan - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="bi bi-bank"></i>
+                        {{ 'Edit Loan' if loan else 'Add New Loan' }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="row">
+                            <!-- Loan Name -->
+                            <div class="col-md-6 mb-3">
+                                <label for="name" class="form-label">Loan Name <span class="text-danger">*</span></label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="name" 
+                                       name="name" 
+                                       value="{{ loan.name if loan else '' }}"
+                                       required>
+                                <small class="text-muted">E.g., "EE", "JN Bank", "Loft Loan"</small>
+                            </div>
+
+                            <!-- Loan Value -->
+                            <div class="col-md-6 mb-3">
+                                <label for="loan_value" class="form-label">Loan Amount <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="loan_value" 
+                                           name="loan_value" 
+                                           step="0.01"
+                                           value="{{ '%.2f'|format(loan.loan_value) if loan else '' }}"
+                                           required>
+                                </div>
+                                <small class="text-muted">Original loan amount borrowed</small>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Current Balance -->
+                            <div class="col-md-6 mb-3">
+                                <label for="current_balance" class="form-label">Current Balance</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="current_balance" 
+                                           name="current_balance" 
+                                           step="0.01"
+                                           value="{{ '%.2f'|format(loan.current_balance) if loan else '' }}"
+                                           placeholder="Leave blank to use loan amount">
+                                </div>
+                                <small class="text-muted">Current outstanding balance</small>
+                            </div>
+
+                            <!-- Annual APR -->
+                            <div class="col-md-6 mb-3">
+                                <label for="annual_apr" class="form-label">Annual APR (%) <span class="text-danger">*</span></label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="annual_apr" 
+                                       name="annual_apr" 
+                                       step="0.01"
+                                       value="{{ '%.2f'|format(loan.annual_apr) if loan else '' }}"
+                                       required>
+                                <small class="text-muted">Annual interest rate (0.00 for 0% loans)</small>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Monthly Payment -->
+                            <div class="col-md-6 mb-3">
+                                <label for="monthly_payment" class="form-label">Monthly Payment <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" 
+                                           class="form-control" 
+                                           id="monthly_payment" 
+                                           name="monthly_payment" 
+                                           step="0.01"
+                                           value="{{ '%.2f'|format(loan.monthly_payment) if loan else '' }}"
+                                           required>
+                                </div>
+                                <small class="text-muted">Fixed monthly payment amount</small>
+                            </div>
+
+                            <!-- Term in Months -->
+                            <div class="col-md-6 mb-3">
+                                <label for="term_months" class="form-label">Term (Months) <span class="text-danger">*</span></label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="term_months" 
+                                       name="term_months" 
+                                       min="1"
+                                       value="{{ loan.term_months if loan else '' }}"
+                                       required>
+                                <small class="text-muted">Total loan term in months</small>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Start Date -->
+                            <div class="col-md-6 mb-3">
+                                <label for="start_date" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" 
+                                       class="form-control" 
+                                       id="start_date" 
+                                       name="start_date" 
+                                       value="{{ loan.start_date.strftime('%Y-%m-%d') if loan else '' }}"
+                                       required>
+                                <small class="text-muted">First payment date</small>
+                            </div>
+
+                            <!-- Is Active -->
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label d-block">Status</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" 
+                                           type="checkbox" 
+                                           id="is_active" 
+                                           name="is_active"
+                                           {{ 'checked' if not loan or loan.is_active else '' }}>
+                                    <label class="form-check-label" for="is_active">
+                                        Active Loan
+                                    </label>
+                                </div>
+                                <small class="text-muted">Inactive loans are hidden from summaries</small>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Default Payment Account -->
+                            <div class="col-md-12 mb-3">
+                                <label for="default_payment_account_id" class="form-label">Default Payment Account</label>
+                                <select class="form-select" id="default_payment_account_id" name="default_payment_account_id">
+                                    <option value="">-- No Auto-Link --</option>
+                                    {% for account in accounts %}
+                                    <option value="{{ account.id }}" 
+                                            {% if loan and loan.default_payment_account_id == account.id %}selected{% endif %}>
+                                        {{ account.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">
+                                    <i class="bi bi-info-circle"></i>
+                                    Automatically creates linked bank transactions for each payment. 
+                                    When you mark payments as paid/unpaid, the bank transaction is updated automatically.
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Calculated Fields Info -->
+                        {% if loan %}
+                        <div class="alert alert-info">
+                            <strong>Calculated Fields:</strong>
+                            <ul class="mb-0">
+                                <li>Monthly APR: {{ '%.2f'|format(loan.monthly_apr) }}%</li>
+                                <li>End Date: {{ loan.end_date.strftime('%d %b %Y') }}</li>
+                                <li>Months Remaining: {{ loan.term_months }}</li>
+                            </ul>
+                        </div>
+                        {% endif %}
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('loans.index') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Back to Loans
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> {{ 'Update' if loan else 'Create' }} Loan
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Delete Section (Edit Only) -->
+                    {% if loan %}
+                    <hr class="my-4">
+                    <div class="card border-danger">
+                        <div class="card-header bg-danger text-white">
+                            <h6 class="mb-0">Danger Zone</h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-2">
+                                <strong>Delete this loan</strong> - This action cannot be undone. 
+                                All payment records will also be deleted.
+                            </p>
+                            <form method="POST" action="{{ url_for('loans.delete', id=loan.id) }}" 
+                                  onsubmit="return confirm('Are you sure you want to delete this loan? This action cannot be undone!');">
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="bi bi-trash"></i> Delete Loan
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

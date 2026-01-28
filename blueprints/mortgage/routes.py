@@ -8,7 +8,7 @@ from extensions import db
 def index():
     """List all mortgages"""
     mortgages = Mortgage.query.all()
-    return render_template('mortgage.html', mortgages=mortgages)
+    return render_template('mortgage/index.html', mortgages=mortgages)
 
 
 @mortgage_bp.route('/mortgage/create', methods=['POST'])

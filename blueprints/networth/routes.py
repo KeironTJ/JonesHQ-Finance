@@ -8,7 +8,7 @@ from extensions import db
 def index():
     """View net worth history"""
     records = NetWorth.query.order_by(NetWorth.date.desc()).all()
-    return render_template('networth.html', records=records)
+    return render_template('networth/index.html', records=records)
 
 
 @networth_bp.route('/networth/snapshot', methods=['POST'])

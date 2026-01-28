@@ -8,7 +8,7 @@ from extensions import db
 def index():
     """List all budgets"""
     budgets = Budget.query.all()
-    return render_template('budgets.html', budgets=budgets)
+    return render_template('budgets/index.html', budgets=budgets)
 
 
 @budgets_bp.route('/budgets/create', methods=['POST'])

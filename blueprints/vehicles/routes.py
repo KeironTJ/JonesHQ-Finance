@@ -8,7 +8,7 @@ from extensions import db
 def index():
     """List all vehicles"""
     vehicles = Vehicle.query.all()
-    return render_template('vehicles.html', vehicles=vehicles)
+    return render_template('vehicles/index.html', vehicles=vehicles)
 
 
 @vehicles_bp.route('/vehicles/create', methods=['POST'])

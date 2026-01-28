@@ -43,7 +43,7 @@ def create_app(config_name=None):
     app.register_blueprint(categories_bp)
     app.register_blueprint(vendors_bp)
     app.register_blueprint(budgets_bp)
-    app.register_blueprint(loans_bp)
+    app.register_blueprint(loans_bp, url_prefix='/loans')
     app.register_blueprint(credit_cards_bp)
     app.register_blueprint(vehicles_bp)
     app.register_blueprint(childcare_bp)
