@@ -272,6 +272,10 @@ def edit_transaction(id, txn_id):
         
         db.session.commit()
         
+        # Sync changes to linked bank transaction if exists
+        if txn.bank_transaction_id:
+            CreditCardService.sync_payment_to_bank_transaction(txn)
+        
         # Recalculate balance
         CreditCardTransaction.recalculate_card_balance(card.id)
         db.session.commit()

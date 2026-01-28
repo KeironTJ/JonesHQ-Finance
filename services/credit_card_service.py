@@ -203,11 +203,46 @@ class CreditCardService:
         )
         
         db.session.add(transaction)
+        db.session.flush()  # Get the transaction ID
+        
+        # Create linked bank transaction if default payment account is set
+        if card.default_payment_account_id:
+            from models.transactions import Transaction
+            from models.vendors import Vendor
+            
+            # Find or create vendor for card provider
+            vendor = Vendor.query.filter_by(name=card.card_name).first()
+            if not vendor:
+                vendor = Vendor(name=card.card_name)
+                db.session.add(vendor)
+                db.session.flush()
+            
+            bank_txn = Transaction(
+                account_id=card.default_payment_account_id,
+                category_id=credit_card_category.id,
+                vendor_id=vendor.id,
+                amount=payment_amount,  # Positive = expense from bank account
+                transaction_date=payment_date,
+                description=f'Payment to {card.card_name}',
+                item='Credit Card Payment',
+                payment_type='Transfer',
+                is_paid=False,
+                is_fixed=False,
+                credit_card_id=card.id
+            )
+            db.session.add(bank_txn)
+            db.session.flush()  # Get the bank transaction ID
+            
+            # Link them together
+            transaction.bank_transaction_id = bank_txn.id
         
         # Recalculate balances
         if commit:
             db.session.commit()
             CreditCardTransaction.recalculate_card_balance(card.id)
+            if card.default_payment_account_id:
+                from models.transactions import Transaction
+                Transaction.recalculate_account_balance(card.default_payment_account_id)
         
         return transaction
     
@@ -400,6 +435,7 @@ class CreditCardService:
         If card_id is specified, only delete for that card
         If from_date is specified, only delete transactions on or after that date
         This preserves any transactions marked as is_fixed=True
+        Also unlinks any associated bank transactions before deletion
         """
         if not from_date:
             from_date = date.today()
@@ -413,7 +449,21 @@ class CreditCardService:
         if card_id:
             query = query.filter(CreditCardTransaction.credit_card_id == card_id)
         
-        deleted_count = query.delete(synchronize_session=False)
+        # Delete linked bank transactions and the credit card transactions
+        transactions_to_delete = query.all()
+        from models.transactions import Transaction
+        
+        for txn in transactions_to_delete:
+            # Delete linked bank transaction if it exists
+            if txn.bank_transaction_id:
+                bank_txn = Transaction.query.get(txn.bank_transaction_id)
+                if bank_txn:
+                    db.session.delete(bank_txn)
+            
+            # Delete the credit card transaction
+            db.session.delete(txn)
+        
+        deleted_count = len(transactions_to_delete)
         db.session.commit()
         
         return deleted_count
@@ -544,3 +594,136 @@ class CreditCardService:
             results['payments'] += len(payments)
         
         return results
+
+    @staticmethod
+    def sync_bank_transaction_to_payment(bank_txn):
+        """
+        Sync changes from a bank transaction to its linked credit card payment.
+        Called when a bank transaction is edited.
+        
+        Args:
+            bank_txn: Transaction model instance with credit_card_id
+        
+        Returns:
+            CreditCardTransaction if updated, None otherwise
+        """
+        from models.transactions import Transaction
+        
+        if not bank_txn.credit_card_id:
+            return None
+        
+        # Find linked credit card payment
+        cc_payment = CreditCardTransaction.query.filter_by(
+            credit_card_id=bank_txn.credit_card_id,
+            bank_transaction_id=bank_txn.id
+        ).first()
+        
+        if not cc_payment:
+            return None
+        
+        # Only sync if not paid (avoid changing historical data)
+        if cc_payment.is_paid:
+            return None
+        
+        # Sync date
+        if bank_txn.transaction_date != cc_payment.date:
+            cc_payment.date = bank_txn.transaction_date
+            cc_payment.day_name = bank_txn.transaction_date.strftime('%A')
+            cc_payment.week = int(bank_txn.transaction_date.strftime('%U'))
+            cc_payment.month = bank_txn.transaction_date.strftime('%Y-%m')
+        
+        # Sync amount (bank expense = credit card payment)
+        if bank_txn.amount != cc_payment.amount:
+            cc_payment.amount = abs(float(bank_txn.amount))
+        
+        # Sync paid status
+        cc_payment.is_paid = bank_txn.is_paid
+        cc_payment.is_fixed = bank_txn.is_fixed
+        
+        db.session.flush()
+        
+        # Recalculate credit card balance
+        CreditCardTransaction.recalculate_card_balance(cc_payment.credit_card_id)
+        
+        return cc_payment
+
+    @staticmethod
+    def sync_payment_to_bank_transaction(cc_payment):
+        """
+        Sync changes from a credit card payment to its linked bank transaction.
+        Called when a credit card payment is edited.
+        
+        Args:
+            cc_payment: CreditCardTransaction model instance with bank_transaction_id
+        
+        Returns:
+            Transaction if updated, None otherwise
+        """
+        from models.transactions import Transaction
+        
+        if not cc_payment.bank_transaction_id:
+            return None
+        
+        # Find linked bank transaction
+        bank_txn = Transaction.query.get(cc_payment.bank_transaction_id)
+        
+        if not bank_txn:
+            return None
+        
+        # Only sync if not paid (avoid changing historical data)
+        if bank_txn.is_paid:
+            return None
+        
+        # Sync date
+        if cc_payment.date != bank_txn.transaction_date:
+            bank_txn.transaction_date = cc_payment.date
+            bank_txn.year_month = cc_payment.date.strftime('%Y-%m')
+            bank_txn.week_year = f"{cc_payment.date.isocalendar()[1]:02d}-{cc_payment.date.year}"
+            bank_txn.day_name = cc_payment.date.strftime('%a')
+        
+        # Sync amount (credit card payment = bank expense)
+        if abs(float(cc_payment.amount)) != bank_txn.amount:
+            bank_txn.amount = abs(float(cc_payment.amount))
+        
+        # Sync paid status
+        bank_txn.is_paid = cc_payment.is_paid
+        bank_txn.is_fixed = cc_payment.is_fixed
+        bank_txn.updated_at = datetime.now()
+        
+        db.session.flush()
+        
+        # Recalculate bank account balance
+        if bank_txn.account_id:
+            Transaction.recalculate_account_balance(bank_txn.account_id)
+        
+        return bank_txn
+
+    @staticmethod
+    def unlink_payment_and_transaction(cc_payment_id=None, bank_txn_id=None):
+        """
+        Remove the link between a credit card payment and bank transaction.
+        Called when either is being deleted.
+        
+        Args:
+            cc_payment_id: ID of credit card payment
+            bank_txn_id: ID of bank transaction
+        """
+        from models.transactions import Transaction
+        
+        if cc_payment_id:
+            cc_payment = CreditCardTransaction.query.get(cc_payment_id)
+            if cc_payment and cc_payment.bank_transaction_id:
+                bank_txn = Transaction.query.get(cc_payment.bank_transaction_id)
+                if bank_txn:
+                    bank_txn.credit_card_id = None
+                cc_payment.bank_transaction_id = None
+        
+        if bank_txn_id:
+            bank_txn = Transaction.query.get(bank_txn_id)
+            if bank_txn and bank_txn.credit_card_id:
+                cc_payment = CreditCardTransaction.query.filter_by(
+                    bank_transaction_id=bank_txn_id
+                ).first()
+                if cc_payment:
+                    cc_payment.bank_transaction_id = None
+                bank_txn.credit_card_id = None

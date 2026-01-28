@@ -24,6 +24,7 @@ def index():
     vendor_id = request.args.get('vendor_id', type=int)
     year_month = request.args.get('year_month')
     search = request.args.get('search', '')
+    is_paid_filter = request.args.get('is_paid')
     
     # Build query
     query = Transaction.query
@@ -47,6 +48,11 @@ def index():
                 Transaction.item.ilike(f'%{search}%')
             )
         )
+    if is_paid_filter:
+        if is_paid_filter == 'paid':
+            query = query.filter(Transaction.is_paid == True)
+        elif is_paid_filter == 'pending':
+            query = query.filter(Transaction.is_paid == False)
     
     # Order by date descending
     transactions = query.order_by(Transaction.transaction_date.desc()).all()
@@ -118,7 +124,8 @@ def index():
         selected_category=category_id,
         selected_vendor=vendor_id,
         selected_year_month=year_month,
-        search_term=search
+        search_term=search,
+        selected_is_paid=is_paid_filter
     )
 
 
@@ -254,6 +261,11 @@ def edit(id):
             
             db.session.commit()
             
+            # Sync changes to linked credit card payment if exists
+            if transaction.credit_card_id:
+                from services.credit_card_service import CreditCardService
+                CreditCardService.sync_bank_transaction_to_payment(transaction)
+            
             # Recalculate balances for affected accounts
             if old_account_id and old_account_id != transaction.account_id:
                 # Account changed - update both old and new
@@ -299,9 +311,24 @@ def delete(id):
     try:
         account_id = transaction.account_id
         account_name = transaction.account.name if transaction.account else 'Unknown'
+        linked_cc_payment = None
+        
+        # Delete linked credit card payment if exists
+        if transaction.credit_card_id:
+            from models.credit_card_transactions import CreditCardTransaction
+            linked_cc_payment = CreditCardTransaction.query.filter_by(
+                bank_transaction_id=transaction.id
+            ).first()
+            if linked_cc_payment:
+                db.session.delete(linked_cc_payment)
         
         db.session.delete(transaction)
         db.session.commit()
+        
+        # Recalculate credit card balance if payment was deleted
+        if linked_cc_payment:
+            from models.credit_card_transactions import CreditCardTransaction
+            CreditCardTransaction.recalculate_card_balance(linked_cc_payment.credit_card_id)
         
         # Recalculate balance for the account
         if account_id:
@@ -418,6 +445,60 @@ def bulk_edit():
         flash(f'Error updating transactions: {str(e)}', 'danger')
     
     return redirect(request.form.get('return_url') or url_for('transactions.index'))
+
+
+@transactions_bp.route('/transactions/bulk-delete', methods=['POST'])
+def bulk_delete():
+    """Bulk delete multiple transactions"""
+    try:
+        transaction_ids_str = request.form.get('transaction_ids', '')
+        if not transaction_ids_str:
+            flash('No transactions selected', 'warning')
+            return redirect(url_for('transactions.index'))
+        
+        transaction_ids = [int(tid) for tid in transaction_ids_str.split(',') if tid]
+        
+        deleted_count = 0
+        accounts_to_recalc = set()
+        cards_to_recalc = set()
+        
+        for txn_id in transaction_ids:
+            transaction = Transaction.query.get(txn_id)
+            if transaction:
+                accounts_to_recalc.add(transaction.account_id)
+                
+                # Delete linked credit card payment if exists
+                if transaction.credit_card_id:
+                    linked_cc_payment = CreditCardTransaction.query.filter_by(
+                        bank_transaction_id=transaction.id
+                    ).first()
+                    if linked_cc_payment:
+                        cards_to_recalc.add(linked_cc_payment.credit_card_id)
+                        db.session.delete(linked_cc_payment)
+                
+                db.session.delete(transaction)
+                deleted_count += 1
+        
+        db.session.commit()
+        
+        # Recalculate balances for affected accounts and credit cards
+        for account_id in accounts_to_recalc:
+            if account_id:
+                Transaction.recalculate_account_balance(account_id)
+        
+        for card_id in cards_to_recalc:
+            CreditCardTransaction.recalculate_card_balance(card_id)
+        
+        flash(f'Successfully deleted {deleted_count} transaction(s)', 'success')
+        
+    except ValueError as e:
+        db.session.rollback()
+        flash(f'Invalid transaction IDs: {str(e)}', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting transactions: {str(e)}', 'danger')
+    
+    return redirect(url_for('transactions.index'))
 
 
 @transactions_bp.route('/transactions/transfer', methods=['GET', 'POST'])
