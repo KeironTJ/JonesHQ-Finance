@@ -28,7 +28,7 @@ class DevelopmentConfig(Config):
     """Development configuration"""
     # Safe for localhost development, but disable before sharing/deploying
     DEBUG = True  # Convenient for local development
-    SQLALCHEMY_ECHO = True  # Set to True only when debugging SQL queries
+    SQLALCHEMY_ECHO = False  # Set to True only when debugging SQL queries
     
     # SECURITY: Only safe because Flask binds to 127.0.0.1 by default
     # Never use --host=0.0.0.0 with debug mode enabled

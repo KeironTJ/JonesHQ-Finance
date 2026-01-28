@@ -478,6 +478,8 @@ class CreditCardService:
         
         This allows users to mark certain payments as "locked" and regenerate around them
         """
+        print(f"DEBUG: regenerate_future_transactions called for card_id={card_id}")
+        
         if not start_date:
             start_date = date.today()
         if not end_date:
@@ -488,6 +490,78 @@ class CreditCardService:
         
         # Step 2: Recalculate balance to current state (without future transactions)
         CreditCardTransaction.recalculate_card_balance(card_id)
+        
+        # Step 2a: Check for locked statements that need payments generated
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+        from decimal import Decimal
+        
+        print(f"DEBUG Step 2a: Looking for locked statements for card {card_id}")
+        
+        # Get the card object
+        card = CreditCard.query.get(card_id)
+        if not card:
+            return {'deleted_count': deleted, 'statements_created': 0, 'payments_created': 0, 'zero_balance_statements': 0}
+        
+        # Find all locked interest transactions (regardless of date range)
+        # We want to check all locked statements to ensure they have payments
+        locked_statements = CreditCardTransaction.query.filter(
+            CreditCardTransaction.credit_card_id == card_id,
+            CreditCardTransaction.transaction_type == 'Interest',
+            CreditCardTransaction.is_fixed == True
+        ).all()
+        
+        print(f"DEBUG: Found {len(locked_statements)} locked statements")
+        
+        # For each locked statement, check if payment exists
+        payments_generated = 0
+        for locked_stmt in locked_statements:
+            print(f"DEBUG: Checking locked statement on {locked_stmt.date}")
+            payment_date = locked_stmt.date + relativedelta(days=payment_offset_days)
+            print(f"DEBUG: Payment date would be {payment_date}, start_date is {start_date}")
+            
+            # Only generate payment if it's in our date range and doesn't exist
+            if payment_date >= start_date:
+                existing_payment = CreditCardTransaction.query.filter_by(
+                    credit_card_id=card_id,
+                    date=payment_date,
+                    transaction_type='Payment'
+                ).first()
+                
+                if not existing_payment:
+                    # Calculate balance at the time of the locked statement
+                    transactions_up_to_statement = CreditCardTransaction.query.filter(
+                        CreditCardTransaction.credit_card_id == card_id,
+                        CreditCardTransaction.date <= locked_stmt.date
+                    ).order_by(CreditCardTransaction.date).all()
+                    
+                    balance_after_interest = Decimal('0.0')
+                    for t in transactions_up_to_statement:
+                        balance_after_interest += t.amount
+                    
+                    print(f"DEBUG: Locked statement on {locked_stmt.date}, payment due {payment_date}, balance: {balance_after_interest}")
+                    
+                    # Generate payment if there's debt (negative balance on credit card)
+                    if balance_after_interest < 0:
+                        # Temporarily set the card's current balance to this amount
+                        # so generate_payment_transaction calculates correctly
+                        original_balance = card.current_balance
+                        card.current_balance = float(balance_after_interest)
+                        
+                        payment_txn = CreditCardService.generate_payment_transaction(
+                            card_id, payment_date, commit=False
+                        )
+                        
+                        # Restore original balance
+                        card.current_balance = original_balance
+                        
+                        if payment_txn:
+                            payments_generated += 1
+                            print(f"DEBUG: Generated payment of £{abs(balance_after_interest)}")
+        
+        # Commit locked statement payments
+        if payments_generated > 0:
+            db.session.commit()
         
         # Step 3: Generate new statements
         from datetime import date
@@ -508,14 +582,23 @@ class CreditCardService:
             current_date = current_date + relativedelta(months=1)
         
         while current_date <= end_date:
-            # Check if statement already exists (and not deleted)
-            existing = CreditCardTransaction.query.filter_by(
+            # Check if statement already exists (locked interest transaction)
+            existing_interest = CreditCardTransaction.query.filter_by(
                 credit_card_id=card_id,
                 date=current_date,
                 transaction_type='Interest'
             ).first()
             
-            if not existing:
+            # Check if payment already exists for this statement date
+            payment_date = current_date + relativedelta(days=payment_offset_days)
+            existing_payment = CreditCardTransaction.query.filter_by(
+                credit_card_id=card_id,
+                date=payment_date,
+                transaction_type='Payment'
+            ).first()
+            
+            if not existing_interest:
+                # No statement exists - generate complete statement with payment
                 stmt_result = CreditCardService.generate_monthly_statement(
                     card_id, current_date, payment_offset_days, commit=False
                 )
@@ -527,6 +610,28 @@ class CreditCardService:
                         results['payments_created'] += 1
                     else:
                         results['zero_balance_statements'] += 1
+            elif not existing_payment:
+                # Statement exists (locked) but payment doesn't - generate payment only
+                # Calculate balance at the time of the locked statement
+                # Get all transactions up to and including the statement date
+                transactions_up_to_statement = CreditCardTransaction.query.filter(
+                    CreditCardTransaction.credit_card_id == card_id,
+                    CreditCardTransaction.date <= current_date
+                ).order_by(CreditCardTransaction.date).all()
+                
+                # Calculate balance
+                from decimal import Decimal
+                balance_after_interest = Decimal('0.0')
+                for t in transactions_up_to_statement:
+                    balance_after_interest += t.amount
+                
+                # Generate payment if there's debt
+                if balance_after_interest > 0:
+                    payment_txn = CreditCardService.generate_payment_transaction(
+                        card_id, payment_date, float(balance_after_interest), commit=False
+                    )
+                    if payment_txn:
+                        results['payments_created'] += 1
             
             current_date = current_date + relativedelta(months=1)
         

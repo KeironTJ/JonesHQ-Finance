@@ -10,6 +10,7 @@ Account balances are now **automatically recalculated** whenever transactions ar
 - ✅ **Added** - New transactions update the account balance
 - ✅ **Edited** - Modified transactions recalculate both old and new account balances
 - ✅ **Deleted** - Removed transactions update the account balance
+- ✅ **Bulk Deleted** - Multiple transactions can be deleted at once with balance recalculation
 
 **Implementation**: SQLAlchemy event listeners in `models/transactions.py`
 - `after_insert` - Triggers balance recalculation when a transaction is created
@@ -22,6 +23,7 @@ Account balances are now **automatically recalculated** whenever transactions ar
 - **GET/POST `/transactions/create`** - Create new transactions
 - **GET/POST `/transactions/<id>/edit`** - Edit existing transactions
 - **POST `/transactions/<id>/delete`** - Delete transactions
+- **POST `/transactions/bulk-delete`** - Bulk delete multiple transactions
 
 #### Form Fields:
 - Account (required)
@@ -43,6 +45,9 @@ Account balances are now **automatically recalculated** whenever transactions ar
 - ✅ **Delete** button for each transaction (trash icon)
 - ✅ Confirmation dialog before deletion
 - ✅ Flash messages for success/error feedback
+- ✅ **Is_Paid Filter** - Dropdown to filter by All Status / Paid / Pending
+- ✅ **Bulk Delete** - Checkbox selection with "Delete Selected Transactions" button
+- ✅ **Cascading Delete** - Deleting bank transaction also deletes linked credit card payment
 
 #### Transaction Form Page (`transaction_form.html`):
 - Clean, Bootstrap 5 styled form
@@ -60,6 +65,18 @@ balance = sum([-t.amount for t in transactions])
 - **Negative amounts** = Income/Credits (money coming in)
 - **Positive amounts** = Expenses/Debits (money going out)
 - Balance represents current account value
+
+#### Cascading Deletes (Credit Card Integration):
+When deleting a bank transaction linked to a credit card:
+1. Checks if transaction has `credit_card_id` set
+2. Finds linked `CreditCardTransaction` via `bank_transaction_id`
+3. Deletes both the bank transaction AND credit card transaction
+4. Recalculates both bank account balance AND credit card balance
+5. Ensures data integrity across linked transactions
+
+**Bidirectional Sync:**
+- Deleting bank transaction → deletes linked credit card payment
+- Deleting credit card payment → deletes linked bank transaction
 
 #### Auto-Calculated Fields:
 When creating/editing transactions, these fields are automatically set:
@@ -92,6 +109,18 @@ When creating/editing transactions, these fields are automatically set:
 1. Click the trash icon (Delete) on any transaction
 2. Confirm the deletion in the popup
 3. ✅ Transaction deleted + Account balance automatically updated
+
+### Bulk Deleting Transactions:
+1. Select checkboxes for transactions to delete
+2. Click "Delete Selected Transactions" button
+3. Confirm deletion count in popup
+4. ✅ All selected transactions deleted + Linked credit card payments deleted + All affected account balances recalculated
+
+### Filtering by Paid Status:
+1. Click the "Status" filter dropdown
+2. Select "Paid" or "Pending"
+3. Click "Apply Filters"
+4. ✅ Transaction list filtered to show only selected status
 
 ### Changing Transaction Category:
 1. Edit the transaction

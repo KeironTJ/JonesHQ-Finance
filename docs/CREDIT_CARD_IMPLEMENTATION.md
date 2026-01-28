@@ -33,6 +33,8 @@ Complete credit card management system with automated transaction generation and
 - `GET /credit-cards/<id>` - View card details
 - `POST /credit-cards/<id>/generate` - Generate future for single card
 - `POST /credit-cards/generate-all` - Generate for all cards
+- `GET /credit-cards/<id>/transaction/<txn_id>/edit` - Edit credit card transaction
+- `POST /credit-cards/<id>/transaction/<txn_id>/delete` - Delete credit card transaction (with cascading delete)
 
 ---
 
@@ -87,6 +89,8 @@ def generate_payment_transaction(card_id, payment_date):
     # Creates Payment transaction
     # Amount = MIN(set_payment, balance)
     # Triggers balance recalculation
+    # Auto-creates vendor matching card name
+    # Links to bank account transaction
 ```
 
 **Features:**
@@ -94,7 +98,8 @@ def generate_payment_transaction(card_id, payment_date):
 - Configurable offset from statement date (default 5 days)
 - Automatic payment generation
 - Creates negative transactions (reduce balance)
-- Links to bank account transactions (ready for integration)
+- **Vendor auto-creation** - Bank transactions automatically get vendor set to card name (e.g., "Barclaycard")
+- **Linked to bank account** - Creates corresponding bank transaction with bidirectional link
 
 **Payment Logic:**
 - If `set_payment` not configured → use minimum payment %
@@ -199,6 +204,31 @@ def recalculate_card_balance(credit_card_id):
 - **Balance Transfer** - Positive amount
 - **Reward** - Negative amount (reduces balance)
 - **Fee** - Positive amount (increases balance)
+
+### Transaction Deletion
+**Individual Delete:**
+- Delete button on credit card detail page for unpaid transactions
+- Automatically deletes linked bank transaction
+- Recalculates both credit card and bank account balances
+- Confirmation required before deletion
+
+**Cascading Deletes (Bidirectional):**
+- Deleting credit card payment → deletes linked bank transaction
+- Deleting bank transaction → deletes linked credit card payment
+- Ensures data integrity across linked transactions
+
+### Locked Statement Payment Generation
+When regenerating transactions:
+1. **Non-fixed transactions** (is_fixed=False) are deleted and regenerated
+2. **Fixed/locked transactions** (is_fixed=True) are preserved
+3. **Locked statement check**: For each locked Interest transaction:
+   - Calculates historical balance at statement date
+   - If debt exists (balance < 0) and no payment exists for payment date
+   - Generates missing payment transaction
+   - Uses absolute value of balance for payment amount
+4. **Credit card balance convention**: Negative balance = debt owed
+
+**Example:** Locked statement on 2026-02-08 with -£1,815.46 balance → generates £1,815.46 payment on 2026-02-22
 
 ---
 

@@ -293,6 +293,46 @@ def edit_transaction(id, txn_id):
         return redirect(url_for('credit_cards.detail', id=id))
 
 
+@credit_cards_bp.route('/credit-cards/<int:id>/transaction/<int:txn_id>/delete', methods=['POST'])
+def delete_transaction(id, txn_id):
+    """Delete a credit card transaction and linked bank transaction"""
+    try:
+        card = CreditCard.query.get_or_404(id)
+        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        
+        # Verify transaction belongs to this card
+        if txn.credit_card_id != card.id:
+            flash('Transaction does not belong to this card!', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Delete linked bank transaction if exists
+        if txn.bank_transaction_id:
+            from models.transactions import Transaction
+            bank_txn = Transaction.query.get(txn.bank_transaction_id)
+            if bank_txn:
+                account_id = bank_txn.account_id
+                db.session.delete(bank_txn)
+                # Recalculate bank account balance
+                if account_id:
+                    from models.transactions import Transaction
+                    Transaction.recalculate_account_balance(account_id)
+        
+        # Delete the credit card transaction
+        db.session.delete(txn)
+        db.session.commit()
+        
+        # Recalculate credit card balance
+        CreditCardTransaction.recalculate_card_balance(card.id)
+        
+        flash('Transaction deleted successfully!', 'success')
+        return redirect(url_for('credit_cards.detail', id=id))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting transaction: {str(e)}', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+
+
 @credit_cards_bp.route('/credit-cards/<int:id>/payment/<int:txn_id>/edit', methods=['POST'])
 def edit_payment(id, txn_id):
     """Edit a payment transaction amount and automatically lock it"""

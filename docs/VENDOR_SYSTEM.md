@@ -86,6 +86,7 @@ Complete vendor tracking and management system integrated into JonesHQ Finance w
 - ✅ Prevent deletion of vendors with transactions
 - ✅ Unique vendor names enforced
 - ✅ Website and notes tracking
+- ✅ **Auto-create vendors** - Credit card payment transactions automatically create vendor matching card name
 
 #### API Endpoints
 - ✅ `/vendors/api/search` - Autocomplete for transaction forms
@@ -97,6 +98,41 @@ Complete vendor tracking and management system integrated into JonesHQ Finance w
 - ✅ Vendor type classification for reporting
 - ✅ Default category suggestion for faster transaction entry
 - ✅ Inactive flag preserves historical data
+
+## Credit Card Integration
+
+### Automatic Vendor Creation for Credit Card Payments
+When a credit card payment transaction is generated:
+
+1. **Vendor Lookup**: System searches for vendor with name matching card name
+   ```python
+   vendor = Vendor.query.filter_by(name=card.card_name).first()
+   ```
+
+2. **Auto-Create if Missing**: If vendor doesn't exist, creates new vendor:
+   ```python
+   if not vendor:
+       vendor = Vendor(name=card.card_name)
+       db.session.add(vendor)
+       db.session.flush()
+   ```
+
+3. **Link to Transaction**: Sets vendor_id on the bank transaction:
+   ```python
+   bank_txn.vendor_id = vendor.id
+   ```
+
+**Result**: All bank transactions from credit card payments have:
+- Proper vendor tracking (e.g., "Barclaycard", "M&S", "Natwest")
+- Consistent vendor naming across all payments
+- Ability to track spending per card via vendor analytics
+
+**Examples of Auto-Created Vendors:**
+- Barclaycard
+- M&S
+- Natwest
+- Vanquis
+- Aqua
 
 ## Benefits
 

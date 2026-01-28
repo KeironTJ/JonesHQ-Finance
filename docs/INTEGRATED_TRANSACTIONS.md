@@ -75,29 +75,45 @@ When either side is edited:
 ### Phase 1: Basic Linking ✅
 - [x] Add `is_fixed` to transactions table
 - [x] Update Transaction model
+- [x] Add `vendor_id` to transactions table
 
-### Phase 2: Payment Creation with Linking
-- [ ] Add account selector to credit card payment creation
-- [ ] Create service method: `create_linked_payment(card_id, account_id, amount, date)`
-- [ ] Automatically create both transactions
-- [ ] Link them together
+### Phase 2: Payment Creation with Linking ✅
+- [x] Add account selector to credit card payment creation
+- [x] Create service method in `CreditCardService.generate_payment_transaction()`
+- [x] Automatically create both transactions
+- [x] Link them together via `bank_transaction_id` and `credit_card_id`
+- [x] **Vendor auto-creation** - Bank transactions automatically get vendor set to card name
 
-### Phase 3: Bi-directional Sync
-- [ ] Create service method: `sync_credit_card_payment(transaction_id, updates)`
-- [ ] When credit card payment edited → update bank transaction
-- [ ] When bank transaction edited (if linked) → update credit card payment
-- [ ] Handle deletion cascades
+### Phase 3: Bi-directional Sync ✅
+- [x] Create service method: `sync_credit_card_payment(transaction_id, updates)`
+- [x] When credit card payment edited → update bank transaction
+- [x] When bank transaction edited (if linked) → update credit card payment
+- [x] **Handle deletion cascades (bidirectional)**:
+  - Deleting credit card payment → deletes linked bank transaction
+  - Deleting bank transaction → deletes linked credit card payment
+  - Recalculates balances for affected accounts and cards
 
-### Phase 4: UI Updates
-- [ ] Add account dropdown to credit card payment forms
-- [ ] Show linked transaction indicator
-- [ ] Add "View in Bank Account" link from credit card transaction
-- [ ] Add "View Credit Card Payment" link from bank transaction
+### Phase 4: UI Updates ✅
+- [x] Add account dropdown to credit card payment forms
+- [x] Show linked transaction indicator
+- [x] Delete button for credit card transactions (with cascading delete)
+- [x] Edit transaction URL routing fixed
+- [x] Vendor automatically displayed on bank transactions from credit card payments
 
-### Phase 5: Bank Transaction Features
-- [ ] Add edit/lock/paid controls to bank transaction list
-- [ ] Similar modals as credit cards
-- [ ] Toggle buttons for is_paid and is_fixed
+### Phase 5: Bank Transaction Features ✅
+- [x] Add edit/lock/paid controls to bank transaction list
+- [x] **Is_paid filter** - Dropdown to filter by paid/pending status
+- [x] **Bulk delete** - Delete multiple transactions with confirmation
+- [x] Individual delete with cascading to linked credit card payments
+- [x] Toggle buttons for is_paid and is_fixed
+
+### Phase 6: Locked Statement Payment Generation ✅
+- [x] **Regeneration enhancement** - Check locked (is_fixed=True) statements
+- [x] **Missing payment detection** - For each locked statement, check if payment exists
+- [x] **Historical balance calculation** - Calculate balance at statement date
+- [x] **Automatic payment generation** - Generate missing payments for locked statements
+- [x] **Credit card balance handling** - Correctly handle negative balances (debt)
+- [x] **Temporary state modification** - Use historical balance for payment calculation
 
 ## Data Integrity Rules
 
@@ -171,6 +187,48 @@ All linking logic should be in a service layer (e.g., `CreditCardService`) to en
 - Validation happens before creation
 - Proper error handling
 - Consistent business logic
+
+## New Features Implemented
+
+### Vendor Auto-Creation
+When a credit card payment is generated:
+1. System looks for vendor with name matching card name (e.g., "Barclaycard")
+2. If vendor doesn't exist, creates new vendor automatically
+3. Sets vendor_id on the bank transaction
+4. Ensures all bank transactions from credit card payments have proper vendor tracking
+
+### Locked Statement Payment Generation
+When regenerating credit card transactions:
+1. **Delete non-fixed** - Removes all is_fixed=False transactions after current date
+2. **Check locked statements** - Finds all is_fixed=True Interest transactions
+3. **For each locked statement**:
+   - Calculates historical balance at statement date
+   - Checks if payment exists for payment_date (statement_date + offset days)
+   - If balance < 0 (debt exists) and no payment found:
+     - Temporarily sets card.current_balance to historical value
+     - Calls generate_payment_transaction() which uses card's payment calculation logic
+     - Restores original balance
+4. **Continue regular generation** - Generates new statements and payments for future dates
+
+**Credit Card Balance Convention:**
+- **Negative balance** = debt owed (e.g., -£1,815.46 means £1,815.46 owed)
+- **Payment amount** = absolute value of negative balance
+- **Check**: `if balance < 0:` to detect debt requiring payment
+
+### Bulk Delete Operations
+Transactions page now includes:
+- Checkbox selection for multiple transactions
+- "Delete Selected Transactions" button
+- Confirmation dialog showing count
+- Deletes all selected transactions and linked credit card payments
+- Recalculates balances for all affected accounts and cards
+
+### Is_Paid Filter
+Transactions page includes filter dropdown:
+- **All Status** - Shows all transactions
+- **Paid** - Shows only is_paid=True transactions
+- **Pending** - Shows only is_paid=False transactions
+- Filter state preserved in URL parameters
 
 ## Future Enhancements
 
