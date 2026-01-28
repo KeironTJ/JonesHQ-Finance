@@ -17,6 +17,7 @@ class Transaction(db.Model):
     payment_type = db.Column(db.String(50))  # BACS, Direct Debit, Card Payment, Transfer
     running_balance = db.Column(db.Numeric(10, 2))  # Balance after transaction
     is_paid = db.Column(db.Boolean, default=False)
+    is_fixed = db.Column(db.Boolean, default=False)  # Is this transaction locked from regeneration?
     
     # Optional reference to credit card or loan
     credit_card_id = db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=True)

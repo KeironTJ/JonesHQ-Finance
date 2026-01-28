@@ -243,6 +243,7 @@ def edit(id):
             transaction.assigned_to = request.form.get('assigned_to', '')
             transaction.payment_type = request.form.get('payment_type', '')
             transaction.is_paid = request.form.get('is_paid') == 'on'
+            transaction.is_fixed = request.form.get('txn_fixed') == '1'
             
             # Recalculate computed fields
             date = transaction.transaction_date
@@ -316,6 +317,44 @@ def delete(id):
     return_url = request.form.get('return_url')
     if return_url:
         return redirect(return_url)
+    return redirect(request.referrer or url_for('transactions.index'))
+
+
+@transactions_bp.route('/transactions/<int:id>/toggle_paid', methods=['POST'])
+def toggle_paid(id):
+    """Toggle the paid status of a transaction"""
+    transaction = Transaction.query.get_or_404(id)
+    
+    try:
+        transaction.is_paid = not transaction.is_paid
+        transaction.updated_at = datetime.now()
+        db.session.commit()
+        
+        status_text = "paid" if transaction.is_paid else "pending"
+        flash(f'Transaction marked as {status_text}.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating transaction status: {str(e)}', 'danger')
+    
+    return redirect(request.referrer or url_for('transactions.index'))
+
+
+@transactions_bp.route('/transactions/<int:id>/toggle_fixed', methods=['POST'])
+def toggle_fixed(id):
+    """Toggle the fixed/locked status of a transaction"""
+    transaction = Transaction.query.get_or_404(id)
+    
+    try:
+        transaction.is_fixed = not transaction.is_fixed
+        transaction.updated_at = datetime.now()
+        db.session.commit()
+        
+        status_text = "locked" if transaction.is_fixed else "unlocked"
+        flash(f'Transaction {status_text}.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating transaction lock status: {str(e)}', 'danger')
+    
     return redirect(request.referrer or url_for('transactions.index'))
 
 

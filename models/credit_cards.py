@@ -26,6 +26,9 @@ class CreditCard(db.Model):
     current_balance = db.Column(db.Numeric(10, 2), default=0.00)
     available_credit = db.Column(db.Numeric(10, 2))
     
+    # Default Payment Account
+    default_payment_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
+    
     # Account Management
     start_date = db.Column(db.Date)
     is_active = db.Column(db.Boolean, default=True)
@@ -35,6 +38,7 @@ class CreditCard(db.Model):
     # Relationships
     transactions = db.relationship('CreditCardTransaction', backref='credit_card', lazy=True, cascade='all, delete-orphan')
     promotional_offers = db.relationship('CreditCardPromotion', backref='credit_card', lazy=True, cascade='all, delete-orphan')
+    default_payment_account = db.relationship('Account', foreign_keys=[default_payment_account_id])
     
     def get_current_purchase_apr(self, date=None):
         """Get APR for purchases on a specific date (considers 0% offers)"""

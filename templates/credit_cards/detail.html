@@ -142,11 +142,14 @@
                             <td>£{{ "%.2f"|format(txn.balance or 0) }}</td>
                             <td>£{{ "%.2f"|format(txn.credit_available or 0) }}</td>
                             <td>
-                                {% if txn.is_paid %}
-                                <span class="badge bg-success">Paid</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Pending</span>
-                                {% endif %}
+                                <form method="POST" action="{{ url_for('credit_cards.toggle_paid', id=card.id, txn_id=txn.id) }}" style="display: inline;">
+                                    <button type="submit" 
+                                            class="badge bg-{% if txn.is_paid %}success{% else %}secondary{% endif %} status-toggle" 
+                                            style="border: none; cursor: pointer; padding: 0.5em 0.75em;"
+                                            title="Click to toggle paid status">
+                                        {% if txn.is_paid %}✓ Paid{% else %}⏳ Pending{% endif %}
+                                    </button>
+                                </form>
                                 {% if txn.is_fixed %}
                                 <span class="badge bg-warning text-dark" title="This transaction is locked and won't be regenerated">
                                     <i class="bi bi-lock-fill"></i> Fixed
@@ -310,6 +313,16 @@
                         <input type="number" class="form-control" id="payment_amount" name="payment_amount" step="0.01" required>
                         <small class="text-muted">Enter positive amount to reduce debt</small>
                     </div>
+                    <div class="mb-3">
+                        <label for="payment_account_id" class="form-label">Source Account</label>
+                        <select class="form-select" id="payment_account_id" name="account_id">
+                            <option value="">-- No linked account --</option>
+                            {% for account in accounts %}
+                            <option value="{{ account.id }}">{{ account.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Select the bank account this payment will come from (optional)</small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -357,6 +370,20 @@ editPaymentModal.addEventListener('show.bs.modal', function (event) {
     
     document.getElementById('payment_date').value = txnDate;
     document.getElementById('payment_amount').value = Math.abs(parseFloat(txnAmount));
+    
+    // Pre-select default payment account if set
+    {% if card.default_payment_account_id %}
+    document.getElementById('payment_account_id').value = '{{ card.default_payment_account_id }}';
+    {% else %}
+    document.getElementById('payment_account_id').value = '';
+    {% endif %}
 });
 </script>
+
+<style>
+.status-toggle:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+}
+</style>
 {% endblock %}
