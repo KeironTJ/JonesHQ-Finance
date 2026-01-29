@@ -128,11 +128,14 @@ def import_transactions():
                 vendor = get_or_create_vendor(item)
                 
                 # Determine transaction type based on amount
+                # In the CSV: negative = money in (income), positive = money out (expense)
+                # In our new DB convention: positive = income, negative = expense
                 if amount < 0:
                     trans_type = 'Income'
-                    amount = abs(amount)  # Store as positive
+                    amount = abs(amount)  # Convert to positive for income
                 else:
                     trans_type = 'Expense'
+                    amount = -amount  # Convert to negative for expense
                 
                 # Check if transaction already exists (to avoid duplicates)
                 existing = Transaction.query.filter_by(

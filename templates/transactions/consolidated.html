@@ -176,10 +176,10 @@
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                {% if txn.amount < 0 %}
-                                    <span class="text-success fw-bold">£{{ "{:,.2f}".format(txn.amount|abs) }}</span>
+                                {% if txn.amount > 0 %}
+                                    <span class="text-success fw-bold">£{{ "%.2f"|format(txn.amount) }}</span>
                                 {% else %}
-                                    <span class="text-danger fw-bold">£{{ "{:,.2f}".format(txn.amount) }}</span>
+                                    <span class="text-danger">-£{{ "%.2f"|format(txn.amount|abs) }}</span>
                                 {% endif %}
                             </td>
                             <td class="text-end">

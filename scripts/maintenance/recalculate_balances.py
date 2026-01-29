@@ -47,8 +47,8 @@ def recalculate_all_balances():
             balance = float(sum([-t.amount for t in transactions]))
             
             # Calculate totals for info
-            income_total = float(sum([-t.amount for t in transactions if t.amount < 0]))
-            expense_total = float(sum([t.amount for t in transactions if t.amount > 0]))
+            income_total = float(sum([t.amount for t in transactions if t.amount > 0]))
+            expense_total = float(sum([abs(t.amount) for t in transactions if t.amount < 0]))
             
             old_balance = float(account.balance) if account.balance else 0.0
             account.balance = balance

@@ -53,8 +53,8 @@ def update_account_balance(account_name):
         print(f"✅ Account balance updated to £{balance:,.2f}")
         
         # Show some transaction statistics
-        income_transactions = [t for t in transactions if t.amount < 0]
-        expense_transactions = [t for t in transactions if t.amount > 0]
+        income_transactions = [t for t in transactions if t.amount > 0]
+        expense_transactions = [t for t in transactions if t.amount < 0]
         
         total_income = sum([-t.amount for t in income_transactions])
         total_expenses = sum([t.amount for t in expense_transactions])

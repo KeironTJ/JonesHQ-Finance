@@ -39,15 +39,15 @@ with app.app_context():
     
     for txn in all_txns[:10]:  # Show first 10
         old_balance = balance
-        if txn.amount < 0:
+        if txn.amount > 0:
             # Income
-            income_total += abs(Decimal(str(txn.amount)))
-            balance += abs(Decimal(str(txn.amount)))
+            income_total += Decimal(str(txn.amount))
+            balance += Decimal(str(txn.amount))
             txn_type = "INCOME"
         else:
             # Expense
-            expense_total += Decimal(str(txn.amount))
-            balance -= Decimal(str(txn.amount))
+            expense_total += abs(Decimal(str(txn.amount)))
+            balance -= abs(Decimal(str(txn.amount)))
             txn_type = "EXPENSE"
         
         print(f"{txn.transaction_date} | {txn_type:8} | Amount: £{abs(float(txn.amount)):8.2f} | Balance: £{old_balance:8.2f} -> £{balance:8.2f} | {txn.description[:30]}")
@@ -57,10 +57,10 @@ with app.app_context():
     # Calculate final balance
     final_balance = Decimal('0.00')
     for txn in all_txns:
-        if txn.amount < 0:
-            final_balance += abs(Decimal(str(txn.amount)))
+        if txn.amount > 0:
+            final_balance += Decimal(str(txn.amount))
         else:
-            final_balance -= Decimal(str(txn.amount))
+            final_balance -= abs(Decimal(str(txn.amount)))
     
     print(f"\nFinal calculated balance: £{final_balance:.2f}")
     print(f"Total income: £{income_total:.2f}")

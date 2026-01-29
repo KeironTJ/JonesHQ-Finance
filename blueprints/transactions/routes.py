@@ -10,6 +10,8 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.credit_cards import CreditCard
 from models.loan_payments import LoanPayment
 from models.loans import Loan
+from models.settings import Settings
+from services.payday_service import PaydayService
 from extensions import db
 
 
@@ -23,8 +25,22 @@ def index():
     category_id = request.args.get('category_id', type=int)
     vendor_id = request.args.get('vendor_id', type=int)
     year_month = request.args.get('year_month')
+    payday_period = request.args.get('payday_period')
     search = request.args.get('search', '')
     is_paid_filter = request.args.get('is_paid')
+    sort_order = request.args.get('sort', 'asc')  # 'asc' or 'desc'
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 100, type=int)
+    
+    # Default to current payday period and pending ONLY on first visit (no query params at all)
+    if not request.args:
+        from datetime import date
+        today = date.today()
+        current_year = today.year
+        current_month = today.month
+        _, _, current_period = PaydayService.get_payday_period(current_year, current_month)
+        payday_period = current_period
+        is_paid_filter = 'pending'
     
     # Build query
     query = Transaction.query
@@ -41,6 +57,8 @@ def index():
         query = query.filter(Transaction.vendor_id == vendor_id)
     if year_month:
         query = query.filter(Transaction.year_month == year_month)
+    if payday_period:
+        query = query.filter(Transaction.payday_period == payday_period)
     if search:
         query = query.filter(
             db.or_(
@@ -54,19 +72,57 @@ def index():
         elif is_paid_filter == 'pending':
             query = query.filter(Transaction.is_paid == False)
     
-    # Order by date descending
-    transactions = query.order_by(Transaction.transaction_date.desc()).all()
+    # Order by date based on sort parameter
+    if sort_order == 'desc':
+        query = query.order_by(Transaction.transaction_date.desc())
+    else:
+        query = query.order_by(Transaction.transaction_date.asc())
     
-    # Calculate summary statistics
-    total_income = sum([-t.amount for t in transactions if t.amount < 0])
-    total_expenses = sum([t.amount for t in transactions if t.amount > 0])
+    # Get paginated results
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    transactions = pagination.items
+    
+    # Calculate summary statistics from ALL filtered transactions (not just current page)
+    all_filtered_transactions = query.all()
+    total_income = sum([t.amount for t in all_filtered_transactions if t.amount > 0])
+    total_expenses = sum([abs(t.amount) for t in all_filtered_transactions if t.amount < 0])
     net_balance = total_income - total_expenses
+    total_count = len(all_filtered_transactions)
     
-    # Calculate category summary for all filtered transactions
+    # Calculate running balance for current page transactions
+    # Running balance is calculated per account (not globally)
+    from decimal import Decimal
+    running_balances = []
+    
+    for txn in transactions:
+        # Get ALL transactions from the SAME ACCOUNT up to and including this transaction's date
+        # Order by date ascending, then by ID to ensure consistent ordering
+        all_txns_up_to_date = Transaction.query.filter(
+            Transaction.account_id == txn.account_id,
+            db.or_(
+                Transaction.transaction_date < txn.transaction_date,
+                db.and_(
+                    Transaction.transaction_date == txn.transaction_date,
+                    Transaction.id <= txn.id
+                )
+            )
+        ).order_by(Transaction.transaction_date.asc(), Transaction.id.asc()).all()
+        
+        # Calculate running balance from all transactions in this account up to this point
+        running_balance = Decimal('0')
+        for t in all_txns_up_to_date:
+            if t.amount > 0:  # Income
+                running_balance += Decimal(str(t.amount))
+            else:  # Expense
+                running_balance -= abs(Decimal(str(t.amount)))
+        
+        running_balances.append(running_balance)
+    
+    # Calculate category summary for all filtered transactions (not just current page)
     from collections import defaultdict
     summary = defaultdict(lambda: {'categories': defaultdict(lambda: {'count': 0, 'total': 0})})
     
-    for t in transactions:
+    for t in all_filtered_transactions:
         if t.category:
             head = t.category.head_budget
             sub = t.category.sub_budget
@@ -105,27 +161,79 @@ def index():
     year_months = db.session.query(Transaction.year_month).distinct().order_by(Transaction.year_month.desc()).all()
     year_months = [ym[0] for ym in year_months if ym[0]]
     
+    # Get payday periods for filter - generate from min to max transaction dates
+    min_date = db.session.query(func.min(Transaction.transaction_date)).scalar()
+    max_date = db.session.query(func.max(Transaction.transaction_date)).scalar()
+    
+    if min_date and max_date:
+        # Calculate number of months between min and max
+        months_diff = (max_date.year - min_date.year) * 12 + (max_date.month - min_date.month) + 2
+        payday_periods = PaydayService.get_recent_periods(
+            num_periods=months_diff, 
+            include_future=False,
+            start_year=min_date.year,
+            start_month=min_date.month
+        )
+    else:
+        payday_periods = []
+    
+    # Calculate previous and next payday periods for navigation
+    prev_period = None
+    next_period = None
+    if payday_period:
+        try:
+            year, month = map(int, payday_period.split('-'))
+            # Previous period
+            prev_month = month - 1
+            prev_year = year
+            if prev_month < 1:
+                prev_month = 12
+                prev_year -= 1
+            _, _, prev_period = PaydayService.get_payday_period(prev_year, prev_month)
+            
+            # Next period
+            next_month = month + 1
+            next_year = year
+            if next_month > 12:
+                next_month = 1
+                next_year += 1
+            _, _, next_period = PaydayService.get_payday_period(next_year, next_month)
+        except:
+            pass
+    
+    # Get filter expanded preference
+    filter_expanded = Settings.get_value('transactions_filter_expanded', True)
+    
     return render_template(
         'transactions.html',
         transactions=transactions,
+        running_balances=running_balances,
+        pagination=pagination,
         accounts=accounts,
         head_budgets=head_budgets,
         categories=categories,
         all_categories=all_categories,
         vendors=vendors,
         year_months=year_months,
+        payday_periods=payday_periods,
         total_income=total_income,
         total_expenses=total_expenses,
         net_balance=net_balance,
-        transaction_count=len(transactions),
+        transaction_count=total_count,
         category_summary=category_summary,
         selected_account=account_id,
         selected_head_budget=head_budget,
         selected_category=category_id,
         selected_vendor=vendor_id,
         selected_year_month=year_month,
+        selected_payday_period=payday_period,
+        prev_payday_period=prev_period,
+        next_payday_period=next_period,
         search_term=search,
-        selected_is_paid=is_paid_filter
+        selected_is_paid=is_paid_filter,
+        sort_order=sort_order,
+        per_page=per_page,
+        filter_expanded=filter_expanded
     )
 
 
@@ -208,6 +316,7 @@ def create():
                 year_month = current_date.strftime('%Y-%m')
                 week_year = f"{current_date.isocalendar()[1]:02d}-{current_date.year}"
                 day_name = current_date.strftime('%a')
+                payday_period = PaydayService.get_period_for_date(current_date)
                 
                 # Create transaction
                 transaction = Transaction(
@@ -223,7 +332,8 @@ def create():
                     is_paid=is_paid,
                     year_month=year_month,
                     week_year=week_year,
-                    day_name=day_name
+                    day_name=day_name,
+                    payday_period=payday_period
                 )
                 
                 db.session.add(transaction)
@@ -289,6 +399,7 @@ def edit(id):
             transaction.year_month = date.strftime('%Y-%m')
             transaction.week_year = f"{date.isocalendar()[1]:02d}-{date.year}"
             transaction.day_name = date.strftime('%a')
+            transaction.payday_period = PaydayService.get_period_for_date(date)
             transaction.updated_at = datetime.now()
             
             # Sync changes to linked transfer transaction if exists (BEFORE commit)
@@ -305,7 +416,7 @@ def edit(id):
                     linked_txn.is_paid = transaction.is_paid
                     
                     # Update description to reflect the correct direction
-                    if transaction.amount > 0:  # Current txn is expense (money leaving)
+                    if transaction.amount < 0:  # Current txn is expense (money leaving)
                         # This is the "from" account, linked is the "to" account
                         linked_txn.description = f"Transfer from {transaction.account.name if transaction.account else 'Unknown'}"
                     else:  # Current txn is income (money arriving)
@@ -316,6 +427,7 @@ def edit(id):
                     linked_txn.year_month = transaction.transaction_date.strftime('%Y-%m')
                     linked_txn.week_year = f"{transaction.transaction_date.isocalendar()[1]:02d}-{transaction.transaction_date.year}"
                     linked_txn.day_name = transaction.transaction_date.strftime('%a')
+                    linked_txn.payday_period = PaydayService.get_period_for_date(transaction.transaction_date)
                     linked_txn.updated_at = datetime.now()
             
             db.session.commit()
@@ -638,6 +750,27 @@ def bulk_delete():
     return redirect(url_for('transactions.index'))
 
 
+@transactions_bp.route('/transactions/save-filter-preference', methods=['POST'])
+def save_filter_preference():
+    """Save user preference for filter section expansion"""
+    try:
+        data = request.get_json()
+        expanded = data.get('expanded', False)
+        
+        Settings.set_value(
+            'transactions_filter_expanded',
+            expanded,
+            description='Whether the transactions filter section is expanded by default',
+            setting_type='boolean'
+        )
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @transactions_bp.route('/transactions/transfer', methods=['GET', 'POST'])
 def create_transfer():
     """Create a transfer between two accounts (creates both transactions automatically)"""
@@ -869,7 +1002,7 @@ def consolidated():
                 'amount': float(txn.amount),
                 'balance': float(txn.running_balance) if txn.running_balance else None,
                 'vendor': txn.vendor.name if txn.vendor else '',
-                'type': 'Income' if txn.amount < 0 else 'Expense'
+                'type': 'Income' if txn.amount > 0 else 'Expense'
             })
     
     # 2. Credit Card Transactions
@@ -926,8 +1059,8 @@ def consolidated():
     consolidated_transactions.sort(key=lambda x: x['date'], reverse=True)
     
     # Calculate totals
-    total_inflows = sum([abs(t['amount']) for t in consolidated_transactions if t['amount'] < 0])
-    total_outflows = sum([t['amount'] for t in consolidated_transactions if t['amount'] > 0])
+    total_inflows = sum([t['amount'] for t in consolidated_transactions if t['amount'] > 0])
+    total_outflows = sum([abs(t['amount']) for t in consolidated_transactions if t['amount'] < 0])
     net_position = total_inflows - total_outflows
     
     # Get filter options

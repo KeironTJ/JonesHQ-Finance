@@ -103,6 +103,92 @@ class PaydayService:
         return periods
     
     @staticmethod
+    def get_period_for_date(target_date):
+        """
+        Get the payday period label for a given transaction date.
+        
+        Args:
+            target_date: The date to find the payday period for
+            
+        Returns:
+            period_label (e.g., "2026-01") or None if cannot determine
+        """
+        if not target_date:
+            return None
+        
+        # Search backwards from target_date to find which period it belongs to
+        # Start with the year/month of the target date
+        search_year = target_date.year
+        search_month = target_date.month
+        
+        # Check current month and previous 2 months (handles edge cases)
+        for _ in range(3):
+            start_date, end_date, period_label = PaydayService.get_payday_period(search_year, search_month)
+            
+            if start_date <= target_date <= end_date:
+                return period_label
+            
+            # Move backwards one month
+            search_month -= 1
+            if search_month < 1:
+                search_month = 12
+                search_year -= 1
+        
+        # If we still haven't found it, just use the year-month of the transaction
+        return f"{target_date.year:04d}-{target_date.month:02d}"
+    
+    @staticmethod
+    def get_recent_periods(num_periods=24, include_future=True, start_year=None, start_month=None):
+        """
+        Get recent payday periods for filter dropdowns.
+        
+        Args:
+            num_periods: Number of periods to return
+            include_future: Whether to include future periods (ignored if start_year/month provided)
+            start_year: Optional starting year (overrides include_future logic)
+            start_month: Optional starting month (overrides include_future logic)
+            
+        Returns:
+            List of dicts with period info for display
+        """
+        today = date.today()
+        
+        # If start year/month provided, use those
+        if start_year and start_month:
+            current_year = start_year
+            current_month = start_month
+        elif include_future:
+            # Show current month + future months
+            current_year = today.year
+            current_month = today.month
+        else:
+            # Show past periods - go back num_periods months
+            current_year = today.year
+            current_month = today.month - num_periods + 1
+            
+            while current_month < 1:
+                current_month += 12
+                current_year -= 1
+        
+        periods = PaydayService.get_payday_periods(current_year, current_month, num_periods)
+        
+        # Format for display
+        result = []
+        for start_date, end_date, period_label in periods:
+            # Create display name like "Jan 15 - Feb 14, 2026"
+            display_name = f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')}"
+            
+            result.append({
+                'label': period_label,
+                'start_date': start_date,
+                'end_date': end_date,
+                'display_name': display_name,
+                'year': start_date.year  # For grouping
+            })
+        
+        return result
+    
+    @staticmethod
     def calculate_period_balances(account_id, start_date, end_date, include_unpaid=True):
         """
         Calculate rolling balance, minimum balance, and max extra spend for a payday period.
@@ -137,12 +223,12 @@ class PaydayService:
         balances = []
         
         for txn in transactions:
-            # Income (negative amount) adds to balance, expense (positive) subtracts
-            # Note: In this system, income is stored as negative, expenses as positive
-            if txn.amount < 0:
-                current_balance += abs(Decimal(str(txn.amount)))
+            # Income (positive amount) adds to balance, expense (negative) subtracts
+            # Note: In this system, income is stored as positive, expenses as negative
+            if txn.amount > 0:
+                current_balance += Decimal(str(txn.amount))
             else:  # Expense
-                current_balance -= Decimal(str(txn.amount))
+                current_balance -= abs(Decimal(str(txn.amount)))
             
             balances.append(current_balance)
             min_balance = min(min_balance, current_balance)
@@ -195,11 +281,11 @@ class PaydayService:
         
         # Apply transactions
         for txn in transactions:
-            # Income (negative amount) adds to balance, expense (positive) subtracts
-            if txn.amount < 0:
-                balance += abs(Decimal(str(txn.amount)))
+            # Income (positive amount) adds to balance, expense (negative) subtracts
+            if txn.amount > 0:
+                balance += Decimal(str(txn.amount))
             else:  # Expense
-                balance -= Decimal(str(txn.amount))
+                balance -= abs(Decimal(str(txn.amount)))
         
         return balance
     

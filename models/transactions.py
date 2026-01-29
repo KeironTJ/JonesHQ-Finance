@@ -30,6 +30,7 @@ class Transaction(db.Model):
     year_month = db.Column(db.String(7))  # 2026-01
     week_year = db.Column(db.String(7))   # 03-2026
     day_name = db.Column(db.String(10))   # Thu, Fri, etc.
+    payday_period = db.Column(db.String(7))  # 2026-01 (payday period this transaction falls in)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

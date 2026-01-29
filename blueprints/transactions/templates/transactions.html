@@ -69,97 +69,196 @@
     
     <!-- Filters -->
     <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" action="{{ url_for('transactions.index') }}" class="row g-3">
-                <div class="col-md-2">
-                    <label for="account_id" class="form-label">Account</label>
-                    <select name="account_id" id="account_id" class="form-select">
-                        <option value="">All Accounts</option>
-                        {% for account in accounts %}
-                        <option value="{{ account.id }}" {% if selected_account == account.id %}selected{% endif %}>
-                            {{ account.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
+        <div class="card-header bg-primary text-white" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#filterSection">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-funnel"></i> Filters</h5>
+                <div>
+                    {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
+                    <span class="badge bg-warning text-dark me-2">Filters Active</span>
+                    {% endif %}
+                    <span class="badge bg-light text-dark">Click to toggle</span>
                 </div>
-                
-                <div class="col-md-2">
-                    <label for="head_budget" class="form-label">Category Group</label>
-                    <select name="head_budget" id="head_budget" class="form-select">
-                        <option value="">All Groups</option>
-                        {% for hb in head_budgets %}
-                        <option value="{{ hb }}" {% if selected_head_budget == hb %}selected{% endif %}>
-                            {{ hb }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="col-md-2">
-                    <label for="category_id" class="form-label">Sub-Category</label>
-                    <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %}>
-                        <option value="">All Sub-Categories</option>
-                        {% for category in categories %}
-                        <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
-                            {% if selected_head_budget %}
-                                {{ category.sub_budget }}
-                            {% else %}
-                                {{ category.head_budget }} > {{ category.sub_budget }}
-                            {% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="col-md-2">
-                    <label for="vendor_id" class="form-label">Vendor</label>
-                    <select name="vendor_id" id="vendor_id" class="form-select">
-                        <option value="">All Vendors</option>
-                        {% for vendor in vendors %}
-                        <option value="{{ vendor.id }}" {% if selected_vendor == vendor.id %}selected{% endif %}>
-                            {{ vendor.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="col-md-2">
-                    <label for="year_month" class="form-label">Month</label>
-                    <select name="year_month" id="year_month" class="form-select">
-                        <option value="">All Months</option>
-                        {% for ym in year_months %}
-                        <option value="{{ ym }}" {% if selected_year_month == ym %}selected{% endif %}>
-                            {{ ym }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="col-md-2">
-                    <label for="is_paid" class="form-label">Status</label>
-                    <select name="is_paid" id="is_paid" class="form-select" onchange="this.form.submit()">
-                        <option value="">All Status</option>
-                        <option value="paid" {% if selected_is_paid == 'paid' %}selected{% endif %}>Paid</option>
-                        <option value="pending" {% if selected_is_paid == 'pending' %}selected{% endif %}>Pending</option>
-                    </select>
-                </div>
-                
-                <div class="col-md-2">
-                    <label for="search" class="form-label">Search</label>
-                    <input type="text" name="search" id="search" class="form-control" 
-                           placeholder="Search description..." value="{{ search_term }}">
-                </div>
-                
-                <div class="col-md-1">
-                    <label class="form-label">&nbsp;</label>
-                    <button type="submit" class="btn btn-primary w-100">Filter</button>
-                </div>
-            </form>
-            {% if selected_account or selected_category or selected_vendor or selected_year_month or search_term or selected_is_paid %}
-            <div class="mt-2">
-                <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
             </div>
-            {% endif %}
+        </div>
+        <div id="filterSection" class="collapse{% if filter_expanded %} show{% endif %}">
+            <div class="card-body">
+                <form method="get" action="{{ url_for('transactions.index') }}" class="row g-3">
+                    <div class="col-md-2">
+                        <label for="account_id" class="form-label">Account</label>
+                        <select name="account_id" id="account_id" class="form-select">
+                            <option value="">All Accounts</option>
+                            {% for account in accounts %}
+                            <option value="{{ account.id }}" {% if selected_account == account.id %}selected{% endif %}>
+                                {{ account.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="head_budget" class="form-label">Category Group</label>
+                        <select name="head_budget" id="head_budget" class="form-select">
+                            <option value="">All Groups</option>
+                            {% for hb in head_budgets %}
+                            <option value="{{ hb }}" {% if selected_head_budget == hb %}selected{% endif %}>
+                                {{ hb }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="category_id" class="form-label">Sub-Category</label>
+                        <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %}>
+                            <option value="">All Sub-Categories</option>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
+                                {% if selected_head_budget %}
+                                    {{ category.sub_budget }}
+                                {% else %}
+                                    {{ category.head_budget }} > {{ category.sub_budget }}
+                                {% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="vendor_id" class="form-label">Vendor</label>
+                        <select name="vendor_id" id="vendor_id" class="form-select">
+                            <option value="">All Vendors</option>
+                            {% for vendor in vendors %}
+                            <option value="{{ vendor.id }}" {% if selected_vendor == vendor.id %}selected{% endif %}>
+                                {{ vendor.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="year_month" class="form-label">Calendar Month</label>
+                        <select name="year_month" id="year_month" class="form-select" onchange="this.form.submit()">
+                            <option value="">All Months</option>
+                            {% for ym in year_months %}
+                            <option value="{{ ym }}" {% if selected_year_month == ym %}selected{% endif %}>
+                                {{ ym }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="is_paid" class="form-label">Status</label>
+                        <select name="is_paid" id="is_paid" class="form-select" onchange="this.form.submit()">
+                            <option value="">All Status</option>
+                            <option value="paid" {% if selected_is_paid == 'paid' %}selected{% endif %}>Paid</option>
+                            <option value="pending" {% if selected_is_paid == 'pending' %}selected{% endif %}>Pending</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-10">
+                        <label for="search" class="form-label">Search</label>
+                        <input type="text" name="search" id="search" class="form-control" 
+                               placeholder="Search description or item..." value="{{ search_term }}">
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-search"></i> Apply Filters
+                        </button>
+                    </div>
+                    
+                    <!-- Payday Period Timeline - Full Width Row -->
+                    <div class="col-12 mt-3 pt-3 border-top">
+                        <label for="payday_period" class="form-label fw-bold">
+                            <i class="bi bi-calendar-range"></i> Payday Period Timeline
+                        </label>
+                        <div class="input-group input-group-lg">
+                            {% if prev_payday_period %}
+                            <a href="{{ url_for('transactions.index', 
+                                                account_id=selected_account, 
+                                                head_budget=selected_head_budget, 
+                                                category_id=selected_category, 
+                                                vendor_id=selected_vendor, 
+                                                payday_period=prev_payday_period, 
+                                                search=search_term, 
+                                                is_paid=selected_is_paid,
+                                                sort=sort_order) }}" 
+                               class="btn btn-outline-secondary" title="Previous Period">
+                                <i class="bi bi-chevron-left"></i> Previous
+                            </a>
+                            {% else %}
+                            <button class="btn btn-outline-secondary" disabled>
+                                <i class="bi bi-chevron-left"></i> Previous
+                            </button>
+                            {% endif %}
+                            <select name="payday_period" id="payday_period" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Periods</option>
+                                {% for period in payday_periods %}
+                                    {% if loop.first or period.year != payday_periods[loop.index0 - 1].year %}
+                                        {% if not loop.first %}
+                                            </optgroup>
+                                        {% endif %}
+                                        <optgroup label="━━━ {{ period.year }} ━━━">
+                                    {% endif %}
+                                    <option value="{{ period.label }}" {% if selected_payday_period == period.label %}selected{% endif %}>
+                                        {{ period.display_name }}
+                                    </option>
+                                    {% if loop.last %}
+                                        </optgroup>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            {% if next_payday_period %}
+                            <a href="{{ url_for('transactions.index', 
+                                                account_id=selected_account, 
+                                                head_budget=selected_head_budget, 
+                                                category_id=selected_category, 
+                                                vendor_id=selected_vendor, 
+                                                payday_period=next_payday_period, 
+                                                search=search_term, 
+                                                is_paid=selected_is_paid,
+                                                sort=sort_order) }}" 
+                               class="btn btn-outline-secondary" title="Next Period">
+                                Next <i class="bi bi-chevron-right"></i>
+                            </a>
+                            {% else %}
+                            <button class="btn btn-outline-secondary" disabled>
+                                Next <i class="bi bi-chevron-right"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </form>
+                
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
+                        <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-x-circle"></i> Clear All Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <a href="{{ url_for('transactions.index', 
+                                            account_id=selected_account, 
+                                            head_budget=selected_head_budget, 
+                                            category_id=selected_category, 
+                                            vendor_id=selected_vendor, 
+                                            year_month=selected_year_month, 
+                                            payday_period=selected_payday_period, 
+                                            search=search_term, 
+                                            is_paid=selected_is_paid, 
+                                            sort='desc' if sort_order == 'asc' else 'asc',
+                                            per_page=per_page) }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-arrow-{% if sort_order == 'asc' %}down{% else %}up{% endif %}"></i>
+                            {% if sort_order == 'asc' %}Oldest First{% else %}Newest First{% endif %}
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -178,7 +277,7 @@
                     {% for head_budget, data in category_summary.items() %}
                     <div class="col-md-6 col-lg-4 mb-3">
                         <div class="card h-100">
-                            <div class="card-header {% if data.total_amount > 0 %}bg-danger{% else %}bg-success{% endif %} text-white">
+                            <div class="card-header {% if data.total_amount < 0 %}bg-danger{% else %}bg-success{% endif %} text-white">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <strong>{{ head_budget }}</strong>
                                     <span class="badge bg-light text-dark">{{ data.total_count }}</span>
@@ -293,6 +392,102 @@
     <!-- Transactions Table -->
     <div class="card">
         <div class="card-body">
+            <!-- Top Pagination Controls -->
+            {% if pagination.pages > 1 %}
+            <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+                <div class="text-muted">
+                    Showing {{ (pagination.page - 1) * pagination.per_page + 1 }} to {% if pagination.page * pagination.per_page < pagination.total %}{{ pagination.page * pagination.per_page }}{% else %}{{ pagination.total }}{% endif %} of {{ pagination.total }} transactions
+                </div>
+                <nav aria-label="Transaction pagination">
+                    <ul class="pagination mb-0">
+                        <!-- First Page -->
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=1, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-double-left"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-double-left"></i></span>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Previous Page -->
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=pagination.prev_num, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Page Numbers -->
+                        {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page_num %}
+                                {% if page_num == pagination.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('transactions.index', page=page_num, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <!-- Next Page -->
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=pagination.next_num, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Last Page -->
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=pagination.pages, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-double-right"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-double-right"></i></span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                
+                <!-- Per Page Selector -->
+                <div class="d-flex align-items-center">
+                    <label for="perPageSelectTop" class="me-2 mb-0 text-muted">Per page:</label>
+                    <select id="perPageSelectTop" class="form-select form-select-sm" style="width: auto;" onchange="changePerPage(this.value)">
+                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                        <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                        <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                    </select>
+                </div>
+            </div>
+            {% endif %}
+            
             <div class="table-responsive">
                 <table class="table table-hover table-sm">
                     <thead class="table-light">
@@ -308,6 +503,7 @@
                             <th style="width: 100px;">Assigned To</th>
                             <th style="width: 120px;">Payment Type</th>
                             <th style="width: 100px;" class="text-end">Amount</th>
+                            <th style="width: 120px;" class="text-end">Running Balance</th>
                             <th style="width: 60px;">Status</th>
                             <th style="width: 100px;">Actions</th>
                         </tr>
@@ -315,7 +511,7 @@
                     <tbody>
                         {% if transactions %}
                             {% for transaction in transactions %}
-                            <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount < 0 %}table-success{% endif %}">
+                            <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount > 0 %}table-success{% endif %}">
                                 <td>
                                     <input type="checkbox" class="transaction-checkbox" value="{{ transaction.id }}" onchange="updateBulkActions()">
                                 </td>
@@ -347,11 +543,16 @@
                                 <td>{{ transaction.assigned_to if transaction.assigned_to else '-' }}</td>
                                 <td><span class="badge bg-secondary">{{ transaction.payment_type }}</span></td>
                                 <td class="text-end">
-                                    {% if transaction.amount < 0 %}
-                                        <span class="text-success fw-bold">-£{{ "%.2f"|format(transaction.amount|abs) }}</span>
+                                    {% if transaction.amount > 0 %}
+                                        <span class="text-success fw-bold">£{{ "%.2f"|format(transaction.amount) }}</span>
                                     {% else %}
-                                        <span class="text-danger">£{{ "%.2f"|format(transaction.amount) }}</span>
+                                        <span class="text-danger">-£{{ "%.2f"|format(transaction.amount|abs) }}</span>
                                     {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <span class="fw-bold {% if running_balances[loop.index0] >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        £{{ "%.2f"|format(running_balances[loop.index0]|abs) }}
+                                    </span>
                                 </td>
                                 <td class="text-center">
                                     <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}" 
@@ -421,7 +622,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-4">
+                                <td colspan="12" class="text-center text-muted py-4">
                                     No transactions found. Try adjusting your filters.
                                 </td>
                             </tr>
@@ -429,6 +630,102 @@
                     </tbody>
                 </table>
             </div>
+            
+            <!-- Pagination Controls -->
+            {% if pagination.pages > 1 %}
+            <div class="d-flex justify-content-between align-items-center mt-3 px-3 pb-3">
+                <div class="text-muted">
+                    Showing {{ (pagination.page - 1) * pagination.per_page + 1 }} to {% if pagination.page * pagination.per_page < pagination.total %}{{ pagination.page * pagination.per_page }}{% else %}{{ pagination.total }}{% endif %} of {{ pagination.total }} transactions
+                </div>
+                <nav aria-label="Transaction pagination">
+                    <ul class="pagination mb-0">
+                        <!-- First Page -->
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=1, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-double-left"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-double-left"></i></span>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Previous Page -->
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=pagination.prev_num, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Page Numbers -->
+                        {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page_num %}
+                                {% if page_num == pagination.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('transactions.index', page=page_num, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <!-- Next Page -->
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=pagination.next_num, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Last Page -->
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('transactions.index', page=pagination.pages, per_page=per_page, account_id=selected_account, head_budget=selected_head_budget, category_id=selected_category, vendor_id=selected_vendor, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort_order) }}">
+                                <i class="bi bi-chevron-double-right"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-double-right"></i></span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                
+                <!-- Per Page Selector -->
+                <div class="d-flex align-items-center">
+                    <label for="perPageSelect" class="me-2 mb-0 text-muted">Per page:</label>
+                    <select id="perPageSelect" class="form-select form-select-sm" style="width: auto;" onchange="changePerPage(this.value)">
+                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                        <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                        <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                    </select>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -649,6 +946,40 @@ function bulkDelete() {
     document.body.appendChild(form);
     form.submit();
 }
+
+// Change per page setting
+function changePerPage(perPage) {
+    const url = new URL(window.location);
+    url.searchParams.set('per_page', perPage);
+    url.searchParams.set('page', '1'); // Reset to page 1 when changing per_page
+    window.location.href = url.toString();
+}
+
+// Save filter section collapse state to database
+document.addEventListener('DOMContentLoaded', function() {
+    const filterSection = document.getElementById('filterSection');
+    
+    // Save state when toggled
+    filterSection.addEventListener('shown.bs.collapse', function() {
+        fetch('{{ url_for("transactions.save_filter_preference") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ expanded: true })
+        });
+    });
+    
+    filterSection.addEventListener('hidden.bs.collapse', function() {
+        fetch('{{ url_for("transactions.save_filter_preference") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ expanded: false })
+        });
+    });
+});
 </script>
 
 <style>

@@ -178,7 +178,7 @@
                     {% for head_budget, data in category_summary.items() %}
                     <div class="col-md-6 col-lg-4 mb-3">
                         <div class="card h-100">
-                            <div class="card-header {% if data.total_amount > 0 %}bg-danger{% else %}bg-success{% endif %} text-white">
+                            <div class="card-header {% if data.total_amount < 0 %}bg-danger{% else %}bg-success{% endif %} text-white">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <strong>{{ head_budget }}</strong>
                                     <span class="badge bg-light text-dark">{{ data.total_count }}</span>
@@ -304,7 +304,7 @@
                     <tbody>
                         {% if transactions %}
                             {% for transaction in transactions %}
-                            <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount < 0 %}table-success{% endif %}">
+                            <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount > 0 %}table-success{% endif %}">
                                 <td>
                                     <input type="checkbox" class="transaction-checkbox" value="{{ transaction.id }}" onchange="updateBulkActions()">
                                 </td>
@@ -336,10 +336,10 @@
                                 <td>{{ transaction.assigned_to if transaction.assigned_to else '-' }}</td>
                                 <td><span class="badge bg-secondary">{{ transaction.payment_type }}</span></td>
                                 <td class="text-end">
-                                    {% if transaction.amount < 0 %}
-                                        <span class="text-success fw-bold">-£{{ "%.2f"|format(transaction.amount|abs) }}</span>
+                                    {% if transaction.amount > 0 %}
+                                        <span class="text-success fw-bold">£{{ "%.2f"|format(transaction.amount) }}</span>
                                     {% else %}
-                                        <span class="text-danger">£{{ "%.2f"|format(transaction.amount) }}</span>
+                                        <span class="text-danger">-£{{ "%.2f"|format(transaction.amount|abs) }}</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-center">

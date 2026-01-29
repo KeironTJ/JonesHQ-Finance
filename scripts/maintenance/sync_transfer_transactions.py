@@ -131,7 +131,7 @@ def sync_transfers():
         # Sample some transfers first
         print("\nSample transfers:")
         for t in transfers[:10]:
-            direction = "OUT" if t.amount > 0 else "IN"
+            direction = "OUT" if t.amount < 0 else "IN"
             category_name = f"{t.category.head_budget} > {t.category.sub_budget}" if t.category else "No Category"
             print(f"  {t.transaction_date} | {direction:3} | GBP {abs(t.amount):>8.2f} | {t.item:30} | {category_name}")
         
@@ -139,7 +139,7 @@ def sync_transfers():
         
         for transfer in transfers:
             # Determine direction
-            is_outgoing = transfer.amount > 0  # Positive = money leaving
+            is_outgoing = transfer.amount < 0  # Negative = money leaving
             
             # Try to find the destination account from the category
             destination = parse_transfer_destination(transfer)

@@ -50,7 +50,7 @@ def consolidated():
                 'amount': float(txn.amount),
                 'balance': float(txn.balance) if txn.balance else None,
                 'vendor': txn.vendor.name if txn.vendor else '',
-                'type': 'Income' if txn.amount < 0 else 'Expense'
+                'type': 'Income' if txn.amount > 0 else 'Expense'
             })
     
     # 2. Credit Card Transactions
@@ -107,8 +107,8 @@ def consolidated():
     consolidated_transactions.sort(key=lambda x: x['date'], reverse=True)
     
     # Calculate totals
-    total_inflows = sum([abs(t['amount']) for t in consolidated_transactions if t['amount'] < 0])
-    total_outflows = sum([t['amount'] for t in consolidated_transactions if t['amount'] > 0])
+    total_inflows = sum([t['amount'] for t in consolidated_transactions if t['amount'] > 0])
+    total_outflows = sum([abs(t['amount']) for t in consolidated_transactions if t['amount'] < 0])
     net_position = total_inflows - total_outflows
     
     # Get filter options
