@@ -83,8 +83,22 @@
                                 <small class="form-text text-muted">Optional - helps identify the purpose of this transfer</small>
                             </div>
 
+                            <!-- Paid Status -->
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">
+                                    <i class="bi bi-check-circle"></i> Payment Status
+                                </label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="is_paid" name="is_paid" checked>
+                                    <label class="form-check-label" for="is_paid">
+                                        Mark as Paid
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">Uncheck if this is a future/pending transfer</small>
+                            </div>
+
                             <!-- Category -->
-                            <div class="col-md-12 mb-3">
+                            <div class="col-md-6 mb-3">
                                 <label for="category_id" class="form-label">
                                     <i class="bi bi-folder"></i> Category
                                 </label>

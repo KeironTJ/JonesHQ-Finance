@@ -137,7 +137,7 @@
                 
                 <div class="col-md-2">
                     <label for="is_paid" class="form-label">Status</label>
-                    <select name="is_paid" id="is_paid" class="form-select">
+                    <select name="is_paid" id="is_paid" class="form-select" onchange="this.form.submit()">
                         <option value="">All Status</option>
                         <option value="paid" {% if selected_is_paid == 'paid' %}selected{% endif %}>Paid</option>
                         <option value="pending" {% if selected_is_paid == 'pending' %}selected{% endif %}>Pending</option>
@@ -266,6 +266,14 @@
                             <option value="Ivy">Ivy</option>
                         </select>
                     </div>
+                    <div class="col-md-3">
+                        <label for="bulk_is_paid" class="form-label">Change Paid Status:</label>
+                        <select class="form-select" name="bulk_is_paid" id="bulk_is_paid">
+                            <option value="">-- No Change --</option>
+                            <option value="1">Mark as Paid</option>
+                            <option value="0">Mark as Pending</option>
+                        </select>
+                    </div>
                     <div class="col-md-12">
                         <button type="submit" class="btn btn-primary me-2">
                             <i class="bi bi-save"></i> Update Selected Transactions
@@ -307,7 +315,7 @@
                     <tbody>
                         {% if transactions %}
                             {% for transaction in transactions %}
-                            <tr class="{% if transaction.amount < 0 %}table-success{% endif %}">
+                            <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount < 0 %}table-success{% endif %}">
                                 <td>
                                     <input type="checkbox" class="transaction-checkbox" value="{{ transaction.id }}" onchange="updateBulkActions()">
                                 </td>
@@ -315,6 +323,9 @@
                                 <td>
                                     {% if transaction.account %}
                                         {{ transaction.account.name }}
+                                        {% if transaction.linked_transaction_id %}
+                                            <br><small class="badge bg-info"><i class="bi bi-arrow-left-right"></i> Linked</small>
+                                        {% endif %}
                                     {% else %}
                                         <span class="text-muted">No Account</span>
                                     {% endif %}
@@ -326,6 +337,9 @@
                                 <td>{{ transaction.vendor.name if transaction.vendor else '-' }}</td>
                                 <td>
                                     <strong>{{ transaction.item if transaction.item else transaction.description }}</strong>
+                                    {% if transaction.linked_transaction_id %}
+                                        <span class="badge bg-info ms-1" title="Linked Transfer Transaction (ID: {{ transaction.linked_transaction_id }})"><i class="bi bi-arrow-left-right"></i> Transfer</span>
+                                    {% endif %}
                                     {% if transaction.description and transaction.item and transaction.description != transaction.item %}
                                         <br><small class="text-muted">{{ transaction.description }}</small>
                                     {% endif %}

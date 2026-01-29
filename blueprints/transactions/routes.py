@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timedelta
 from . import transactions_bp
 from models.transactions import Transaction
 from models.accounts import Account
@@ -150,10 +150,32 @@ def create():
             is_recurring = request.form.get('is_recurring') == 'on'
             frequency = request.form.get('frequency', 'monthly')
             occurrences = request.form.get('occurrences', type=int, default=1)
+            adjust_working_days = request.form.get('adjust_working_days') == 'on'
+            weekend_adjustment = request.form.get('weekend_adjustment', 'previous')  # 'previous' or 'next'
             
             if is_recurring and occurrences < 1:
                 flash('Number of occurrences must be at least 1', 'danger')
                 return redirect(url_for('transactions.create'))
+            
+            # Helper functions for working day adjustment
+            def is_weekend(date_obj):
+                """Check if date falls on Saturday (5) or Sunday (6)"""
+                return date_obj.weekday() >= 5
+            
+            def adjust_to_working_day(date_obj, direction='previous'):
+                """Adjust date to working day if it falls on weekend"""
+                if not is_weekend(date_obj):
+                    return date_obj
+                
+                if direction == 'previous':
+                    # Move to previous Friday
+                    while is_weekend(date_obj):
+                        date_obj = date_obj - timedelta(days=1)
+                else:  # 'next'
+                    # Move to next Monday
+                    while is_weekend(date_obj):
+                        date_obj = date_obj + timedelta(days=1)
+                return date_obj
             
             # Create transactions
             transactions_created = 0
@@ -165,12 +187,22 @@ def create():
                     if frequency == 'weekly':
                         from dateutil.relativedelta import relativedelta
                         current_date = transaction_date + relativedelta(weeks=i)
+                    elif frequency == '4weekly':
+                        from dateutil.relativedelta import relativedelta
+                        current_date = transaction_date + relativedelta(weeks=i*4)
                     elif frequency == 'monthly':
                         from dateutil.relativedelta import relativedelta
                         current_date = transaction_date + relativedelta(months=i)
+                    elif frequency == 'quarterly':
+                        from dateutil.relativedelta import relativedelta
+                        current_date = transaction_date + relativedelta(months=i*3)
                     elif frequency == 'yearly':
                         from dateutil.relativedelta import relativedelta
                         current_date = transaction_date + relativedelta(years=i)
+                
+                # Adjust for working days if enabled
+                if adjust_working_days:
+                    current_date = adjust_to_working_day(current_date, weekend_adjustment)
                 
                 # Calculate computed fields
                 year_month = current_date.strftime('%Y-%m')
@@ -259,6 +291,33 @@ def edit(id):
             transaction.day_name = date.strftime('%a')
             transaction.updated_at = datetime.now()
             
+            # Sync changes to linked transfer transaction if exists (BEFORE commit)
+            linked_account_id = None
+            if transaction.linked_transaction_id:
+                linked_txn = Transaction.query.get(transaction.linked_transaction_id)
+                if linked_txn:
+                    linked_account_id = linked_txn.account_id
+                    
+                    # Update the linked transaction with opposite amount
+                    linked_txn.amount = -transaction.amount
+                    linked_txn.transaction_date = transaction.transaction_date
+                    linked_txn.item = transaction.item
+                    linked_txn.is_paid = transaction.is_paid
+                    
+                    # Update description to reflect the correct direction
+                    if transaction.amount > 0:  # Current txn is expense (money leaving)
+                        # This is the "from" account, linked is the "to" account
+                        linked_txn.description = f"Transfer from {transaction.account.name if transaction.account else 'Unknown'}"
+                    else:  # Current txn is income (money arriving)
+                        # This is the "to" account, linked is the "from" account
+                        linked_txn.description = f"Transfer to {transaction.account.name if transaction.account else 'Unknown'}"
+                    
+                    # Recalculate computed fields for linked transaction
+                    linked_txn.year_month = transaction.transaction_date.strftime('%Y-%m')
+                    linked_txn.week_year = f"{transaction.transaction_date.isocalendar()[1]:02d}-{transaction.transaction_date.year}"
+                    linked_txn.day_name = transaction.transaction_date.strftime('%a')
+                    linked_txn.updated_at = datetime.now()
+            
             db.session.commit()
             
             # Sync changes to linked credit card payment if exists
@@ -283,6 +342,10 @@ def edit(id):
             else:
                 # Same account - just update it
                 Transaction.recalculate_account_balance(transaction.account_id)
+            
+            # Also recalculate linked transaction's account if it exists
+            if linked_account_id:
+                Transaction.recalculate_account_balance(linked_account_id)
             
             db.session.commit()
             
@@ -321,6 +384,7 @@ def delete(id):
         account_id = transaction.account_id
         account_name = transaction.account.name if transaction.account else 'Unknown'
         linked_cc_payment = None
+        linked_transfer_account_id = None
         
         # Delete linked credit card payment if exists
         if transaction.credit_card_id:
@@ -330,6 +394,13 @@ def delete(id):
             ).first()
             if linked_cc_payment:
                 db.session.delete(linked_cc_payment)
+        
+        # Delete linked transfer transaction if exists
+        if transaction.linked_transaction_id:
+            linked_transfer = Transaction.query.get(transaction.linked_transaction_id)
+            if linked_transfer:
+                linked_transfer_account_id = linked_transfer.account_id
+                db.session.delete(linked_transfer)
         
         db.session.delete(transaction)
         db.session.commit()
@@ -342,7 +413,12 @@ def delete(id):
         # Recalculate balance for the account
         if account_id:
             Transaction.recalculate_account_balance(account_id)
-            db.session.commit()
+        
+        # Recalculate balance for linked transfer account
+        if linked_transfer_account_id:
+            Transaction.recalculate_account_balance(linked_transfer_account_id)
+        
+        db.session.commit()
         
         flash(f'Transaction deleted successfully! {account_name} balance updated.', 'success')
     except Exception as e:
@@ -383,6 +459,13 @@ def toggle_paid(id):
             if cc_payment:
                 cc_payment.is_paid = transaction.is_paid
         
+        # Sync with linked transfer transaction if exists
+        if transaction.linked_transaction_id:
+            linked_txn = Transaction.query.get(transaction.linked_transaction_id)
+            if linked_txn:
+                linked_txn.is_paid = transaction.is_paid
+                linked_txn.updated_at = datetime.now()
+        
         db.session.commit()
         
         status_text = "paid" if transaction.is_paid else "pending"
@@ -391,7 +474,12 @@ def toggle_paid(id):
         db.session.rollback()
         flash(f'Error updating transaction status: {str(e)}', 'danger')
     
-    return redirect(request.referrer or url_for('transactions.index'))
+    # Redirect with anchor to preserve position
+    referrer = request.referrer or url_for('transactions.index')
+    # Add anchor to jump back to the transaction row
+    if '#' not in referrer:
+        referrer += f'#txn-{id}'
+    return redirect(referrer)
 
 
 @transactions_bp.route('/transactions/<int:id>/toggle_fixed', methods=['POST'])
@@ -410,7 +498,11 @@ def toggle_fixed(id):
         db.session.rollback()
         flash(f'Error updating transaction lock status: {str(e)}', 'danger')
     
-    return redirect(request.referrer or url_for('transactions.index'))
+    # Redirect with anchor to preserve position
+    referrer = request.referrer or url_for('transactions.index')
+    if '#' not in referrer:
+        referrer += f'#txn-{id}'
+    return redirect(referrer)
 
 
 @transactions_bp.route('/transactions/bulk-edit', methods=['POST'])
@@ -430,6 +522,14 @@ def bulk_edit():
         vendor_id = request.form.get('bulk_vendor_id', type=int)
         payment_type = request.form.get('bulk_payment_type')
         assigned_to = request.form.get('bulk_assigned_to')
+        is_paid_str = request.form.get('bulk_is_paid')
+        
+        # Convert is_paid to boolean if provided
+        is_paid = None
+        if is_paid_str == '1':
+            is_paid = True
+        elif is_paid_str == '0':
+            is_paid = False
         
         # Track affected accounts for balance recalculation
         affected_accounts = set()
@@ -450,6 +550,15 @@ def bulk_edit():
                     transaction.payment_type = payment_type
                 if assigned_to:
                     transaction.assigned_to = assigned_to
+                if is_paid is not None:
+                    transaction.is_paid = is_paid
+                    # Sync with linked transfer if exists
+                    if transaction.linked_transaction_id:
+                        linked_txn = Transaction.query.get(transaction.linked_transaction_id)
+                        if linked_txn:
+                            linked_txn.is_paid = is_paid
+                            if linked_txn.account_id:
+                                affected_accounts.add(linked_txn.account_id)
                 
                 transaction.updated_at = datetime.now()
                 update_count += 1
@@ -556,6 +665,7 @@ def create_transfer():
             transfer_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d').date()
             description = request.form.get('description', 'Transfer')
             category_id = request.form.get('category_id', type=int)
+            is_paid = request.form.get('is_paid') == 'on'
             
             # Bulk transfer options
             is_recurring = request.form.get('is_recurring') == 'on'
@@ -650,7 +760,7 @@ def create_transfer():
                     description=f"Transfer to {to_account.name}",
                     item=description,
                     payment_type='Transfer',
-                    is_paid=True,
+                    is_paid=is_paid,
                     year_month=year_month,
                     week_year=week_year,
                     day_name=day_name
@@ -666,7 +776,7 @@ def create_transfer():
                     description=f"Transfer from {from_account.name}",
                     item=description,
                     payment_type='Transfer',
-                    is_paid=True,
+                    is_paid=is_paid,
                     year_month=year_month,
                     week_year=week_year,
                     day_name=day_name
@@ -674,6 +784,12 @@ def create_transfer():
                 
                 db.session.add(from_transaction)
                 db.session.add(to_transaction)
+                db.session.flush()  # Get IDs assigned
+                
+                # Link the transactions together
+                from_transaction.linked_transaction_id = to_transaction.id
+                to_transaction.linked_transaction_id = from_transaction.id
+                
                 transfers_created += 1
             
             db.session.commit()

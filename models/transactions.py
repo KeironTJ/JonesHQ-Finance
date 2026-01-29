@@ -23,6 +23,9 @@ class Transaction(db.Model):
     credit_card_id = db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=True)
     loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=True)
     
+    # Link to paired transfer transaction (for account-to-account transfers)
+    linked_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
+    
     # Computed fields for reporting
     year_month = db.Column(db.String(7))  # 2026-01
     week_year = db.Column(db.String(7))   # 03-2026
