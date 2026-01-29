@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Childcare Reports{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Childcare Reports</h1>
+        <a href="{{ url_for('childcare.index') }}" class="btn btn-primary">
+            <i class="bi bi-calendar"></i> Back to Calendar
+        </a>
+    </div>
+
+    <!-- Year Selector -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    {% if current_year - 1 in years %}
+                    <a href="{{ url_for('childcare.reports', year=current_year - 1) }}" class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-left"></i> {{ current_year - 1 }}
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="col-md-4 text-center">
+                    <h3>{{ current_year }}</h3>
+                </div>
+                <div class="col-md-4 text-end">
+                    {% if current_year + 1 in years %}
+                    <a href="{{ url_for('childcare.reports', year=current_year + 1) }}" class="btn btn-outline-primary">
+                        {{ current_year + 1 }} <i class="bi bi-chevron-right"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Annual Summary -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Annual Summary - {{ current_year }}</h5>
+        </div>
+        <div class="card-body">
+            <h2 class="text-primary">Total: £{{ "%.2f"|format(annual_data.total) }}</h2>
+            
+            <div class="row mt-4">
+                {% for child_id, child_data in annual_data.by_child.items() %}
+                <div class="col-md-3 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6>{{ child_data.child.name }}</h6>
+                            <h4 class="text-success">£{{ "%.2f"|format(child_data.total) }}</h4>
+                            <small class="text-muted">{{ child_data.months|length }} months</small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Breakdown -->
+    {% if annual_data.summaries %}
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Monthly Breakdown</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th>Child</th>
+                        <th class="text-end">Amount</th>
+                        <th>Transaction</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for summary in annual_data.summaries|sort(attribute='year_month', reverse=True) %}
+                    <tr>
+                        <td>{{ summary.year_month }}</td>
+                        <td>{{ summary.child.name }}</td>
+                        <td class="text-end">£{{ "%.2f"|format(summary.total_cost) }}</td>
+                        <td>
+                            {% if summary.transaction %}
+                            <a href="{{ url_for('transactions.index') }}" class="badge bg-success">
+                                <i class="bi bi-check-circle"></i> Created
+                            </a>
+                            {% else %}
+                            <span class="badge bg-warning">No Transaction</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <p class="mb-0">No childcare data for {{ current_year }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,41 +1,581 @@
 {% extends "base.html" %}
 
-{% block title %}Childcare - JonesHQ Finance{% endblock %}
+{% block title %}Childcare Tracking{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Childcare Records</h1>
-    
-    <div class="mb-3">
-        <button class="btn btn-primary">Add Record</button>
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Childcare Tracking</h1>
+        <div>
+            <a href="{{ url_for('childcare.setup') }}" class="btn btn-secondary">
+                <i class="bi bi-gear"></i> Setup
+            </a>
+            <a href="{{ url_for('childcare.reports') }}" class="btn btn-info">
+                <i class="bi bi-graph-up"></i> Reports
+            </a>
+        </div>
     </div>
-    
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Child Name</th>
-                <th>Provider</th>
-                <th>Amount</th>
-                <th>Description</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for record in records %}
-            <tr>
-                <td>{{ record.date }}</td>
-                <td>{{ record.child_name }}</td>
-                <td>{{ record.provider }}</td>
-                <td>£{{ record.amount }}</td>
-                <td>{{ record.description }}</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary">Edit</button>
-                    <button class="btn btn-sm btn-danger">Delete</button>
-                </td>
-            </tr>
+
+    <!-- Month Navigation -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <a href="{{ url_for('childcare.index', year=current_year if current_month > 1 else current_year - 1, month=current_month - 1 if current_month > 1 else 12) }}" class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-left"></i> Previous Month
+                    </a>
+                </div>
+                <div class="col-md-3 text-center">
+                    <h3>{{ current_year }}-{{ '%02d'|format(current_month) }}</h3>
+                </div>
+                <div class="col-md-3 text-center">
+                    <!-- Bulk Actions -->
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-warning dropdown-toggle" data-bs-toggle="dropdown">
+                            <i class="bi bi-lightning"></i> Quick Actions
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <form method="POST" action="{{ url_for('childcare.apply_templates') }}" style="display: inline;">
+                                    <input type="hidden" name="year" value="{{ current_year }}">
+                                    <input type="hidden" name="month" value="{{ current_month }}">
+                                    <button type="submit" class="dropdown-item" onclick="return confirm('Apply weekly templates to this entire month?');">
+                                        <i class="bi bi-calendar-check"></i> Apply Weekly Templates
+                                    </button>
+                                </form>
+                            </li>
+                            <li>
+                                <form method="POST" action="{{ url_for('childcare.copy_previous_month') }}" style="display: inline;">
+                                    <input type="hidden" name="year" value="{{ current_year }}">
+                                    <input type="hidden" name="month" value="{{ current_month }}">
+                                    <button type="submit" class="dropdown-item" onclick="return confirm('Copy last month activities to this month?');">
+                                        <i class="bi bi-files"></i> Copy Previous Month
+                                    </button>
+                                </form>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="POST" action="{{ url_for('childcare.clear_month') }}" style="display: inline;">
+                                    <input type="hidden" name="year" value="{{ current_year }}">
+                                    <input type="hidden" name="month" value="{{ current_month }}">
+                                    <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Clear ALL activities for this month?');">
+                                        <i class="bi bi-trash"></i> Clear Month
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-md-3 text-end">
+                    <a href="{{ url_for('childcare.index', year=current_year if current_month < 12 else current_year + 1, month=current_month + 1 if current_month < 12 else 1) }}" class="btn btn-outline-primary">
+                        Next Month <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not children %}
+    <!-- No children setup yet -->
+    <div class="alert alert-info">
+        <h4><i class="bi bi-info-circle"></i> No Children Found</h4>
+        <p>Get started by adding children and their activity types in the setup page.</p>
+        <a href="{{ url_for('childcare.setup') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Go to Setup
+        </a>
+    </div>
+    {% else %}
+    <!-- Calendar View -->
+    <div class="table-responsive shadow-sm">
+        <table class="table table-bordered table-sm mb-0">
+            <thead style="background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); color: white;">
+                <tr>
+                    <th rowspan="2" class="align-middle border-end border-secondary" style="width: 100px; font-size: 0.9rem; font-weight: 600;">Date</th>
+                    <th rowspan="2" class="align-middle border-end border-secondary" style="width: 70px; font-size: 0.9rem; font-weight: 600;">Day</th>
+                    {% for child in children %}
+                    <th class="text-center border-end border-secondary" colspan="{{ child.activity_types|selectattr('is_active')|list|length + 1 }}" style="padding: 10px;">
+                        <div style="font-size: 1.1rem; font-weight: bold; letter-spacing: 0.5px;">{{ child.name }}</div>
+                        <small style="font-size: 0.75rem; opacity: 0.9;">{{ child.year_group }}</small>
+                    </th>
+                    {% endfor %}
+                    <th rowspan="2" class="text-end align-middle" style="width: 100px; font-size: 0.9rem; font-weight: 600;">Daily Total</th>
+                </tr>
+                <tr style="background: linear-gradient(135deg, #34495e 0%, #2980b9 100%);">
+                    {% for child in children %}
+                        {% for activity_type in child.activity_types if activity_type.is_active %}
+                        <th class="text-center" style="font-size: 0.72rem; padding: 6px; min-width: 70px; font-weight: 500;">
+                            <div style="margin-bottom: 2px;">{{ activity_type.name }}</div>
+                            <div style="font-size: 0.68rem; opacity: 0.85;">£{{ activity_type.cost }}</div>
+                        </th>
+                        {% endfor %}
+                        <th class="text-center border-start border-secondary" style="font-size: 0.7rem; padding: 6px; width: 75px; font-weight: 600; background: rgba(0,0,0,0.2);">Total</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for date, day_data in calendar_data.items() %}
+                <tr>
+                    <td class="align-middle" style="font-weight: 500; font-size: 0.85rem; padding: 6px;">
+                        {{ date.strftime('%d/%m') }}
+                    </td>
+                    <td class="align-middle" style="font-size: 0.8rem; padding: 6px;">
+                        <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ day_data.day_name[:3] }}</span>
+                    </td>
+                    
+                    {% for child in children %}
+                        {% set child_data = day_data.children.get(child.id) %}
+                        {% for activity_type in child.activity_types if activity_type.is_active %}
+                            {% set is_occurred = namespace(value=false) %}
+                            {% if child_data %}
+                                {% for act in child_data.activities %}
+                                    {% if act.activity_type_id == activity_type.id and act.occurred %}
+                                        {% set is_occurred.value = true %}
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                            
+                            <td class="text-center align-middle" style="padding: 5px;">
+                                <button class="btn btn-sm activity-toggle {% if is_occurred.value %}btn-success{% else %}btn-outline-secondary{% endif %}" 
+                                        data-date="{{ date }}"
+                                        data-child-id="{{ child.id }}"
+                                        data-activity-type-id="{{ activity_type.id }}"
+                                        data-cost="{{ activity_type.cost }}"
+                                        data-active="{{ 'true' if is_occurred.value else 'false' }}"
+                                        style="font-size: 0.95rem; padding: 5px 10px; min-width: 55px; border-radius: 6px; transition: all 0.2s ease; {% if is_occurred.value %}box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);{% endif %}">
+                                    <i class="bi {% if is_occurred.value %}bi-check-circle-fill{% else %}bi-circle{% endif %}" style="font-size: 1rem;"></i>
+                                </button>
+                            </td>
+                        {% endfor %}
+                        
+                        <!-- Child daily total -->
+                        <td class="text-center align-middle border-start" style="padding: 5px; background: linear-gradient(to right, #f8f9fa, #e9ecef);">
+                            <strong class="child-daily-total" data-child-id="{{ child.id }}" data-date="{{ date }}" style="font-size: 0.9rem; color: #2c3e50; font-weight: 600;">
+                                {% if child_data %}£{{ "%.2f"|format(child_data.total) }}{% else %}£0.00{% endif %}
+                            </strong>
+                        </td>
+                    {% endfor %}
+                    
+                    <td class="text-end align-middle" style="padding: 6px;">
+                        <strong class="day-total text-primary" data-date="{{ date }}" style="font-size: 0.95rem;">
+                            £{{ "%.2f"|format(day_data.total) }}
+                        </strong>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Monthly Totals & Transaction Creation -->
+    <div class="card mt-4 shadow">
+        <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);">
+            <h5 class="mb-0">Monthly Totals - {{ year_month }}</h5>
+            {% set has_untransacted = namespace(value=false) %}
+            {% for child_id, data in monthly_totals.items() %}
+                {% set summary = summaries|selectattr('child_id', 'equalto', child_id)|first %}
+                {% if not (summary and summary.transaction_id) and data.total > 0 %}
+                    {% set has_untransacted.value = true %}
+                {% endif %}
             {% endfor %}
-        </tbody>
-    </table>
+            {% if has_untransacted.value %}
+            <button class="btn btn-light btn-sm" id="bulk-create-btn" style="font-weight: 600;">
+                <i class="bi bi-lightning-charge-fill"></i> Create All Transactions
+            </button>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for child_id, data in monthly_totals.items() %}
+                <div class="col-md-3 mb-3">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                            <h6 class="mb-2">{{ data.child.name }}</h6>
+                            <h3 class="monthly-total" data-child-id="{{ child_id }}" style="color: #2c3e50; font-weight: 700; margin-bottom: 8px;">£{{ "%.2f"|format(data.total) }}</h3>
+                            
+                            {% set summary = summaries|selectattr('child_id', 'equalto', child_id)|first %}
+                            
+                            {% if summary and summary.transaction_id %}
+                            <div id="transaction-status-{{ child_id }}">
+                                <div class="alert alert-success py-2 px-2 mb-0 d-flex align-items-center justify-content-between">
+                                    <small><i class="bi bi-check-circle-fill"></i> Transaction: £<span class="transaction-amount" data-child-id="{{ child_id }}">{{ "%.2f"|format(data.total) }}</span></small>
+                                    <button class="btn btn-sm btn-outline-primary update-transaction-btn" 
+                                            data-child-id="{{ child_id }}"
+                                            data-transaction-id="{{ summary.transaction_id }}"
+                                            style="display: none; padding: 2px 6px; font-size: 0.7rem;">
+                                        <i class="bi bi-arrow-repeat"></i> Sync
+                                    </button>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div id="transaction-status-{{ child_id }}">
+                                <div class="mb-2">
+                                    <label class="form-label" style="font-size: 0.8rem; margin-bottom: 4px;">Account</label>
+                                    <select name="account_id" class="form-select form-select-sm account-selector" data-child-id="{{ child_id }}" required>
+                                        <option value="">Select Account</option>
+                                        {% for account in accounts %}
+                                        <option value="{{ account.id }}" {% if data.child.default_account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Save account selection as default
+    document.querySelectorAll('.account-selector').forEach(select => {
+        select.addEventListener('change', function() {
+            const childId = this.dataset.childId;
+            const accountId = this.value;
+            
+            if (accountId) {
+                // Save as default account for this child
+                fetch('{{ url_for("childcare.set_default_account") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        child_id: childId,
+                        account_id: accountId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log('Default account saved for child', childId);
+                    }
+                });
+            }
+        });
+    });
+    
+    // Bulk create all transactions
+    const bulkCreateBtn = document.getElementById('bulk-create-btn');
+    if (bulkCreateBtn) {
+        bulkCreateBtn.addEventListener('click', function() {
+            const transactions = [];
+            
+            // Gather all children without transactions
+            document.querySelectorAll('.account-selector').forEach(select => {
+                const childId = select.dataset.childId;
+                const accountId = select.value;
+                const totalElement = document.querySelector(`.monthly-total[data-child-id="${childId}"]`);
+                const total = parseFloat(totalElement.textContent.replace('£', ''));
+                
+                if (total > 0) {
+                    if (!accountId) {
+                        alert(`Please select an account for all children before creating transactions.`);
+                        select.focus();
+                        throw new Error('Missing account selection');
+                    }
+                    
+                    transactions.push({
+                        child_id: parseInt(childId),
+                        account_id: parseInt(accountId),
+                        amount: total
+                    });
+                }
+            });
+            
+            if (transactions.length === 0) {
+                alert('No transactions to create.');
+                return;
+            }
+            
+            // Disable button and show loading
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+            
+            // Create all transactions
+            fetch('{{ url_for("childcare.bulk_create_transactions") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    year: {{ current_year }},
+                    month: {{ current_month }},
+                    transactions: transactions
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success notification
+                    const notification = document.createElement('div');
+                    notification.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+                    notification.style.zIndex = '9999';
+                    notification.innerHTML = `<i class="bi bi-check-circle-fill"></i> ${data.created} transactions created successfully!`;
+                    document.body.appendChild(notification);
+                    
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    alert('Failed to create transactions: ' + (data.error || 'Unknown error'));
+                    this.disabled = false;
+                    this.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Create All Transactions';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                if (error.message !== 'Missing account selection') {
+                    alert('Failed to create transactions. Please try again.');
+                    this.disabled = false;
+                    this.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Create All Transactions';
+                }
+            });
+        });
+    }
+    
+    // Handle activity toggle button clicks
+    document.querySelectorAll('.activity-toggle').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            const date = this.dataset.date;
+            const childId = this.dataset.childId;
+            const activityTypeId = this.dataset.activityTypeId;
+            const isActive = this.dataset.active === 'true';
+            const occurred = !isActive;  // Toggle the state
+            
+            // Optimistic UI update
+            this.dataset.active = occurred.toString();
+            if (occurred) {
+                this.classList.remove('btn-outline-secondary');
+                this.classList.add('btn-success');
+                this.querySelector('i').classList.remove('bi-circle');
+                this.querySelector('i').classList.add('bi-check-circle-fill');
+            } else {
+                this.classList.remove('btn-success');
+                this.classList.add('btn-outline-secondary');
+                this.querySelector('i').classList.remove('bi-check-circle-fill');
+                this.querySelector('i').classList.add('bi-circle');
+            }
+            
+            // Send AJAX request to update
+            fetch('{{ url_for("childcare.update_activity") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    date: date,
+                    child_id: childId,
+                    activity_type_id: activityTypeId,
+                    occurred: occurred
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update daily total for this child
+                    const totalElement = document.querySelector(`.child-daily-total[data-child-id="${childId}"][data-date="${date}"]`);
+                    if (totalElement) {
+                        totalElement.textContent = '£' + data.daily_total.toFixed(2);
+                    }
+                    
+                    // Recalculate day total
+                    updateDayTotal(date);
+                    
+                    // Update monthly total
+                    updateMonthlyTotal(childId, data.monthly_total);
+                    
+                    // Check if transaction needs updating
+                    checkTransactionSync(childId, data.monthly_total);
+                    
+                    // Add pulse animation to the button
+                    this.style.transform = 'scale(1.05)';
+                    this.style.boxShadow = occurred ? '0 4px 8px rgba(40, 167, 69, 0.4)' : '';
+                    setTimeout(() => {
+                        this.style.transform = 'scale(1)';
+                        this.style.boxShadow = occurred ? '0 2px 4px rgba(40, 167, 69, 0.3)' : '';
+                    }, 200);
+                } else {
+                    console.error('Update failed:', data.error);
+                    // Revert UI on error
+                    this.dataset.active = (!occurred).toString();
+                    if (!occurred) {
+                        this.classList.remove('btn-outline-secondary');
+                        this.classList.add('btn-success');
+                        this.querySelector('i').classList.remove('bi-circle');
+                        this.querySelector('i').classList.add('bi-check-circle-fill');
+                    } else {
+                        this.classList.remove('btn-success');
+                        this.classList.add('btn-outline-secondary');
+                        this.querySelector('i').classList.remove('bi-check-circle-fill');
+                        this.querySelector('i').classList.add('bi-circle');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to update activity. Please try again.');
+                // Revert UI on error
+                this.dataset.active = (!occurred).toString();
+                if (!occurred) {
+                    this.classList.remove('btn-outline-secondary');
+                    this.classList.add('btn-success');
+                    this.querySelector('i').classList.remove('bi-circle');
+                    this.querySelector('i').classList.add('bi-check-circle-fill');
+                } else {
+                    this.classList.remove('btn-success');
+                    this.classList.add('btn-outline-secondary');
+                    this.querySelector('i').classList.remove('bi-check-circle-fill');
+                    this.querySelector('i').classList.add('bi-circle');
+                }
+            });
+        });
+    });
+    
+    function updateDayTotal(date) {
+        let dayTotal = 0;
+        document.querySelectorAll(`.child-daily-total[data-date="${date}"]`).forEach(el => {
+            const amount = parseFloat(el.textContent.replace('£', ''));
+            dayTotal += amount;
+        });
+        
+        const dayTotalElement = document.querySelector(`.day-total[data-date="${date}"]`);
+        if (dayTotalElement) {
+            dayTotalElement.textContent = '£' + dayTotal.toFixed(2);
+        }
+    }
+    
+    function updateMonthlyTotal(childId, monthlyTotal) {
+        const monthlyTotalElement = document.querySelector(`.monthly-total[data-child-id="${childId}"]`);
+        if (monthlyTotalElement) {
+            monthlyTotalElement.textContent = '£' + monthlyTotal.toFixed(2);
+            
+            // Add pulse animation
+            monthlyTotalElement.style.color = '#27ae60';
+            monthlyTotalElement.style.transform = 'scale(1.1)';
+            monthlyTotalElement.style.transition = 'all 0.3s ease';
+            
+            setTimeout(() => {
+                monthlyTotalElement.style.color = '#2c3e50';
+                monthlyTotalElement.style.transform = 'scale(1)';
+            }, 500);
+        }
+    }
+    
+    function checkTransactionSync(childId, newTotal) {
+        const statusElement = document.querySelector(`#transaction-status-${childId}`);
+        if (!statusElement) return;
+        
+        const transactionAmountElement = statusElement.querySelector(`.transaction-amount[data-child-id="${childId}"]`);
+        const syncButton = statusElement.querySelector(`.update-transaction-btn[data-child-id="${childId}"]`);
+        
+        if (transactionAmountElement && syncButton) {
+            const currentAmount = parseFloat(transactionAmountElement.textContent);
+            const difference = Math.abs(currentAmount - newTotal);
+            
+            if (difference > 0.01) {
+                // Transaction is out of sync
+                syncButton.style.display = 'inline-block';
+                const alertBox = transactionAmountElement.closest('.alert');
+                if (alertBox) {
+                    alertBox.classList.remove('alert-success');
+                    alertBox.classList.add('alert-warning');
+                }
+                transactionAmountElement.textContent = newTotal.toFixed(2);
+                
+                // Update display to show difference
+                const parentSmall = transactionAmountElement.closest('small');
+                if (parentSmall) {
+                    parentSmall.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> Transaction: £<span class="transaction-amount" data-child-id="${childId}">${currentAmount.toFixed(2)}</span> <span class="text-danger">(Should be £${newTotal.toFixed(2)})</span>`;
+                }
+            } else {
+                // Transaction is in sync
+                syncButton.style.display = 'none';
+                const alertBox = transactionAmountElement.closest('.alert');
+                if (alertBox) {
+                    alertBox.classList.remove('alert-warning');
+                    alertBox.classList.add('alert-success');
+                }
+            }
+        }
+    }
+    
+    // Function to attach sync button listener
+    function attachSyncButtonListener(btn) {
+        btn.addEventListener('click', function() {
+            const childId = this.dataset.childId;
+            const transactionId = this.dataset.transactionId;
+            const newTotal = parseFloat(document.querySelector(`.monthly-total[data-child-id="${childId}"]`).textContent.replace('£', ''));
+            
+            if (confirm(`Update transaction to £${newTotal.toFixed(2)}?`)) {
+                fetch('{{ url_for("childcare.update_transaction") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        transaction_id: transactionId,
+                        child_id: childId,
+                        new_amount: newTotal
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update the transaction amount in the status element
+                        const statusElement = document.querySelector(`#transaction-status-${childId}`);
+                        if (statusElement) {
+                            const alertBox = statusElement.querySelector('.alert');
+                            if (alertBox) {
+                                alertBox.innerHTML = `
+                                    <small><i class="bi bi-check-circle-fill"></i> Transaction: £<span class="transaction-amount" data-child-id="${childId}">${newTotal.toFixed(2)}</span></small>
+                                    <button class="btn btn-sm btn-outline-primary update-transaction-btn" 
+                                            data-child-id="${childId}"
+                                            data-transaction-id="${transactionId}"
+                                            style="display: none; padding: 2px 6px; font-size: 0.7rem;">
+                                        <i class="bi bi-arrow-repeat"></i> Sync
+                                    </button>
+                                `;
+                                alertBox.classList.remove('alert-warning');
+                                alertBox.classList.add('alert-success');
+                                
+                                // Re-attach event listener to the new sync button
+                                const newSyncBtn = alertBox.querySelector('.update-transaction-btn');
+                                if (newSyncBtn) {
+                                    attachSyncButtonListener(newSyncBtn);
+                                }
+                            }
+                        }
+                        
+                        // Show success notification
+                        const notification = document.createElement('div');
+                        notification.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+                        notification.style.zIndex = '9999';
+                        notification.innerHTML = '<i class="bi bi-check-circle-fill"></i> Transaction updated successfully!';
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 3000);
+                    } else {
+                        alert('Failed to update transaction: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to update transaction. Please try again.');
+                });
+            }
+        });
+    }
+    
+    // Handle sync button clicks
+    document.querySelectorAll('.update-transaction-btn').forEach(btn => {
+        attachSyncButtonListener(btn);
+    });
+});
+</script>
 {% endblock %}
