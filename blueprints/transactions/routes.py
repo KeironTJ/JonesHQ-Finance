@@ -13,6 +13,8 @@ from models.loans import Loan
 from models.settings import Settings
 from services.payday_service import PaydayService
 from extensions import db
+from flask import current_app
+from models.expenses import Expense
 
 
 @transactions_bp.route('/transactions')
@@ -516,6 +518,23 @@ def delete(id):
         
         db.session.delete(transaction)
         db.session.commit()
+
+        # Clear any Expense links pointing to this deleted transaction to avoid automatic recreation
+        try:
+            linked_expenses = Expense.query.filter(
+                (Expense.bank_transaction_id == id) | (Expense.credit_card_transaction_id == id)
+            ).all()
+            for exp in linked_expenses:
+                if getattr(exp, 'bank_transaction_id', None) == id:
+                    exp.bank_transaction_id = None
+                if getattr(exp, 'credit_card_transaction_id', None) == id:
+                    exp.credit_card_transaction_id = None
+                db.session.add(exp)
+            if linked_expenses:
+                db.session.commit()
+                current_app.logger.info(f"Cleared expense links for deleted transaction {id}: {[e.id for e in linked_expenses]}")
+        except Exception:
+            db.session.rollback()
         
         # Recalculate credit card balance if payment was deleted
         if linked_cc_payment:
@@ -701,12 +720,19 @@ def bulk_delete():
     """Bulk delete multiple transactions"""
     try:
         transaction_ids_str = request.form.get('transaction_ids', '')
+        # Log received ids for debugging
+        current_app.logger.info(f"Bulk delete called with transaction_ids: {transaction_ids_str}")
         if not transaction_ids_str:
             flash('No transactions selected', 'warning')
-            return redirect(url_for('transactions.index'))
+            # Preserve filters if provided
+            return redirect(request.form.get('return_url') or url_for('transactions.index'))
         
         transaction_ids = [int(tid) for tid in transaction_ids_str.split(',') if tid]
-        
+        # Inspect which transactions exist before deletion
+        existing_before = Transaction.query.filter(Transaction.id.in_(transaction_ids)).all()
+        existing_before_ids = [t.id for t in existing_before]
+        current_app.logger.info(f"Bulk delete - existing before: {existing_before_ids}")
+
         deleted_count = 0
         accounts_to_recalc = set()
         cards_to_recalc = set()
@@ -727,9 +753,23 @@ def bulk_delete():
                 
                 db.session.delete(transaction)
                 deleted_count += 1
+                # Clear any Expense links pointing to this deleted transaction
+                try:
+                    linked_expenses = Expense.query.filter(
+                        (Expense.bank_transaction_id == txn_id) | (Expense.credit_card_transaction_id == txn_id)
+                    ).all()
+                    for exp in linked_expenses:
+                        if getattr(exp, 'bank_transaction_id', None) == txn_id:
+                            exp.bank_transaction_id = None
+                        if getattr(exp, 'credit_card_transaction_id', None) == txn_id:
+                            exp.credit_card_transaction_id = None
+                        db.session.add(exp)
+                    if linked_expenses:
+                        current_app.logger.info(f"Cleared expense links for deleted transaction {txn_id}: {[e.id for e in linked_expenses]}")
+                except Exception:
+                    db.session.rollback()
         
         db.session.commit()
-        
         # Recalculate balances for affected accounts and credit cards
         for account_id in accounts_to_recalc:
             if account_id:
@@ -737,8 +777,16 @@ def bulk_delete():
         
         for card_id in cards_to_recalc:
             CreditCardTransaction.recalculate_card_balance(card_id)
-        
-        flash(f'Successfully deleted {deleted_count} transaction(s)', 'success')
+        # Check which of the requested IDs still exist after deletion
+        remaining = Transaction.query.filter(Transaction.id.in_(transaction_ids)).all()
+        remaining_ids = [t.id for t in remaining]
+        current_app.logger.info(f"Bulk delete - remaining after: {remaining_ids}")
+
+        if remaining_ids:
+            flash(f'Deleted {deleted_count} transaction(s). However {len(remaining_ids)} could not be deleted: {remaining_ids}', 'warning')
+        else:
+            flash(f'Successfully deleted {deleted_count} transaction(s)', 'success')
+        current_app.logger.info(f"Bulk delete removed {deleted_count} transactions. IDs requested: {transaction_ids}")
         
     except ValueError as e:
         db.session.rollback()
@@ -747,7 +795,8 @@ def bulk_delete():
         db.session.rollback()
         flash(f'Error deleting transactions: {str(e)}', 'danger')
     
-    return redirect(url_for('transactions.index'))
+    # Redirect back to the return_url if provided to preserve filters
+    return redirect(request.form.get('return_url') or url_for('transactions.index'))
 
 
 @transactions_bp.route('/transactions/save-filter-preference', methods=['POST'])

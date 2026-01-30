@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+
+{% block title %}Work Expenses{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Work Expenses</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+                <i class="bi bi-plus-circle"></i> Add Expense
+            </button>
+            <a href="{{ url_for('transactions.index') }}" class="btn btn-secondary">Back to Transactions</a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body p-2">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Type</label>
+                    <select name="type" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Types</option>
+                        <option value="Fuel" {% if selected_type == 'Fuel' %}selected{% endif %}>Fuel</option>
+                        <option value="Hotel" {% if selected_type == 'Hotel' %}selected{% endif %}>Hotel</option>
+                        <option value="Food" {% if selected_type == 'Food' %}selected{% endif %}>Food</option>
+                        <option value="VAT" {% if selected_type == 'VAT' %}selected{% endif %}>VAT</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Vehicle</label>
+                    <select name="vehicle" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Vehicles</option>
+                        {% for v in vehicles %}
+                        <option value="{{ v.registration }}" {% if selected_vehicle == v.registration %}selected{% endif %}>{{ v.registration }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Reimbursed</label>
+                    <select name="reimbursed" class="form-select" onchange="this.form.submit()">
+                        <option value="">Any</option>
+                        <option value="true" {% if selected_reimbursed == 'true' %}selected{% endif %}>Yes</option>
+                        <option value="false" {% if selected_reimbursed == 'false' %}selected{% endif %}>No</option>
+                    </select>
+                </div>
+                <div class="col-md-4 text-end">
+                    <a class="btn btn-outline-secondary" href="#" onclick="document.location.reload();">Refresh</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:40px;"><input type="checkbox" id="selectAllExpenses" onclick="toggleSelectAllExpenses()"></th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Desc</th>
+                            <th>Card</th>
+                            <th>Covered Miles</th>
+                            <th>Rate</th>
+                            <th>Days</th>
+                            <th>Total</th>
+                            <th>Paid</th>
+                            <th>Submitted</th>
+                            <th>Reimbursed</th>
+                            <th>VRN</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in expenses %}
+                        <tr>
+                            <td><input type="checkbox" class="expense-checkbox" value="{{ e.id }}" onchange="updateExpenseBulkActions()"></td>
+                            <td>{{ e.date.strftime('%d/%m/%Y') if e.date else '' }}</td>
+                            <td>{{ e.expense_type }}</td>
+                            <td>{{ e.description }}</td>
+                            <td>{{ e.credit_card.card_name if e.credit_card else '' }}</td>
+                            <td>{{ e.covered_miles or '' }}</td>
+                            <td>{{ e.rate_per_mile or '' }}</td>
+                            <td>{{ e.days or 1 }}</td>
+                            <td>£{{ "%.2f"|format((e.total_cost or e.cost or 0) ) }}</td>
+                            <td>
+                                {% if e.paid_for %}
+                                    <button class="btn btn-sm btn-success toggle-flag" data-id="{{ e.id }}" data-field="paid_for" title="Toggle Paid">Paid</button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-outline-secondary toggle-flag" data-id="{{ e.id }}" data-field="paid_for" title="Toggle Paid">Not paid</button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if e.submitted %}
+                                    <button class="btn btn-sm btn-success toggle-flag" data-id="{{ e.id }}" data-field="submitted" title="Toggle Submitted">Submitted</button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-outline-secondary toggle-flag" data-id="{{ e.id }}" data-field="submitted" title="Toggle Submitted">Not submitted</button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if e.reimbursed %}
+                                    <button class="btn btn-sm btn-success toggle-flag" data-id="{{ e.id }}" data-field="reimbursed" title="Toggle Reimbursed">Reimbursed</button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-outline-secondary toggle-flag" data-id="{{ e.id }}" data-field="reimbursed" title="Toggle Reimbursed">Not reimbursed</button>
+                                {% endif %}
+                            </td>
+                            <td>{{ e.vehicle_registration or '' }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary" onclick="editExpense({{ e.id }}, {{ (e.date.strftime('%Y-%m-%d') if e.date else '')|tojson }}, {{ (e.description or '')|tojson }}, {{ (e.expense_type or '')|tojson }}, {{ (e.credit_card_id or '')|tojson }}, {{ (e.covered_miles or '')|tojson }}, {{ (e.rate_per_mile or '')|tojson }}, {{ (e.days or 1)|tojson }}, {{ ((e.total_cost or e.cost or 0))|tojson }}, {{ (e.vehicle_registration or '')|tojson }}, {{ ('checked' if e.paid_for else '')|tojson }}, {{ ('checked' if e.submitted else '')|tojson }}, {{ ('checked' if e.reimbursed else '')|tojson }})">Edit</button>
+                                <form method="post" action="{{ url_for('expenses.delete_expense', expense_id=e.id) }}" style="display:inline">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if expenses|length == 0 %}
+                        <tr><td colspan="13" class="text-center p-3 text-muted">No expenses found</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+        <!-- Bulk Actions Panel for Expenses -->
+        <div class="card mt-3 mb-4" id="expenseBulkActions" style="display:none;">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0">Bulk Actions - <span id="expenseSelectedCount">0</span> selected</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-2 align-items-center">
+                    <form method="POST" action="{{ url_for('expenses.bulk_delete_linked') }}" id="expenseBulkDeleteForm" onsubmit="return confirm('Delete linked transactions for selected expenses? This will remove linked bank and card transactions.')">
+                        <input type="hidden" name="expense_ids" id="expenseBulkIds">
+                        <input type="hidden" name="return_url" value="{{ request.url }}">
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-trash"></i> Delete Linked Transactions
+                        </button>
+                    </form>
+
+                    <form method="POST" action="{{ url_for('expenses.bulk_delete_expenses') }}" id="expenseBulkDeleteExpensesForm" onsubmit="return confirm('Delete selected expenses? This will remove the expense rows and any linked transactions.')">
+                        <input type="hidden" name="expense_ids" id="expenseBulkIdsForDelete">
+                        <input type="hidden" name="return_url" value="{{ request.url }}">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash-fill"></i> Delete Selected Expenses
+                        </button>
+                    </form>
+
+                    <button type="button" class="btn btn-secondary ms-2" onclick="clearExpenseSelection()">Clear Selection</button>
+                </div>
+            </div>
+        </div>
+</div>
+
+<!-- Add Expense Modal -->
+<div class="modal fade" id="addExpenseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('expenses.add_expense') }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Expense</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Date</label>
+                <input type="date" name="date" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Description</label>
+                <input type="text" name="description" class="form-control" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select name="expense_type" id="add_expense_type" class="form-select" onchange="onTypeChange('add')">
+                    <option>Fuel</option>
+                    <option>Hotel</option>
+                    <option>Food</option>
+                    <option>VAT</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Card</label>
+                <select name="credit_card_id" class="form-select">
+                    <option value="">-- Select Card --</option>
+                    {% for c in credit_cards %}
+                    <option value="{{ c.id }}">{{ c.card_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Covered Miles</label>
+                <input type="number" step="1" name="covered_miles" id="add_covered_miles" class="form-control" onchange="calcTotal('add')">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Rate (per mile)</label>
+                <input type="number" step="0.01" name="rate_per_mile" id="add_rate_per_mile" class="form-control" onchange="calcTotal('add')">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Days</label>
+                <input type="number" name="days" id="add_days" class="form-control" value="1" onchange="calcTotal('add')">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Total Cost</label>
+                <input type="text" name="total_cost" id="add_total_cost" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">VRN</label>
+                <input type="text" name="vehicle_registration" class="form-control">
+            </div>
+            <div class="col-md-3 d-flex align-items-center">
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" id="add_paid_for" name="paid_for">
+                    <label class="form-check-label">Paid For</label>
+                </div>
+                <div class="form-check ms-3">
+                    <input class="form-check-input" type="checkbox" id="add_submitted" name="submitted">
+                    <label class="form-check-label">Submitted</label>
+                </div>
+                <div class="form-check ms-3">
+                    <input class="form-check-input" type="checkbox" id="add_reimbursed" name="reimbursed">
+                    <label class="form-check-label">Reimbursed</label>
+                </div>
+            </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Expense Modal (reused) -->
+<div class="modal fade" id="editExpenseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" id="editExpenseForm">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Expense</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+            <input type="hidden" name="_id" id="edit_expense_id">
+            <div class="col-md-3">
+                <label class="form-label">Date</label>
+                <input type="date" name="date" id="edit_date" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Description</label>
+                <input type="text" name="description" id="edit_description" class="form-control" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select name="expense_type" id="edit_expense_type" class="form-select" onchange="onTypeChange('edit')">
+                    <option>Fuel</option>
+                    <option>Hotel</option>
+                    <option>Food</option>
+                    <option>VAT</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Card</label>
+                <select name="credit_card_id" id="edit_credit_card_id" class="form-select">
+                    <option value="">-- Select Card --</option>
+                    {% for c in credit_cards %}
+                    <option value="{{ c.id }}">{{ c.card_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Covered Miles</label>
+                <input type="number" step="1" name="covered_miles" id="edit_covered_miles" class="form-control" onchange="calcTotal('edit')">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Rate (per mile)</label>
+                <input type="number" step="0.01" name="rate_per_mile" id="edit_rate_per_mile" class="form-control" onchange="calcTotal('edit')">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Days</label>
+                <input type="number" name="days" id="edit_days" class="form-control" value="1" onchange="calcTotal('edit')">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Total Cost</label>
+                <input type="text" name="total_cost" id="edit_total_cost" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">VRN</label>
+                <input type="text" name="vehicle_registration" id="edit_vehicle_registration" class="form-control">
+            </div>
+            <div class="col-md-3 d-flex align-items-center">
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" id="edit_paid_for" name="paid_for">
+                    <label class="form-check-label">Paid For</label>
+                </div>
+                <div class="form-check ms-3">
+                    <input class="form-check-input" type="checkbox" id="edit_submitted" name="submitted">
+                    <label class="form-check-label">Submitted</label>
+                </div>
+                <div class="form-check ms-3">
+                    <input class="form-check-input" type="checkbox" id="edit_reimbursed" name="reimbursed">
+                    <label class="form-check-label">Reimbursed</label>
+                </div>
+            </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+    <!-- No upload preview — entry-only UI per user request -->
+<script>
+function calcTotal(prefix) {
+    const miles = parseFloat(document.getElementById(prefix + '_covered_miles').value || 0);
+    const rate = parseFloat(document.getElementById(prefix + '_rate_per_mile').value || 0);
+    const days = parseInt(document.getElementById(prefix + '_days').value || 1);
+    const totalField = document.getElementById(prefix + '_total_cost');
+    if (miles && rate) {
+        const total = (miles * rate * days).toFixed(2);
+        totalField.value = total;
+    }
+}
+
+function onTypeChange(prefix) {
+    // For non-fuel types, don't auto-calc total
+    // (we leave total to be entered manually)
+}
+
+function editExpense(id, date, description, type, cardId, covered_miles, rate, days, total_cost, vrn, paid, submitted, reimbursed) {
+    document.getElementById('editExpenseForm').action = `/expenses/update/${id}`;
+    document.getElementById('edit_expense_id').value = id;
+    document.getElementById('edit_date').value = date;
+    document.getElementById('edit_description').value = description;
+    document.getElementById('edit_expense_type').value = type;
+    document.getElementById('edit_credit_card_id').value = cardId;
+    document.getElementById('edit_covered_miles').value = covered_miles;
+    document.getElementById('edit_rate_per_mile').value = rate;
+    document.getElementById('edit_days').value = days;
+    document.getElementById('edit_total_cost').value = total_cost;
+    document.getElementById('edit_vehicle_registration').value = vrn;
+    document.getElementById('edit_paid_for').checked = (paid === 'checked');
+    document.getElementById('edit_submitted').checked = (submitted === 'checked');
+    document.getElementById('edit_reimbursed').checked = (reimbursed === 'checked');
+    new bootstrap.Modal(document.getElementById('editExpenseModal')).show();
+}
+
+// Toggle flags via AJAX
+document.addEventListener('DOMContentLoaded', function(){
+    document.querySelectorAll('.toggle-flag').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            const id = this.dataset.id;
+            const field = this.dataset.field;
+            fetch(`/expenses/toggle/${id}/${field}`, {method: 'POST', headers: {'Content-Type':'application/json'}})
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                        return;
+                    }
+                    const val = data.value;
+                    // update button appearance and label
+                    if (val) {
+                        this.classList.remove('btn-outline-secondary');
+                        this.classList.add('btn-success');
+                        if (field === 'reimbursed') this.textContent = 'Reimbursed';
+                        else if (field === 'submitted') this.textContent = 'Submitted';
+                        else if (field === 'paid_for') this.textContent = 'Paid';
+                    } else {
+                        this.classList.remove('btn-success');
+                        this.classList.add('btn-outline-secondary');
+                        if (field === 'reimbursed') this.textContent = 'Not reimbursed';
+                        else if (field === 'submitted') this.textContent = 'Not submitted';
+                        else if (field === 'paid_for') this.textContent = 'Not paid';
+                    }
+                    // row highlight toggle for reimbursed
+                    const tr = this.closest('tr');
+                    if (field === 'reimbursed') {
+                        if (val) tr.classList.add('table-success'); else tr.classList.remove('table-success');
+                    }
+                }).catch(err => { alert('Toggle failed'); });
+        });
+    });
+});
+
+// Bulk selection helpers for expenses
+function toggleSelectAllExpenses() {
+    const sel = document.getElementById('selectAllExpenses');
+    document.querySelectorAll('.expense-checkbox').forEach(cb => cb.checked = sel.checked);
+    updateExpenseBulkActions();
+}
+
+function updateExpenseBulkActions() {
+    const checked = document.querySelectorAll('.expense-checkbox:checked');
+    const count = checked.length;
+    const panel = document.getElementById('expenseBulkActions');
+    const badge = document.getElementById('expenseSelectedCount');
+    badge.textContent = count;
+    if (count > 0) {
+        panel.style.display = 'block';
+        const ids = Array.from(checked).map(cb => cb.value).join(',');
+        // Populate both hidden inputs so either bulk form receives the IDs
+        const bulkIds = document.getElementById('expenseBulkIds');
+        if (bulkIds) bulkIds.value = ids;
+        const bulkIdsForDelete = document.getElementById('expenseBulkIdsForDelete');
+        if (bulkIdsForDelete) bulkIdsForDelete.value = ids;
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function clearExpenseSelection() {
+    document.getElementById('selectAllExpenses').checked = false;
+    document.querySelectorAll('.expense-checkbox').forEach(cb => cb.checked = false);
+    updateExpenseBulkActions();
+}
+</script>
+
+{% endblock %}

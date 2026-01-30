@@ -164,6 +164,14 @@
                             </optgroup>
                         {% endif %}
                     </select>
+                    <div class="mt-2 d-flex gap-2">
+                        {% if prev_payday_period %}
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('transactions.index', payday_period=prev_payday_period) }}">&larr; Prev</a>
+                        {% endif %}
+                        {% if next_payday_period %}
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('transactions.index', payday_period=next_payday_period) }}">Next &rarr;</a>
+                        {% endif %}
+                    </div>
                 </div>
                 
                 <div class="col-md-2">
@@ -308,6 +316,16 @@
                     </div>
                 </div>
             </form>
+            <div class="mt-2" style="display: inline; margin-left: .5rem;">
+                <!-- Delete Selected (separate form to avoid nested forms) -->
+                <form method="POST" action="{{ url_for('transactions.bulk_delete') }}" id="bulkDeleteForm" style="display: inline;" onsubmit="return confirm('Delete selected transactions? This will update account balances.')">
+                    <input type="hidden" name="transaction_ids" id="bulkDeleteTransactionIds">
+                    <input type="hidden" name="return_url" value="{{ request.url }}">
+                    <button type="submit" class="btn btn-outline-danger">
+                        <i class="bi bi-trash"></i> Delete Selected Transactions
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
     
@@ -329,6 +347,7 @@
                             <th style="width: 100px;">Assigned To</th>
                             <th style="width: 120px;">Payment Type</th>
                             <th style="width: 100px;" class="text-end">Amount</th>
+                            <th style="width: 100px;" class="text-end">Running</th>
                             <th style="width: 60px;">Status</th>
                             <th style="width: 100px;">Actions</th>
                         </tr>
@@ -372,6 +391,18 @@
                                         <span class="text-success fw-bold">£{{ "%.2f"|format(transaction.amount) }}</span>
                                     {% else %}
                                         <span class="text-danger">-£{{ "%.2f"|format(transaction.amount|abs) }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% set rb = running_balances[loop.index0] if running_balances and running_balances|length > loop.index0 else None %}
+                                    {% if rb is not none %}
+                                        {% if rb >= 0 %}
+                                            <span class="text-success">£{{ "%.2f"|format(rb) }}</span>
+                                        {% else %}
+                                            <span class="text-danger">-£{{ "%.2f"|format(rb|abs) }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                        -
                                     {% endif %}
                                 </td>
                                 <td class="text-center">
@@ -593,6 +624,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// Persist filter collapse state and update chevron
+document.addEventListener('DOMContentLoaded', function() {
+    const filterCollapseEl = document.getElementById('filterCollapse');
+    const headerBtn = document.querySelector('[data-bs-target="#filterCollapse"]');
+    const chevron = headerBtn ? headerBtn.querySelector('i') : null;
+
+    if (filterCollapseEl) {
+        filterCollapseEl.addEventListener('shown.bs.collapse', function () {
+            if (chevron) {
+                chevron.classList.remove('bi-chevron-down');
+                chevron.classList.add('bi-chevron-up');
+            }
+            // save preference
+            fetch('{{ url_for("transactions.save_filter_preference") }}', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({expanded: true})
+            });
+        });
+        filterCollapseEl.addEventListener('hidden.bs.collapse', function () {
+            if (chevron) {
+                chevron.classList.remove('bi-chevron-up');
+                chevron.classList.add('bi-chevron-down');
+            }
+            fetch('{{ url_for("transactions.save_filter_preference") }}', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({expanded: false})
+            });
+        });
+    }
+});
+
 // Handle head budget change
 function handleHeadBudgetChange(selectElement) {
     const categorySelect = document.getElementById('category_id');
@@ -633,7 +693,10 @@ function updateBulkActions() {
         panel.style.display = 'block';
         // Collect IDs
         const ids = Array.from(checkboxes).map(cb => cb.value);
-        document.getElementById('bulkTransactionIds').value = ids.join(',');
+        const joined = ids.join(',');
+        document.getElementById('bulkTransactionIds').value = joined;
+        const deleteHidden = document.getElementById('bulkDeleteTransactionIds');
+        if (deleteHidden) deleteHidden.value = joined;
     } else {
         panel.style.display = 'none';
     }
@@ -643,6 +706,20 @@ function clearSelection() {
     document.getElementById('selectAll').checked = false;
     document.querySelectorAll('.transaction-checkbox').forEach(cb => cb.checked = false);
     updateBulkActions();
+}
+
+function confirmBulkDelete() {
+    // legacy helper - keep for compatibility
+    const ids = document.getElementById('bulkTransactionIds').value;
+    if (!ids) {
+        alert('No transactions selected');
+        return;
+    }
+    if (!confirm('Delete selected transactions? This will update account balances.')) return;
+    const deleteForm = document.getElementById('bulkDeleteForm');
+    const deleteHidden = document.getElementById('bulkDeleteTransactionIds');
+    if (deleteHidden) deleteHidden.value = ids;
+    if (deleteForm) deleteForm.submit();
 }
 </script>
 

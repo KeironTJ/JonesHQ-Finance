@@ -15,6 +15,9 @@ class Expense(db.Model):
     description = db.Column(db.String(255), nullable=False)  # Tetrad, Garner Hotel, etc.
     expense_type = db.Column(db.String(50), nullable=False)  # Fuel, Hotel, Food
     credit_card_id = db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=True)
+    # Linked transaction ids created by sync service
+    credit_card_transaction_id = db.Column(db.Integer, db.ForeignKey('credit_card_transactions.id'), nullable=True)
+    bank_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
     
     # Mileage specific
     covered_miles = db.Column(db.Integer)
