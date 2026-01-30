@@ -118,12 +118,13 @@
                         <th>Gallons</th>
                         <th>Trip Cost</th>
                         <th>Refuel</th>
+                        <th>Expense</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for trip in trips %}
-                    <tr>
+                    <tr id="trip-{{ trip.id }}">
                         <td>
                             <input type="checkbox" class="trip-checkbox" value="{{ trip.id }}" onchange="updateBulkDeleteButton()">
                         </td>
@@ -164,6 +165,18 @@
                                 </a>
                             {% else %}
                                 <span class="text-muted" title="No refuel triggered">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set linked_expense = fuel_expenses_dict.get(trip.vehicle_id, {}).get(trip.date) %}
+                            {% if linked_expense %}
+                                <a href="{{ url_for('expenses.index') }}?id={{ linked_expense.id }}" 
+                                   class="btn btn-sm btn-info" 
+                                   title="Linked fuel expense - {{ linked_expense.description }}">
+                                    <i class="bi bi-receipt"></i> £{{ "%.2f"|format(linked_expense.total_cost) }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted" title="No fuel expense">-</span>
                             {% endif %}
                         </td>
                         <td>
@@ -473,5 +486,30 @@ function bulkDeleteTrips() {
     document.body.appendChild(form);
     form.submit();
 }
+
+// Highlight and scroll to trip if URL has hash anchor
+window.addEventListener('load', function() {
+    if (window.location.hash) {
+        const tripId = window.location.hash.substring(1); // Remove # from hash
+        const targetRow = document.getElementById(tripId);
+        if (targetRow) {
+            // Add highlight styling
+            targetRow.style.backgroundColor = '#fff3cd';
+            targetRow.style.border = '2px solid #ffc107';
+            
+            // Scroll to trip with smooth behavior
+            setTimeout(function() {
+                targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+            
+            // Remove highlight after 5 seconds
+            setTimeout(function() {
+                targetRow.style.transition = 'all 2s ease';
+                targetRow.style.backgroundColor = '';
+                targetRow.style.border = '';
+            }, 5000);
+        }
+    }
+});
 </script>
 {% endblock %}

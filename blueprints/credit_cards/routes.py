@@ -180,6 +180,9 @@ def detail(id):
     """View credit card details and transactions"""
     card = CreditCard.query.get_or_404(id)
     
+    # Get transaction ID filter if provided
+    transaction_id = request.args.get('txn_id', type=int)
+    
     # Get all transactions for this card
     transactions = CreditCardTransaction.query.filter_by(
         credit_card_id=id
@@ -213,7 +216,8 @@ def detail(id):
                          active_purchase_promo=active_purchase_promo,
                          active_bt_promo=active_bt_promo,
                          accounts=accounts,
-                         today=today)
+                         today=today,
+                         highlight_transaction_id=transaction_id)
 
 
 @credit_cards_bp.route('/credit-cards/transaction/<int:txn_id>/toggle-fixed', methods=['POST'])
@@ -452,6 +456,12 @@ def toggle_paid(txn_id):
         # When marking as paid, also lock it to prevent regeneration
         if txn.is_paid:
             txn.is_fixed = True
+        
+        # Sync with linked expense if exists
+        from models.expenses import Expense
+        expense = Expense.query.filter_by(credit_card_transaction_id=txn.id).first()
+        if expense:
+            expense.paid_for = txn.is_paid
         
         db.session.commit()
         

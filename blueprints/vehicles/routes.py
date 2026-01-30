@@ -153,6 +153,7 @@ def trips():
     # Get forecasted fuel transactions
     from models.categories import Category
     from models.transactions import Transaction
+    from models.expenses import Expense
     fuel_category = Category.query.filter_by(name='Transportation - Fuel').first()
     forecasted_transactions = {}
     if fuel_category:
@@ -169,6 +170,13 @@ def trips():
                         forecasted_transactions[vehicle.id] = {}
                     forecasted_transactions[vehicle.id][trans.transaction_date] = trans
                     break
+    
+    # Get fuel expenses to show linked entries
+    fuel_expenses = Expense.query.filter_by(expense_type='Fuel').all()
+    fuel_expenses_dict = {}
+    for vehicle in vehicles:
+        vehicle_expenses = [e for e in fuel_expenses if e.vehicle_registration == vehicle.registration]
+        fuel_expenses_dict[vehicle.id] = {e.date: e for e in vehicle_expenses}
 
     return render_template(
         'vehicles/trip_log.html',
@@ -178,7 +186,8 @@ def trips():
         selected_payday_period_trip=selected_payday_period_trip,
         selected_vehicle_id_trip=selected_vehicle_id_trip,
         fuel_records_dict=fuel_records_dict,
-        forecasted_transactions=forecasted_transactions
+        forecasted_transactions=forecasted_transactions,
+        fuel_expenses_dict=fuel_expenses_dict
     )
 
 

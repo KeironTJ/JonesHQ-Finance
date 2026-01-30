@@ -23,6 +23,7 @@ def index():
     
     # Get filter parameters
     account_id = request.args.get('account_id', type=int)
+    transaction_id = request.args.get('id', type=int)
     head_budget = request.args.get('head_budget')
     category_id = request.args.get('category_id', type=int)
     vendor_id = request.args.get('vendor_id', type=int)
@@ -33,6 +34,16 @@ def index():
     sort_order = request.args.get('sort', 'asc')  # 'asc' or 'desc'
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 100, type=int)
+    
+    # If filtering by specific transaction ID, adjust filters to show that transaction
+    if transaction_id:
+        target_transaction = Transaction.query.get(transaction_id)
+        if target_transaction:
+            # Set filters to the transaction's context
+            account_id = target_transaction.account_id
+            year_month = target_transaction.year_month
+            is_paid_filter = None  # Show both paid and unpaid
+            per_page = 100  # Increase per page to ensure transaction is visible
     
     # Default to current payday period and pending ONLY on first visit (no query params at all)
     if not request.args:
@@ -235,7 +246,8 @@ def index():
         selected_is_paid=is_paid_filter,
         sort_order=sort_order,
         per_page=per_page,
-        filter_expanded=filter_expanded
+        filter_expanded=filter_expanded,
+        highlight_transaction_id=transaction_id
     )
 
 
@@ -596,6 +608,12 @@ def toggle_paid(id):
             if linked_txn:
                 linked_txn.is_paid = transaction.is_paid
                 linked_txn.updated_at = datetime.now()
+        
+        # Sync with linked expense if exists
+        from models.expenses import Expense
+        expense = Expense.query.filter_by(bank_transaction_id=transaction.id).first()
+        if expense:
+            expense.paid_for = transaction.is_paid
         
         db.session.commit()
         

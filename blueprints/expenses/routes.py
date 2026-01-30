@@ -3,7 +3,11 @@ from . import expenses_bp
 from extensions import db
 from models.expenses import Expense
 from models.credit_cards import CreditCard
+from models.credit_card_transactions import CreditCardTransaction
+from models.accounts import Account
 from models.vehicles import Vehicle
+from models.trips import Trip
+from models.transactions import Transaction
 from datetime import datetime
 from decimal import Decimal
 import csv
@@ -19,6 +23,7 @@ def index():
     expense_type = request.args.get('type')
     vehicle = request.args.get('vehicle')
     reimbursed = request.args.get('reimbursed')
+    highlight_id = request.args.get('id', type=int)
 
     query = Expense.query
     if expense_type:
@@ -34,15 +39,46 @@ def index():
     expenses = query.order_by(Expense.date.desc()).all()
     credit_cards = CreditCard.query.order_by(CreditCard.card_name).all()
     vehicles = Vehicle.query.order_by(Vehicle.registration).all()
+    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    
+    # Get linked trips for fuel expenses
+    trips_dict = {}
+    for exp in expenses:
+        if exp.expense_type == 'Fuel' and exp.vehicle_registration:
+            vehicle_obj = Vehicle.query.filter_by(registration=exp.vehicle_registration).first()
+            if vehicle_obj:
+                trip = Trip.query.filter_by(vehicle_id=vehicle_obj.id, date=exp.date).first()
+                if trip:
+                    trips_dict[exp.id] = trip
+    
+    # Get reimbursement transactions by month
+    reimbursement_txns = Transaction.query.filter_by(payment_type='Expense Reimbursement').all()
+    reimbursements_by_month = {txn.year_month: txn for txn in reimbursement_txns}
+    
+    # Get CC payment transactions by month (these are CreditCardTransaction, not Transaction)
+    cc_payment_txns = CreditCardTransaction.query.filter(
+        CreditCardTransaction.transaction_type == 'Payment',
+        CreditCardTransaction.item.like('%Expense reimbursement payment%')
+    ).all()
+    cc_payments_by_month = {}
+    for txn in cc_payment_txns:
+        if txn.month not in cc_payments_by_month:
+            cc_payments_by_month[txn.month] = []
+        cc_payments_by_month[txn.month].append(txn)
 
     return render_template(
         'expenses/index.html',
         expenses=expenses,
         credit_cards=credit_cards,
         vehicles=vehicles,
+        accounts=accounts,
         selected_type=expense_type,
         selected_vehicle=vehicle,
-        selected_reimbursed=reimbursed
+        selected_reimbursed=reimbursed,
+        trips_dict=trips_dict,
+        highlight_expense_id=highlight_id,
+        reimbursements_by_month=reimbursements_by_month,
+        cc_payments_by_month=cc_payments_by_month
     )
 
 
@@ -54,7 +90,21 @@ def toggle_expense_flag(expense_id, field):
         return jsonify({'error': 'invalid field'}), 400
     try:
         current = getattr(expense, field)
-        setattr(expense, field, not bool(current))
+        new_value = not bool(current)
+        setattr(expense, field, new_value)
+        
+        # Two-way sync: If toggling paid_for, sync with linked transactions
+        if field == 'paid_for':
+            if expense.bank_transaction_id:
+                bank_txn = Transaction.query.get(expense.bank_transaction_id)
+                if bank_txn:
+                    bank_txn.is_paid = new_value
+            
+            if expense.credit_card_transaction_id:
+                cc_txn = CreditCardTransaction.query.get(expense.credit_card_transaction_id)
+                if cc_txn:
+                    cc_txn.is_paid = new_value
+        
         db.session.commit()
         # Reconcile after toggle (non-blocking)
         try:
@@ -75,6 +125,7 @@ def add_expense():
         description = request.form.get('description')
         expense_type = request.form.get('expense_type')
         credit_card_id = request.form.get('credit_card_id') or None
+        account_id = request.form.get('account_id') or None
         covered_miles = request.form.get('covered_miles') or None
         rate_per_mile = request.form.get('rate_per_mile') or None
         days = request.form.get('days') or 1
@@ -86,6 +137,7 @@ def add_expense():
             description=description,
             expense_type=expense_type,
             credit_card_id=int(credit_card_id) if credit_card_id else None,
+            account_id=int(account_id) if account_id else None,
             covered_miles=int(covered_miles) if covered_miles else None,
             rate_per_mile=Decimal(rate_per_mile) if rate_per_mile else None,
             days=int(days) if days else 1,
@@ -120,6 +172,8 @@ def update_expense(expense_id):
         expense.expense_type = request.form.get('expense_type', expense.expense_type)
         credit_card_id = request.form.get('credit_card_id') or None
         expense.credit_card_id = int(credit_card_id) if credit_card_id else None
+        account_id = request.form.get('account_id') or None
+        expense.account_id = int(account_id) if account_id else None
         cm = request.form.get('covered_miles')
         expense.covered_miles = int(cm) if cm else None
         rpm = request.form.get('rate_per_mile')
@@ -210,3 +264,43 @@ def bulk_delete_expenses():
         db.session.rollback()
         flash(f'Error deleting expenses: {str(e)}', 'danger')
     return redirect(request.form.get('return_url') or url_for('expenses.index'))
+
+@expenses_bp.route('/expenses/generate-reimbursements', methods=['POST'])
+def generate_reimbursements():
+    """Generate monthly reimbursement transactions for submitted expenses"""
+    try:
+        year_month = request.form.get('year_month')  # Optional: specific month or all
+        
+        results = ExpenseSyncService.reconcile_monthly_reimbursements(year_month=year_month)
+        
+        if results:
+            count = len(results)
+            months = ', '.join(results.keys())
+            flash(f'Created {count} monthly reimbursement transaction(s) for: {months}', 'success')
+        else:
+            flash('No reimbursement transactions created (no submitted expenses found)', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error generating reimbursements: {str(e)}', 'danger')
+    
+    return redirect(url_for('expenses.index'))
+
+
+@expenses_bp.route('/expenses/generate-cc-payments', methods=['POST'])
+def generate_cc_payments():
+    """Generate automatic credit card payment transactions 1 working day after reimbursement"""
+    try:
+        year_month = request.form.get('year_month')  # Optional: specific month or all
+        
+        results = ExpenseSyncService.reconcile_credit_card_payments(year_month=year_month)
+        
+        if results:
+            count = len(results)
+            flash(f'Created {count} credit card payment transaction(s)', 'success')
+        else:
+            flash('No credit card payment transactions created', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error generating credit card payments: {str(e)}', 'danger')
+    
+    return redirect(url_for('expenses.index'))

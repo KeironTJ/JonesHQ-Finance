@@ -721,6 +721,30 @@ function confirmBulkDelete() {
     if (deleteHidden) deleteHidden.value = ids;
     if (deleteForm) deleteForm.submit();
 }
+
+// Highlight and scroll to specific transaction if ID is in URL
+{% if highlight_transaction_id %}
+window.addEventListener('load', function() {
+    const targetRow = document.getElementById('txn-{{ highlight_transaction_id }}');
+    if (targetRow) {
+        // Add highlight styling
+        targetRow.style.backgroundColor = '#fff3cd';
+        targetRow.style.border = '2px solid #ffc107';
+        
+        // Scroll to transaction with smooth behavior
+        setTimeout(function() {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+        
+        // Remove highlight after 5 seconds
+        setTimeout(function() {
+            targetRow.style.transition = 'all 2s ease';
+            targetRow.style.backgroundColor = '';
+            targetRow.style.border = '';
+        }, 5000);
+    }
+});
+{% endif %}
 </script>
 
 <style>

@@ -7,11 +7,31 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Work Expenses</h2>
         <div class="d-flex gap-2">
+            <a href="{{ url_for('settings.index') }}" class="btn btn-outline-secondary btn-sm" title="Configure expense accounts and settings">
+                <i class="bi bi-gear"></i> Settings
+            </a>
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#generateReimbursementModal" title="Generate monthly reimbursement transactions">
+                <i class="bi bi-cash-coin"></i> Generate Reimbursements
+            </button>
+            <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#generateCCPaymentModal" title="Generate credit card payment transactions">
+                <i class="bi bi-credit-card"></i> Generate CC Payments
+            </button>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
                 <i class="bi bi-plus-circle"></i> Add Expense
             </button>
             <a href="{{ url_for('transactions.index') }}" class="btn btn-secondary">Back to Transactions</a>
         </div>
+    </div>
+
+    <!-- Info Alert about Expense Workflow -->
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        <strong><i class="bi bi-info-circle"></i> Expense Workflow:</strong>
+        <ol class="mb-0 mt-2">
+            <li><strong>Payment:</strong> When expense entered → Creates Credit Card or Bank transaction</li>
+            <li><strong>Reimbursement:</strong> All submitted expenses for month → Single reimbursement on last working day</li>
+            <li><strong>CC Payment:</strong> 1 working day after reimbursement → Auto payment to clear credit cards</li>
+        </ol>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
     <div class="card mb-4">
@@ -62,7 +82,7 @@
                             <th>Type</th>
                             <th>Desc</th>
                             <th>Card</th>
-                            <th>Covered Miles</th>
+                            <th>Miles</th>
                             <th>Rate</th>
                             <th>Days</th>
                             <th>Total</th>
@@ -70,17 +90,69 @@
                             <th>Submitted</th>
                             <th>Reimbursed</th>
                             <th>VRN</th>
+                            <th>Linked Txns</th>
+                            <th>Trip</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
+                        {% set current_month = namespace(value='') %}
                         {% for e in expenses %}
-                        <tr>
+                        {% if e.month != current_month.value %}
+                        {% set current_month.value = e.month %}
+                        {% set reimb_txn = reimbursements_by_month.get(e.month) %}
+                        {% set cc_payments = cc_payments_by_month.get(e.month, []) %}
+                        <tr class="table-secondary">
+                            <td colspan="16" class="fw-bold">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>
+                                        <i class="bi bi-calendar-month"></i> {{ e.month or 'No Month' }}
+                                        {% set month_expenses = expenses|selectattr('month', 'equalto', e.month)|list %}
+                                        ({{ month_expenses|length }} expenses, £{{ "%.2f"|format(month_expenses|sum(attribute='total_cost')) }})
+                                    </span>
+                                    <div class="d-flex gap-2">
+                                        {% if reimb_txn %}
+                                        <a href="{{ url_for('transactions.index') }}?id={{ reimb_txn.id }}" class="btn btn-sm btn-success" title="Reimbursement transaction">
+                                            <i class="bi bi-cash-coin"></i> Reimb: £{{ "%.2f"|format(reimb_txn.amount) }} ({{ reimb_txn.transaction_date.strftime('%d/%m') }})
+                                        </a>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark">No reimbursement</span>
+                                        {% endif %}
+                                        
+                                        {% if cc_payments %}
+                                        <div class="btn-group" role="group">
+                                            {% for cc_payment in cc_payments %}
+                                            <a href="{{ url_for('credit_cards.detail', id=cc_payment.credit_card_id) }}#txn-{{ cc_payment.id }}" class="btn btn-sm btn-info" title="CC Payment - {{ cc_payment.credit_card.name if cc_payment.credit_card else 'Unknown' }}">
+                                                <i class="bi bi-credit-card"></i> {{ cc_payment.credit_card.name if cc_payment.credit_card else 'CC' }}: £{{ "%.2f"|format(cc_payment.amount|abs) }} ({{ cc_payment.date.strftime('%d/%m') }})
+                                            </a>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        <tr id="expense-{{ e.id }}" {% if e.bank_transaction_id or e.credit_card_transaction_id %}class="table-success"{% endif %}>
                             <td><input type="checkbox" class="expense-checkbox" value="{{ e.id }}" onchange="updateExpenseBulkActions()"></td>
                             <td>{{ e.date.strftime('%d/%m/%Y') if e.date else '' }}</td>
-                            <td>{{ e.expense_type }}</td>
+                            <td>
+                                <span class="badge" style="background-color: {% if e.expense_type == 'Fuel' %}#e74c3c{% elif e.expense_type == 'Hotel' %}#3498db{% elif e.expense_type == 'Food' %}#2ecc71{% else %}#95a5a6{% endif %};">
+                                    {{ e.expense_type }}
+                                </span>
+                            </td>
                             <td>{{ e.description }}</td>
-                            <td>{{ e.credit_card.card_name if e.credit_card else '' }}</td>
+                            <td>
+                                {% if e.credit_card %}
+                                <span class="badge bg-warning text-dark" title="{{ e.credit_card.card_name }}">
+                                    <i class="bi bi-credit-card"></i> {{ e.credit_card.card_name }}
+                                </span>
+                                {% else %}
+                                <span class="badge bg-info" title="Direct Bank Payment">
+                                    <i class="bi bi-bank"></i> Bank
+                                </span>
+                                {% endif %}
+                            </td>
                             <td>{{ e.covered_miles or '' }}</td>
                             <td>{{ e.rate_per_mile or '' }}</td>
                             <td>{{ e.days or 1 }}</td>
@@ -107,8 +179,54 @@
                                 {% endif %}
                             </td>
                             <td>{{ e.vehicle_registration or '' }}</td>
+                            <td>
+                                {% if e.bank_transaction_id or e.credit_card_transaction_id %}
+                                <div class="d-flex gap-1">
+                                    {% if e.bank_transaction_id %}
+                                    <a href="{{ url_for('transactions.index') }}?id={{ e.bank_transaction_id }}" class="btn btn-sm btn-success" title="Bank Transaction #{{ e.bank_transaction_id }}">
+                                        <i class="bi bi-bank"></i> #{{ e.bank_transaction_id }}
+                                    </a>
+                                    {% endif %}
+                                    {% if e.credit_card_transaction_id %}
+                                    <a href="{{ url_for('credit_cards.detail', id=e.credit_card_id) }}?txn_id={{ e.credit_card_transaction_id }}" class="btn btn-sm btn-warning text-dark" title="CC Transaction #{{ e.credit_card_transaction_id }}">
+                                        <i class="bi bi-credit-card"></i> #{{ e.credit_card_transaction_id }}
+                                    </a>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set linked_trip = trips_dict.get(e.id) %}
+                                {% if linked_trip %}
+                                <a href="{{ url_for('vehicles.trips') }}#trip-{{ linked_trip.id }}" 
+                                   class="btn btn-sm btn-primary" 
+                                   title="Linked to trip on {{ linked_trip.date.strftime('%d/%m/%Y') }}">
+                                    <i class="bi bi-map"></i> {{ linked_trip.total_miles }}mi
+                                </a>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-primary" onclick="editExpense({{ e.id }}, {{ (e.date.strftime('%Y-%m-%d') if e.date else '')|tojson }}, {{ (e.description or '')|tojson }}, {{ (e.expense_type or '')|tojson }}, {{ (e.credit_card_id or '')|tojson }}, {{ (e.covered_miles or '')|tojson }}, {{ (e.rate_per_mile or '')|tojson }}, {{ (e.days or 1)|tojson }}, {{ ((e.total_cost or e.cost or 0))|tojson }}, {{ (e.vehicle_registration or '')|tojson }}, {{ ('checked' if e.paid_for else '')|tojson }}, {{ ('checked' if e.submitted else '')|tojson }}, {{ ('checked' if e.reimbursed else '')|tojson }})">Edit</button>
+                                <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
+                                    data-id="{{ e.id }}"
+                                    data-date="{{ e.date.strftime('%Y-%m-%d') if e.date else '' }}"
+                                    data-description="{{ e.description or '' }}"
+                                    data-type="{{ e.expense_type or '' }}"
+                                    data-card="{{ e.credit_card_id or '' }}"
+                                    data-account="{{ e.account_id or '' }}"
+                                    data-miles="{{ e.covered_miles or '' }}"
+                                    data-rate="{{ e.rate_per_mile or '' }}"
+                                    data-days="{{ e.days or 1 }}"
+                                    data-total="{{ e.total_cost or e.cost or 0 }}"
+                                    data-vrn="{{ e.vehicle_registration or '' }}"
+                                    data-paid="{{ 'true' if e.paid_for else 'false' }}"
+                                    data-submitted="{{ 'true' if e.submitted else 'false' }}"
+                                    data-reimbursed="{{ 'true' if e.reimbursed else 'false' }}">
+                                    Edit
+                                </button>
                                 <form method="post" action="{{ url_for('expenses.delete_expense', expense_id=e.id) }}" style="display:inline">
                                     <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')">Delete</button>
                                 </form>
@@ -116,7 +234,7 @@
                         </tr>
                         {% endfor %}
                         {% if expenses|length == 0 %}
-                        <tr><td colspan="13" class="text-center p-3 text-muted">No expenses found</td></tr>
+                        <tr><td colspan="15" class="text-center p-3 text-muted">No expenses found</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
@@ -180,12 +298,28 @@
                     <option>VAT</option>
                 </select>
             </div>
-            <div class="col-md-4">
-                <label class="form-label">Card</label>
-                <select name="credit_card_id" class="form-select">
+            <div class="col-md-3">
+                <label class="form-label">Payment Method</label>
+                <select name="payment_method" id="add_payment_method" class="form-select" onchange="togglePaymentFields('add')">
+                    <option value="card">Credit Card</option>
+                    <option value="bank">Bank Account</option>
+                </select>
+            </div>
+            <div class="col-md-4" id="add_card_field">
+                <label class="form-label">Credit Card</label>
+                <select name="credit_card_id" id="add_credit_card_id" class="form-select">
                     <option value="">-- Select Card --</option>
                     {% for c in credit_cards %}
                     <option value="{{ c.id }}">{{ c.card_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4" id="add_account_field" style="display:none;">
+                <label class="form-label">Bank Account</label>
+                <select name="account_id" id="add_account_id" class="form-select">
+                    <option value="">-- Select Account --</option>
+                    {% for a in accounts %}
+                    <option value="{{ a.id }}">{{ a.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -263,12 +397,28 @@
                     <option>VAT</option>
                 </select>
             </div>
-            <div class="col-md-4">
-                <label class="form-label">Card</label>
+            <div class="col-md-3">
+                <label class="form-label">Payment Method</label>
+                <select name="payment_method" id="edit_payment_method" class="form-select" onchange="togglePaymentFields('edit')">
+                    <option value="card">Credit Card</option>
+                    <option value="bank">Bank Account</option>
+                </select>
+            </div>
+            <div class="col-md-4" id="edit_card_field">
+                <label class="form-label">Credit Card</label>
                 <select name="credit_card_id" id="edit_credit_card_id" class="form-select">
                     <option value="">-- Select Card --</option>
                     {% for c in credit_cards %}
                     <option value="{{ c.id }}">{{ c.card_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4" id="edit_account_field" style="display:none;">
+                <label class="form-label">Bank Account</label>
+                <select name="account_id" id="edit_account_id" class="form-select">
+                    <option value="">-- Select Account --</option>
+                    {% for a in accounts %}
+                    <option value="{{ a.id }}">{{ a.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -319,6 +469,24 @@
 
     <!-- No upload preview — entry-only UI per user request -->
 <script>
+function togglePaymentFields(prefix) {
+    const method = document.getElementById(prefix + '_payment_method').value;
+    const cardField = document.getElementById(prefix + '_card_field');
+    const accountField = document.getElementById(prefix + '_account_field');
+    const cardSelect = document.getElementById(prefix + '_credit_card_id');
+    const accountSelect = document.getElementById(prefix + '_account_id');
+    
+    if (method === 'card') {
+        cardField.style.display = 'block';
+        accountField.style.display = 'none';
+        accountSelect.value = '';  // Clear account selection
+    } else {
+        cardField.style.display = 'none';
+        accountField.style.display = 'block';
+        cardSelect.value = '';  // Clear card selection
+    }
+}
+
 function calcTotal(prefix) {
     const miles = parseFloat(document.getElementById(prefix + '_covered_miles').value || 0);
     const rate = parseFloat(document.getElementById(prefix + '_rate_per_mile').value || 0);
@@ -335,26 +503,61 @@ function onTypeChange(prefix) {
     // (we leave total to be entered manually)
 }
 
-function editExpense(id, date, description, type, cardId, covered_miles, rate, days, total_cost, vrn, paid, submitted, reimbursed) {
-    document.getElementById('editExpenseForm').action = `/expenses/update/${id}`;
-    document.getElementById('edit_expense_id').value = id;
-    document.getElementById('edit_date').value = date;
-    document.getElementById('edit_description').value = description;
-    document.getElementById('edit_expense_type').value = type;
-    document.getElementById('edit_credit_card_id').value = cardId;
-    document.getElementById('edit_covered_miles').value = covered_miles;
-    document.getElementById('edit_rate_per_mile').value = rate;
-    document.getElementById('edit_days').value = days;
-    document.getElementById('edit_total_cost').value = total_cost;
-    document.getElementById('edit_vehicle_registration').value = vrn;
-    document.getElementById('edit_paid_for').checked = (paid === 'checked');
-    document.getElementById('edit_submitted').checked = (submitted === 'checked');
-    document.getElementById('edit_reimbursed').checked = (reimbursed === 'checked');
-    new bootstrap.Modal(document.getElementById('editExpenseModal')).show();
-}
-
 // Toggle flags via AJAX
 document.addEventListener('DOMContentLoaded', function(){
+    // Edit expense with data attributes
+    document.querySelectorAll('.edit-expense-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const date = this.dataset.date;
+            const description = this.dataset.description;
+            const type = this.dataset.type;
+            const cardId = this.dataset.card;
+            const accountId = this.dataset.account;
+            const miles = this.dataset.miles;
+            const rate = this.dataset.rate;
+            const days = this.dataset.days;
+            const total = this.dataset.total;
+            const vrn = this.dataset.vrn;
+            const paid = this.dataset.paid === 'true';
+            const submitted = this.dataset.submitted === 'true';
+            const reimbursed = this.dataset.reimbursed === 'true';
+            
+            document.getElementById('editExpenseForm').action = `/expenses/update/${id}`;
+            document.getElementById('edit_expense_id').value = id;
+            document.getElementById('edit_date').value = date;
+            document.getElementById('edit_description').value = description;
+            document.getElementById('edit_expense_type').value = type;
+            
+            // Set payment method based on what's populated
+            if (cardId) {
+                document.getElementById('edit_payment_method').value = 'card';
+                document.getElementById('edit_credit_card_id').value = cardId;
+                document.getElementById('edit_account_id').value = '';
+            } else if (accountId) {
+                document.getElementById('edit_payment_method').value = 'bank';
+                document.getElementById('edit_account_id').value = accountId;
+                document.getElementById('edit_credit_card_id').value = '';
+            } else {
+                document.getElementById('edit_payment_method').value = 'bank';
+                document.getElementById('edit_credit_card_id').value = '';
+                document.getElementById('edit_account_id').value = '';
+            }
+            togglePaymentFields('edit');
+            
+            document.getElementById('edit_covered_miles').value = miles || '';
+            document.getElementById('edit_rate_per_mile').value = rate || '';
+            document.getElementById('edit_days').value = days || 1;
+            document.getElementById('edit_total_cost').value = total || '';
+            document.getElementById('edit_vehicle_registration').value = vrn || '';
+            document.getElementById('edit_paid_for').checked = paid;
+            document.getElementById('edit_submitted').checked = submitted;
+            document.getElementById('edit_reimbursed').checked = reimbursed;
+            new bootstrap.Modal(document.getElementById('editExpenseModal')).show();
+        });
+    });
+    
+    // Toggle flags
     document.querySelectorAll('.toggle-flag').forEach(btn => {
         btn.addEventListener('click', function(e){
             const id = this.dataset.id;
@@ -422,6 +625,99 @@ function clearExpenseSelection() {
     document.querySelectorAll('.expense-checkbox').forEach(cb => cb.checked = false);
     updateExpenseBulkActions();
 }
+</script>
+
+<!-- Generate Reimbursement Modal -->
+<div class="modal fade" id="generateReimbursementModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-cash-coin"></i> Generate Monthly Reimbursements</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('expenses.generate_reimbursements') }}">
+      <div class="modal-body">
+        <p>This will create monthly reimbursement transactions for all <strong>submitted</strong> expenses.</p>
+        <p><strong>Workflow:</strong></p>
+        <ul>
+          <li>Groups all submitted expenses by calendar month (YYYY-MM)</li>
+          <li>Creates single reimbursement transaction on <strong>last working day of month</strong></li>
+          <li>Amount = total of all expenses for that month</li>
+          <li>Transaction type: "Expense Reimbursement" (Income)</li>
+        </ul>
+        <div class="mb-3">
+          <label class="form-label">Month (optional - leave blank for all months)</label>
+          <input type="month" name="year_month" class="form-control" placeholder="2026-01">
+          <small class="text-muted">Leave empty to process all months with submitted expenses</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-success">Generate Reimbursements</button>
+      </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Generate CC Payment Modal -->
+<div class="modal fade" id="generateCCPaymentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title"><i class="bi bi-credit-card"></i> Generate Credit Card Payments</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('expenses.generate_cc_payments') }}">
+      <div class="modal-body">
+        <p>This will create automatic credit card payment transactions to clear expense charges.</p>
+        <p><strong>Workflow:</strong></p>
+        <ul>
+          <li>Finds all months with expense reimbursements</li>
+          <li>For each month, groups credit card expenses by card</li>
+          <li>Creates payment transaction <strong>1 working day after reimbursement date</strong></li>
+          <li>Amount = total credit card expenses for that month</li>
+          <li>Transaction type: "Payment" (positive amount clears card balance)</li>
+        </ul>
+        <div class="mb-3">
+          <label class="form-label">Month (optional - leave blank for all months)</label>
+          <input type="month" name="year_month" class="form-control" placeholder="2026-01">
+          <small class="text-muted">Leave empty to process all reimbursement months</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-warning">Generate Payments</button>
+      </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// Highlight and scroll to specific expense if ID is in URL
+{% if highlight_expense_id %}
+window.addEventListener('load', function() {
+    const targetRow = document.getElementById('expense-{{ highlight_expense_id }}');
+    if (targetRow) {
+        // Add highlight styling
+        targetRow.style.backgroundColor = '#fff3cd';
+        targetRow.style.border = '2px solid #ffc107';
+        
+        // Scroll to expense with smooth behavior
+        setTimeout(function() {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+        
+        // Remove highlight after 5 seconds
+        setTimeout(function() {
+            targetRow.style.transition = 'all 2s ease';
+            targetRow.style.backgroundColor = '';
+            targetRow.style.border = '';
+        }, 5000);
+    }
+});
+{% endif %}
 </script>
 
 {% endblock %}

@@ -66,6 +66,59 @@
                     </div>
                 </div>
 
+                <!-- Expense Settings -->
+                <div class="card mb-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="bi bi-receipt"></i> Work Expense Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="expense_reimburse_account" class="form-label">Reimbursement Account</label>
+                            <select class="form-select" id="expense_reimburse_account" name="expense_reimburse_account">
+                                <option value="">-- Select Account --</option>
+                                {% for account in accounts %}
+                                <option value="{{ account.id }}" {% if account.id == expense_reimburse_account %}selected{% endif %}>
+                                    {{ account.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">
+                                This is the account where monthly expense reimbursements will be deposited.
+                            </small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="expense_payment_account" class="form-label">Default Payment Account</label>
+                            <select class="form-select" id="expense_payment_account" name="expense_payment_account">
+                                <option value="">-- Select Account --</option>
+                                {% for account in accounts %}
+                                <option value="{{ account.id }}" {% if account.id == expense_payment_account %}selected{% endif %}>
+                                    {{ account.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">
+                                Default account for bank-paid expenses (can be overridden per expense).
+                            </small>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="expense_auto_sync" name="expense_auto_sync" value="1" {% if expense_auto_sync %}checked{% endif %}>
+                            <label class="form-check-label" for="expense_auto_sync">
+                                Auto-sync expense transactions
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Automatically create bank/credit card transactions when expenses are added or updated.
+                            </small>
+                        </div>
+                        
+                        <div class="alert alert-info mt-3 mb-0">
+                            <i class="bi bi-info-circle"></i> <strong>Expense Workflow:</strong> 
+                            Payment → Monthly Reimbursement (last working day) → CC Payment (1 working day after reimbursement)
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Save Button -->
                 <div class="d-flex justify-content-between">
                     <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">
