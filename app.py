@@ -52,6 +52,12 @@ def create_app(config_name=None):
     app.register_blueprint(networth_bp)
     app.register_blueprint(settings_bp)
     
+    # Add context processors
+    @app.context_processor
+    def utility_processor():
+        from datetime import date
+        return dict(today=lambda: date.today().strftime('%Y-%m-%d'))
+    
     # Create database tables
     with app.app_context():
         db.create_all()

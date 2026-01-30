@@ -17,6 +17,7 @@ class FuelRecord(db.Model):
     mpg = db.Column(db.Numeric(6, 2))  # Calculated MPG
     price_per_mile = db.Column(db.Numeric(6, 2))  # Cost per mile
     last_fill_date = db.Column(db.Date)  # Previous fill date
+    linked_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'))  # Link to actual transaction
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships

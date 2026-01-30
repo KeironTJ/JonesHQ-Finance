@@ -205,7 +205,7 @@ def index():
     filter_expanded = Settings.get_value('transactions_filter_expanded', True)
     
     return render_template(
-        'transactions.html',
+        'transactions/transactions.html',
         transactions=transactions,
         running_balances=running_balances,
         pagination=pagination,
@@ -362,7 +362,7 @@ def create():
     vendors = Vendor.query.order_by(Vendor.name).all()
     
     return render_template(
-        'transaction_form.html',
+        'transactions/transaction_form.html',
         transaction=None,
         accounts=accounts,
         categories=categories,
@@ -478,7 +478,7 @@ def edit(id):
     vendors = Vendor.query.order_by(Vendor.name).all()
     
     return render_template(
-        'transaction_form.html',
+        'transactions/transaction_form.html',
         transaction=transaction,
         accounts=accounts,
         categories=categories,
@@ -785,14 +785,14 @@ def create_transfer():
                 flash('Please select both accounts', 'danger')
                 accounts = Account.query.order_by(Account.name).all()
                 categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-                return render_template('transfer_form.html', accounts=accounts, categories=categories)
+                return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
             
             amount_str = request.form.get('amount', '')
             if not amount_str:
                 flash('Please enter an amount', 'danger')
                 accounts = Account.query.order_by(Account.name).all()
                 categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-                return render_template('transfer_form.html', accounts=accounts, categories=categories)
+                return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
             
             amount = abs(float(amount_str))  # Ensure positive
             transfer_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d').date()
@@ -843,7 +843,7 @@ def create_transfer():
                     flash('Invalid category selected', 'danger')
                     accounts = Account.query.order_by(Account.name).all()
                     categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-                    return render_template('transfer_form.html', accounts=accounts, categories=categories)
+                    return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
             else:
                 # Get or create default Transfer category
                 transfer_category = Category.query.filter_by(
@@ -944,7 +944,7 @@ def create_transfer():
             flash(f'Invalid input: {str(e)}', 'danger')
             accounts = Account.query.order_by(Account.name).all()
             categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-            return render_template('transfer_form.html', accounts=accounts, categories=categories)
+            return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
         except Exception as e:
             db.session.rollback()
             import traceback
@@ -953,14 +953,14 @@ def create_transfer():
             flash(f'Error creating transfer: {str(e)}', 'danger')
             accounts = Account.query.order_by(Account.name).all()
             categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-            return render_template('transfer_form.html', accounts=accounts, categories=categories)
+            return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
     
     # GET request - show form
     accounts = Account.query.order_by(Account.name).all()
     categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
     
     return render_template(
-        'transfer_form.html',
+        'transactions/transfer_form.html',
         accounts=accounts,
         categories=categories
     )

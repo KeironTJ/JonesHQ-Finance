@@ -1,0 +1,170 @@
+<div class="card shadow">
+    <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #27ae60 0%, #229954 100%);">
+        <h5 class="mb-0"><i class="bi bi-map"></i> Trip Log</h5>
+        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addTripModal">
+            <i class="bi bi-plus-circle"></i> Add Trip
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Date</th>
+                        <th>Day</th>
+                        <th>Vehicle</th>
+                        <th>Personal</th>
+                        <th>Business</th>
+                        <th>Total</th>
+                        <th>Cum. Miles</th>
+                        <th>Journey</th>
+                        <th>MPG</th>
+                        <th>Gallons</th>
+                        <th>Trip Cost</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trip in trips %}
+                    <tr>
+                        <td>{{ trip.date.strftime('%d/%m/%Y') }}</td>
+                        <td><span class="badge bg-secondary">{{ trip.day_name[:3] if trip.day_name else trip.date.strftime('%a') }}</span></td>
+                        <td><span class="badge bg-primary">{{ trip.vehicle.registration }}</span></td>
+                        <td>{{ trip.personal_miles }}</td>
+                        <td>{{ trip.business_miles }}</td>
+                        <td class="fw-bold">{{ trip.total_miles }}</td>
+                        <td>{{ "{:,}".format(trip.cumulative_total_miles or 0) }}</td>
+                        <td><small>{{ trip.journey_description[:40] if trip.journey_description else '-' }}</small></td>
+                        <td>{{ "%.1f"|format(trip.approx_mpg or 0) }}</td>
+                        <td>{{ "%.2f"|format(trip.gallons_used or 0) }}</td>
+                        <td class="text-danger">£{{ "%.2f"|format(trip.trip_cost or 0) }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editTrip({{ trip.id }}, '{{ trip.date }}', {{ trip.vehicle_id }}, {{ trip.personal_miles }}, {{ trip.business_miles }}, '{{ trip.journey_description or '' }}', '{{ trip.school_holidays or '' }}')">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <form method="POST" action="{{ url_for('vehicles.delete_trip', trip_id=trip.id) }}" style="display:inline;" onsubmit="return confirm('Delete this trip?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Trip Modal -->
+<div class="modal fade" id="addTripModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('vehicles.add_trip') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Trip</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Vehicle</label>
+                        <select name="vehicle_id" class="form-select" required>
+                            {% for vehicle in vehicles %}
+                            <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date</label>
+                        <input type="date" name="date" class="form-control" value="{{ today() }}" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Personal Miles</label>
+                            <input type="number" name="personal_miles" class="form-control" value="0" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Business Miles</label>
+                            <input type="number" name="business_miles" class="form-control" value="0" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Journey Description</label>
+                        <input type="text" name="journey_description" class="form-control" placeholder="Daily Commute">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">School Holidays (Optional)</label>
+                        <input type="text" name="school_holidays" class="form-control" placeholder="Christmas">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Trip</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Trip Modal -->
+<div class="modal fade" id="editTripModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="editTripForm">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Trip</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Vehicle</label>
+                        <select name="vehicle_id" id="edit_trip_vehicle_id" class="form-select" required>
+                            {% for vehicle in vehicles %}
+                            <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date</label>
+                        <input type="date" name="date" id="edit_trip_date" class="form-control" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Personal Miles</label>
+                            <input type="number" name="personal_miles" id="edit_trip_personal_miles" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Business Miles</label>
+                            <input type="number" name="business_miles" id="edit_trip_business_miles" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Journey Description</label>
+                        <input type="text" name="journey_description" id="edit_trip_journey_description" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">School Holidays (Optional)</label>
+                        <input type="text" name="school_holidays" id="edit_trip_school_holidays" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function editTrip(id, date, vehicle_id, personal_miles, business_miles, journey_description, school_holidays) {
+    document.getElementById('editTripForm').action = `/vehicles/trip/update/${id}`;
+    document.getElementById('edit_trip_date').value = date;
+    document.getElementById('edit_trip_vehicle_id').value = vehicle_id;
+    document.getElementById('edit_trip_personal_miles').value = personal_miles;
+    document.getElementById('edit_trip_business_miles').value = business_miles;
+    document.getElementById('edit_trip_journey_description').value = journey_description;
+    document.getElementById('edit_trip_school_holidays').value = school_holidays;
+    new bootstrap.Modal(document.getElementById('editTripModal')).show();
+}
+</script>

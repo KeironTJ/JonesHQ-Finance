@@ -32,6 +32,8 @@ class Transaction(db.Model):
     day_name = db.Column(db.String(10))   # Thu, Fri, etc.
     payday_period = db.Column(db.String(7))  # 2026-01 (payday period this transaction falls in)
     
+    is_forecasted = db.Column(db.Boolean, default=False)  # True for predicted/forecasted transactions
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

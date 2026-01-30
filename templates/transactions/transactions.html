@@ -69,8 +69,15 @@
     
     <!-- Filters -->
     <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" action="{{ url_for('transactions.index') }}" class="row g-3">
+        <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="{{ 'true' if filter_expanded else 'false' }}">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filters</h5>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="{{ 'true' if filter_expanded else 'false' }}" aria-controls="filterCollapse">
+                <i class="bi {% if filter_expanded %}bi-chevron-up{% else %}bi-chevron-down{% endif %}"></i>
+            </button>
+        </div>
+        <div id="filterCollapse" class="collapse {% if filter_expanded %}show{% endif %}">
+            <div class="card-body">
+                <form method="get" action="{{ url_for('transactions.index') }}" class="row g-3">
                 <div class="col-md-2">
                     <label for="account_id" class="form-label">Account</label>
                     <select name="account_id" id="account_id" class="form-select" onchange="this.form.submit()">
@@ -123,6 +130,7 @@
                     </select>
                 </div>
                 
+
                 <div class="col-md-2">
                     <label for="year_month" class="form-label">Month</label>
                     <select name="year_month" id="year_month" class="form-select" onchange="this.form.submit()">
@@ -132,6 +140,29 @@
                             {{ ym }}
                         </option>
                         {% endfor %}
+                    </select>
+                </div>
+                <div class="w-100 d-none d-md-block"></div>
+                <div class="col-12">
+                    <label for="payday_period" class="form-label">Pay Period</label>
+                    <select name="payday_period" id="payday_period" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Periods</option>
+                        {% set ns = namespace(current_year=None) %}
+                        {% for period in payday_periods %}
+                            {% if ns.current_year != period['year'] %}
+                                {% if ns.current_year is not none %}
+                                    </optgroup>
+                                {% endif %}
+                                <optgroup label="{{ period['year'] }}">
+                                {% set ns.current_year = period['year'] %}
+                            {% endif %}
+                            <option value="{{ period['label'] }}" {% if selected_payday_period == period['label'] %}selected{% endif %}>
+                                {{ period['display_name'] }}
+                            </option>
+                        {% endfor %}
+                        {% if ns.current_year is not none %}
+                            </optgroup>
+                        {% endif %}
                     </select>
                 </div>
                 
@@ -154,12 +185,13 @@
                     <label class="form-label">&nbsp;</label>
                     <button type="submit" class="btn btn-primary w-100">Filter</button>
                 </div>
-            </form>
-            {% if selected_account or selected_category or selected_vendor or selected_year_month or search_term or selected_is_paid %}
-            <div class="mt-2">
-                <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
+                </form>
+                {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
+                <div class="mt-2">
+                    <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
     </div>
     

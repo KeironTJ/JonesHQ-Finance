@@ -13,6 +13,8 @@ class Vehicle(db.Model):
     registration = db.Column(db.String(20), nullable=False, unique=True)  # VRN
     tank_size = db.Column(db.Numeric(5, 2))  # Gallons
     fuel_type = db.Column(db.String(20))  # Diesel, Petrol
+    starting_mileage = db.Column(db.Integer)  # Initial odometer reading
+    fuel_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'))  # Default account for fuel transactions
     purchase_date = db.Column(db.Date)
     purchase_price = db.Column(db.Numeric(10, 2))
     is_active = db.Column(db.Boolean, default=True)

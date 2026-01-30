@@ -1,20 +1,198 @@
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
+from models.trips import Trip
+from models.transactions import Transaction
+from models.categories import Category
+from models.accounts import Account
 from extensions import db
+from datetime import datetime, date, timedelta
+from decimal import Decimal
+from sqlalchemy import func
 
 
 class VehicleService:
     @staticmethod
+    def calculate_fuel_metrics(vehicle_id, current_mileage, gallons, cost, fuel_date):
+        """
+        Calculate fuel metrics based on previous fill-up
+        Returns: (actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles)
+        """
+        # Get the most recent fuel record before this one
+        previous_fill = FuelRecord.query.filter(
+            FuelRecord.vehicle_id == vehicle_id,
+            FuelRecord.date < fuel_date
+        ).order_by(FuelRecord.date.desc()).first()
+        
+        if previous_fill:
+            actual_miles = current_mileage - previous_fill.mileage
+            mpg = Decimal(actual_miles) / gallons if gallons > 0 else Decimal('0')
+            price_per_mile = cost / Decimal(actual_miles) if actual_miles > 0 else Decimal('0')
+            last_fill_date = previous_fill.date
+            cumulative_miles = (previous_fill.actual_cumulative_miles or 0) + actual_miles
+        else:
+            # First fill for this vehicle
+            actual_miles = 0
+            mpg = Decimal('0')
+            price_per_mile = Decimal('0')
+            last_fill_date = None
+            cumulative_miles = 0
+        
+        return actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles
+    
+    @staticmethod
+    def get_latest_fuel_record(vehicle_id):
+        """Get the most recent fuel record for a vehicle"""
+        return FuelRecord.query.filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.desc()).first()
+    
+    @staticmethod
     def calculate_fuel_efficiency(vehicle_id, num_records=10):
         """Calculate average fuel efficiency for a vehicle"""
-        pass
+        records = FuelRecord.query.filter_by(vehicle_id=vehicle_id).order_by(
+            FuelRecord.date.desc()
+        ).limit(num_records).all()
+        
+        if not records:
+            return Decimal('0')
+        
+        avg_mpg = sum([r.mpg or Decimal('0') for r in records]) / len(records)
+        return avg_mpg
     
     @staticmethod
     def get_total_fuel_cost(vehicle_id, start_date=None, end_date=None):
         """Calculate total fuel costs for a vehicle"""
-        pass
+        query = FuelRecord.query.filter_by(vehicle_id=vehicle_id)
+        
+        if start_date:
+            query = query.filter(FuelRecord.date >= start_date)
+        if end_date:
+            query = query.filter(FuelRecord.date <= end_date)
+        
+        total = db.session.query(func.sum(FuelRecord.cost)).filter(
+            FuelRecord.vehicle_id == vehicle_id
+        )
+        if start_date:
+            total = total.filter(FuelRecord.date >= start_date)
+        if end_date:
+            total = total.filter(FuelRecord.date <= end_date)
+        
+        result = total.scalar()
+        return result or Decimal('0')
     
     @staticmethod
     def estimate_monthly_fuel_cost(vehicle_id):
         """Estimate monthly fuel costs based on historical data"""
-        pass
+        # Get last 3 months of data
+        three_months_ago = date.today() - timedelta(days=90)
+        total_cost = VehicleService.get_total_fuel_cost(vehicle_id, three_months_ago)
+        
+        # Average per month
+        monthly_avg = total_cost / Decimal('3')
+        return monthly_avg
+    
+    @staticmethod
+    def get_vehicle_stats(vehicle_id):
+        """Get comprehensive stats for a vehicle"""
+        fuel_records = FuelRecord.query.filter_by(vehicle_id=vehicle_id).all()
+        
+        if not fuel_records:
+            return {
+                'avg_mpg': Decimal('0'),
+                'total_cost': Decimal('0'),
+                'total_miles': 0,
+                'total_gallons': Decimal('0'),
+                'avg_price_per_gallon': Decimal('0')
+            }
+        
+        total_cost = sum([f.cost for f in fuel_records])
+        total_gallons = sum([f.gallons for f in fuel_records])
+        total_miles = max([f.actual_cumulative_miles or 0 for f in fuel_records])
+        
+        # Calculate average MPG from records that have MPG
+        mpg_records = [f.mpg for f in fuel_records if f.mpg and f.mpg > 0]
+        avg_mpg = sum(mpg_records) / len(mpg_records) if mpg_records else Decimal('0')
+        
+        avg_price_per_gallon = total_cost / total_gallons if total_gallons > 0 else Decimal('0')
+        
+        return {
+            'avg_mpg': avg_mpg,
+            'total_cost': total_cost,
+            'total_miles': total_miles,
+            'total_gallons': total_gallons,
+            'avg_price_per_gallon': avg_price_per_gallon
+        }
+    
+    @staticmethod
+    def calculate_trip_cost(vehicle_id, miles, trip_date):
+        """Calculate estimated cost for a trip based on recent MPG and fuel prices"""
+        # Get most recent fuel record
+        latest_fuel = VehicleService.get_latest_fuel_record(vehicle_id)
+        
+        if not latest_fuel or not latest_fuel.mpg or latest_fuel.mpg == 0:
+            return Decimal('0'), Decimal('0'), Decimal('0')
+        
+        gallons_used = Decimal(miles) / latest_fuel.mpg
+        
+        # Use latest price per gallon
+        price_per_gallon = latest_fuel.cost / latest_fuel.gallons if latest_fuel.gallons > 0 else Decimal('0')
+        trip_cost = gallons_used * price_per_gallon
+        
+        return trip_cost, gallons_used, latest_fuel.mpg
+    
+    @staticmethod
+    def create_fuel_transaction(fuel_record, account_id):
+        """Create a transaction for a fuel purchase"""
+        from services.payday_service import PaydayService
+        
+        # Get or create Fuel category
+        category = Category.query.filter(
+            db.func.lower(Category.name) == 'fuel'
+        ).first()
+        
+        if not category:
+            category = Category(
+                name='Fuel',
+                category_type='Expense',
+                head_budget='General',
+                sub_budget='Fuel'
+            )
+            db.session.add(category)
+            db.session.commit()
+        
+        vehicle = Vehicle.query.get(fuel_record.vehicle_id)
+        
+        # Calculate year_month and payday_period
+        trans_date = fuel_record.date
+        year_month = f"{trans_date.year:04d}-{trans_date.month:02d}"
+        
+        # Determine payday period
+        payday_period = None
+        start_date, end_date, period_label = PaydayService.get_payday_period(trans_date.year, trans_date.month)
+        if start_date <= trans_date <= end_date:
+            payday_period = period_label
+        else:
+            prev_month = trans_date.month - 1
+            prev_year = trans_date.year
+            if prev_month < 1:
+                prev_month = 12
+                prev_year -= 1
+            start_date, end_date, period_label = PaydayService.get_payday_period(prev_year, prev_month)
+            if start_date <= trans_date <= end_date:
+                payday_period = period_label
+        
+        # Create transaction
+        transaction = Transaction(
+            transaction_date=fuel_record.date,
+            account_id=account_id,
+            category_id=category.id,
+            amount=-fuel_record.cost,  # Negative for expense
+            description=f"Fuel - {vehicle.registration}",
+            item=f"{vehicle.name} - {fuel_record.gallons:.2f} gal @ {fuel_record.price_per_litre:.1f}p/L",
+            is_paid=True,
+            payment_type='Card Payment',
+            year_month=year_month,
+            payday_period=payday_period
+        )
+        db.session.add(transaction)
+        db.session.commit()
+        
+        return transaction
