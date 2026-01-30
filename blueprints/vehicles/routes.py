@@ -7,34 +7,191 @@ from models.accounts import Account
 from services.vehicle_service import VehicleService
 from services.fuel_forecasting_service import FuelForecastingService
 from extensions import db
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal
+from services.payday_service import PaydayService
+from sqlalchemy.orm import joinedload
 
 
 @vehicles_bp.route('/vehicles')
 def index():
-    """Vehicle tracking dashboard"""
+    """Vehicle overview page"""
     vehicles = Vehicle.query.filter_by(is_active=True).order_by(Vehicle.name).all()
     accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    
+
     # Get stats for each vehicle
     vehicle_stats = {}
     for vehicle in vehicles:
         vehicle_stats[vehicle.id] = VehicleService.get_vehicle_stats(vehicle.id)
-    
-    # Get all fuel records
-    fuel_records = FuelRecord.query.order_by(FuelRecord.date.desc()).all()
-    
-    # Get all trips
-    trips = Trip.query.order_by(Trip.date.desc()).all()
-    
+
     return render_template(
         'vehicles/index.html',
         vehicles=vehicles,
         accounts=accounts,
-        vehicle_stats=vehicle_stats,
+        vehicle_stats=vehicle_stats
+    )
+
+
+@vehicles_bp.route('/vehicles/fuel')
+def fuel():
+    """Fuel log page (standalone)"""
+    vehicles = Vehicle.query.filter_by(is_active=True).order_by(Vehicle.name).all()
+    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+
+    # Payday filter for fuel
+    selected_payday_period = request.args.get('payday_period')
+    
+    # If no period specified in URL, default to current month
+    if selected_payday_period is None:
+        today = date.today()
+        selected_payday_period = f"{today.year}-{today.month:02d}"
+    elif selected_payday_period == 'all' or selected_payday_period == '':
+        selected_payday_period = ''
+
+    # Get date range of fuel records to determine relevant periods
+    min_date_result = db.session.query(db.func.min(FuelRecord.date)).scalar()
+    max_date_result = db.session.query(db.func.max(FuelRecord.date)).scalar()
+    
+    if min_date_result and max_date_result:
+        # Calculate number of months between min and max dates
+        months_diff = (max_date_result.year - min_date_result.year) * 12 + (max_date_result.month - min_date_result.month) + 2
+        payday_periods = PaydayService.get_recent_periods(
+            num_periods=months_diff,
+            include_future=False,
+            start_year=min_date_result.year,
+            start_month=min_date_result.month
+        )
+    else:
+        payday_periods = []
+
+    # Vehicle filter for fuel
+    selected_vehicle_id = request.args.get('vehicle_id')
+
+    # Get fuel records
+    fuel_query = FuelRecord.query
+    if selected_payday_period:
+        try:
+            year, month = map(int, selected_payday_period.split('-'))
+            start_date, end_date, _ = PaydayService.get_payday_period(year, month)
+            fuel_query = fuel_query.filter(FuelRecord.date >= start_date, FuelRecord.date <= end_date)
+        except Exception:
+            pass
+    if selected_vehicle_id:
+        try:
+            fuel_query = fuel_query.filter(FuelRecord.vehicle_id == int(selected_vehicle_id))
+        except Exception:
+            pass
+    fuel_records = fuel_query.order_by(FuelRecord.date.desc()).all()
+
+    return render_template(
+        'vehicles/fuel_log.html',
         fuel_records=fuel_records,
-        trips=trips
+        vehicles=vehicles,
+        accounts=accounts,
+        payday_periods=payday_periods,
+        selected_payday_period=selected_payday_period,
+        selected_vehicle_id=selected_vehicle_id
+    )
+
+
+@vehicles_bp.route('/vehicles/trips')
+def trips():
+    """Trip log page (standalone)"""
+    vehicles = Vehicle.query.filter_by(is_active=True).order_by(Vehicle.name).all()
+
+    # Trip-specific payday filter
+    selected_payday_period_trip = request.args.get('payday_period_trip')
+    
+    # If no period specified in URL, default to current month
+    if selected_payday_period_trip is None:
+        today = date.today()
+        selected_payday_period_trip = f"{today.year}-{today.month:02d}"
+    elif selected_payday_period_trip == 'all' or selected_payday_period_trip == '':
+        selected_payday_period_trip = ''
+
+    # Get date range of trip records to determine relevant periods
+    min_date_result = db.session.query(db.func.min(Trip.date)).scalar()
+    max_date_result = db.session.query(db.func.max(Trip.date)).scalar()
+    
+    if min_date_result and max_date_result:
+        # Calculate number of months between min and max dates
+        months_diff = (max_date_result.year - min_date_result.year) * 12 + (max_date_result.month - min_date_result.month) + 2
+        payday_periods = PaydayService.get_recent_periods(
+            num_periods=months_diff,
+            include_future=False,
+            start_year=min_date_result.year,
+            start_month=min_date_result.month
+        )
+    else:
+        payday_periods = []
+
+    # Trip vehicle filter
+    selected_vehicle_id_trip = request.args.get('vehicle_id_trip')
+
+    # Get trip records
+    trip_query = Trip.query.options(joinedload(Trip.fuel_record))
+    if selected_payday_period_trip:
+        try:
+            year, month = map(int, selected_payday_period_trip.split('-'))
+            start_date, end_date, _ = PaydayService.get_payday_period(year, month)
+            trip_query = trip_query.filter(Trip.date >= start_date, Trip.date <= end_date)
+        except Exception:
+            pass
+    if selected_vehicle_id_trip:
+        try:
+            trip_query = trip_query.filter(Trip.vehicle_id == int(selected_vehicle_id_trip))
+        except Exception:
+            pass
+    trips = trip_query.order_by(Trip.date.desc()).all()
+    
+    # Get all fuel records to check for linked transactions
+    fuel_records_dict = {}
+    for vehicle in vehicles:
+        fuel_records = FuelRecord.query.filter_by(vehicle_id=vehicle.id).all()
+        fuel_records_dict[vehicle.id] = {f.date: f for f in fuel_records}
+    
+    # Get forecasted fuel transactions
+    from models.categories import Category
+    from models.transactions import Transaction
+    fuel_category = Category.query.filter_by(name='Transportation - Fuel').first()
+    forecasted_transactions = {}
+    if fuel_category:
+        forecasted_fuel = Transaction.query.filter(
+            Transaction.is_forecasted == True,
+            Transaction.category_id == fuel_category.id
+        ).all()
+        # Group by vehicle registration extracted from description
+        for trans in forecasted_fuel:
+            # Description format: "Forecasted fuel - ABC123" or similar
+            for vehicle in vehicles:
+                if vehicle.registration in trans.description:
+                    if vehicle.id not in forecasted_transactions:
+                        forecasted_transactions[vehicle.id] = {}
+                    forecasted_transactions[vehicle.id][trans.transaction_date] = trans
+                    break
+
+    return render_template(
+        'vehicles/trip_log.html',
+        trips=trips,
+        vehicles=vehicles,
+        payday_periods=payday_periods,
+        selected_payday_period_trip=selected_payday_period_trip,
+        selected_vehicle_id_trip=selected_vehicle_id_trip,
+        fuel_records_dict=fuel_records_dict,
+        forecasted_transactions=forecasted_transactions
+    )
+
+
+@vehicles_bp.route('/vehicles/manage')
+def manage():
+    """Manage vehicles page (standalone)"""
+    vehicles = Vehicle.query.order_by(Vehicle.is_active.desc(), Vehicle.name).all()
+    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+
+    return render_template(
+        'vehicles/manage_vehicles.html',
+        vehicles=vehicles,
+        accounts=accounts
     )
 
 
@@ -108,6 +265,20 @@ def update_vehicle(vehicle_id):
         flash(f'Error updating vehicle: {str(e)}', 'danger')
     
     return redirect(url_for('vehicles.index'))
+
+
+@vehicles_bp.route('/vehicles/<int:vehicle_id>/refresh-forecasts', methods=['POST'])
+def refresh_forecasts(vehicle_id):
+    """Manually refresh forecasted fuel transactions for a vehicle"""
+    try:
+        vehicle = Vehicle.query.get_or_404(vehicle_id)
+        FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        flash(f'Forecasted fuel transactions refreshed for {vehicle.name}', 'success')
+    except Exception as e:
+        flash(f'Error refreshing forecasts: {str(e)}', 'danger')
+    
+    # Redirect back to the page they came from
+    return redirect(request.referrer or url_for('vehicles.index'))
 
 
 @vehicles_bp.route('/vehicles/delete/<int:vehicle_id>', methods=['POST'])
@@ -335,3 +506,102 @@ def delete_trip(trip_id):
         flash(f'Error deleting trip: {str(e)}', 'danger')
     
     return redirect(url_for('vehicles.index'))
+
+
+@vehicles_bp.route('/vehicles/trips/bulk-delete', methods=['POST'])
+def bulk_delete_trips():
+    """Bulk delete trip records"""
+    try:
+        import json
+        trip_ids_json = request.form.get('trip_ids')
+        trip_ids = json.loads(trip_ids_json) if trip_ids_json else []
+        
+        if not trip_ids:
+            flash('No trips selected for deletion', 'warning')
+            return redirect(url_for('vehicles.trips'))
+        
+        # Delete all selected trips
+        deleted_count = 0
+        for trip_id in trip_ids:
+            trip = Trip.query.get(int(trip_id))
+            if trip:
+                db.session.delete(trip)
+                deleted_count += 1
+        
+        db.session.commit()
+        flash(f'Successfully deleted {deleted_count} trip(s)', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting trips: {str(e)}', 'danger')
+    
+    return redirect(url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/trips/bulk-add', methods=['POST'])
+def bulk_add_trips():
+    """Bulk add recurring trips based on date range and selected days of week"""
+    try:
+        vehicle_id = request.form.get('vehicle_id')
+        journey_description = request.form.get('journey_description', '')
+        personal_miles = Decimal(request.form.get('personal_miles', 0))
+        business_miles = Decimal(request.form.get('business_miles', 0))
+        start_date_str = request.form.get('start_date')
+        end_date_str = request.form.get('end_date')
+        selected_days = request.form.getlist('days')  # List of weekday integers (0=Monday, 6=Sunday)
+        
+        # Validate inputs
+        if not vehicle_id or not start_date_str or not end_date_str or not selected_days:
+            flash('Please fill in all required fields and select at least one day', 'danger')
+            return redirect(url_for('vehicles.trips'))
+        
+        # Convert to integers
+        selected_days = [int(day) for day in selected_days]
+        
+        # Parse dates
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        
+        if start_date > end_date:
+            flash('Start date must be before or equal to end date', 'danger')
+            return redirect(url_for('vehicles.trips'))
+        
+        # Create trips for selected days in the date range
+        created_count = 0
+        current_date = start_date
+        
+        while current_date <= end_date:
+            # Check if this day of the week is selected (0=Monday, 6=Sunday)
+            if current_date.weekday() in selected_days:
+                # Calculate trip costs using the service
+                total_miles = personal_miles + business_miles
+                trip_cost, gallons_used, avg_mpg = VehicleService.calculate_trip_cost(
+                    vehicle_id, total_miles, current_date
+                )
+                
+                # Create new trip
+                new_trip = Trip(
+                    vehicle_id=vehicle_id,
+                    date=current_date,
+                    journey_description=journey_description,
+                    personal_miles=personal_miles,
+                    business_miles=business_miles,
+                    approx_mpg=avg_mpg,
+                    gallons_used=gallons_used,
+                    trip_cost=trip_cost
+                )
+                db.session.add(new_trip)
+                created_count += 1
+            
+            # Move to next day
+            current_date += timedelta(days=1)
+        
+        db.session.commit()
+        flash(f'Successfully created {created_count} trip(s)', 'success')
+    except ValueError as ve:
+        db.session.rollback()
+        flash(f'Invalid input: {str(ve)}', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating trips: {str(e)}', 'danger')
+    
+    return redirect(url_for('vehicles.trips'))

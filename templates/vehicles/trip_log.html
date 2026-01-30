@@ -1,15 +1,111 @@
-<div class="card shadow">
+{% extends "base.html" %}
+
+{% block title %}Trip Log{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">Vehicle Tracking</h2>
+            
+            <!-- Navigation -->
+            <ul class="nav nav-tabs mb-4">
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('vehicles.index') }}">
+                        <i class="bi bi-speedometer2"></i> Overview
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
+                        <i class="bi bi-fuel-pump-fill"></i> Fuel Log
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="{{ url_for('vehicles.trips') }}">
+                        <i class="bi bi-map"></i> Trip Log
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('vehicles.manage') }}">
+                        <i class="bi bi-car-front-fill"></i> Manage Vehicles
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Trip Log Content -->
+<div id="trip-log-panel"><div class="card shadow">
     <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #27ae60 0%, #229954 100%);">
         <h5 class="mb-0"><i class="bi bi-map"></i> Trip Log</h5>
-        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addTripModal">
-            <i class="bi bi-plus-circle"></i> Add Trip
-        </button>
+        <div>
+            {% if selected_vehicle_id_trip %}
+            <form method="POST" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=selected_vehicle_id_trip) }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for this vehicle?');">
+                <button type="submit" class="btn btn-warning btn-sm me-2" title="Refresh forecasted fuel transactions">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh Forecasts
+                </button>
+            </form>
+            {% endif %}
+            <button class="btn btn-danger btn-sm me-2" id="bulkDeleteTripBtn" onclick="bulkDeleteTrips()" style="display:none;">
+                <i class="bi bi-trash"></i> Delete Selected (<span id="selectedTripCount">0</span>)
+            </button>
+            <button class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#bulkAddTripModal">
+                <i class="bi bi-calendar-plus"></i> Bulk Add Trips
+            </button>
+            <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addTripModal">
+                <i class="bi bi-plus-circle"></i> Add Trip
+            </button>
+        </div>
     </div>
     <div class="card-body">
+        <div id="panel-filters-trip" class="mb-2 small text-muted">Filters: vehicle={{ selected_vehicle_id_trip or 'any' }}, payday={{ selected_payday_period_trip or 'all' }}</div>
+        <form id="trip_filters_form" method="get" action="{{ url_for('vehicles.trips') }}">
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <div class="d-flex align-items-center">
+                        <div class="me-2">
+                            <label class="form-label">Vehicle</label>
+                            <select name="vehicle_id_trip" id="vehicle_filter_trip" class="form-select" style="min-width:260px;" onchange="this.form.submit()">
+                                <option value="">All Vehicles</option>
+                                {% for v in vehicles %}
+                                <option value="{{ v.id }}" {% if selected_vehicle_id_trip and selected_vehicle_id_trip|int == v.id %}selected{% endif %}>{{ v.name }} ({{ v.registration }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex-grow-1">
+                            <label class="form-label">Pay Period</label>
+                            <div class="input-group flex-nowrap">
+                                <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period_trip', -1)">Prev</button>
+                                <select name="payday_period_trip" id="payday_period_trip" class="form-select" onchange="this.form.submit()">
+                                    <option value="" {% if not selected_payday_period_trip %}selected{% endif %}>All Periods</option>
+                                    {% for period in payday_periods %}
+                                    <option value="{{ period.label }}" {% if selected_payday_period_trip == period.label %}selected{% endif %}>{{ period.display_name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period_trip', 1)">Next</button>
+                                <button class="btn btn-outline-primary" type="button" onclick="jumpToCurrentPeriod('payday_period_trip')" title="Jump to current period"><i class="bi bi-calendar-check"></i> Current</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+        
+        <div class="alert alert-info d-flex align-items-center mb-3" role="alert">
+            <i class="bi bi-info-circle me-2"></i>
+            <div>
+                <strong>Refuel Indicators:</strong> 
+                <span class="badge bg-success"><i class="bi bi-receipt"></i></span> = Actual refuel with bank transaction |
+                <span class="badge bg-info"><i class="bi bi-fuel-pump"></i></span> = Actual refuel (no transaction yet) |
+                <span class="badge bg-warning text-dark"><i class="bi bi-calendar-event"></i></span> = Forecasted refuel transaction
+            </div>
+        </div>
+        
         <div class="table-responsive">
             <table class="table table-hover table-sm">
                 <thead class="table-dark">
                     <tr>
+                        <th style="width: 30px;">
+                            <input type="checkbox" id="selectAllTrips" onchange="toggleAllTrips(this)">
+                        </th>
                         <th>Date</th>
                         <th>Day</th>
                         <th>Vehicle</th>
@@ -21,15 +117,19 @@
                         <th>MPG</th>
                         <th>Gallons</th>
                         <th>Trip Cost</th>
+                        <th>Refuel</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for trip in trips %}
                     <tr>
+                        <td>
+                            <input type="checkbox" class="trip-checkbox" value="{{ trip.id }}" onchange="updateBulkDeleteButton()">
+                        </td>
                         <td>{{ trip.date.strftime('%d/%m/%Y') }}</td>
                         <td><span class="badge bg-secondary">{{ trip.day_name[:3] if trip.day_name else trip.date.strftime('%a') }}</span></td>
-                        <td><span class="badge bg-primary">{{ trip.vehicle.registration }}</span></td>
+                        <td><span class="badge bg-primary">{{ trip.vehicle.name }} ({{ trip.vehicle.registration }})</span></td>
                         <td>{{ trip.personal_miles }}</td>
                         <td>{{ trip.business_miles }}</td>
                         <td class="fw-bold">{{ trip.total_miles }}</td>
@@ -39,7 +139,42 @@
                         <td>{{ "%.2f"|format(trip.gallons_used or 0) }}</td>
                         <td class="text-danger">£{{ "%.2f"|format(trip.trip_cost or 0) }}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary" onclick="editTrip({{ trip.id }}, '{{ trip.date }}', {{ trip.vehicle_id }}, {{ trip.personal_miles }}, {{ trip.business_miles }}, '{{ trip.journey_description or '' }}', '{{ trip.school_holidays or '' }}')">
+                            {% set next_day_fuel = fuel_records_dict.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
+                            {% set next_day_forecasted = forecasted_transactions.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
+                            
+                            {% if next_day_fuel %}
+                                {# Actual fuel record next day - this trip triggered it #}
+                                {% if next_day_fuel.linked_transaction_id %}
+                                    <a href="{{ url_for('transactions.index') }}?id={{ next_day_fuel.linked_transaction_id }}" 
+                                       class="btn btn-sm btn-success" 
+                                       title="Triggered refuel next day - view transaction">
+                                        <i class="bi bi-receipt"></i> {{ next_day_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_fuel.cost) }}
+                                    </a>
+                                {% else %}
+                                    <span class="badge bg-info" title="Triggered refuel next day">
+                                        <i class="bi bi-fuel-pump"></i> {{ next_day_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_fuel.cost) }}
+                                    </span>
+                                {% endif %}
+                            {% elif next_day_forecasted %}
+                                {# Forecasted transaction next day - this trip will trigger it #}
+                                <a href="{{ url_for('transactions.index') }}?id={{ next_day_forecasted.id }}" 
+                                   class="btn btn-sm btn-warning" 
+                                   title="Forecasted refuel next day - view transaction">
+                                    <i class="bi bi-calendar-event"></i> {{ next_day_forecasted.transaction_date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_forecasted.amount|abs) }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted" title="No refuel triggered">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary edit-trip-btn" 
+                                    data-id="{{ trip.id }}" 
+                                    data-date="{{ trip.date.isoformat() }}" 
+                                    data-vehicle-id="{{ trip.vehicle_id }}" 
+                                    data-personal-miles="{{ trip.personal_miles }}" 
+                                    data-business-miles="{{ trip.business_miles }}" 
+                                    data-journey-description="{{ trip.journey_description or '' }}" 
+                                    data-school-holidays="{{ trip.school_holidays or '' }}">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_trip', trip_id=trip.id) }}" style="display:inline;" onsubmit="return confirm('Delete this trip?');">
@@ -156,15 +291,187 @@
     </div>
 </div>
 
+<!-- Bulk Add Trip Modal -->
+<div class="modal fade" id="bulkAddTripModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('vehicles.bulk_add_trips') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Bulk Add Recurring Trips</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Vehicle</label>
+                            <select name="vehicle_id" class="form-select" required>
+                                {% for vehicle in vehicles %}
+                                <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Journey Description</label>
+                            <input type="text" name="journey_description" class="form-control" placeholder="Daily Commute">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Personal Miles</label>
+                            <input type="number" name="personal_miles" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Business Miles</label>
+                            <input type="number" name="business_miles" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">School Holidays</label>
+                            <input type="text" name="school_holidays" class="form-control">
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>Date Range</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" name="start_date" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">End Date</label>
+                            <input type="date" name="end_date" class="form-control" required>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>Select Days of Week</h6>
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="days" value="0" id="bulk_monday">
+                                <label class="form-check-label" for="bulk_monday">Monday</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="days" value="1" id="bulk_tuesday">
+                                <label class="form-check-label" for="bulk_tuesday">Tuesday</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="days" value="2" id="bulk_wednesday">
+                                <label class="form-check-label" for="bulk_wednesday">Wednesday</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="days" value="3" id="bulk_thursday">
+                                <label class="form-check-label" for="bulk_thursday">Thursday</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="days" value="4" id="bulk_friday">
+                                <label class="form-check-label" for="bulk_friday">Friday</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="days" value="5" id="bulk_saturday">
+                                <label class="form-check-label" for="bulk_saturday">Saturday</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="days" value="6" id="bulk_sunday">
+                                <label class="form-check-label" for="bulk_sunday">Sunday</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info mt-3">
+                        <small><i class="bi bi-info-circle"></i> Trips will be created for each selected day of the week between the start and end dates.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Trips</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
-function editTrip(id, date, vehicle_id, personal_miles, business_miles, journey_description, school_holidays) {
-    document.getElementById('editTripForm').action = `/vehicles/trip/update/${id}`;
-    document.getElementById('edit_trip_date').value = date;
-    document.getElementById('edit_trip_vehicle_id').value = vehicle_id;
-    document.getElementById('edit_trip_personal_miles').value = personal_miles;
-    document.getElementById('edit_trip_business_miles').value = business_miles;
-    document.getElementById('edit_trip_journey_description').value = journey_description;
-    document.getElementById('edit_trip_school_holidays').value = school_holidays;
-    new bootstrap.Modal(document.getElementById('editTripModal')).show();
+// Event listener for edit buttons
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.edit-trip-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const date = this.dataset.date;
+            const vehicleId = this.dataset.vehicleId;
+            const personalMiles = this.dataset.personalMiles;
+            const businessMiles = this.dataset.businessMiles;
+            const journeyDescription = this.dataset.journeyDescription;
+            const schoolHolidays = this.dataset.schoolHolidays;
+            
+            document.getElementById('editTripForm').action = `/vehicles/trip/update/${id}`;
+            document.getElementById('edit_trip_date').value = date;
+            document.getElementById('edit_trip_vehicle_id').value = vehicleId;
+            document.getElementById('edit_trip_personal_miles').value = personalMiles;
+            document.getElementById('edit_trip_business_miles').value = businessMiles;
+            document.getElementById('edit_trip_journey_description').value = journeyDescription;
+            document.getElementById('edit_trip_school_holidays').value = schoolHolidays;
+            
+            const modal = new bootstrap.Modal(document.getElementById('editTripModal'));
+            modal.show();
+        });
+    });
+});
+
+function toggleAllTrips(checkbox) {
+    const checkboxes = document.querySelectorAll('.trip-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateBulkDeleteButton();
+}
+
+function updateBulkDeleteButton() {
+    const checkboxes = document.querySelectorAll('.trip-checkbox:checked');
+    const count = checkboxes.length;
+    const bulkBtn = document.getElementById('bulkDeleteTripBtn');
+    const countSpan = document.getElementById('selectedTripCount');
+    
+    if (count > 0) {
+        bulkBtn.style.display = 'inline-block';
+        countSpan.textContent = count;
+    } else {
+        bulkBtn.style.display = 'none';
+    }
+    
+    // Update "select all" checkbox state
+    const allCheckboxes = document.querySelectorAll('.trip-checkbox');
+    const selectAllCheckbox = document.getElementById('selectAllTrips');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = allCheckboxes.length > 0 && count === allCheckboxes.length;
+    }
+}
+
+function bulkDeleteTrips() {
+    const checkboxes = document.querySelectorAll('.trip-checkbox:checked');
+    const ids = Array.from(checkboxes).map(cb => cb.value);
+    
+    if (ids.length === 0) {
+        alert('Please select at least one trip to delete.');
+        return;
+    }
+    
+    if (!confirm(`Delete ${ids.length} selected trip(s)? This action cannot be undone.`)) {
+        return;
+    }
+    
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/vehicles/trips/bulk-delete';
+    
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'trip_ids';
+    input.value = JSON.stringify(ids);
+    
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
 }
 </script>
+{% endblock %}

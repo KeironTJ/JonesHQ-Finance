@@ -21,7 +21,8 @@ class FuelRecord(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
-    trips = db.relationship('Trip', backref='fuel_record', lazy=True)
+    trips = db.relationship('Trip', foreign_keys='Trip.fuel_log_entry_id', back_populates='fuel_record', lazy=True)
+    linked_transaction = db.relationship('Transaction', foreign_keys=[linked_transaction_id], backref='fuel_records')
     
     def __repr__(self):
         return f'<FuelRecord {self.date}: {self.vehicle.registration} - £{self.cost}>'

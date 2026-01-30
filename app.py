@@ -57,8 +57,11 @@ def create_app(config_name=None):
     # Add context processors
     @app.context_processor
     def utility_processor():
-        from datetime import date
-        return dict(today=lambda: date.today().strftime('%Y-%m-%d'))
+        from datetime import date, timedelta
+        return dict(
+            today=lambda: date.today().strftime('%Y-%m-%d'),
+            timedelta=timedelta
+        )
     
     # Create database tables
     with app.app_context():

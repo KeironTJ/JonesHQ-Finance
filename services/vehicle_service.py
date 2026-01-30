@@ -124,19 +124,37 @@ class VehicleService:
     @staticmethod
     def calculate_trip_cost(vehicle_id, miles, trip_date):
         """Calculate estimated cost for a trip based on recent MPG and fuel prices"""
-        # Get most recent fuel record
-        latest_fuel = VehicleService.get_latest_fuel_record(vehicle_id)
+        # Get average MPG from last 10 fuel records before the trip date
+        recent_fuels = FuelRecord.query.filter(
+            FuelRecord.vehicle_id == vehicle_id,
+            FuelRecord.date <= trip_date,
+            FuelRecord.mpg.isnot(None),
+            FuelRecord.mpg > 0
+        ).order_by(FuelRecord.date.desc()).limit(10).all()
         
-        if not latest_fuel or not latest_fuel.mpg or latest_fuel.mpg == 0:
-            return Decimal('0'), Decimal('0'), Decimal('0')
+        if not recent_fuels:
+            # Try to get any fuel record for this vehicle
+            latest_fuel = VehicleService.get_latest_fuel_record(vehicle_id)
+            if not latest_fuel or not latest_fuel.mpg or latest_fuel.mpg == 0:
+                return Decimal('0'), Decimal('0'), Decimal('0')
+            avg_mpg = latest_fuel.mpg
+            price_per_gallon = latest_fuel.cost / latest_fuel.gallons if latest_fuel.gallons > 0 else Decimal('0')
+        else:
+            # Calculate average MPG from recent fills
+            avg_mpg = sum([f.mpg for f in recent_fuels]) / Decimal(len(recent_fuels))
+            
+            # Get average price per gallon from recent fills (last 3)
+            recent_price_records = recent_fuels[:3]
+            avg_price_per_gallon = sum([
+                f.cost / f.gallons if f.gallons > 0 else Decimal('0') 
+                for f in recent_price_records
+            ]) / Decimal(len(recent_price_records))
+            price_per_gallon = avg_price_per_gallon
         
-        gallons_used = Decimal(miles) / latest_fuel.mpg
-        
-        # Use latest price per gallon
-        price_per_gallon = latest_fuel.cost / latest_fuel.gallons if latest_fuel.gallons > 0 else Decimal('0')
+        gallons_used = Decimal(miles) / avg_mpg if avg_mpg > 0 else Decimal('0')
         trip_cost = gallons_used * price_per_gallon
         
-        return trip_cost, gallons_used, latest_fuel.mpg
+        return trip_cost, gallons_used, avg_mpg
     
     @staticmethod
     def create_fuel_transaction(fuel_record, account_id):

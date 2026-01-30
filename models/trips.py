@@ -35,5 +35,8 @@ class Trip(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Relationships
+    fuel_record = db.relationship('FuelRecord', foreign_keys=[fuel_log_entry_id], back_populates='trips')
+    
     def __repr__(self):
         return f'<Trip {self.date}: {self.vehicle.registration} - {self.total_miles}mi>'

@@ -8,19 +8,27 @@
         <div class="col-12">
             <h2 class="mb-4">Vehicle Tracking</h2>
             
-            <!-- Navigation Tabs -->
-            <ul class="nav nav-tabs mb-4" role="tablist">
+            <!-- Navigation -->
+            <ul class="nav nav-tabs mb-4">
                 <li class="nav-item">
-                    <a class="nav-link active" data-bs-toggle="tab" href="#overview">Overview</a>
+                    <a class="nav-link active" href="{{ url_for('vehicles.index') }}">
+                        <i class="bi bi-speedometer2"></i> Overview
+                    </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" href="#fuel-log">Fuel Log</a>
+                    <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
+                        <i class="bi bi-fuel-pump-fill"></i> Fuel Log
+                    </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" href="#trip-log">Trip Log</a>
+                    <a class="nav-link" href="{{ url_for('vehicles.trips') }}">
+                        <i class="bi bi-map"></i> Trip Log
+                    </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tab" href="#vehicles">Manage Vehicles</a>
+                    <a class="nav-link" href="{{ url_for('vehicles.manage') }}">
+                        <i class="bi bi-car-front-fill"></i> Manage Vehicles
+                    </a>
                 </li>
             </ul>
 
@@ -75,23 +83,9 @@
                         {% endfor %}
                     </div>
                 </div>
-
-                <!-- Fuel Log Tab -->
-                <div id="fuel-log" class="tab-pane fade">
-                    {% include 'vehicles/fuel_log.html' %}
-                </div>
-
-                <!-- Trip Log Tab -->
-                <div id="trip-log" class="tab-pane fade">
-                    {% include 'vehicles/trip_log.html' %}
-                </div>
-
-                <!-- Manage Vehicles Tab -->
-                <div id="vehicles" class="tab-pane fade">
-                    {% include 'vehicles/manage_vehicles.html' %}
-                </div>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
+

@@ -1,11 +1,97 @@
-<div class="card shadow">
+{% extends "base.html" %}
+
+{% block title %}Fuel Log{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">Vehicle Tracking</h2>
+            
+            <!-- Navigation -->
+            <ul class="nav nav-tabs mb-4">
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('vehicles.index') }}">
+                        <i class="bi bi-speedometer2"></i> Overview
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="{{ url_for('vehicles.fuel') }}">
+                        <i class="bi bi-fuel-pump-fill"></i> Fuel Log
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('vehicles.trips') }}">
+                        <i class="bi bi-map"></i> Trip Log
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('vehicles.manage') }}">
+                        <i class="bi bi-car-front-fill"></i> Manage Vehicles
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Fuel Log Content -->
+<div id="fuel-log-panel"><div class="card shadow">
     <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">
         <h5 class="mb-0"><i class="bi bi-fuel-pump-fill"></i> Fuel Log</h5>
-        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addFuelModal">
-            <i class="bi bi-plus-circle"></i> Add Fuel Record
-        </button>
+        <div>
+            {% if selected_vehicle_id %}
+            <form method="post" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=selected_vehicle_id) }}" class="d-inline" onsubmit="return confirm('Refresh forecasted fuel transactions for this vehicle?');">
+                <button type="submit" class="btn btn-warning btn-sm me-2">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh Forecasts
+                </button>
+            </form>
+            {% endif %}
+            <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addFuelModal">
+                <i class="bi bi-plus-circle"></i> Add Fuel Record
+            </button>
+        </div>
     </div>
     <div class="card-body">
+        <div id="panel-filters" class="mb-2 small text-muted">Filters: vehicle={{ selected_vehicle_id or 'any' }}, payday={{ selected_payday_period or 'all' }}</div>
+        <form id="fuel_filters_form" method="get" action="{{ url_for('vehicles.fuel') }}">
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <div class="d-flex align-items-center">
+                        <div class="me-2">
+                            <label class="form-label">Vehicle</label>
+                            <select name="vehicle_id" id="vehicle_filter" class="form-select" style="min-width:260px;" onchange="this.form.submit()">
+                                <option value="">All Vehicles</option>
+                                {% for v in vehicles %}
+                                <option value="{{ v.id }}" {% if selected_vehicle_id and selected_vehicle_id|int == v.id %}selected{% endif %}>{{ v.name }} ({{ v.registration }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex-grow-1">
+                            <label class="form-label">Pay Period</label>
+                            <div class="input-group flex-nowrap">
+                                <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period', -1)">Prev</button>
+                                <select name="payday_period" id="payday_period" class="form-select" onchange="this.form.submit()">
+                                    <option value="" {% if not selected_payday_period %}selected{% endif %}>All Periods</option>
+                                    {% for period in payday_periods %}
+                                    <option value="{{ period.label }}" {% if selected_payday_period == period.label %}selected{% endif %}>{{ period.display_name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period', 1)">Next</button>
+                                <button class="btn btn-outline-primary" type="button" onclick="jumpToCurrentPeriod('payday_period')" title="Jump to current period"><i class="bi bi-calendar-check"></i> Current</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+        
+        <div class="alert alert-info d-flex align-items-center mb-3" role="alert">
+            <i class="bi bi-info-circle me-2"></i>
+            <div>
+                <strong>Visual Indicators:</strong> 
+                Rows with a <span class="badge bg-success">green background</span> have a linked transaction. 
+                Click the <i class="bi bi-link-45deg"></i> <strong>View</strong> button to see the transaction details.
+            </div>
+        </div>
+        
         <div class="table-responsive">
             <table class="table table-hover table-sm">
                 <thead class="table-dark">
@@ -21,17 +107,23 @@
                         <th>MPG</th>
                         <th>£/Mile</th>
                         <th>Last Fill</th>
+                        <th>Transaction</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for fuel in fuel_records %}
-                    <tr>
+                    <tr {% if fuel.linked_transaction_id %}class="table-success"{% endif %}>
                         <td>{{ fuel.date.strftime('%d/%m/%Y') }}</td>
-                        <td><span class="badge bg-primary">{{ fuel.vehicle.registration }}</span></td>
+                        <td><span class="badge bg-primary">{{ fuel.vehicle.name }} ({{ fuel.vehicle.registration }})</span></td>
                         <td>{{ "%.1f"|format(fuel.price_per_litre) }}p</td>
                         <td>{{ "{:,}".format(fuel.mileage) }}</td>
-                        <td class="text-danger fw-bold">£{{ "%.2f"|format(fuel.cost) }}</td>
+                        <td class="text-danger fw-bold">
+                            {% if fuel.linked_transaction_id %}
+                                <i class="bi bi-receipt text-success" title="Transaction created"></i>
+                            {% endif %}
+                            £{{ "%.2f"|format(fuel.cost) }}
+                        </td>
                         <td>{{ "%.2f"|format(fuel.gallons) }}</td>
                         <td>{{ fuel.actual_miles or 0 }}</td>
                         <td>{{ "{:,}".format(fuel.actual_cumulative_miles or 0) }}</td>
@@ -39,7 +131,25 @@
                         <td>£{{ "%.2f"|format(fuel.price_per_mile or 0) }}</td>
                         <td>{{ fuel.last_fill_date.strftime('%d/%m/%Y') if fuel.last_fill_date else '-' }}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary" onclick="editFuel({{ fuel.id }}, '{{ fuel.date }}', {{ fuel.vehicle_id }}, {{ fuel.price_per_litre }}, {{ fuel.mileage }}, {{ fuel.cost }}, {{ fuel.gallons }})">
+                            {% if fuel.linked_transaction_id %}
+                                <a href="{{ url_for('transactions.index') }}?id={{ fuel.linked_transaction_id }}" 
+                                   class="btn btn-sm btn-success" 
+                                   title="View linked transaction">
+                                    <i class="bi bi-link-45deg"></i> View
+                                </a>
+                            {% else %}
+                                <span class="text-muted"><i class="bi bi-dash-circle"></i> None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary edit-fuel-btn" 
+                                    data-id="{{ fuel.id }}" 
+                                    data-date="{{ fuel.date.isoformat() }}" 
+                                    data-vehicle-id="{{ fuel.vehicle_id }}" 
+                                    data-price-per-litre="{{ fuel.price_per_litre }}" 
+                                    data-mileage="{{ fuel.mileage }}" 
+                                    data-cost="{{ fuel.cost }}" 
+                                    data-gallons="{{ fuel.gallons }}">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_fuel', fuel_id=fuel.id) }}" style="display:inline;" onsubmit="return confirm('Delete this fuel record?');">
@@ -168,8 +278,39 @@
         </div>
     </div>
 </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
+// Event listener for edit buttons
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.edit-fuel-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const date = this.dataset.date;
+            const vehicleId = this.dataset.vehicleId;
+            const pricePerLitre = this.dataset.pricePerLitre;
+            const mileage = this.dataset.mileage;
+            const cost = this.dataset.cost;
+            const gallons = this.dataset.gallons;
+            
+            document.getElementById('editFuelForm').action = `/vehicles/fuel/update/${id}`;
+            document.getElementById('edit_date').value = date;
+            document.getElementById('edit_vehicle_id').value = vehicleId;
+            document.getElementById('edit_price_per_litre').value = pricePerLitre;
+            document.getElementById('edit_mileage').value = mileage;
+            document.getElementById('edit_cost').value = cost;
+            document.getElementById('edit_gallons').value = gallons;
+            
+            const modal = new bootstrap.Modal(document.getElementById('editFuelModal'));
+            modal.show();
+        });
+    });
+});
+
 function calculateGallons(mode) {
     const pricePerLitre = parseFloat(document.getElementById(mode + '_price_per_litre').value);
     const cost = parseFloat(document.getElementById(mode + '_cost').value);
@@ -184,15 +325,5 @@ function calculateGallons(mode) {
         document.getElementById(mode + '_gallons').value = gallons.toFixed(2);
     }
 }
-
-function editFuel(id, date, vehicle_id, price_per_litre, mileage, cost, gallons) {
-    document.getElementById('editFuelForm').action = `/vehicles/fuel/update/${id}`;
-    document.getElementById('edit_date').value = date;
-    document.getElementById('edit_vehicle_id').value = vehicle_id;
-    document.getElementById('edit_price_per_litre').value = price_per_litre;
-    document.getElementById('edit_mileage').value = mileage;
-    document.getElementById('edit_cost').value = cost;
-    document.getElementById('edit_gallons').value = gallons;
-    new bootstrap.Modal(document.getElementById('editFuelModal')).show();
-}
 </script>
+{% endblock %}
