@@ -7,10 +7,13 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1><i class="bi bi-credit-card"></i> {{ card.card_name }}</h1>
         <div>
+            <button type="button" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addTransactionModal">
+                <i class="bi bi-plus-circle"></i> Add Transaction
+            </button>
             <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#generateModal">
                 <i class="bi bi-calendar-plus"></i> Generate Future
             </button>
-            <a href="{{ url_for('credit_cards.edit', id=card.id) }}" class="btn btn-primary">
+            <a href="{{ url_for('credit_cards.edit', id=card.id) }}" class="btn btn-warning">
                 <i class="bi bi-pencil"></i> Edit
             </a>
             <a href="{{ url_for('credit_cards.index') }}" class="btn btn-secondary">
@@ -109,13 +112,14 @@
                             <th>Amount</th>
                             <th>Balance</th>
                             <th>Available</th>
+                            <th>Linked Txn</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for txn in transactions %}
-                        <tr id="cc-txn-{{ txn.id }}">
+                        <tr id="cc-txn-{{ txn.id }}" {% if txn.bank_transaction_id %}class="table-info"{% endif %}>
                             <td>{{ txn.date.strftime('%d/%m/%Y') }}</td>
                             <td>
                                 {% if txn.transaction_type == 'Purchase' %}
@@ -141,6 +145,15 @@
                             </td>
                             <td>£{{ "%.2f"|format(txn.balance or 0) }}</td>
                             <td>£{{ "%.2f"|format(txn.credit_available or 0) }}</td>
+                            <td>
+                                {% if txn.bank_transaction_id %}
+                                <a href="{{ url_for('transactions.index') }}?id={{ txn.bank_transaction_id }}" class="btn btn-sm btn-success" title="Bank Transaction #{{ txn.bank_transaction_id }}">
+                                    <i class="bi bi-bank"></i> #{{ txn.bank_transaction_id }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 <form method="POST" action="{{ url_for('credit_cards.toggle_paid', id=card.id, txn_id=txn.id) }}" style="display: inline;">
                                     <button type="submit" 
@@ -248,6 +261,77 @@
     </div>
 </div>
 
+<!-- Add Transaction Modal -->
+<div class="modal fade" id="addTransactionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('credit_cards.add_transaction', id=card.id) }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="add_txn_date" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="add_txn_date" name="txn_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_txn_type" class="form-label">Type</label>
+                        <select class="form-control" id="add_txn_type" name="txn_type" required onchange="toggleAddAccountField()">
+                            <option value="Purchase">Purchase</option>
+                            <option value="Payment">Payment</option>
+                            <option value="Interest">Interest</option>
+                            <option value="Reward">Reward</option>
+                            <option value="Fee">Fee</option>
+                            <option value="Balance Transfer">Balance Transfer</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="add_account_field" style="display: none;">
+                        <label for="add_account_id" class="form-label">Source Account</label>
+                        <select class="form-select" id="add_account_id" name="account_id">
+                            <option value="">-- No linked account --</option>
+                            {% for account in accounts %}
+                            <option value="{{ account.id }}" {% if card.default_payment_account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Select the bank account this payment will come from (creates linked bank transaction)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_txn_item" class="form-label">Description</label>
+                        <input type="text" class="form-control" id="add_txn_item" name="txn_item" placeholder="e.g., Amazon purchase, monthly payment" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_txn_amount" class="form-label">Amount (£)</label>
+                        <input type="number" class="form-control" id="add_txn_amount" name="txn_amount" step="0.01" required>
+                        <small class="text-muted">For purchases/fees: enter negative amount (e.g., -50.00). For payments/rewards: enter positive amount (e.g., 100.00)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_category" class="form-label">Category (Optional)</label>
+                        <select class="form-select" id="add_category" name="category_id">
+                            <option value="">-- No category --</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.head_budget }} > {{ cat.sub_budget }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="add_txn_fixed" name="txn_fixed" value="1" checked>
+                        <label class="form-check-label" for="add_txn_fixed">
+                            <i class="bi bi-lock-fill"></i> Lock this transaction (prevent regeneration)
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Add Transaction
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Edit Transaction Modal -->
 <div class="modal fade" id="editTransactionModal" tabindex="-1">
     <div class="modal-dialog">
@@ -345,6 +429,24 @@
 </div>
 
 <script>
+// Toggle account field visibility when transaction type changes in add modal
+function toggleAddAccountField() {
+    const typeSelect = document.getElementById('add_txn_type');
+    const accountField = document.getElementById('add_account_field');
+    const accountSelect = document.getElementById('add_account_id');
+    
+    if (typeSelect.value === 'Payment') {
+        accountField.style.display = 'block';
+        // Pre-select default payment account if available
+        {% if card.default_payment_account_id %}
+        accountSelect.value = '{{ card.default_payment_account_id }}';
+        {% endif %}
+    } else {
+        accountField.style.display = 'none';
+        accountSelect.value = '';
+    }
+}
+
 // Set up edit transaction modal
 var editTransactionModal = document.getElementById('editTransactionModal');
 editTransactionModal.addEventListener('show.bs.modal', function (event) {
@@ -375,7 +477,7 @@ editPaymentModal.addEventListener('show.bs.modal', function (event) {
     var txnAmount = button.getAttribute('data-txn-amount');
     
     var form = document.getElementById('editPaymentForm');
-    form.action = '/credit_cards/{{ card.id }}/edit_payment/' + txnId;
+    form.action = '/credit-cards/{{ card.id }}/payment/' + txnId + '/edit';
     
     document.getElementById('payment_date').value = txnDate;
     document.getElementById('payment_amount').value = Math.abs(parseFloat(txnAmount));

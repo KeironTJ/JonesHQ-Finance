@@ -221,7 +221,7 @@ class CreditCardService:
                 account_id=card.default_payment_account_id,
                 category_id=credit_card_category.id,
                 vendor_id=vendor.id,
-                amount=payment_amount,  # Positive = expense from bank account
+                amount=-payment_amount,  # Negative = expense/debit (money leaving bank account)
                 transaction_date=payment_date,
                 description=f'Payment to {card.card_name}',
                 item='Credit Card Payment',

@@ -13,7 +13,7 @@
                         <span class="badge bg-info ms-2"><i class="bi bi-arrow-left-right"></i> Linked Transfer</span>
                     {% endif %}
                 </h2>
-                <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-secondary">
+                <a href="{{ url_for('transactions.index') }}" class="btn btn-secondary">
                     <i class="bi bi-arrow-left"></i> Back to Transactions
                 </a>
             </div>

@@ -7,7 +7,9 @@ from models.transactions import Transaction
 from models.accounts import Account
 from models.categories import Category
 from models.credit_cards import CreditCard
+from models.vendors import Vendor
 from models.settings import Settings
+from services.payday_service import PaydayService
 from flask import current_app
 from sqlalchemy import func
 
@@ -464,6 +466,7 @@ class ExpenseSyncService:
     def _create_cc_payment_from_reimbursement(card_id, amount, payment_date, year_month):
         """
         Create credit card payment transaction from reimbursement.
+        Also creates linked bank transaction from the card's default payment account.
         Returns transaction ID or None.
         """
         # Check if payment already exists
@@ -477,6 +480,11 @@ class ExpenseSyncService:
         
         if existing:
             return existing.id
+        
+        # Get the credit card to find default payment account
+        card = CreditCard.query.get(card_id)
+        if not card:
+            return None
         
         # Create payment transaction (positive = payment to card)
         # Only set is_paid=True if payment date is today or in the past
@@ -495,10 +503,59 @@ class ExpenseSyncService:
             item=f'Expense reimbursement payment - {year_month}',
             transaction_type='Payment',
             amount=amount,  # Positive amount
-            is_paid=is_paid
+            is_paid=is_paid,
+            is_fixed=True  # Lock to prevent regeneration
         )
         db.session.add(payment_txn)
         db.session.flush()
+        
+        # Create linked bank transaction if card has default payment account
+        if card.default_payment_account_id:
+            # Find Credit Cards category matching this specific card
+            credit_card_category = Category.query.filter_by(
+                head_budget='Credit Cards',
+                sub_budget=card.card_name
+            ).first()
+            
+            # If not found, try to find any Credit Cards category as fallback
+            if not credit_card_category:
+                credit_card_category = Category.query.filter_by(
+                    head_budget='Credit Cards'
+                ).first()
+            
+            # Find or create vendor matching card name
+            vendor = Vendor.query.filter_by(name=card.card_name).first()
+            if not vendor:
+                vendor = Vendor(name=card.card_name)
+                db.session.add(vendor)
+                db.session.flush()
+            
+            # Create bank transaction (negative = money out)
+            bank_txn = Transaction(
+                account_id=card.default_payment_account_id,
+                category_id=credit_card_category.id if credit_card_category else None,
+                vendor_id=vendor.id,
+                amount=Decimal(str(-abs(float(amount)))),  # Negative = expense from bank account
+                transaction_date=payment_date,
+                description=f'Payment to {card.card_name}',
+                item='Credit Card Payment',
+                payment_type='Card Payment',
+                is_paid=is_paid,
+                is_fixed=True,  # Lock to prevent deletion
+                credit_card_id=card.id,
+                year_month=year_month,
+                week_year=f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}",
+                day_name=payment_date.strftime('%A'),
+                payday_period=PaydayService.get_period_for_date(payment_date)
+            )
+            db.session.add(bank_txn)
+            db.session.flush()
+            
+            # Link back to credit card transaction
+            payment_txn.bank_transaction_id = bank_txn.id
+            
+            # Recalculate bank account balance
+            Transaction.recalculate_account_balance(card.default_payment_account_id)
         
         # Recalculate card balance
         CreditCardTransaction.recalculate_card_balance(card_id)

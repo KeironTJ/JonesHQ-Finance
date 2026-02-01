@@ -232,19 +232,22 @@ def index():
         total_income=total_income,
         total_expenses=total_expenses,
         net_balance=net_balance,
+        total_count=total_count,
         transaction_count=total_count,
         category_summary=category_summary,
-        selected_account=account_id,
+        selected_account=Account.query.get(account_id) if account_id else None,
         selected_head_budget=head_budget,
-        selected_category=category_id,
-        selected_vendor=vendor_id,
+        selected_category=Category.query.get(category_id) if category_id else None,
+        selected_vendor=Vendor.query.get(vendor_id) if vendor_id else None,
         selected_year_month=year_month,
         selected_payday_period=payday_period,
         prev_payday_period=prev_period,
         next_payday_period=next_period,
         search_term=search,
         selected_is_paid=is_paid_filter,
+        sort=sort_order,
         sort_order=sort_order,
+        page=page,
         per_page=per_page,
         filter_expanded=filter_expanded,
         highlight_transaction_id=transaction_id
@@ -405,7 +408,7 @@ def edit(id):
             transaction.item = request.form.get('item', '')
             transaction.assigned_to = request.form.get('assigned_to', '')
             transaction.payment_type = request.form.get('payment_type', '')
-            transaction.is_paid = request.form.get('is_paid') == 'on'
+            transaction.is_paid = request.form.get('is_paid') == '1'
             transaction.is_fixed = request.form.get('txn_fixed') == '1'
             
             # Recalculate computed fields
@@ -949,13 +952,14 @@ def create_transfer():
                 year_month = current_date.strftime('%Y-%m')
                 week_year = f"{current_date.isocalendar()[1]:02d}-{current_date.year}"
                 day_name = current_date.strftime('%a')
+                payday_period = PaydayService.get_period_for_date(current_date)
                 
-                # Create transaction in FROM account (money leaving - positive amount)
+                # Create transaction in FROM account (money leaving - negative amount)
                 from_transaction = Transaction(
                     account_id=from_account_id,
                     category_id=transfer_category.id,
                     vendor_id=from_vendor.id,  # Vendor = destination account
-                    amount=amount,  # Positive = expense/debit
+                    amount=-amount,  # Negative = expense/debit (money out)
                     transaction_date=current_date,
                     description=f"Transfer to {to_account.name}",
                     item=description,
@@ -963,15 +967,16 @@ def create_transfer():
                     is_paid=is_paid,
                     year_month=year_month,
                     week_year=week_year,
-                    day_name=day_name
+                    day_name=day_name,
+                    payday_period=payday_period
                 )
                 
-                # Create transaction in TO account (money arriving - negative amount)
+                # Create transaction in TO account (money arriving - positive amount)
                 to_transaction = Transaction(
                     account_id=to_account_id,
                     category_id=transfer_category.id,
                     vendor_id=to_vendor.id,  # Vendor = source account
-                    amount=-amount,  # Negative = income/credit
+                    amount=amount,  # Positive = income/credit (money in)
                     transaction_date=current_date,
                     description=f"Transfer from {from_account.name}",
                     item=description,
@@ -979,7 +984,8 @@ def create_transfer():
                     is_paid=is_paid,
                     year_month=year_month,
                     week_year=week_year,
-                    day_name=day_name
+                    day_name=day_name,
+                    payday_period=payday_period
                 )
                 
                 db.session.add(from_transaction)
@@ -1018,18 +1024,21 @@ def create_transfer():
             error_detail = traceback.format_exc()
             print(f"Transfer creation error: {error_detail}")  # Log to console
             flash(f'Error creating transfer: {str(e)}', 'danger')
+            from datetime import date
             accounts = Account.query.order_by(Account.name).all()
             categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-            return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
+            return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories, today=date.today())
     
     # GET request - show form
+    from datetime import date
     accounts = Account.query.order_by(Account.name).all()
     categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
     
     return render_template(
         'transactions/transfer_form.html',
         accounts=accounts,
-        categories=categories
+        categories=categories,
+        today=date.today()
     )
 
 

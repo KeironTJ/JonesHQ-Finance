@@ -53,7 +53,7 @@ class Transaction(db.Model):
             return
         
         transactions = Transaction.query.filter_by(account_id=account_id).all()
-        # Balance = sum of -amount (negative amounts are income, positive are expenses)
-        balance = float(sum([-t.amount for t in transactions]))
+        # Balance = sum of amounts (positive=income adds, negative=expense subtracts)
+        balance = float(sum([t.amount for t in transactions]))
         account.balance = balance
         account.updated_at = datetime.now()

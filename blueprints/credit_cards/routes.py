@@ -1,14 +1,17 @@
 from flask import render_template, request, redirect, url_for, flash
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
+from decimal import Decimal
 from . import credit_cards_bp
 from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
 from models.accounts import Account
 from models.transactions import Transaction
 from models.categories import Category
+from models.vendors import Vendor
 from models.settings import Settings
 from services.credit_card_service import CreditCardService
+from services.payday_service import PaydayService
 from extensions import db
 
 
@@ -206,6 +209,9 @@ def detail(id):
     # Get all accounts for the account selector
     accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
     
+    # Get all categories for the add transaction modal
+    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    
     return render_template('credit_cards/detail.html',
                          card=card,
                          transactions=transactions,
@@ -216,8 +222,149 @@ def detail(id):
                          active_purchase_promo=active_purchase_promo,
                          active_bt_promo=active_bt_promo,
                          accounts=accounts,
+                         categories=categories,
                          today=today,
                          highlight_transaction_id=transaction_id)
+
+
+@credit_cards_bp.route('/credit-cards/<int:id>/add-transaction', methods=['POST'])
+def add_transaction(id):
+    """Add a new credit card transaction"""
+    try:
+        card = CreditCard.query.get_or_404(id)
+        
+        # Get form data
+        txn_date_str = request.form.get('txn_date')
+        txn_type = request.form.get('txn_type')
+        txn_item = request.form.get('txn_item')
+        txn_amount_str = request.form.get('txn_amount', '0')
+        category_id = request.form.get('category_id') or None
+        txn_fixed = request.form.get('txn_fixed') == '1'
+        account_id_str = request.form.get('account_id')
+        
+        # Validate required fields
+        if not txn_date_str:
+            flash('Date is required', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        if not txn_type:
+            flash('Transaction type is required', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        if not txn_item:
+            flash('Description is required', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Parse amount
+        try:
+            txn_amount = float(txn_amount_str)
+        except (ValueError, TypeError):
+            flash('Invalid amount entered', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Parse account ID
+        account_id = None
+        if account_id_str and account_id_str.strip():
+            try:
+                account_id = int(account_id_str)
+            except (ValueError, TypeError):
+                flash('Invalid account selected', 'danger')
+                return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Parse date
+        try:
+            txn_date = datetime.strptime(txn_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Invalid date format', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        # Get category info if provided
+        head_budget = None
+        sub_budget = None
+        if category_id:
+            category = Category.query.get(int(category_id))
+            if category:
+                head_budget = category.head_budget
+                sub_budget = category.sub_budget
+        
+        # Create new transaction
+        new_txn = CreditCardTransaction(
+            credit_card_id=id,
+            category_id=int(category_id) if category_id else None,
+            date=txn_date,
+            day_name=txn_date.strftime('%A'),
+            week=f"{txn_date.isocalendar()[1]:02d}-{txn_date.year}",
+            month=txn_date.strftime('%Y-%m'),
+            head_budget=head_budget,
+            sub_budget=sub_budget,
+            item=txn_item,
+            transaction_type=txn_type,
+            amount=Decimal(str(txn_amount)),  # Convert to Decimal
+            is_paid=False,  # New transactions start as unpaid
+            is_fixed=txn_fixed
+        )
+        
+        db.session.add(new_txn)
+        db.session.flush()
+        
+        # If it's a payment and an account is selected, create linked bank transaction
+        if txn_type == 'Payment' and account_id:
+            # Find Credit Cards category matching this specific card
+            credit_card_category = Category.query.filter_by(
+                head_budget='Credit Cards',
+                sub_budget=card.card_name
+            ).first()
+            
+            # If not found, try to find any Credit Cards category as fallback
+            if not credit_card_category:
+                credit_card_category = Category.query.filter_by(
+                    head_budget='Credit Cards'
+                ).first()
+            
+            # Find or create vendor matching card name
+            vendor = Vendor.query.filter_by(name=card.card_name).first()
+            if not vendor:
+                vendor = Vendor(name=card.card_name)
+                db.session.add(vendor)
+                db.session.flush()
+            
+            # Create linked bank transaction (payment from account)
+            bank_txn = Transaction(
+                account_id=account_id,
+                category_id=credit_card_category.id if credit_card_category else None,
+                vendor_id=vendor.id,
+                amount=Decimal(str(-abs(txn_amount))),  # Negative = expense from bank account (money out)
+                transaction_date=txn_date,
+                description=f'Payment to {card.card_name}',
+                item='Credit Card Payment',
+                payment_type='Card Payment',
+                is_paid=False,  # Same as CC transaction
+                is_fixed=txn_fixed,
+                credit_card_id=card.id,
+                year_month=txn_date.strftime('%Y-%m'),
+                week_year=f"{txn_date.isocalendar()[1]:02d}-{txn_date.year}",
+                day_name=txn_date.strftime('%A'),
+                payday_period=PaydayService.get_period_for_date(txn_date)
+            )
+            db.session.add(bank_txn)
+            db.session.flush()
+            
+            # Link back to credit card transaction
+            new_txn.bank_transaction_id = bank_txn.id
+            
+            # Recalculate bank account balance
+            Transaction.recalculate_account_balance(account_id)
+        
+        # Recalculate card balance
+        CreditCardTransaction.recalculate_card_balance(id)
+        db.session.commit()
+        
+        flash(f'Transaction added successfully!', 'success')
+        return redirect(url_for('credit_cards.detail', id=id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error adding transaction: {str(e)}', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
 
 
 @credit_cards_bp.route('/credit-cards/transaction/<int:txn_id>/toggle-fixed', methods=['POST'])
@@ -380,23 +527,33 @@ def edit_payment(id, txn_id):
         
         # Handle account linking
         if account_id:
-            # Find or create Credit Cards category
+            # Find Credit Cards category matching this specific card
             credit_card_category = Category.query.filter_by(
                 head_budget='Credit Cards',
-                sub_budget='Aqua'  # Default sub-category
+                sub_budget=card.card_name
             ).first()
             
+            # If not found, try to find any Credit Cards category as fallback
             if not credit_card_category:
-                # Use first Credit Cards category or create generic one
-                credit_card_category = Category.query.filter_by(head_budget='Credit Cards').first()
+                credit_card_category = Category.query.filter_by(
+                    head_budget='Credit Cards'
+                ).first()
+            
+            # Find or create vendor matching card name
+            vendor = Vendor.query.filter_by(name=card.card_name).first()
+            if not vendor:
+                vendor = Vendor(name=card.card_name)
+                db.session.add(vendor)
+                db.session.flush()
             
             # If there's an existing linked transaction, update it
             if txn.bank_transaction_id:
                 bank_txn = Transaction.query.get(txn.bank_transaction_id)
                 if bank_txn:
                     bank_txn.transaction_date = txn.date
-                    bank_txn.amount = payment_amount  # Positive = expense from bank account
+                    bank_txn.amount = -abs(payment_amount)  # Negative = expense from bank account (money out)
                     bank_txn.account_id = account_id
+                    bank_txn.vendor_id = vendor.id
                     bank_txn.description = f'Payment to {card.card_name}'
                     bank_txn.item = f'Credit Card Payment'
                     if credit_card_category:
@@ -407,14 +564,19 @@ def edit_payment(id, txn_id):
                 bank_txn = Transaction(
                     account_id=account_id,
                     category_id=credit_card_category.id if credit_card_category else None,
-                    amount=payment_amount,  # Positive = expense from bank account
+                    vendor_id=vendor.id,
+                    amount=-abs(payment_amount),  # Negative = expense from bank account (money out)
                     transaction_date=txn.date,
                     description=f'Payment to {card.card_name}',
                     item='Credit Card Payment',
-                    payment_type='Transfer',
+                    payment_type='Card Payment',
                     is_paid=txn.is_paid,
                     is_fixed=True,
-                    credit_card_id=card.id
+                    credit_card_id=card.id,
+                    year_month=txn.date.strftime('%Y-%m'),
+                    week_year=f"{txn.date.isocalendar()[1]:02d}-{txn.date.year}",
+                    day_name=txn.date.strftime('%A'),
+                    payday_period=PaydayService.get_period_for_date(txn.date)
                 )
                 db.session.add(bank_txn)
                 db.session.flush()  # Get the ID

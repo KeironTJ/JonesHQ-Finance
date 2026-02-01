@@ -18,15 +18,11 @@ def index():
             is_paid=True
         ).all()
         
-        # Calculate balance: income (negative amounts) adds, expenses (positive) subtracts
+        # Calculate balance: positive = income (adds), negative = expense (subtracts)
         balance = Decimal('0.00')
         for txn in paid_transactions:
-            if txn.amount < 0:
-                # Income - add the absolute value
-                balance += abs(Decimal(str(txn.amount)))
-            else:
-                # Expense - subtract
-                balance -= Decimal(str(txn.amount))
+            # Simply add the amount (positive adds, negative subtracts)
+            balance += Decimal(str(txn.amount))
         
         account.calculated_balance = float(balance)
     

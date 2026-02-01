@@ -236,8 +236,8 @@ class PaydayService:
         # Ending balance
         rolling_balance = current_balance if balances else opening_balance
         
-        # Max extra spend is the difference between ending and minimum
-        max_extra_spend = rolling_balance - min_balance
+        # Max extra spend is the difference between ending balance and opening balance
+        max_extra_spend = rolling_balance - opening_balance
         
         return {
             'rolling_balance': float(rolling_balance),
@@ -290,6 +290,114 @@ class PaydayService:
         return balance
     
     @staticmethod
+    def get_category_breakdown(account_id, start_date, end_date, include_unpaid=True):
+        """
+        Get spending breakdown by category and subcategory for a payday period.
+        Includes both income and expenses.
+        
+        Args:
+            account_id: Bank account ID to track (None for all accounts)
+            start_date: Period start date
+            end_date: Period end date
+            include_unpaid: Whether to include unpaid transactions
+            
+        Returns:
+            Dict with 'income' and 'expenses' lists, each containing category breakdowns
+        """
+        from models.categories import Category
+        from sqlalchemy import func
+        
+        # Get all transactions in the period
+        query = Transaction.query.filter(
+            Transaction.transaction_date >= start_date,
+            Transaction.transaction_date <= end_date
+        )
+        
+        # Optionally filter by account
+        if account_id:
+            query = query.filter(Transaction.account_id == account_id)
+        
+        transactions = query.all()
+        
+        # Separate income and expenses
+        income_totals = {}
+        expense_totals = {}
+        uncategorized_income = 0
+        uncategorized_expense = 0
+        
+        for txn in transactions:
+            amount = abs(float(txn.amount))
+            is_income = txn.amount > 0
+            
+            if txn.category_id:
+                category = Category.query.get(txn.category_id)
+                if category:
+                    head = category.head_budget or 'Uncategorized'
+                    sub = category.sub_budget or 'General'
+                    
+                    # Choose the right totals dict
+                    totals = income_totals if is_income else expense_totals
+                    
+                    if head not in totals:
+                        totals[head] = {
+                            'total': 0,
+                            'subcategories': {}
+                        }
+                    
+                    if sub not in totals[head]['subcategories']:
+                        totals[head]['subcategories'][sub] = 0
+                    
+                    totals[head]['total'] += amount
+                    totals[head]['subcategories'][sub] += amount
+                else:
+                    if is_income:
+                        uncategorized_income += amount
+                    else:
+                        uncategorized_expense += amount
+            else:
+                if is_income:
+                    uncategorized_income += amount
+                else:
+                    uncategorized_expense += amount
+        
+        # Add uncategorized if there are any
+        if uncategorized_income > 0:
+            income_totals['Uncategorized'] = {
+                'total': uncategorized_income,
+                'subcategories': {'No Category': uncategorized_income}
+            }
+        
+        if uncategorized_expense > 0:
+            expense_totals['Uncategorized'] = {
+                'total': uncategorized_expense,
+                'subcategories': {'No Category': uncategorized_expense}
+            }
+        
+        # Convert to sorted lists
+        income_result = []
+        for head, data in sorted(income_totals.items(), key=lambda x: x[1]['total'], reverse=True):
+            subcats = [{'name': sub, 'amount': amt} for sub, amt in sorted(data['subcategories'].items(), key=lambda x: x[1], reverse=True)]
+            income_result.append({
+                'category': head,
+                'total': data['total'],
+                'subcategories': subcats
+            })
+        
+        expense_result = []
+        for head, data in sorted(expense_totals.items(), key=lambda x: x[1]['total'], reverse=True):
+            subcats = [{'name': sub, 'amount': amt} for sub, amt in sorted(data['subcategories'].items(), key=lambda x: x[1], reverse=True)]
+            expense_result.append({
+                'category': head,
+                'total': data['total'],
+                'subcategories': subcats
+            })
+        
+        return {
+            'income': income_result,
+            'expenses': expense_result
+        }
+    
+    @staticmethod
     def get_payday_summary(account_id, num_periods=12, include_unpaid=True):
         """
         Get summary of all payday periods for dashboard display.
@@ -302,17 +410,21 @@ class PaydayService:
         Returns:
             List of dicts with period info and metrics
         """
-        # Get current date to determine starting period
+        # Get current date and determine which payday period we're in
         today = date.today()
-        current_year = today.year
-        current_month = today.month
+        current_period_label = PaydayService.get_period_for_date(today)
         
-        # Get payday periods
+        # Extract year and month from period label (format: "2026-01")
+        current_year = int(current_period_label.split('-')[0])
+        current_month = int(current_period_label.split('-')[1])
+        
+        # Get payday periods starting from current period
         periods = PaydayService.get_payday_periods(current_year, current_month, num_periods)
         
         results = []
         for start_date, end_date, period_label in periods:
             metrics = PaydayService.calculate_period_balances(account_id, start_date, end_date, include_unpaid)
+            category_breakdown = PaydayService.get_category_breakdown(account_id, start_date, end_date, include_unpaid)
             
             results.append({
                 'period_label': period_label,
@@ -321,7 +433,8 @@ class PaydayService:
                 'rolling_balance': metrics['rolling_balance'],
                 'min_balance': metrics['min_balance'],
                 'max_extra_spend': metrics['max_extra_spend'],
-                'opening_balance': metrics['opening_balance']
+                'opening_balance': metrics['opening_balance'],
+                'category_breakdown': category_breakdown
             })
         
         return results

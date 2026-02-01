@@ -83,7 +83,7 @@
                     <select name="account_id" id="account_id" class="form-select" onchange="this.form.submit()">
                         <option value="">All Accounts</option>
                         {% for account in accounts %}
-                        <option value="{{ account.id }}" {% if selected_account == account.id %}selected{% endif %}>
+                        <option value="{{ account.id }}" {% if selected_account and selected_account.id == account.id %}selected{% endif %}>
                             {{ account.name }}
                         </option>
                         {% endfor %}
@@ -107,7 +107,7 @@
                     <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %} onchange="this.form.submit()">
                         <option value="">All Sub-Categories</option>
                         {% for category in categories %}
-                        <option value="{{ category.id }}" {% if selected_category == category.id %}selected{% endif %}>
+                        <option value="{{ category.id }}" {% if selected_category and selected_category.id == category.id %}selected{% endif %}>
                             {% if selected_head_budget %}
                                 {{ category.sub_budget }}
                             {% else %}
@@ -123,7 +123,7 @@
                     <select name="vendor_id" id="vendor_id" class="form-select" onchange="this.form.submit()">
                         <option value="">All Vendors</option>
                         {% for vendor in vendors %}
-                        <option value="{{ vendor.id }}" {% if selected_vendor == vendor.id %}selected{% endif %}>
+                        <option value="{{ vendor.id }}" {% if selected_vendor and selected_vendor.id == vendor.id %}selected{% endif %}>
                             {{ vendor.name }}
                         </option>
                         {% endfor %}
@@ -331,6 +331,47 @@
     
     <!-- Transactions Table -->
     <div class="card">
+        <div class="card-header bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0"><i class="bi bi-list-ul"></i> Transactions</h5>
+                    <small class="text-muted">
+                        Showing {{ transactions|length }} of {{ total_count }} transactions
+                        {% if pagination.has_prev or pagination.has_next %}
+                        (Page {{ pagination.page }} of {{ pagination.pages }})
+                        {% endif %}
+                    </small>
+                </div>
+                <div class="d-flex gap-2">
+                    <!-- Sort Order -->
+                    <div class="btn-group" role="group">
+                        <a href="{{ url_for('transactions.index', sort='asc', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=page, per_page=per_page) }}" 
+                           class="btn btn-sm {% if sort == 'asc' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                            <i class="bi bi-sort-up"></i> Oldest First
+                        </a>
+                        <a href="{{ url_for('transactions.index', sort='desc', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=page, per_page=per_page) }}" 
+                           class="btn btn-sm {% if sort == 'desc' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                            <i class="bi bi-sort-down"></i> Newest First
+                        </a>
+                    </div>
+                    
+                    <!-- Per Page -->
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                            {{ per_page }} per page
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% for pp in [25, 50, 100, 250, 500] %}
+                            <li><a class="dropdown-item {% if per_page == pp %}active{% endif %}" 
+                                   href="{{ url_for('transactions.index', sort=sort, account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=1, per_page=pp) }}">
+                                {{ pp }}
+                            </a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover table-sm">
@@ -348,6 +389,7 @@
                             <th style="width: 120px;">Payment Type</th>
                             <th style="width: 100px;" class="text-end">Amount</th>
                             <th style="width: 100px;" class="text-end">Running</th>
+                            <th style="width: 90px;">Linked Txn</th>
                             <th style="width: 60px;">Status</th>
                             <th style="width: 100px;">Actions</th>
                         </tr>
@@ -355,7 +397,7 @@
                     <tbody>
                         {% if transactions %}
                             {% for transaction in transactions %}
-                            <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount > 0 %}table-success{% endif %}">
+                            <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount > 0 %}table-success{% elif transaction.credit_card_id %}table-info{% endif %}">
                                 <td>
                                     <input type="checkbox" class="transaction-checkbox" value="{{ transaction.id }}" onchange="updateBulkActions()">
                                 </td>
@@ -405,6 +447,19 @@
                                         -
                                     {% endif %}
                                 </td>
+                                <td>
+                                    {% if transaction.credit_card_id %}
+                                        {% if transaction.credit_card %}
+                                            <a href="{{ url_for('credit_cards.detail', id=transaction.credit_card_id) }}" class="btn btn-sm btn-warning text-dark" title="Credit Card: {{ transaction.credit_card.card_name }}">
+                                                <i class="bi bi-credit-card"></i> {{ transaction.credit_card.card_name[:10] }}
+                                            </a>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-credit-card"></i> CC</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-center">
                                     <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}" 
                                           style="display: inline;">
@@ -435,7 +490,8 @@
                                                     data-txn-account="{{ transaction.account_id }}"
                                                     data-txn-assigned="{{ transaction.assigned_to }}"
                                                     data-txn-payment-type="{{ transaction.payment_type }}"
-                                                    data-txn-fixed="{{ '1' if transaction.is_fixed else '0' }}">
+                                                    data-txn-fixed="{{ '1' if transaction.is_fixed else '0' }}"
+                                                    data-txn-paid="{{ '1' if transaction.is_paid else '0' }}">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             
@@ -481,6 +537,39 @@
                     </tbody>
                 </table>
             </div>
+            
+            <!-- Pagination -->
+            {% if pagination.has_prev or pagination.has_next %}
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination pagination-sm justify-content-center mb-0">
+                        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('transactions.index', sort=sort, account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=1, per_page=per_page) }}">First</a>
+                        </li>
+                        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('transactions.index', sort=sort, account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=pagination.prev_num, per_page=per_page) if pagination.has_prev else '#' }}">Previous</a>
+                        </li>
+                        
+                        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if p %}
+                                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('transactions.index', sort=sort, account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=p, per_page=per_page) }}">{{ p }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('transactions.index', sort=sort, account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=pagination.next_num, per_page=per_page) if pagination.has_next else '#' }}">Next</a>
+                        </li>
+                        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('transactions.index', sort=sort, account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=pagination.pages, per_page=per_page) }}">Last</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -575,6 +664,13 @@
                             Lock this transaction (prevent regeneration)
                         </label>
                     </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="is_paid" id="edit_is_paid" value="1">
+                        <label class="form-check-label" for="edit_is_paid">
+                            Mark as paid
+                        </label>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -604,6 +700,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const txnAssigned = button.getAttribute('data-txn-assigned');
             const txnPaymentType = button.getAttribute('data-txn-payment-type');
             const txnFixed = button.getAttribute('data-txn-fixed');
+            const txnPaid = button.getAttribute('data-txn-paid');
             
             // Set form action dynamically
             const form = document.getElementById('editTransactionForm');
@@ -620,6 +717,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_assigned_to').value = txnAssigned;
             document.getElementById('edit_payment_type').value = txnPaymentType;
             document.getElementById('edit_txn_fixed').checked = (txnFixed === '1');
+            document.getElementById('edit_is_paid').checked = (txnPaid === '1');
         });
     }
 });
