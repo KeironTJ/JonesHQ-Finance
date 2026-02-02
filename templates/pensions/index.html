@@ -3,39 +3,122 @@
 {% block title %}Pensions - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Pensions</h1>
-    
-    <div class="mb-3">
-        <button class="btn btn-primary">Add Pension</button>
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-piggy-bank"></i> Pensions</h1>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('pensions.add') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Pension
+            </a>
+        </div>
     </div>
     
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Provider</th>
-                <th>Account Number</th>
-                <th>Current Value</th>
-                <th>Contribution Rate</th>
-                <th>Employer Contribution</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for pension in pensions %}
-            <tr>
-                <td>{{ pension.provider }}</td>
-                <td>{{ pension.account_number }}</td>
-                <td>£{{ pension.current_value }}</td>
-                <td>{{ pension.contribution_rate }}%</td>
-                <td>{{ pension.employer_contribution }}%</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary">Edit</button>
-                    <button class="btn btn-sm btn-danger">Delete</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Total Pension Value</h6>
+                    <h3 class="card-title">£{{ "{:,.2f}".format(total_value) }}</h3>
+                    <small>{{ active_count }} active pension{{ 's' if active_count != 1 else '' }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Person</label>
+                    <select name="person" class="form-select">
+                        <option value="">All People</option>
+                        {% for p in people %}
+                        <option value="{{ p }}" {% if current_person == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="bi bi-filter"></i> Filter
+                    </button>
+                    <a href="{{ url_for('pensions.index') }}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Pensions Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Pension Accounts</h5>
+        </div>
+        <div class="card-body">
+            {% if pensions %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Person</th>
+                            <th>Provider</th>
+                            <th>Account Number</th>
+                            <th>Current Value</th>
+                            <th>Contribution</th>
+                            <th>Employer</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pension in pensions %}
+                        <tr class="{% if not pension.is_active %}table-secondary{% endif %}">
+                            <td><span class="badge bg-secondary">{{ pension.person }}</span></td>
+                            <td>{{ pension.provider }}</td>
+                            <td>{{ pension.account_number or '-' }}</td>
+                            <td class="fw-bold">£{{ "{:,.2f}".format(pension.current_value) }}</td>
+                            <td>{{ pension.contribution_rate }}%</td>
+                            <td>{{ pension.employer_contribution }}%</td>
+                            <td>
+                                {% if pension.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('pensions.snapshots', id=pension.id) }}" 
+                                   class="btn btn-sm btn-outline-info" title="View Snapshots">
+                                    <i class="bi bi-graph-up"></i>
+                                </a>
+                                <a href="{{ url_for('pensions.edit', id=pension.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="post" action="{{ url_for('pensions.delete', id=pension.id) }}" 
+                                      class="d-inline" 
+                                      onsubmit="return confirm('Are you sure you want to delete this pension?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No pension accounts found. Click "Add Pension" to get started.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
 {% endblock %}

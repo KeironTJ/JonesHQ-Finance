@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Add Income - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-plus-circle"></i> Add Income Record</h1>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" id="incomeForm">
+                        <!-- Person -->
+                        <div class="mb-3">
+                            <label for="person" class="form-label">Person</label>
+                            <select class="form-select" id="person" name="person" required>
+                                <option value="Keiron" selected>Keiron</option>
+                                <option value="Emma">Emma</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Pay Date -->
+                        <div class="mb-3">
+                            <label for="pay_date" class="form-label">Pay Date</label>
+                            <input type="date" class="form-control" id="pay_date" name="pay_date" required>
+                        </div>
+                        
+                        <!-- Gross Annual Income -->
+                        <div class="mb-3">
+                            <label for="gross_annual" class="form-label">Gross Annual Income</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" step="0.01" class="form-control" id="gross_annual" 
+                                       name="gross_annual" placeholder="53000.00" required>
+                            </div>
+                            <small class="text-muted">Your annual salary before any deductions</small>
+                        </div>
+                        
+                        <!-- Tax Code -->
+                        <div class="mb-3">
+                            <label for="tax_code" class="form-label">Tax Code</label>
+                            <input type="text" class="form-control" id="tax_code" name="tax_code" 
+                                   placeholder="1257L" value="1257L" required>
+                            <small class="text-muted">UK tax code (e.g., 1257L for standard £12,570 allowance)</small>
+                        </div>
+                        
+                        <!-- Pension Contributions -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="employer_pension_pct" class="form-label">Employer Pension %</label>
+                                    <div class="input-group">
+                                        <input type="number" step="0.01" class="form-control" 
+                                               id="employer_pension_pct" name="employer_pension_pct" 
+                                               placeholder="3.00" value="0">
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="employee_pension_pct" class="form-label">Employee Pension %</label>
+                                    <div class="input-group">
+                                        <input type="number" step="0.01" class="form-control" 
+                                               id="employee_pension_pct" name="employee_pension_pct" 
+                                               placeholder="4.00" value="0">
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Additional Deductions -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="avc" class="form-label">AVC (Additional Voluntary Contributions)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">£</span>
+                                        <input type="number" step="0.01" class="form-control" 
+                                               id="avc" name="avc" placeholder="0.00" value="0">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="other" class="form-label">Other Deductions</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">£</span>
+                                        <input type="number" step="0.01" class="form-control" 
+                                               id="other" name="other" placeholder="0.00" value="0">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Deposit Account -->
+                        <div class="mb-3">
+                            <label for="deposit_account_id" class="form-label">Deposit Account (Optional)</label>
+                            <select class="form-select" id="deposit_account_id" name="deposit_account_id">
+                                <option value="">Select account...</option>
+                                {% for account in accounts %}
+                                <option value="{{ account.id }}">{{ account.name }} ({{ account.account_type }})</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">The account where your salary is paid</small>
+                        </div>
+                        
+                        <!-- Auto-create Transaction -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="create_transaction" 
+                                       name="create_transaction" checked>
+                                <label class="form-check-label" for="create_transaction">
+                                    Automatically create transaction in selected account
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Source -->
+                        <div class="mb-3">
+                            <label for="source" class="form-label">Source (Optional)</label>
+                            <input type="text" class="form-control" id="source" name="source" 
+                                   placeholder="Employer name or payroll reference">
+                        </div>
+                        
+                        <!-- Buttons -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Save Income Record
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="calculateBtn">
+                                <i class="bi bi-calculator"></i> Calculate Preview
+                            </button>
+                            <a href="{{ url_for('income.index') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Preview Panel -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-calculator"></i> Calculation Preview</h5>
+                </div>
+                <div class="card-body">
+                    <div id="previewContent">
+                        <p class="text-muted text-center">
+                            Click "Calculate Preview" to see tax and NI calculations
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> UK Tax Rates 2023-2024</h6>
+                </div>
+                <div class="card-body">
+                    <small>
+                        <strong>Personal Allowance:</strong> £12,570<br>
+                        <strong>Basic Rate (20%):</strong> £12,571 - £50,270<br>
+                        <strong>Higher Rate (40%):</strong> £50,271 - £125,140<br>
+                        <strong>Additional Rate (45%):</strong> Over £125,140<br>
+                        <hr>
+                        <strong>National Insurance:</strong><br>
+                        - Threshold: £12,570<br>
+                        - Basic (12%): £12,571 - £50,270<br>
+                        - Additional (2%): Over £50,270
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('calculateBtn').addEventListener('click', function() {
+        const formData = {
+            gross_annual: document.getElementById('gross_annual').value,
+            employer_pension_pct: document.getElementById('employer_pension_pct').value || 0,
+            employee_pension_pct: document.getElementById('employee_pension_pct').value || 0,
+            tax_code: document.getElementById('tax_code').value,
+            avc: document.getElementById('avc').value || 0,
+            other: document.getElementById('other').value || 0
+        };
+        
+        // Validate
+        if (!formData.gross_annual || !formData.tax_code) {
+            alert('Please fill in Gross Annual Income and Tax Code');
+            return;
+        }
+        
+        // Call API
+        fetch('/income/calculate-preview', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const html = `
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Gross Monthly:</th>
+                            <td class="text-end">£${data.gross_monthly.toFixed(2)}</td>
+                        </tr>
+                        <tr class="table-light">
+                            <th colspan="2">Deductions:</th>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">Income Tax:</td>
+                            <td class="text-end text-danger">-£${data.income_tax.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">National Insurance:</td>
+                            <td class="text-end text-danger">-£${data.national_insurance.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">Employee Pension:</td>
+                            <td class="text-end text-warning">-£${data.employee_pension.toFixed(2)}</td>
+                        </tr>
+                        <tr class="table-light">
+                            <th colspan="2">Pension Contributions:</th>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">Employer:</td>
+                            <td class="text-end text-info">£${data.employer_pension.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">Employee:</td>
+                            <td class="text-end text-info">£${data.employee_pension.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <th>Total Pension:</th>
+                            <td class="text-end fw-bold text-info">£${data.total_pension.toFixed(2)}</td>
+                        </tr>
+                        <tr class="table-success fw-bold">
+                            <th>Take Home Pay:</th>
+                            <td class="text-end">£${data.take_home.toFixed(2)}</td>
+                        </tr>
+                    </table>
+                    <hr>
+                    <small class="text-muted">
+                        <strong>Annual:</strong><br>
+                        Tax: £${data.annual_tax.toFixed(2)}<br>
+                        NI: £${data.annual_ni.toFixed(2)}
+                    </small>
+                `;
+                document.getElementById('previewContent').innerHTML = html;
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to calculate preview');
+        });
+    });
+</script>
+{% endblock %}

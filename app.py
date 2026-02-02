@@ -33,6 +33,7 @@ def create_app(config_name=None):
     from blueprints.vehicles import vehicles_bp
     from blueprints.childcare import childcare_bp
     from blueprints.pensions import pensions_bp
+    from blueprints.income import income_bp
     from blueprints.mortgage import mortgage_bp
     from blueprints.networth import networth_bp
     from blueprints.settings import settings_bp
@@ -49,6 +50,7 @@ def create_app(config_name=None):
     app.register_blueprint(vehicles_bp)
     app.register_blueprint(childcare_bp)
     app.register_blueprint(pensions_bp)
+    app.register_blueprint(income_bp)
     app.register_blueprint(mortgage_bp)
     app.register_blueprint(networth_bp)
     app.register_blueprint(settings_bp)

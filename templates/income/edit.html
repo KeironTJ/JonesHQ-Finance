@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Income - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-pencil"></i> Edit Income Record</h1>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                <!-- Person -->
+                <div class="mb-3">
+                    <label for="person" class="form-label">Person</label>
+                    <select class="form-select" id="person" name="person" required>
+                        <option value="Keiron" {% if income.person == 'Keiron' %}selected{% endif %}>Keiron</option>
+                        <option value="Emma" {% if income.person == 'Emma' %}selected{% endif %}>Emma</option>
+                    </select>
+                </div>
+                
+                <!-- Pay Date -->
+                <div class="mb-3">
+                    <label for="pay_date" class="form-label">Pay Date</label>
+                    <input type="date" class="form-control" id="pay_date" name="pay_date" 
+                           value="{{ income.pay_date.strftime('%Y-%m-%d') }}" required>
+                </div>
+                
+                <!-- Gross Annual Income -->
+                <div class="mb-3">
+                    <label for="gross_annual" class="form-label">Gross Annual Income</label>
+                    <div class="input-group">
+                        <span class="input-group-text">£</span>
+                        <input type="number" step="0.01" class="form-control" id="gross_annual" 
+                               name="gross_annual" value="{{ income.gross_annual_income }}" required>
+                    </div>
+                </div>
+                
+                <!-- Tax Code -->
+                <div class="mb-3">
+                    <label for="tax_code" class="form-label">Tax Code</label>
+                    <input type="text" class="form-control" id="tax_code" name="tax_code" 
+                           value="{{ income.tax_code }}" required>
+                </div>
+                
+                <!-- Pension Contributions -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="employer_pension_pct" class="form-label">Employer Pension %</label>
+                            <div class="input-group">
+                                <input type="number" step="0.01" class="form-control" 
+                                       id="employer_pension_pct" name="employer_pension_pct" 
+                                       value="{{ income.employer_pension_percent }}">
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="employee_pension_pct" class="form-label">Employee Pension %</label>
+                            <div class="input-group">
+                                <input type="number" step="0.01" class="form-control" 
+                                       id="employee_pension_pct" name="employee_pension_pct" 
+                                       value="{{ income.employee_pension_percent }}">
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Additional Deductions -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="avc" class="form-label">AVC</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" step="0.01" class="form-control" 
+                                       id="avc" name="avc" value="{{ income.avc or 0 }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="other" class="form-label">Other Deductions</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" step="0.01" class="form-control" 
+                                       id="other" name="other" value="{{ income.other_deductions or 0 }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Deposit Account -->
+                <div class="mb-3">
+                    <label for="deposit_account_id" class="form-label">Deposit Account</label>
+                    <select class="form-select" id="deposit_account_id" name="deposit_account_id">
+                        <option value="">None</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}" {% if income.deposit_account_id == account.id %}selected{% endif %}>
+                            {{ account.name }} ({{ account.account_type }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Source -->
+                <div class="mb-3">
+                    <label for="source" class="form-label">Source</label>
+                    <input type="text" class="form-control" id="source" name="source" 
+                           value="{{ income.source or '' }}">
+                </div>
+                
+                <!-- Buttons -->
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Update Income Record
+                    </button>
+                    <a href="{{ url_for('income.index') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

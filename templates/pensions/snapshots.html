@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}{{ pension.provider }} Snapshots - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-graph-up"></i> {{ pension.provider }} - Performance Tracking</h1>
+            <p class="text-muted">{{ pension.person }}</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('pensions.add_snapshot', id=pension.id) }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Snapshot
+            </a>
+            <a href="{{ url_for('pensions.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Pensions
+            </a>
+        </div>
+    </div>
+    
+    <!-- Summary Card -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted">Current Value</h6>
+                    <h3>£{{ "{:,.2f}".format(pension.current_value) }}</h3>
+                    <hr>
+                    <small class="text-muted">
+                        <strong>Contribution:</strong> {{ pension.contribution_rate }}% (Employee)<br>
+                        <strong>Employer:</strong> {{ pension.employer_contribution }}%
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% if snapshots %}
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted">Latest Growth</h6>
+                    {% if snapshots[0].growth_percent %}
+                    <h3 class="{% if snapshots[0].growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ "{:+.2f}".format(snapshots[0].growth_percent) }}%
+                    </h3>
+                    {% else %}
+                    <h3 class="text-muted">N/A</h3>
+                    {% endif %}
+                    <hr>
+                    <small class="text-muted">Since {{ snapshots[1].review_date.strftime('%d/%m/%Y') if snapshots|length > 1 else 'previous' }}</small>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Snapshots Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Historical Snapshots</h5>
+        </div>
+        <div class="card-body">
+            {% if snapshots %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Review Date</th>
+                            <th>Value</th>
+                            <th>Growth %</th>
+                            <th>Change (£)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for snapshot in snapshots %}
+                        <tr>
+                            <td>{{ snapshot.review_date.strftime('%d/%m/%Y') }}</td>
+                            <td class="fw-bold">£{{ "{:,.2f}".format(snapshot.value) }}</td>
+                            <td>
+                                {% if snapshot.growth_percent %}
+                                <span class="{% if snapshot.growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ "{:+.2f}".format(snapshot.growth_percent) }}%
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if loop.index < snapshots|length %}
+                                {% set prev = snapshots[loop.index] %}
+                                {% set change = snapshot.value - prev.value %}
+                                <span class="{% if change > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ "{:+,.2f}".format(change) }}
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No snapshots recorded yet. Click "Add Snapshot" to start tracking performance.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
