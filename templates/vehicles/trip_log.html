@@ -39,8 +39,14 @@
         <div>
             {% if selected_vehicle_id_trip %}
             <form method="POST" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=selected_vehicle_id_trip) }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for this vehicle?');">
-                <button type="submit" class="btn btn-warning btn-sm me-2" title="Refresh forecasted fuel transactions">
+                <button type="submit" class="btn btn-warning btn-sm me-2" title="Refresh forecasted fuel transactions for this vehicle">
                     <i class="bi bi-arrow-clockwise"></i> Refresh Forecasts
+                </button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('vehicles.refresh_all_forecasts') }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for ALL vehicles?');">
+                <button type="submit" class="btn btn-warning btn-sm me-2" title="Refresh forecasted fuel transactions for all vehicles">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh All Forecasts
                 </button>
             </form>
             {% endif %}

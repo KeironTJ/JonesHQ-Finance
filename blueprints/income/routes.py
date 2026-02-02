@@ -1,6 +1,7 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from . import income_bp
 from models.income import Income
+from models.recurring_income import RecurringIncome
 from models.accounts import Account
 from services.income_service import IncomeService
 from extensions import db
@@ -213,3 +214,137 @@ def calculate_preview():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+
+# ============= RECURRING INCOME ROUTES =============
+
+@income_bp.route('/income/recurring')
+def recurring():
+    """List all recurring income templates"""
+    person = request.args.get('person', None)
+    
+    query = RecurringIncome.query
+    if person:
+        query = query.filter_by(person=person)
+    
+    recurring_incomes = query.order_by(RecurringIncome.person, RecurringIncome.source).all()
+    
+    # Get unique people for filter
+    people = db.session.query(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()
+    people = [p[0] for p in people] if people else ['Keiron']
+    
+    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    
+    return render_template('income/recurring.html',
+                         recurring_incomes=recurring_incomes,
+                         people=people,
+                         accounts=accounts,
+                         current_person=person)
+
+
+@income_bp.route('/income/recurring/add', methods=['GET', 'POST'])
+def add_recurring():
+    """Add a new recurring income template"""
+    if request.method == 'POST':
+        try:
+            recurring = RecurringIncome(
+                person=request.form.get('person', 'Keiron'),
+                start_date=datetime.strptime(request.form['start_date'], '%Y-%m-%d').date(),
+                end_date=datetime.strptime(request.form['end_date'], '%Y-%m-%d').date() if request.form.get('end_date') else None,
+                pay_day=int(request.form['pay_day']),
+                gross_annual_income=Decimal(request.form['gross_annual']),
+                employer_pension_percent=Decimal(request.form.get('employer_pension_pct', 0)),
+                employee_pension_percent=Decimal(request.form.get('employee_pension_pct', 0)),
+                tax_code=request.form['tax_code'],
+                avc=Decimal(request.form.get('avc', 0)),
+                other_deductions=Decimal(request.form.get('other', 0)),
+                deposit_account_id=int(request.form['deposit_account_id']) if request.form.get('deposit_account_id') else None,
+                auto_create_transaction=request.form.get('auto_create_transaction') == 'on',
+                source=request.form.get('source', ''),
+                description=request.form.get('description', ''),
+                is_active=True
+            )
+            
+            db.session.add(recurring)
+            db.session.commit()
+            
+            # Generate missing income records
+            generated = IncomeService.generate_missing_income(recurring.id)
+            
+            flash(f'Recurring income added successfully! Generated {len(generated)} income record(s).', 'success')
+            return redirect(url_for('income.recurring'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error adding recurring income: {str(e)}', 'danger')
+    
+    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    return render_template('income/add_recurring.html', accounts=accounts)
+
+
+@income_bp.route('/income/recurring/<int:id>/edit', methods=['GET', 'POST'])
+def edit_recurring(id):
+    """Edit a recurring income template"""
+    recurring = RecurringIncome.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        try:
+            recurring.person = request.form.get('person', recurring.person)
+            recurring.start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
+            recurring.end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d').date() if request.form.get('end_date') else None
+            recurring.pay_day = int(request.form['pay_day'])
+            recurring.gross_annual_income = Decimal(request.form['gross_annual'])
+            recurring.employer_pension_percent = Decimal(request.form.get('employer_pension_pct', 0))
+            recurring.employee_pension_percent = Decimal(request.form.get('employee_pension_pct', 0))
+            recurring.tax_code = request.form['tax_code']
+            recurring.avc = Decimal(request.form.get('avc', 0))
+            recurring.other_deductions = Decimal(request.form.get('other', 0))
+            recurring.deposit_account_id = int(request.form['deposit_account_id']) if request.form.get('deposit_account_id') else None
+            recurring.auto_create_transaction = request.form.get('auto_create_transaction') == 'on'
+            recurring.source = request.form.get('source', '')
+            recurring.description = request.form.get('description', '')
+            recurring.is_active = request.form.get('is_active') == 'on'
+            
+            db.session.commit()
+            flash('Recurring income updated successfully!', 'success')
+            return redirect(url_for('income.recurring'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating recurring income: {str(e)}', 'danger')
+    
+    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts)
+
+
+@income_bp.route('/income/recurring/<int:id>/delete', methods=['POST'])
+def delete_recurring(id):
+    """Delete a recurring income template"""
+    recurring = RecurringIncome.query.get_or_404(id)
+    
+    try:
+        db.session.delete(recurring)
+        db.session.commit()
+        flash('Recurring income deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting recurring income: {str(e)}', 'danger')
+    
+    return redirect(url_for('income.recurring'))
+
+
+@income_bp.route('/income/generate-missing', methods=['POST'])
+def generate_missing():
+    """Generate all missing income records from recurring templates"""
+    try:
+        generated = IncomeService.generate_all_missing_income()
+        
+        if generated:
+            flash(f'Successfully generated {len(generated)} income record(s)!', 'success')
+        else:
+            flash('All income records are up to date.', 'info')
+            
+    except Exception as e:
+        flash(f'Error generating income: {str(e)}', 'danger')
+    
+    return redirect(url_for('income.index'))

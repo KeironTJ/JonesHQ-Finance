@@ -3,12 +3,15 @@ Income Service
 Handles income record management, tax/NI calculations, and transaction creation
 """
 from models.income import Income
+from models.recurring_income import RecurringIncome
 from models.accounts import Account
 from models.transactions import Transaction
 from models.categories import Category
 from extensions import db
-from datetime import date
+from datetime import date, datetime
+from dateutil.relativedelta import relativedelta
 from decimal import Decimal
+import calendar
 
 
 class IncomeService:
@@ -251,3 +254,102 @@ class IncomeService:
             'avg_gross': total_gross / len(incomes) if incomes else 0,
             'avg_take_home': total_take_home / len(incomes) if incomes else 0
         }
+    
+    @staticmethod
+    def generate_income_for_month(recurring_income, target_date):
+        """Generate an income record for a specific month from a recurring template"""
+        # Calculate pay date for this month
+        year = target_date.year
+        month = target_date.month
+        
+        if recurring_income.pay_day == 0:
+            # Last day of month
+            pay_day = calendar.monthrange(year, month)[1]
+        else:
+            # Specific day, capped at last day of month
+            pay_day = min(recurring_income.pay_day, calendar.monthrange(year, month)[1])
+        
+        pay_date = date(year, month, pay_day)
+        
+        # Check if this income already exists
+        existing = Income.query.filter(
+            Income.person == recurring_income.person,
+            Income.pay_date == pay_date
+        ).first()
+        
+        if existing:
+            return existing
+        
+        # Create new income record
+        income = IncomeService.create_income_record(
+            person=recurring_income.person,
+            pay_date=pay_date,
+            gross_annual=recurring_income.gross_annual_income,
+            employer_pension_pct=recurring_income.employer_pension_percent,
+            employee_pension_pct=recurring_income.employee_pension_percent,
+            tax_code=recurring_income.tax_code,
+            avc=recurring_income.avc,
+            other=recurring_income.other_deductions,
+            deposit_account_id=recurring_income.deposit_account_id,
+            source=recurring_income.source,
+            create_transaction=recurring_income.auto_create_transaction
+        )
+        
+        return income
+    
+    @staticmethod
+    def generate_missing_income(recurring_income_id, end_date=None):
+        """Generate all missing income records for a recurring income template"""
+        recurring = RecurringIncome.query.get(recurring_income_id)
+        if not recurring or not recurring.is_active:
+            return []
+        
+        # Determine date range
+        start = recurring.last_generated_date or recurring.start_date
+        if start < recurring.start_date:
+            start = recurring.start_date
+        
+        # Move to next month if we've already generated for this month
+        if recurring.last_generated_date:
+            start = start + relativedelta(months=1)
+        
+        # Default end_date to current month if not specified
+        if end_date is None:
+            end_date = date.today()
+        
+        # Cap at recurring end_date if set
+        if recurring.end_date and end_date > recurring.end_date:
+            end_date = recurring.end_date
+        
+        # Generate income for each month
+        generated = []
+        current = start
+        
+        while current <= end_date:
+            income = IncomeService.generate_income_for_month(recurring, current)
+            if income:
+                generated.append(income)
+            
+            # Update last_generated_date
+            recurring.last_generated_date = current
+            
+            # Move to next month
+            current = current + relativedelta(months=1)
+        
+        if generated:
+            db.session.commit()
+        
+        return generated
+    
+    @staticmethod
+    def generate_all_missing_income(end_date=None):
+        """Generate missing income for all active recurring income templates"""
+        recurring_incomes = RecurringIncome.query.filter_by(is_active=True).all()
+        
+        all_generated = []
+        for recurring in recurring_incomes:
+            generated = IncomeService.generate_missing_income(recurring.id, end_date)
+            all_generated.extend(generated)
+        
+        return all_generated
+

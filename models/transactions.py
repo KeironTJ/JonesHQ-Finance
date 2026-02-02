@@ -60,11 +60,14 @@ class Transaction(db.Model):
 
 
 # Event listeners to update monthly balance cache when transactions change
+# DISABLED: Causes session state errors with after_commit events
+# Cache updates are now handled manually in routes after transactions are committed
+"""
 from sqlalchemy import event
 
 @event.listens_for(Transaction, 'after_insert')
 def after_transaction_insert(mapper, connection, target):
-    """Update monthly balance cache when a transaction is added"""
+    \"\"\"Update monthly balance cache when a transaction is added\"\"\"
     if target.account_id:
         # Use after_commit to ensure transaction is completed
         @event.listens_for(db.session, 'after_commit', once=True)
@@ -78,20 +81,15 @@ def after_transaction_insert(mapper, connection, target):
 
 @event.listens_for(Transaction, 'after_update')
 def after_transaction_update(mapper, connection, target):
-    """Update monthly balance cache when a transaction is edited"""
-    if target.account_id:
-        @event.listens_for(db.session, 'after_commit', once=True)
-        def update_cache(session):
-            from services.monthly_balance_service import MonthlyBalanceService
-            MonthlyBalanceService.handle_transaction_change(
-                target.account_id, 
-                target.transaction_date
-            )
+    \"\"\"Update monthly balance cache when a transaction is edited\"\"\"
+    # Cache update will be handled by the route after commit
+    # This avoids session state issues with after_commit events
+    pass
 
 
 @event.listens_for(Transaction, 'after_delete')
 def after_transaction_delete(mapper, connection, target):
-    """Update monthly balance cache when a transaction is deleted"""
+    \"\"\"Update monthly balance cache when a transaction is deleted\"\"\"
     if target.account_id:
         @event.listens_for(db.session, 'after_commit', once=True)
         def update_cache(session):
@@ -100,3 +98,4 @@ def after_transaction_delete(mapper, connection, target):
                 target.account_id, 
                 target.transaction_date
             )
+"""

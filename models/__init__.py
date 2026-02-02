@@ -10,6 +10,7 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.expenses import Expense
 from models.fuel import FuelRecord
 from models.income import Income
+from models.recurring_income import RecurringIncome
 from models.loans import Loan
 from models.loan_payments import LoanPayment
 from models.monthly_account_balance import MonthlyAccountBalance
@@ -37,6 +38,7 @@ __all__ = [
     'Expense',
     'FuelRecord',
     'Income',
+    'RecurringIncome',
     'Loan',
     'LoanPayment',
     'MonthlyAccountBalance',

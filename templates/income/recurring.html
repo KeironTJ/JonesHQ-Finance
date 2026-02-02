@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Recurring Income - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-arrow-repeat"></i> Recurring Income Templates</h1>
+            <p class="text-muted">Set up automatic monthly income generation</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Recurring Income
+            </a>
+            <a href="{{ url_for('income.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-list-ul"></i> View Income Records
+            </a>
+        </div>
+    </div>
+    
+    <!-- Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Person</label>
+                    <select name="person" class="form-select">
+                        <option value="">All People</option>
+                        {% for p in people %}
+                        <option value="{{ p }}" {% if current_person == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="bi bi-filter"></i> Filter
+                    </button>
+                    <a href="{{ url_for('income.recurring') }}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Recurring Income Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Active Recurring Income</h5>
+        </div>
+        <div class="card-body">
+            {% if recurring_incomes %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Person</th>
+                            <th>Source</th>
+                            <th>Annual Salary</th>
+                            <th>Pay Day</th>
+                            <th>Period</th>
+                            <th>Account</th>
+                            <th>Last Generated</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for recurring in recurring_incomes %}
+                        <tr class="{% if not recurring.is_active %}table-secondary{% endif %}">
+                            <td><span class="badge bg-secondary">{{ recurring.person }}</span></td>
+                            <td>
+                                <strong>{{ recurring.source or 'Income' }}</strong>
+                                {% if recurring.description %}
+                                <br><small class="text-muted">{{ recurring.description }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="fw-bold">£{{ "{:,.2f}".format(recurring.gross_annual_income) }}</td>
+                            <td>
+                                {% if recurring.pay_day == 0 %}
+                                Last day of month
+                                {% else %}
+                                {{ recurring.pay_day }}{{ 'st' if recurring.pay_day in [1, 21, 31] else ('nd' if recurring.pay_day in [2, 22] else ('rd' if recurring.pay_day in [3, 23] else 'th')) }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>
+                                    From: {{ recurring.start_date.strftime('%d/%m/%Y') }}<br>
+                                    {% if recurring.end_date %}
+                                    To: {{ recurring.end_date.strftime('%d/%m/%Y') }}
+                                    {% else %}
+                                    <span class="text-success">Ongoing</span>
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                {% if recurring.deposit_account %}
+                                <span class="badge bg-primary">{{ recurring.deposit_account.name }}</span>
+                                {% if recurring.auto_create_transaction %}
+                                <br><small class="text-success"><i class="bi bi-check-circle"></i> Auto-create txn</small>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if recurring.last_generated_date %}
+                                {{ recurring.last_generated_date.strftime('%b %Y') }}
+                                {% else %}
+                                <span class="text-muted">Not yet</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if recurring.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('income.edit_recurring', id=recurring.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="post" action="{{ url_for('income.delete_recurring', id=recurring.id) }}" 
+                                      class="d-inline" 
+                                      onsubmit="return confirm('Are you sure? This will not delete existing income records.');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No recurring income templates found. Click "Add Recurring Income" to get started.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

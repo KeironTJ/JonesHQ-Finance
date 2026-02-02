@@ -9,8 +9,16 @@
             <h1><i class="bi bi-cash-coin"></i> Income Tracking</h1>
         </div>
         <div class="col-auto">
+            <form method="post" action="{{ url_for('income.generate_missing') }}" class="d-inline">
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-arrow-repeat"></i> Generate Missing Income
+                </button>
+            </form>
+            <a href="{{ url_for('income.recurring') }}" class="btn btn-info">
+                <i class="bi bi-gear"></i> Recurring Income
+            </a>
             <a href="{{ url_for('income.add') }}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Add Income Record
+                <i class="bi bi-plus-circle"></i> Add One-Time Income
             </a>
         </div>
     </div>

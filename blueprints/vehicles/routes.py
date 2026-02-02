@@ -282,8 +282,47 @@ def refresh_forecasts(vehicle_id):
     try:
         vehicle = Vehicle.query.get_or_404(vehicle_id)
         FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        
+        # Update monthly balance cache for fuel account
+        from services.monthly_balance_service import MonthlyBalanceService
+        from datetime import date
+        if vehicle.default_fuel_account_id:
+            MonthlyBalanceService.handle_transaction_change(
+                vehicle.default_fuel_account_id,
+                date.today()
+            )
+        
         flash(f'Forecasted fuel transactions refreshed for {vehicle.name}', 'success')
     except Exception as e:
+        flash(f'Error refreshing forecasts: {str(e)}', 'danger')
+    
+    # Redirect back to the page they came from
+    return redirect(request.referrer or url_for('vehicles.index'))
+
+
+@vehicles_bp.route('/vehicles/refresh-all-forecasts', methods=['POST'])
+def refresh_all_forecasts():
+    """Manually refresh forecasted fuel transactions for all vehicles"""
+    try:
+        # Get all vehicle data BEFORE calling any services that commit
+        vehicles = Vehicle.query.filter_by(is_active=True).all()
+        vehicle_data = [(v.id, v.name) for v in vehicles]
+        
+        refreshed_count = 0
+        
+        for vehicle_id, vehicle_name in vehicle_data:
+            try:
+                FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+                # Clear the session after each commit to avoid 'committed' state errors
+                db.session.remove()
+                refreshed_count += 1
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Error refreshing forecasts for {vehicle_name}: {str(e)}', 'warning')
+        
+        flash(f'Forecasted fuel transactions refreshed for {refreshed_count} vehicle(s)', 'success')
+    except Exception as e:
+        db.session.rollback()
         flash(f'Error refreshing forecasts: {str(e)}', 'danger')
     
     # Redirect back to the page they came from
@@ -347,6 +386,17 @@ def add_fuel():
         
         db.session.commit()
         
+        # Update cache after commit (manually since we disabled the event handler)
+        from services.monthly_balance_service import MonthlyBalanceService
+        from models.transactions import Transaction
+        if fuel_record.transaction_id:
+            txn = Transaction.query.get(fuel_record.transaction_id)
+            if txn and txn.account_id:
+                MonthlyBalanceService.handle_transaction_change(txn.account_id, txn.transaction_date)
+        
+        # Regenerate future fuel forecasts
+        FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        
         flash(f'Fuel record added: £{cost:.2f}, {mpg:.1f} MPG', 'success')
     except Exception as e:
         db.session.rollback()
@@ -379,6 +429,10 @@ def update_fuel(fuel_id):
         fuel_record.actual_cumulative_miles = cumulative_miles
         
         db.session.commit()
+        
+        # Regenerate future fuel forecasts
+        FuelForecastingService.sync_forecasted_transactions(fuel_record.vehicle_id)
+        
         flash('Fuel record updated successfully', 'success')
     except Exception as e:
         db.session.rollback()
@@ -392,8 +446,12 @@ def delete_fuel(fuel_id):
     """Delete a fuel record"""
     try:
         fuel_record = FuelRecord.query.get_or_404(fuel_id)
+        vehicle_id = fuel_record.vehicle_id  # Store before deletion
         db.session.delete(fuel_record)
         db.session.commit()
+        
+        # Regenerate future fuel forecasts
+        FuelForecastingService.sync_forecasted_transactions(vehicle_id)
         
         flash('Fuel record deleted successfully', 'success')
     except Exception as e:
