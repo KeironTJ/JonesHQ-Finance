@@ -21,6 +21,71 @@
     </div>
     {% endif %}
 
+    <!-- Net Worth Summary Card -->
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Net Worth Summary</h5>
+                <a href="{{ url_for('networth.index') }}" class="btn btn-sm btn-light">
+                    <i class="bi bi-arrow-right-circle"></i> View Details
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Total Net Worth -->
+                <div class="col-md-3 mb-3 mb-md-0">
+                    <div class="text-center p-3 rounded" style="background-color: {% if networth.net_worth >= 0 %}#d1e7dd{% else %}#f8d7da{% endif %};">
+                        <h6 class="text-muted mb-2">Total Net Worth</h6>
+                        <h3 class="mb-0 {% if networth.net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            £{{ "{:,.2f}".format(networth.net_worth) }}
+                        </h3>
+                        <small class="text-muted">Including pensions</small>
+                    </div>
+                </div>
+                
+                <!-- Liquid Net Worth -->
+                <div class="col-md-3 mb-3 mb-md-0">
+                    <div class="text-center p-3 rounded" style="background-color: {% if networth.liquid_net_worth >= 0 %}#d1e7dd{% else %}#f8d7da{% endif %};">
+                        <h6 class="text-muted mb-2">Liquid Net Worth</h6>
+                        <h3 class="mb-0 {% if networth.liquid_net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            £{{ "{:,.2f}".format(networth.liquid_net_worth) }}
+                        </h3>
+                        <small class="text-muted">Cash & Savings</small>
+                    </div>
+                </div>
+                
+                <!-- Total Assets -->
+                <div class="col-md-3 mb-3 mb-md-0">
+                    <div class="text-center p-3 rounded bg-light">
+                        <h6 class="text-muted mb-2">Total Assets</h6>
+                        <h3 class="mb-0 text-primary">
+                            £{{ "{:,.2f}".format(networth.total_assets) }}
+                        </h3>
+                        <small class="text-muted">
+                            Cash: £{{ "{:,.2f}".format(networth.cash) }} | 
+                            Savings: £{{ "{:,.2f}".format(networth.savings) }}
+                        </small>
+                    </div>
+                </div>
+                
+                <!-- Total Liabilities -->
+                <div class="col-md-3">
+                    <div class="text-center p-3 rounded bg-light">
+                        <h6 class="text-muted mb-2">Total Liabilities</h6>
+                        <h3 class="mb-0 text-danger">
+                            £{{ "{:,.2f}".format(networth.total_liabilities) }}
+                        </h3>
+                        <small class="text-muted">
+                            Cards: £{{ "{:,.2f}".format(networth.credit_cards) }} | 
+                            Loans: £{{ "{:,.2f}".format(networth.loans) }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Account Selector -->
     {% if accounts %}
     <div class="card mb-4">

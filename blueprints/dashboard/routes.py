@@ -2,6 +2,7 @@ from flask import render_template, request
 from . import dashboard_bp
 from models.accounts import Account
 from services.payday_service import PaydayService
+from services.networth_service import NetWorthService
 from models.settings import Settings
 from datetime import date
 
@@ -39,10 +40,14 @@ def index():
         # Start from January of selected year
         payday_data = PaydayService.get_payday_summary_for_year(selected_account_id, selected_year, include_unpaid=True)
     
+    # Get current net worth
+    networth = NetWorthService.calculate_current_networth()
+    
     return render_template('dashboard/index.html',
                          accounts=accounts,
                          selected_account=selected_account,
                          payday_data=payday_data,
                          payday_day=payday_day,
                          selected_year=selected_year,
-                         current_year=today.year)
+                         current_year=today.year,
+                         networth=networth)
