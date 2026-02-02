@@ -41,10 +41,10 @@ def fuel():
     # Payday filter for fuel
     selected_payday_period = request.args.get('payday_period')
     
-    # If no period specified in URL, default to current month
+    # If no period specified in URL, default to current payday period
     if selected_payday_period is None:
         today = date.today()
-        selected_payday_period = f"{today.year}-{today.month:02d}"
+        selected_payday_period = PaydayService.get_period_for_date(today)
     elif selected_payday_period == 'all' or selected_payday_period == '':
         selected_payday_period = ''
 
@@ -102,10 +102,10 @@ def trips():
     # Trip-specific payday filter
     selected_payday_period_trip = request.args.get('payday_period_trip')
     
-    # If no period specified in URL, default to current month
+    # If no period specified in URL, default to current payday period
     if selected_payday_period_trip is None:
         today = date.today()
-        selected_payday_period_trip = f"{today.year}-{today.month:02d}"
+        selected_payday_period_trip = PaydayService.get_period_for_date(today)
     elif selected_payday_period_trip == 'all' or selected_payday_period_trip == '':
         selected_payday_period_trip = ''
 

@@ -59,10 +59,26 @@
     {% if payday_data %}
     <div class="card mb-4">
         <div class="card-header bg-success text-white">
-            <h5 class="mb-0">
-                <i class="bi bi-calendar-check"></i> Payday Period Tracking 
-                <small class="ms-2">(Payday: {{ payday_day }}{{ 'st' if payday_day == 1 or payday_day == 21 or payday_day == 31 else 'nd' if payday_day == 2 or payday_day == 22 else 'rd' if payday_day == 3 or payday_day == 23 else 'th' }} of each month)</small>
-            </h5>
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-calendar-check"></i> Payday Period Tracking 
+                    <small class="ms-2">(Payday: {{ payday_day }}{{ 'st' if payday_day == 1 or payday_day == 21 or payday_day == 31 else 'nd' if payday_day == 2 or payday_day == 22 else 'rd' if payday_day == 3 or payday_day == 23 else 'th' }} of each month)</small>
+                </h5>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-light" onclick="changeYear({{ selected_year - 1 }})" title="Previous Year">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <span class="badge bg-light text-dark px-3 py-2">
+                        {{ selected_year }}
+                        {% if selected_year == current_year %}
+                            <i class="bi bi-circle-fill text-success" style="font-size: 0.5rem;" title="Current Year"></i>
+                        {% endif %}
+                    </span>
+                    <button class="btn btn-sm btn-light" onclick="changeYear({{ selected_year + 1 }})" title="Next Year">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
         </div>
         <div class="card-body">
             <p class="text-muted mb-4">
@@ -71,14 +87,24 @@
                 If payday falls on a weekend, it's adjusted to the previous working day.
             </p>
             
+            <!-- Column Headers -->
+            <div class="d-flex justify-content-between align-items-center mb-2 px-3">
+                <div class="text-muted small" style="flex: 1;">Period</div>
+                <div class="d-flex gap-4 text-muted small">
+                    <div style="width: 100px; text-align: right;">Ending Balance</div>
+                    <div style="width: 100px; text-align: right;">Minimum</div>
+                    <div style="width: 100px; text-align: right;">Extra Spend</div>
+                </div>
+            </div>
+            
             <!-- Payday Periods Accordion -->
             <div class="accordion" id="paydayAccordion">
                 {% for period in payday_data %}
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="heading{{ loop.index }}">
-                        <button class="accordion-button {% if loop.index > 1 %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="{% if loop.index == 1 %}true{% else %}false{% endif %}" aria-controls="collapse{{ loop.index }}">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
                             <div class="d-flex justify-content-between align-items-center w-100 me-3">
-                                <div>
+                                <div style="flex: 1;">
                                     <strong class="me-2">{{ period.period_label }}</strong>
                                     <span class="text-muted small">{{ period.start_date.strftime('%d %b') }} - {{ period.end_date.strftime('%d %b %Y') }}</span>
                                     {% if loop.index == 1 %}
@@ -86,23 +112,14 @@
                                     {% endif %}
                                 </div>
                                 <div class="d-flex gap-4">
-                                    <div class="text-center">
-                                        <div class="text-muted small">Ending Balance</div>
-                                        <strong class="text-primary">£{{ "%.2f"|format(period.rolling_balance) }}</strong>
-                                    </div>
-                                    <div class="text-center">
-                                        <div class="text-muted small">Minimum</div>
-                                        <strong class="text-warning">£{{ "%.2f"|format(period.min_balance) }}</strong>
-                                    </div>
-                                    <div class="text-center">
-                                        <div class="text-muted small">Extra Spend</div>
-                                        <strong class="text-info">£{{ "%.2f"|format(period.max_extra_spend) }}</strong>
-                                    </div>
+                                    <strong class="text-primary" style="width: 100px; text-align: right;">£{{ "%.2f"|format(period.rolling_balance) }}</strong>
+                                    <strong class="text-warning" style="width: 100px; text-align: right;">£{{ "%.2f"|format(period.min_balance) }}</strong>
+                                    <strong class="text-info" style="width: 100px; text-align: right;">£{{ "%.2f"|format(period.max_extra_spend) }}</strong>
                                 </div>
                             </div>
                         </button>
                     </h2>
-                    <div id="collapse{{ loop.index }}" class="accordion-collapse collapse {% if loop.index == 1 %}show{% endif %}" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#paydayAccordion">
+                    <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#paydayAccordion">
                         <div class="accordion-body">
                             <div class="row mb-3">
                                 <div class="col-md-3">
@@ -311,4 +328,12 @@
     z-index: 10;
 }
 </style>
+
+<script>
+function changeYear(year) {
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('year', year);
+    window.location.search = urlParams.toString();
+}
+</script>
 {% endblock %}

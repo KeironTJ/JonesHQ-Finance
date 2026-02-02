@@ -110,7 +110,7 @@
                             <th>Description</th>
                             <th>Category</th>
                             <th>Amount</th>
-                            <th>Balance</th>
+                            <th>Projected Balance</th>
                             <th>Available</th>
                             <th>Linked Txn</th>
                             <th>Status</th>
@@ -143,7 +143,12 @@
                             <td class="{% if txn.amount > 0 %}text-danger{% else %}text-success{% endif %}">
                                 £{{ "%.2f"|format(txn.amount|abs) }}
                             </td>
-                            <td>£{{ "%.2f"|format(txn.balance or 0) }}</td>
+                            <td {% if not txn.is_paid %}class="text-muted" style="font-style: italic;"{% endif %}>
+                                £{{ "%.2f"|format(txn.balance or 0) }}
+                                {% if not txn.is_paid %}
+                                <i class="bi bi-clock-history text-muted" title="Future/Unpaid - not included in actual balance"></i>
+                                {% endif %}
+                            </td>
                             <td>£{{ "%.2f"|format(txn.credit_available or 0) }}</td>
                             <td>
                                 {% if txn.bank_transaction_id %}
@@ -314,11 +319,60 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="form-check">
+                    <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" id="add_txn_fixed" name="txn_fixed" value="1" checked>
                         <label class="form-check-label" for="add_txn_fixed">
                             <i class="bi bi-lock-fill"></i> Lock this transaction (prevent regeneration)
                         </label>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="add_txn_paid" name="txn_paid" value="1">
+                        <label class="form-check-label" for="add_txn_paid">
+                            <i class="bi bi-check-circle"></i> Mark as paid/reconciled
+                        </label>
+                        <small class="d-block text-muted">Check this if the transaction has already cleared</small>
+                    </div>
+                    
+                    <!-- Recurring Transaction Options -->
+                    <div class="card">
+                        <div class="card-header bg-info text-white py-2">
+                            <h6 class="mb-0">
+                                <i class="bi bi-calendar-repeat me-2"></i>Recurring Transaction Options
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_recurring_cc" name="is_recurring">
+                                <label class="form-check-label" for="is_recurring_cc">
+                                    <strong>Create Multiple Transactions</strong>
+                                    <small class="d-block text-muted">Useful for regular expenses (e.g., monthly subscriptions)</small>
+                                </label>
+                            </div>
+                            
+                            <div id="recurring_options_cc" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="frequency_cc" class="form-label">Frequency</label>
+                                        <select class="form-select form-select-sm" id="frequency_cc" name="frequency">
+                                            <option value="weekly">Weekly</option>
+                                            <option value="monthly" selected>Monthly</option>
+                                            <option value="yearly">Yearly</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="occurrences_cc" class="form-label">Number of Transactions</label>
+                                        <input type="number" class="form-control form-control-sm" id="occurrences_cc" name="occurrences" 
+                                               value="12" min="1" max="365">
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info py-2" id="recurring_preview_cc">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    <small id="preview_text_cc">Will create <strong>12</strong> monthly transactions starting from selected date</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -366,11 +420,52 @@
                         <input type="number" class="form-control" id="txn_amount" name="txn_amount" step="0.01" required>
                         <small class="text-muted">Positive = reduces debt (payment/reward), Negative = increases debt (purchase/fee)</small>
                     </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="txn_fixed" name="txn_fixed" value="1">
-                        <label class="form-check-label" for="txn_fixed">
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="add_txn_fixed" name="txn_fixed" value="1" checked>
+                        <label class="form-check-label" for="add_txn_fixed">
                             <i class="bi bi-lock-fill"></i> Lock this transaction (prevent regeneration)
                         </label>
+                    </div>
+                    
+                    <!-- Recurring Transaction Options -->
+                    <div class="card">
+                        <div class="card-header bg-info text-white py-2">
+                            <h6 class="mb-0">
+                                <i class="bi bi-calendar-repeat me-2"></i>Recurring Transaction Options
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_recurring_cc" name="is_recurring">
+                                <label class="form-check-label" for="is_recurring_cc">
+                                    <strong>Create Multiple Transactions</strong>
+                                    <small class="d-block text-muted">Useful for regular expenses (e.g., monthly subscriptions)</small>
+                                </label>
+                            </div>
+                            
+                            <div id="recurring_options_cc" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="frequency_cc" class="form-label">Frequency</label>
+                                        <select class="form-select form-select-sm" id="frequency_cc" name="frequency">
+                                            <option value="weekly">Weekly</option>
+                                            <option value="monthly" selected>Monthly</option>
+                                            <option value="yearly">Yearly</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="occurrences_cc" class="form-label">Number of Transactions</label>
+                                        <input type="number" class="form-control form-control-sm" id="occurrences_cc" name="occurrences" 
+                                               value="12" min="1" max="365">
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info py-2" id="recurring_preview_cc">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    <small id="preview_text_cc">Will create <strong>12</strong> monthly transactions starting from selected date</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -513,6 +608,33 @@ window.addEventListener('load', function() {
     }
 });
 {% endif %}
+
+// Recurring transaction toggle for credit cards
+document.getElementById('is_recurring_cc').addEventListener('change', function() {
+    const recurringOptions = document.getElementById('recurring_options_cc');
+    if (this.checked) {
+        recurringOptions.style.display = 'block';
+        updateRecurringPreviewCC();
+    } else {
+        recurringOptions.style.display = 'none';
+    }
+});
+
+// Update recurring preview for credit cards
+document.getElementById('frequency_cc').addEventListener('change', updateRecurringPreviewCC);
+document.getElementById('occurrences_cc').addEventListener('input', updateRecurringPreviewCC);
+
+function updateRecurringPreviewCC() {
+    const isRecurring = document.getElementById('is_recurring_cc').checked;
+    if (!isRecurring) return;
+    
+    const frequency = document.getElementById('frequency_cc').value;
+    const occurrences = document.getElementById('occurrences_cc').value;
+    
+    let frequencyText = frequency;
+    document.getElementById('preview_text_cc').innerHTML = 
+        `Will create <strong>${occurrences}</strong> ${frequencyText} transactions starting from selected date`;
+}
 </script>
 
 <style>

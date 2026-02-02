@@ -438,3 +438,37 @@ class PaydayService:
             })
         
         return results
+    
+    @staticmethod
+    def get_payday_summary_for_year(account_id, year, include_unpaid=True):
+        """
+        Get summary of all payday periods for a specific year.
+        
+        Args:
+            account_id: Bank account ID to track
+            year: Year to display periods for
+            include_unpaid: Whether to include unpaid transactions
+            
+        Returns:
+            List of dicts with period info and metrics for all 12 months of the year
+        """
+        # Get payday periods starting from January of the selected year
+        periods = PaydayService.get_payday_periods(year, 1, num_periods=12)
+        
+        results = []
+        for start_date, end_date, period_label in periods:
+            metrics = PaydayService.calculate_period_balances(account_id, start_date, end_date, include_unpaid)
+            category_breakdown = PaydayService.get_category_breakdown(account_id, start_date, end_date, include_unpaid)
+            
+            results.append({
+                'period_label': period_label,
+                'start_date': start_date,
+                'end_date': end_date,
+                'rolling_balance': metrics['rolling_balance'],
+                'min_balance': metrics['min_balance'],
+                'max_extra_spend': metrics['max_extra_spend'],
+                'opening_balance': metrics['opening_balance'],
+                'category_breakdown': category_breakdown
+            })
+        
+        return results

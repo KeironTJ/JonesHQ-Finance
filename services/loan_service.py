@@ -281,9 +281,9 @@ class LoanService:
     
     @staticmethod
     def calculate_remaining_balance(loan_id):
-        """Get the most recent closing balance"""
-        last_payment = LoanPayment.query.filter_by(loan_id=loan_id)\
-            .order_by(LoanPayment.date.desc()).first()
+        """Get the most recent closing balance from paid payments only"""
+        last_payment = LoanPayment.query.filter_by(loan_id=loan_id, is_paid=True)\
+            .order_by(LoanPayment.date.desc(), LoanPayment.id.desc()).first()
         
         if last_payment:
             return float(last_payment.closing_balance)

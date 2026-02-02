@@ -34,20 +34,48 @@ class CreditCardService:
             'statement_balance': 0
         }
         
-        # Get balance BEFORE statement
-        opening_balance = float(card.current_balance) if card.current_balance else 0.0
+        # Get balance BEFORE statement (including ALL transactions up to day before statement)
+        # Interest should be charged on the projected balance, not just paid transactions
+        from decimal import Decimal
+        day_before_statement = statement_date - timedelta(days=1)
+        transactions_before_statement = CreditCardTransaction.query.filter(
+            CreditCardTransaction.credit_card_id == card_id,
+            CreditCardTransaction.date <= day_before_statement
+        ).order_by(CreditCardTransaction.date).all()
+        
+        opening_balance = Decimal('0.0')
+        for t in transactions_before_statement:
+            opening_balance += t.amount
+        opening_balance = float(opening_balance)
         
         # Step 1: Generate interest transaction only if you OWE money (negative balance)
         if opening_balance < 0:
-            interest_txn = CreditCardService.generate_statement_interest(card_id, statement_date, commit=False)
+            interest_txn = CreditCardService.generate_statement_interest(
+                card_id, 
+                statement_date, 
+                balance_for_interest=opening_balance,
+                commit=False
+            )
             if interest_txn:
                 result['interest_txn'] = interest_txn
                 db.session.flush()  # Make sure it's in the database for recalculation
         
-        # Step 2: Recalculate balance to include interest
+        # Step 2: Calculate statement balance (including the interest just generated)
+        # We need to calculate the PROJECTED balance including all transactions up to statement date
         CreditCardTransaction.recalculate_card_balance(card_id)
-        card = CreditCard.query.get(card_id)  # Refresh to get updated balance
-        statement_balance = float(card.current_balance) if card.current_balance else 0.0
+        
+        # Get projected balance by summing ALL transactions up to statement date
+        from decimal import Decimal
+        transactions_up_to_statement = CreditCardTransaction.query.filter(
+            CreditCardTransaction.credit_card_id == card_id,
+            CreditCardTransaction.date <= statement_date
+        ).order_by(CreditCardTransaction.date).all()
+        
+        statement_balance = Decimal('0.0')
+        for t in transactions_up_to_statement:
+            statement_balance += t.amount
+        
+        statement_balance = float(statement_balance)
         result['statement_balance'] = statement_balance
         
         # Step 3: Create payment only if you OWE money (negative balance)
@@ -55,7 +83,8 @@ class CreditCardService:
             payment_date = statement_date + timedelta(days=payment_offset_days)
             payment_txn = CreditCardService.generate_payment_transaction(
                 card_id, 
-                payment_date, 
+                payment_date,
+                balance_override=statement_balance,  # Use the statement balance including interest
                 commit=False
             )
             if payment_txn:
@@ -73,9 +102,15 @@ class CreditCardService:
         return result
     
     @staticmethod
-    def calculate_interest(card_id, statement_date):
+    def calculate_interest(card_id, statement_date, balance_to_use=None):
         """
         Calculate interest for a credit card on a specific statement date
+        
+        Args:
+            card_id: The credit card ID
+            statement_date: The statement date
+            balance_to_use: Optional balance to use for calculation (if None, uses card.current_balance)
+        
         Returns the interest amount (0 if in 0% period)
         """
         card = CreditCard.query.get(card_id)
@@ -89,14 +124,28 @@ class CreditCardService:
         if monthly_apr == 0:
             return 0.0
         
-        # Calculate interest on current balance (use absolute value since negative = owe)
-        interest = abs(float(card.current_balance)) * (monthly_apr / 100)
+        # Use provided balance or card's current balance
+        if balance_to_use is not None:
+            balance = balance_to_use
+        else:
+            balance = float(card.current_balance)
+        
+        # Calculate interest on balance (use absolute value since negative = owe)
+        interest = abs(balance) * (monthly_apr / 100)
         return round(interest, 2)
     
     @staticmethod
-    def generate_statement_interest(card_id, statement_date, commit=True):
+    def generate_statement_interest(card_id, statement_date, balance_for_interest=None, commit=True):
         """
         Generate an interest transaction for a credit card on statement date
+        
+        Args:
+            card_id: The credit card ID
+            statement_date: The statement date
+            balance_for_interest: The balance to use for interest calculation
+                                 (should be the projected balance including all transactions)
+            commit: Whether to commit the transaction
+        
         Returns the created transaction or None if no balance
         Note: This should only be called when opening balance > 0
         """
@@ -105,8 +154,15 @@ class CreditCardService:
             return None
         
         # Calculate interest (could be £0 if 0% promotional period)
-        # Interest is positive (increases what you owe), calculated on abs(balance)
-        interest_amount = abs(CreditCardService.calculate_interest(card_id, statement_date))
+        # Interest is negative (increases what you owe), calculated on abs(balance)
+        interest_amount = CreditCardService.calculate_interest(
+            card_id, 
+            statement_date,
+            balance_to_use=balance_for_interest
+        )
+        
+        # Make interest negative (increases debt)
+        interest_amount = -abs(interest_amount)
         
         # Get or create "Credit Cards > {CardName}" category
         credit_card_category = Category.query.filter_by(
@@ -125,7 +181,7 @@ class CreditCardService:
         
         # Get current APR and check if promotional
         monthly_apr = card.get_current_purchase_apr(statement_date)
-        is_promo = (monthly_apr == 0 and card.current_balance < 0)  # negative = owe money
+        is_promo = (monthly_apr == 0 and (balance_for_interest is None or balance_for_interest < 0))  # negative = owe money
         
         # Create interest transaction
         transaction = CreditCardTransaction(
@@ -139,10 +195,11 @@ class CreditCardService:
             sub_budget=card.card_name,
             item='Statement Interest',
             transaction_type='Interest',
-            amount=-interest_amount,  # Negative = increases what you owe
+            amount=interest_amount,  # Already negative (increases debt)
             applied_apr=monthly_apr,
             is_promotional_rate=is_promo,
-            is_paid=False
+            is_paid=False,
+            is_fixed=False
         )
         
         db.session.add(transaction)
@@ -155,17 +212,36 @@ class CreditCardService:
         return transaction
     
     @staticmethod
-    def generate_payment_transaction(card_id, payment_date, commit=True):
+    def generate_payment_transaction(card_id, payment_date, balance_override=None, commit=True):
         """
         Generate a payment transaction based on card's set_payment
         Uses logic: MIN(set_payment, current_balance)
+        
+        Args:
+            card_id: The credit card ID
+            payment_date: Date for the payment
+            balance_override: Optional balance to use instead of card.current_balance
+                             (useful when generating payments for unpaid statements)
+            commit: Whether to commit the transaction
+        
         Returns the created transaction
         """
         card = CreditCard.query.get(card_id)
         if not card or not card.is_active:
             return None
         
-        payment_amount = card.calculate_actual_payment()
+        # If balance_override provided, use it; otherwise use card's actual balance
+        if balance_override is not None:
+            # Calculate payment based on override balance
+            if balance_override >= 0:
+                return None
+            if card.set_payment:
+                payment_amount = round(min(float(card.set_payment), abs(float(balance_override))), 2)
+            else:
+                # Use minimum payment percentage
+                payment_amount = round(abs(float(balance_override)) * (float(card.min_payment_percent) / 100), 2)
+        else:
+            payment_amount = card.calculate_actual_payment()
         
         if payment_amount <= 0:
             return None
@@ -543,17 +619,12 @@ class CreditCardService:
                     
                     # Generate payment if there's debt (negative balance on credit card)
                     if balance_after_interest < 0:
-                        # Temporarily set the card's current balance to this amount
-                        # so generate_payment_transaction calculates correctly
-                        original_balance = card.current_balance
-                        card.current_balance = float(balance_after_interest)
-                        
                         payment_txn = CreditCardService.generate_payment_transaction(
-                            card_id, payment_date, commit=False
+                            card_id, 
+                            payment_date, 
+                            balance_override=float(balance_after_interest),
+                            commit=False
                         )
-                        
-                        # Restore original balance
-                        card.current_balance = original_balance
                         
                         if payment_txn:
                             payments_generated += 1
@@ -625,10 +696,13 @@ class CreditCardService:
                 for t in transactions_up_to_statement:
                     balance_after_interest += t.amount
                 
-                # Generate payment if there's debt
-                if balance_after_interest > 0:
+                # Generate payment if there's debt (negative balance = owe money)
+                if balance_after_interest < 0:
                     payment_txn = CreditCardService.generate_payment_transaction(
-                        card_id, payment_date, float(balance_after_interest), commit=False
+                        card_id, 
+                        payment_date, 
+                        balance_override=float(balance_after_interest), 
+                        commit=False
                     )
                     if payment_txn:
                         results['payments_created'] += 1

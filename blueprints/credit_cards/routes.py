@@ -22,20 +22,19 @@ def index():
     
     # Calculate actual balance from paid transactions only for each card
     for card in cards:
-        if card.is_active:
-            # Get the latest PAID transaction
-            latest_paid = CreditCardTransaction.query.filter_by(
-                credit_card_id=card.id,
-                is_paid=True
-            ).order_by(CreditCardTransaction.date.desc()).first()
-            
-            if latest_paid:
-                card.current_balance = latest_paid.balance
-                card.available_credit = latest_paid.credit_available
-            else:
-                # No paid transactions yet, use opening balance
-                card.current_balance = 0.00
-                card.available_credit = float(card.credit_limit)
+        # Get the latest PAID transaction (with consistent ordering)
+        latest_paid = CreditCardTransaction.query.filter_by(
+            credit_card_id=card.id,
+            is_paid=True
+        ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).first()
+        
+        if latest_paid:
+            card.current_balance = latest_paid.balance
+            card.available_credit = latest_paid.credit_available
+        else:
+            # No paid transactions yet, use opening balance
+            card.current_balance = 0.00
+            card.available_credit = float(card.credit_limit)
     
     # Calculate totals based on actual paid balances
     total_limit = sum([float(c.credit_limit) for c in cards if c.is_active])
@@ -187,9 +186,26 @@ def detail(id):
     transaction_id = request.args.get('txn_id', type=int)
     
     # Get all transactions for this card
+    # Order by date DESC, then ID DESC for display (newest first)
+    # This ensures same-day transactions appear in reverse chronological order
     transactions = CreditCardTransaction.query.filter_by(
         credit_card_id=id
-    ).order_by(CreditCardTransaction.date.desc()).all()
+    ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).all()
+    
+    # Calculate current balance from latest PAID transaction
+    # Must use same ordering as display (date DESC, id DESC) to get the truly latest
+    latest_paid = CreditCardTransaction.query.filter_by(
+        credit_card_id=id,
+        is_paid=True
+    ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).first()
+    
+    if latest_paid:
+        card.current_balance = latest_paid.balance
+        card.available_credit = latest_paid.credit_available
+    else:
+        # No paid transactions yet, use opening balance
+        card.current_balance = 0.00
+        card.available_credit = float(card.credit_limit)
     
     # Calculate summary stats (only PAID transactions)
     total_purchases = sum([float(t.amount) for t in transactions if t.transaction_type == 'Purchase' and t.is_paid])
@@ -240,7 +256,13 @@ def add_transaction(id):
         txn_amount_str = request.form.get('txn_amount', '0')
         category_id = request.form.get('category_id') or None
         txn_fixed = request.form.get('txn_fixed') == '1'
+        txn_paid = request.form.get('txn_paid') == '1'
         account_id_str = request.form.get('account_id')
+        
+        # Recurring options
+        is_recurring = request.form.get('is_recurring') == 'on'
+        frequency = request.form.get('frequency', 'monthly')
+        occurrences = request.form.get('occurrences', type=int, default=1)
         
         # Validate required fields
         if not txn_date_str:
@@ -253,6 +275,10 @@ def add_transaction(id):
         
         if not txn_item:
             flash('Description is required', 'danger')
+            return redirect(url_for('credit_cards.detail', id=id))
+        
+        if is_recurring and occurrences < 1:
+            flash('Number of occurrences must be at least 1', 'danger')
             return redirect(url_for('credit_cards.detail', id=id))
         
         # Parse amount
@@ -287,79 +313,100 @@ def add_transaction(id):
                 head_budget = category.head_budget
                 sub_budget = category.sub_budget
         
-        # Create new transaction
-        new_txn = CreditCardTransaction(
-            credit_card_id=id,
-            category_id=int(category_id) if category_id else None,
-            date=txn_date,
-            day_name=txn_date.strftime('%A'),
-            week=f"{txn_date.isocalendar()[1]:02d}-{txn_date.year}",
-            month=txn_date.strftime('%Y-%m'),
-            head_budget=head_budget,
-            sub_budget=sub_budget,
-            item=txn_item,
-            transaction_type=txn_type,
-            amount=Decimal(str(txn_amount)),  # Convert to Decimal
-            is_paid=False,  # New transactions start as unpaid
-            is_fixed=txn_fixed
-        )
+        # Create transactions (single or multiple if recurring)
+        transactions_created = 0
+        current_date = txn_date
         
-        db.session.add(new_txn)
-        db.session.flush()
-        
-        # If it's a payment and an account is selected, create linked bank transaction
-        if txn_type == 'Payment' and account_id:
-            # Find Credit Cards category matching this specific card
-            credit_card_category = Category.query.filter_by(
-                head_budget='Credit Cards',
-                sub_budget=card.card_name
-            ).first()
+        for i in range(occurrences if is_recurring else 1):
+            # Calculate date for this occurrence
+            if i > 0:
+                if frequency == 'weekly':
+                    from dateutil.relativedelta import relativedelta
+                    current_date = txn_date + relativedelta(weeks=i)
+                elif frequency == 'monthly':
+                    from dateutil.relativedelta import relativedelta
+                    current_date = txn_date + relativedelta(months=i)
+                elif frequency == 'yearly':
+                    from dateutil.relativedelta import relativedelta
+                    current_date = txn_date + relativedelta(years=i)
             
-            # If not found, try to find any Credit Cards category as fallback
-            if not credit_card_category:
-                credit_card_category = Category.query.filter_by(
-                    head_budget='Credit Cards'
-                ).first()
-            
-            # Find or create vendor matching card name
-            vendor = Vendor.query.filter_by(name=card.card_name).first()
-            if not vendor:
-                vendor = Vendor(name=card.card_name)
-                db.session.add(vendor)
-                db.session.flush()
-            
-            # Create linked bank transaction (payment from account)
-            bank_txn = Transaction(
-                account_id=account_id,
-                category_id=credit_card_category.id if credit_card_category else None,
-                vendor_id=vendor.id,
-                amount=Decimal(str(-abs(txn_amount))),  # Negative = expense from bank account (money out)
-                transaction_date=txn_date,
-                description=f'Payment to {card.card_name}',
-                item='Credit Card Payment',
-                payment_type='Card Payment',
-                is_paid=False,  # Same as CC transaction
-                is_fixed=txn_fixed,
-                credit_card_id=card.id,
-                year_month=txn_date.strftime('%Y-%m'),
-                week_year=f"{txn_date.isocalendar()[1]:02d}-{txn_date.year}",
-                day_name=txn_date.strftime('%A'),
-                payday_period=PaydayService.get_period_for_date(txn_date)
+            # Create new credit card transaction
+            new_txn = CreditCardTransaction(
+                credit_card_id=id,
+                category_id=int(category_id) if category_id else None,
+                date=current_date,
+                day_name=current_date.strftime('%A'),
+                week=f"{current_date.isocalendar()[1]:02d}-{current_date.year}",
+                month=current_date.strftime('%Y-%m'),
+                head_budget=head_budget,
+                sub_budget=sub_budget,
+                item=txn_item,
+                transaction_type=txn_type,
+                amount=Decimal(str(txn_amount)),  # Convert to Decimal
+                is_paid=txn_paid,  # Use the value from the form
+                is_fixed=txn_fixed
             )
-            db.session.add(bank_txn)
+            
+            db.session.add(new_txn)
             db.session.flush()
             
-            # Link back to credit card transaction
-            new_txn.bank_transaction_id = bank_txn.id
+            # If it's a payment and an account is selected, create linked bank transaction
+            if txn_type == 'Payment' and account_id:
+                # Find Credit Cards category matching this specific card
+                credit_card_category = Category.query.filter_by(
+                    head_budget='Credit Cards',
+                    sub_budget=card.card_name
+                ).first()
+                
+                # If not found, try to find any Credit Cards category as fallback
+                if not credit_card_category:
+                    credit_card_category = Category.query.filter_by(
+                        head_budget='Credit Cards'
+                    ).first()
+                
+                # Find or create vendor matching card name
+                vendor = Vendor.query.filter_by(name=card.card_name).first()
+                if not vendor:
+                    vendor = Vendor(name=card.card_name)
+                    db.session.add(vendor)
+                    db.session.flush()
+                
+                # Create linked bank transaction (payment from account)
+                bank_txn = Transaction(
+                    account_id=account_id,
+                    category_id=credit_card_category.id if credit_card_category else None,
+                    vendor_id=vendor.id,
+                    amount=Decimal(str(-abs(txn_amount))),  # Negative = expense from bank account (money out)
+                    transaction_date=current_date,
+                    description=f'Payment to {card.card_name}',
+                    item='Credit Card Payment',
+                    payment_type='Card Payment',
+                    is_paid=txn_paid,  # Same as CC transaction
+                    is_fixed=txn_fixed,
+                    credit_card_id=card.id,
+                    year_month=current_date.strftime('%Y-%m'),
+                    week_year=f"{current_date.isocalendar()[1]:02d}-{current_date.year}",
+                    day_name=current_date.strftime('%A'),
+                    payday_period=PaydayService.get_period_for_date(current_date)
+                )
+                db.session.add(bank_txn)
+                db.session.flush()
+                
+                # Link back to credit card transaction
+                new_txn.bank_transaction_id = bank_txn.id
+                
+                # Recalculate bank account balance
+                Transaction.recalculate_account_balance(account_id)
             
-            # Recalculate bank account balance
-            Transaction.recalculate_account_balance(account_id)
+            transactions_created += 1
         
-        # Recalculate card balance
-        CreditCardTransaction.recalculate_card_balance(id)
-        db.session.commit()
+        # Recalculate card balance (will commit internally)
+        CreditCardTransaction.recalculate_card_balance(id, commit=True)
         
-        flash(f'Transaction added successfully!', 'success')
+        if is_recurring:
+            flash(f'{transactions_created} transactions created successfully!', 'success')
+        else:
+            flash(f'Transaction added successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
     except Exception as e:
         db.session.rollback()
@@ -427,9 +474,8 @@ def edit_transaction(id, txn_id):
         if txn.bank_transaction_id:
             CreditCardService.sync_payment_to_bank_transaction(txn)
         
-        # Recalculate balance
-        CreditCardTransaction.recalculate_card_balance(card.id)
-        db.session.commit()
+        # Recalculate balance (commits internally)
+        CreditCardTransaction.recalculate_card_balance(card.id, commit=True)
         
         flash(f'Transaction updated successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
@@ -470,10 +516,9 @@ def delete_transaction(id, txn_id):
         
         # Delete the credit card transaction
         db.session.delete(txn)
-        db.session.commit()
         
-        # Recalculate credit card balance
-        CreditCardTransaction.recalculate_card_balance(card.id)
+        # Recalculate credit card balance (commits internally including the delete)
+        CreditCardTransaction.recalculate_card_balance(card.id, commit=True)
         
         flash('Transaction deleted successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
@@ -584,16 +629,12 @@ def edit_payment(id, txn_id):
                 # Link back to credit card transaction
                 txn.bank_transaction_id = bank_txn.id
         
-        db.session.commit()
-        
-        # Recalculate balance with new payment amount
-        CreditCardTransaction.recalculate_card_balance(card.id)
+        # Recalculate balances (commits internally)
+        CreditCardTransaction.recalculate_card_balance(card.id, commit=True)
         
         # Recalculate bank account balance if linked
         if account_id:
             Transaction.recalculate_account_balance(account_id)
-        
-        db.session.commit()
         
         flash(f'Payment updated to £{payment_amount:.2f} and locked successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
