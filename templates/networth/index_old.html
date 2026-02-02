@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+
+{% block title %}Net Worth - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Net Worth Tracking</h1>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#snapshotModal">
+            <i class="bi bi-camera"></i> Create Snapshot
+        </button>
+    </div>
+    
+    <!-- Current Net Worth Summary -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-muted">Total Net Worth</h5>
+                    <p class="display-4 {% if current_values.net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        £{{ "{:,.2f}".format(current_values.net_worth) }}
+                    </p>
+                    <small class="text-muted">Inc. pensions</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-muted">Liquid Net Worth</h5>
+                    <p class="display-6 {% if current_values.liquid_net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        £{{ "{:,.2f}".format(current_values.liquid_net_worth) }}
+                    </p>
+                    <small class="text-muted">Excluding pensions</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-muted">Total Assets</h5>
+                    <p class="display-6 text-success">
+                        £{{ "{:,.2f}".format(current_values.total_assets) }}
+                    </p>
+                    <small class="text-muted">
+                        Liquid: £{{ "{:,.2f}".format(current_values.liquid_assets) }}
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-muted">Total Liabilities</h5>
+                    <p class="display-6 text-danger">
+                        £{{ "{:,.2f}".format(current_values.total_liabilities) }}
+                    </p>
+                    <small class="text-muted">
+                        CC + Loans + Mortgage
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Month and Year Comparison -->
+    {% if comparison %}
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Month-over-Month Change</h5>
+                </div>
+                <div class="card-body">
+                    {% if comparison.month_comparison %}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="mb-1 text-muted">{{ comparison.month_comparison.date.strftime('%b %Y') }}</p>
+                            <h4>£{{ "{:,.2f}".format(comparison.month_comparison.value) }}</h4>
+                        </div>
+                        <div class="text-center">
+                            <i class="bi bi-arrow-right fs-1"></i>
+                        </div>
+                        <div>
+                            <p class="mb-1 text-muted">{{ comparison.latest_date.strftime('%b %Y') }}</p>
+                            <h4>£{{ "{:,.2f}".format(comparison.latest_value) }}</h4>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="text-center">
+                        <h3 class="{% if comparison.month_comparison.change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "{:+,.2f}".format(comparison.month_comparison.change) }}
+                            <small>({{ "{:+.1f}".format(comparison.month_comparison.pct_change) }}%)</small>
+                        </h3>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No data from last month for comparison</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Year-over-Year Change</h5>
+                </div>
+                <div class="card-body">
+                    {% if comparison.year_comparison %}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="mb-1 text-muted">{{ comparison.year_comparison.date.strftime('%b %Y') }}</p>
+                            <h4>£{{ "{:,.2f}".format(comparison.year_comparison.value) }}</h4>
+                        </div>
+                        <div class="text-center">
+                            <i class="bi bi-arrow-right fs-1"></i>
+                        </div>
+                        <div>
+                            <p class="mb-1 text-muted">{{ comparison.latest_date.strftime('%b %Y') }}</p>
+                            <h4>£{{ "{:,.2f}".format(comparison.latest_value) }}</h4>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="text-center">
+                        <h3 class="{% if comparison.year_comparison.change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "{:+,.2f}".format(comparison.year_comparison.change) }}
+                            <small>({{ "{:+.1f}".format(comparison.year_comparison.pct_change) }}%)</small>
+                        </h3>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No data from last year for comparison</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Detailed Current Values Breakdown -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Current Assets Detail</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Accounts (Cash: £{{ "{:,.2f}".format(current_values.cash) }})</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for acc in current_values.account_details %}
+                        {% if acc.type in ['Joint', 'Personal'] %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{ acc.name }} ({{ acc.type }})</span>
+                            <strong>£{{ "{:,.2f}".format(acc.balance) }}</strong>
+                        </li>
+                        {% endif %}
+                        {% endfor %}
+                    </ul>
+                    
+                    <h6>Savings Accounts (£{{ "{:,.2f}".format(current_values.savings) }})</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for acc in current_values.account_details %}
+                        {% if acc.type == 'Savings' %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{ acc.name }}</span>
+                            <strong>£{{ "{:,.2f}".format(acc.balance) }}</strong>
+                        </li>
+                        {% endif %}
+                        {% endfor %}
+                    </ul>
+                    
+                    <h6>Pensions (£{{ "{:,.2f}".format(current_values.pensions_value) }})</h6>
+                    <ul class="list-group list-group-flush">
+                        {% for pension in current_values.pension_details %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{ pension.name }}</span>
+                            <strong>£{{ "{:,.2f}".format(pension.value) }}</strong>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Current Liabilities Detail</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Credit Cards (£{{ "{:,.2f}".format(current_values.credit_cards) }})</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for cc in current_values.cc_details %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{ cc.name }}</span>
+                            <div>
+                                <span class="text-muted me-2">Balance: £{{ "{:,.2f}".format(cc.balance) }}</span>
+                                <strong class="text-danger">Owed: £{{ "{:,.2f}".format(cc.owed) }}</strong>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    
+                    <h6>Loans (£{{ "{:,.2f}".format(current_values.loans) }})</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for loan in current_values.loan_details %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{ loan.name }}</span>
+                            <strong class="text-danger">£{{ "{:,.2f}".format(loan.balance) }}</strong>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    
+                    <h6>Mortgage (£{{ "{:,.2f}".format(current_values.mortgage) }})</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Remaining Balance</span>
+                            <strong class="text-danger">£{{ "{:,.2f}".format(current_values.mortgage_balance) }}</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Assets vs Liabilities Breakdown -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Assets Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Cash Accounts</span>
+                            <strong>£{{ "{:,.2f}".format(current_values.cash) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-info" role="progressbar" 
+                                 style="width: {% if current_values.total_assets > 0 %}{{ (current_values.cash / current_values.total_assets * 100)|round(1) }}{% else %}0{% endif %}%">
+                                {% if current_values.total_assets > 0 %}{{ (current_values.cash / current_values.total_assets * 100)|round(1) }}%{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Savings Accounts</span>
+                            <strong>£{{ "{:,.2f}".format(current_values.savings) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                 style="width: {% if current_values.total_assets > 0 %}{{ (current_values.savings / current_values.total_assets * 100)|round(1) }}{% else %}0{% endif %}%">
+                                {% if current_values.total_assets > 0 %}{{ (current_values.savings / current_values.total_assets * 100)|round(1) }}%{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Pensions</span>
+                            <strong>£{{ "{:,.2f}".format(current_values.pensions_value) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-primary" role="progressbar" 
+                                 style="width: {% if current_values.total_assets > 0 %}{{ (current_values.pensions_value / current_values.total_assets * 100)|round(1) }}{% else %}0{% endif %}%">
+                                {% if current_values.total_assets > 0 %}{{ (current_values.pensions_value / current_values.total_assets * 100)|round(1) }}%{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <div class="d-flex justify-content-between">
+                            <span>House Value</span>
+                            <strong>£{{ "{:,.2f}".format(current_values.house_value) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-warning" role="progressbar" 
+                                 style="width: {% if current_values.total_assets > 0 %}{{ (current_values.house_value / current_values.total_assets * 100)|round(1) }}{% else %}0{% endif %}%">
+                                {% if current_values.total_assets > 0 %}{{ (current_values.house_value / current_values.total_assets * 100)|round(1) }}%{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Liabilities Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Credit Cards</span>
+                            <strong>£{{ "{:,.2f}".format(current_values.credit_cards) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-danger" role="progressbar" 
+                                 style="width: {% if current_values.total_liabilities > 0 %}{{ (current_values.credit_cards / current_values.total_liabilities * 100)|round(1) }}{% else %}0{% endif %}%">
+                                {% if current_values.total_liabilities > 0 %}{{ (current_values.credit_cards / current_values.total_liabilities * 100)|round(1) }}%{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span>Loans</span>
+                            <strong>£{{ "{:,.2f}".format(current_values.loans) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-warning" role="progressbar" 
+                                 style="width: {% if current_values.total_liabilities > 0 %}{{ (current_values.loans / current_values.total_liabilities * 100)|round(1) }}{% else %}0{% endif %}%">
+                                {% if current_values.total_liabilities > 0 %}{{ (current_values.loans / current_values.total_liabilities * 100)|round(1) }}%{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <div class="d-flex justify-content-between">
+                            <span>Mortgage</span>
+                            <strong>£{{ "{:,.2f}".format(current_values.mortgage) }}</strong>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-info" role="progressbar" 
+                                 style="width: {% if current_values.total_liabilities > 0 %}{{ (current_values.mortgage / current_values.total_liabilities * 100)|round(1) }}{% else %}0{% endif %}%">
+                                {% if current_values.total_liabilities > 0 %}{{ (current_values.mortgage / current_values.total_liabilities * 100)|round(1) }}%{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Historical Snapshots -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Historical Snapshots</h5>
+        </div>
+        <div class="card-body">
+            {% if records %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th class="text-end">Cash</th>
+                            <th class="text-end">Savings</th>
+                            <th class="text-end">Pensions</th>
+                            <th class="text-end">Total Assets</th>
+                            <th class="text-end">Credit Cards</th>
+                            <th class="text-end">Loans</th>
+                            <th class="text-end">Mortgage</th>
+                            <th class="text-end">Total Liabilities</th>
+                            <th class="text-end">Net Worth</th>
+                            <th class="text-end">1M Change</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in records %}
+                        <tr>
+                            <td>{{ record.date.strftime('%d %b %Y') }}</td>
+                            <td class="text-end">£{{ "{:,.2f}".format(record.cash) }}</td>
+                            <td class="text-end">£{{ "{:,.2f}".format(record.savings) }}</td>
+                            <td class="text-end">£{{ "{:,.2f}".format(record.pensions_value) }}</td>
+                            <td class="text-end"><strong>£{{ "{:,.2f}".format(record.total_assets) }}</strong></td>
+                            <td class="text-end text-danger">£{{ "{:,.2f}".format(record.credit_cards) }}</td>
+                            <td class="text-end text-danger">£{{ "{:,.2f}".format(record.loans) }}</td>
+                            <td class="text-end text-danger">£{{ "{:,.2f}".format(record.mortgage) }}</td>
+                            <td class="text-end"><strong class="text-danger">£{{ "{:,.2f}".format(record.total_liabilities) }}</strong></td>
+                            <td class="text-end">
+                                <strong class="{% if record.net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    £{{ "{:,.2f}".format(record.net_worth) }}
+                                </strong>
+                            </td>
+                            <td class="text-end">
+                                {% if record.one_month_track %}
+                                <span class="badge {% if record.one_month_track >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                                    {{ "{:+.1f}".format(record.one_month_track) }}%
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form method="POST" action="{{ url_for('networth.delete_snapshot', id=record.id) }}" 
+                                      style="display: inline;" 
+                                      onsubmit="return confirm('Delete this snapshot?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center">No snapshots yet. Create your first snapshot to start tracking your net worth over time.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Create Snapshot Modal -->
+<div class="modal fade" id="snapshotModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Net Worth Snapshot</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('networth.create_snapshot') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="snapshot_date" class="form-label">Snapshot Date</label>
+                        <input type="date" class="form-control" id="snapshot_date" name="snapshot_date" 
+                               value="{{ current_values.get('today', '') or '' }}" required>
+                        <small class="text-muted">Leave as today's date or choose a specific date</small>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <h6>Current Values to be Saved:</h6>
+                        <ul class="mb-0">
+                            <li>Total Assets: £{{ "{:,.2f}".format(current_values.total_assets) }}</li>
+                            <li>Total Liabilities: £{{ "{:,.2f}".format(current_values.total_liabilities) }}</li>
+                            <li>Net Worth: £{{ "{:,.2f}".format(current_values.net_worth) }}</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Snapshot</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Set default date to today
+document.addEventListener('DOMContentLoaded', function() {
+    const dateInput = document.getElementById('snapshot_date');
+    if (!dateInput.value) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+    }
+});
+</script>
+{% endblock %}

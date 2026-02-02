@@ -57,3 +57,46 @@ class Transaction(db.Model):
         balance = float(sum([t.amount for t in transactions]))
         account.balance = balance
         account.updated_at = datetime.now()
+
+
+# Event listeners to update monthly balance cache when transactions change
+from sqlalchemy import event
+
+@event.listens_for(Transaction, 'after_insert')
+def after_transaction_insert(mapper, connection, target):
+    """Update monthly balance cache when a transaction is added"""
+    if target.account_id:
+        # Use after_commit to ensure transaction is completed
+        @event.listens_for(db.session, 'after_commit', once=True)
+        def update_cache(session):
+            from services.monthly_balance_service import MonthlyBalanceService
+            MonthlyBalanceService.handle_transaction_change(
+                target.account_id, 
+                target.transaction_date
+            )
+
+
+@event.listens_for(Transaction, 'after_update')
+def after_transaction_update(mapper, connection, target):
+    """Update monthly balance cache when a transaction is edited"""
+    if target.account_id:
+        @event.listens_for(db.session, 'after_commit', once=True)
+        def update_cache(session):
+            from services.monthly_balance_service import MonthlyBalanceService
+            MonthlyBalanceService.handle_transaction_change(
+                target.account_id, 
+                target.transaction_date
+            )
+
+
+@event.listens_for(Transaction, 'after_delete')
+def after_transaction_delete(mapper, connection, target):
+    """Update monthly balance cache when a transaction is deleted"""
+    if target.account_id:
+        @event.listens_for(db.session, 'after_commit', once=True)
+        def update_cache(session):
+            from services.monthly_balance_service import MonthlyBalanceService
+            MonthlyBalanceService.handle_transaction_change(
+                target.account_id, 
+                target.transaction_date
+            )

@@ -12,6 +12,7 @@ from models.fuel import FuelRecord
 from models.income import Income
 from models.loans import Loan
 from models.loan_payments import LoanPayment
+from models.monthly_account_balance import MonthlyAccountBalance
 from models.mortgage import Mortgage
 from models.mortgage_payments import MortgagePayment
 from models.networth import NetWorth
@@ -38,6 +39,7 @@ __all__ = [
     'Income',
     'Loan',
     'LoanPayment',
+    'MonthlyAccountBalance',
     'Mortgage',
     'MortgagePayment',
     'NetWorth',
