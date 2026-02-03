@@ -9,6 +9,12 @@
             <h1><i class="bi bi-piggy-bank"></i> Pensions</h1>
         </div>
         <div class="col-auto">
+            <a href="{{ url_for('pensions.retirement_summary') }}" class="btn btn-info">
+                <i class="bi bi-clipboard-data"></i> Retirement Summary
+            </a>
+            <a href="{{ url_for('pensions.projections') }}" class="btn btn-success">
+                <i class="bi bi-graph-up-arrow"></i> View Projections
+            </a>
             <a href="{{ url_for('pensions.add') }}" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> Add Pension
             </a>

@@ -216,6 +216,34 @@ def delete_multiple():
     return redirect(url_for('income.index'))
 
 
+@income_bp.route('/income/toggle/<int:id>/paid', methods=['POST'])
+def toggle_paid(id):
+    """Toggle the is_paid flag for an income record"""
+    income = Income.query.get_or_404(id)
+    
+    try:
+        # Toggle the paid status
+        income.is_paid = not income.is_paid
+        
+        # Sync with linked transaction if it exists
+        if income.transaction_id:
+            from models.transactions import Transaction
+            transaction = Transaction.query.get(income.transaction_id)
+            if transaction:
+                transaction.is_paid = income.is_paid
+        
+        db.session.commit()
+        
+        return jsonify({
+            'id': income.id,
+            'field': 'paid',
+            'value': income.is_paid
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @income_bp.route('/income/calculate-preview', methods=['POST'])
 def calculate_preview():
     """AJAX endpoint to preview tax/NI calculations"""

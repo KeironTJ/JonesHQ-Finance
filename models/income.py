@@ -48,6 +48,7 @@ class Income(db.Model):
     source = db.Column(db.String(100))  # Employer name
     description = db.Column(db.String(255))
     is_recurring = db.Column(db.Boolean, default=True)
+    is_paid = db.Column(db.Boolean, default=False)  # Track if income has been received
     
     # Manual override flag (if true, values were entered manually not calculated)
     is_manual_override = db.Column(db.Boolean, default=False)

@@ -123,6 +123,7 @@
                             <th>NI</th>
                             <th>Take Home</th>
                             <th>Account</th>
+                            <th>Paid</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -155,6 +156,17 @@
                                 {% endif %}
                                 {% else %}
                                 <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if income.is_paid %}
+                                    <button class="btn btn-sm btn-success toggle-paid" data-id="{{ income.id }}" title="Toggle Paid">
+                                        <i class="bi bi-check-circle"></i> Paid
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-outline-secondary toggle-paid" data-id="{{ income.id }}" title="Toggle Paid">
+                                        <i class="bi bi-circle"></i> Not Paid
+                                    </button>
                                 {% endif %}
                             </td>
                             <td>
@@ -191,6 +203,39 @@
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl)
     })
+    
+    // Toggle paid status
+    document.querySelectorAll('.toggle-paid').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            const id = this.dataset.id;
+            fetch(`/income/toggle/${id}/paid`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                const isPaid = data.value;
+                // Update button appearance and text
+                if (isPaid) {
+                    this.classList.remove('btn-outline-secondary');
+                    this.classList.add('btn-success');
+                    this.innerHTML = '<i class="bi bi-check-circle"></i> Paid';
+                } else {
+                    this.classList.remove('btn-success');
+                    this.classList.add('btn-outline-secondary');
+                    this.innerHTML = '<i class="bi bi-circle"></i> Not Paid';
+                }
+            })
+            .catch(err => {
+                alert('Toggle failed');
+                console.error(err);
+            });
+        });
+    });
     
     // Bulk delete functionality
     const selectAllCheckbox = document.getElementById('selectAll');

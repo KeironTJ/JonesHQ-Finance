@@ -177,20 +177,42 @@ class NetWorthService:
                     savings += balance
         
         # ASSETS - Pensions
-        # Get pension snapshots on or before target_date
+        # Get pension values - use actual for past/present, projections for future
         from models.pension_snapshots import PensionSnapshot
         
-        active_pensions = Pension.query.filter_by(is_active=True).all()
+        # Include both active AND inactive pensions in net worth
+        all_pensions = Pension.query.all()
         pensions_value = 0.00
+        is_future_date = target_date > datetime.now().date()
         
-        for pension in active_pensions:
-            latest_snapshot = PensionSnapshot.query.filter(
-                PensionSnapshot.pension_id == pension.id,
-                PensionSnapshot.snapshot_date <= target_date
-            ).order_by(PensionSnapshot.snapshot_date.desc()).first()
-            
-            if latest_snapshot:
-                pensions_value += float(latest_snapshot.value)
+        for pension in all_pensions:
+            if is_future_date:
+                # For future dates, use projected snapshots (default scenario)
+                latest_snapshot = PensionSnapshot.query.filter(
+                    PensionSnapshot.pension_id == pension.id,
+                    PensionSnapshot.review_date <= target_date,
+                    PensionSnapshot.is_projection == True,
+                    PensionSnapshot.scenario_name == 'default'
+                ).order_by(PensionSnapshot.review_date.desc()).first()
+                
+                # If no projection yet, fall back to current value
+                if latest_snapshot:
+                    pensions_value += float(latest_snapshot.value)
+                elif pension.current_value:
+                    pensions_value += float(pension.current_value)
+            else:
+                # For past/present dates, use actual snapshots only
+                latest_snapshot = PensionSnapshot.query.filter(
+                    PensionSnapshot.pension_id == pension.id,
+                    PensionSnapshot.review_date <= target_date,
+                    PensionSnapshot.is_projection == False
+                ).order_by(PensionSnapshot.review_date.desc()).first()
+                
+                if latest_snapshot:
+                    pensions_value += float(latest_snapshot.value)
+                elif pension.current_value:
+                    # If no snapshot exists yet, use current value
+                    pensions_value += float(pension.current_value)
         
         house_value = 0.00
         total_assets = cash + savings + house_value + pensions_value
