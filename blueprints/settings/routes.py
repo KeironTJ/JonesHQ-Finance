@@ -2,7 +2,10 @@ from flask import render_template, request, redirect, url_for, flash
 from . import settings_bp
 from models.settings import Settings
 from models.accounts import Account
+from models.tax_settings import TaxSettings
 from extensions import db
+from decimal import Decimal
+from datetime import datetime
 
 
 @settings_bp.route('/settings')
@@ -102,3 +105,45 @@ def update():
         flash(f'Error updating settings: {str(e)}', 'danger')
     
     return redirect(url_for('settings.index'))
+
+
+@settings_bp.route('/settings/tax')
+def tax_settings():
+    """Display tax and NI settings"""
+    tax_years = TaxSettings.query.order_by(TaxSettings.effective_from.desc()).all()
+    return render_template('settings/tax_settings.html', tax_years=tax_years)
+
+
+@settings_bp.route('/settings/tax/<int:id>/edit', methods=['GET', 'POST'])
+def edit_tax_settings(id):
+    """Edit tax settings for a specific tax year"""
+    tax_year = TaxSettings.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        try:
+            # Update tax settings
+            tax_year.personal_allowance = Decimal(request.form['personal_allowance'])
+            tax_year.basic_rate_limit = Decimal(request.form['basic_rate_limit'])
+            tax_year.higher_rate_limit = Decimal(request.form['higher_rate_limit'])
+            tax_year.basic_rate = Decimal(request.form['basic_rate']) / 100  # Convert % to decimal
+            tax_year.higher_rate = Decimal(request.form['higher_rate']) / 100
+            tax_year.additional_rate = Decimal(request.form['additional_rate']) / 100
+            
+            # Update NI settings
+            tax_year.ni_threshold = Decimal(request.form['ni_threshold'])
+            tax_year.ni_upper_earnings = Decimal(request.form['ni_upper_earnings'])
+            tax_year.ni_basic_rate = Decimal(request.form['ni_basic_rate']) / 100
+            tax_year.ni_additional_rate = Decimal(request.form['ni_additional_rate']) / 100
+            
+            tax_year.notes = request.form.get('notes', '')
+            tax_year.is_active = request.form.get('is_active') == 'on'
+            
+            db.session.commit()
+            flash(f'Tax settings for {tax_year.tax_year} updated successfully!', 'success')
+            return redirect(url_for('settings.tax_settings'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating tax settings: {str(e)}', 'danger')
+    
+    return render_template('settings/edit_tax_settings.html', tax_year=tax_year)

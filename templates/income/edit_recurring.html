@@ -137,6 +137,89 @@
                     </select>
                 </div>
                 
+                <hr>
+                
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="use_manual_deductions" 
+                               name="use_manual_deductions" {% if recurring.use_manual_deductions %}checked{% endif %}
+                               onchange="toggleManualFields()">
+                        <label class="form-check-label" for="use_manual_deductions">
+                            <strong>Use Manual Values (from payslip)</strong>
+                        </label>
+                        <div class="form-text">Check this to enter actual values from your payslip instead of calculated amounts</div>
+                    </div>
+                </div>
+                
+                <div id="manual_fields" style="display: {% if recurring.use_manual_deductions %}block{% else %}none{% endif %};">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> Enter the actual monthly values from your payslip
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="manual_tax_monthly" class="form-label">Income Tax (Monthly)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" step="0.01" class="form-control" 
+                                           id="manual_tax_monthly" name="manual_tax_monthly" 
+                                           value="{{ recurring.manual_tax_monthly or '' }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="manual_ni_monthly" class="form-label">National Insurance (Monthly)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" step="0.01" class="form-control" 
+                                           id="manual_ni_monthly" name="manual_ni_monthly" 
+                                           value="{{ recurring.manual_ni_monthly or '' }}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="manual_employee_pension" class="form-label">Employee Pension (Monthly)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" step="0.01" class="form-control" 
+                                           id="manual_employee_pension" name="manual_employee_pension" 
+                                           value="{{ recurring.manual_employee_pension or '' }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="manual_employer_pension" class="form-label">Employer Pension (Monthly)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" step="0.01" class="form-control" 
+                                           id="manual_employer_pension" name="manual_employer_pension" 
+                                           value="{{ recurring.manual_employer_pension or '' }}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="manual_take_home" class="form-label">Take Home Pay (Monthly)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" step="0.01" class="form-control" 
+                                   id="manual_take_home" name="manual_take_home" 
+                                   value="{{ recurring.manual_take_home or '' }}">
+                        </div>
+                        <div class="form-text">This is your net pay after all deductions</div>
+                    </div>
+                </div>
+                
+                <hr>
+                
                 <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="auto_create_transaction" 
@@ -179,5 +262,72 @@
             </form>
         </div>
     </div>
+    
+    <!-- Regenerate Income Range Section -->
+    <div class="card mt-4">
+        <div class="card-header bg-warning">
+            <h5 class="mb-0"><i class="bi bi-arrow-clockwise"></i> Regenerate Income Range</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Use this to delete and regenerate income records within a specific date range. 
+                This is useful when you've updated salary/pension amounts and need to regenerate future records.
+            </p>
+            
+            <form method="post" action="{{ url_for('income.regenerate_range', id=recurring.id) }}" 
+                  onsubmit="return confirm('Are you sure you want to regenerate income records in this range? This will delete and recreate them with current settings.');">
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="mb-3">
+                            <label for="regen_start_date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="regen_start_date" 
+                                   name="start_date" required>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="mb-3">
+                            <label for="regen_end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="regen_end_date" 
+                                   name="end_date" required>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="bi bi-arrow-clockwise"></i> Regenerate
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="force" name="force">
+                    <label class="form-check-label" for="force">
+                        Force regenerate (delete even if linked to transactions)
+                    </label>
+                    <div class="form-text text-danger">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        Warning: This will break links between income and transaction records
+                    </div>
+                </div>
+            </form>
+            
+            <div class="alert alert-info mt-3 mb-0">
+                <i class="bi bi-info-circle"></i> 
+                <strong>How it works:</strong>
+                <ul class="mb-0 mt-2">
+                    <li>Income records without transactions will be deleted and regenerated automatically</li>
+                    <li>Income records linked to transactions will be skipped (unless you check "Force")</li>
+                    <li>After deletion, new records are generated using the current template settings</li>
+                </ul>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script>
+function toggleManualFields() {
+    const useManual = document.getElementById('use_manual_deductions').checked;
+    document.getElementById('manual_fields').style.display = useManual ? 'block' : 'none';
+}
+</script>
 {% endblock %}

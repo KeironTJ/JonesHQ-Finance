@@ -27,6 +27,14 @@ class RecurringIncome(db.Model):
     avc = db.Column(db.Numeric(10, 2), default=0)
     other_deductions = db.Column(db.Numeric(10, 2), default=0)
     
+    # Manual override for actual payslip values
+    use_manual_deductions = db.Column(db.Boolean, default=False)
+    manual_tax_monthly = db.Column(db.Numeric(10, 2), nullable=True)
+    manual_ni_monthly = db.Column(db.Numeric(10, 2), nullable=True)
+    manual_employer_pension = db.Column(db.Numeric(10, 2), nullable=True)
+    manual_employee_pension = db.Column(db.Numeric(10, 2), nullable=True)
+    manual_take_home = db.Column(db.Numeric(10, 2), nullable=True)
+    
     # Account & transaction settings
     deposit_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
     auto_create_transaction = db.Column(db.Boolean, default=True)

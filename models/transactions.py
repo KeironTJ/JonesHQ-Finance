@@ -23,6 +23,9 @@ class Transaction(db.Model):
     credit_card_id = db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=True)
     loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=True)
     
+    # Link to income record if this is an income transaction
+    income_id = db.Column(db.Integer, db.ForeignKey('income.id'), nullable=True)
+    
     # Link to paired transfer transaction (for account-to-account transfers)
     linked_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
     
@@ -39,6 +42,7 @@ class Transaction(db.Model):
     
     # Relationships
     vendor = db.relationship('Vendor', back_populates='transactions')
+    income = db.relationship('Income', foreign_keys=[income_id], backref='linked_transaction', uselist=False)
     
     def __repr__(self):
         return f'<Transaction {self.transaction_date}: {self.description} - £{self.amount}>'
@@ -47,6 +51,7 @@ class Transaction(db.Model):
     def recalculate_account_balance(account_id):
         """Recalculate and update account balance from all transactions"""
         from models.accounts import Account
+        from decimal import Decimal
         
         account = Account.query.get(account_id)
         if not account:
@@ -54,7 +59,8 @@ class Transaction(db.Model):
         
         transactions = Transaction.query.filter_by(account_id=account_id).all()
         # Balance = sum of amounts (positive=income adds, negative=expense subtracts)
-        balance = float(sum([t.amount for t in transactions]))
+        # Keep as Decimal throughout
+        balance = sum([Decimal(str(t.amount)) for t in transactions], Decimal('0'))
         account.balance = balance
         account.updated_at = datetime.now()
 

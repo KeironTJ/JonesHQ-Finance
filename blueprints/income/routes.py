@@ -131,6 +131,9 @@ def edit(id):
             income.national_insurance = result['ni'] / 12
             income.take_home = income.gross_monthly_income - income.income_tax - income.national_insurance - income.employee_pension_amount - income.avc - income.other_deductions
             
+            # Sync changes to linked transaction
+            IncomeService.sync_income_to_transaction(income)
+            
             db.session.commit()
             
             flash('Income record updated successfully!', 'success')
@@ -151,11 +154,17 @@ def delete(id):
     income = Income.query.get_or_404(id)
     
     try:
-        # If there's a linked transaction, optionally delete it
+        from models.transactions import Transaction
+        
+        # Break circular reference first
         if income.transaction_id:
-            from models.transactions import Transaction
             transaction = Transaction.query.get(income.transaction_id)
             if transaction:
+                # Clear both sides of the relationship
+                transaction.income_id = None
+                income.transaction_id = None
+                db.session.flush()
+                # Now delete the transaction
                 db.session.delete(transaction)
         
         db.session.delete(income)
@@ -164,6 +173,45 @@ def delete(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting income: {str(e)}', 'danger')
+    
+    return redirect(url_for('income.index'))
+
+
+@income_bp.route('/income/delete-multiple', methods=['POST'])
+def delete_multiple():
+    """Delete multiple income records"""
+    income_ids = request.form.getlist('income_ids')
+    
+    if not income_ids:
+        flash('No income records selected.', 'warning')
+        return redirect(url_for('income.index'))
+    
+    try:
+        deleted_count = 0
+        from models.transactions import Transaction
+        
+        for income_id in income_ids:
+            income = Income.query.get(income_id)
+            if income:
+                # Break circular reference first
+                if income.transaction_id:
+                    transaction = Transaction.query.get(income.transaction_id)
+                    if transaction:
+                        # Clear both sides of the relationship
+                        transaction.income_id = None
+                        income.transaction_id = None
+                        db.session.flush()
+                        # Now delete the transaction
+                        db.session.delete(transaction)
+                
+                db.session.delete(income)
+                deleted_count += 1
+        
+        db.session.commit()
+        flash(f'Successfully deleted {deleted_count} income record(s) and their linked transactions.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting income records: {str(e)}', 'danger')
     
     return redirect(url_for('income.index'))
 
@@ -262,7 +310,14 @@ def add_recurring():
                 auto_create_transaction=request.form.get('auto_create_transaction') == 'on',
                 source=request.form.get('source', ''),
                 description=request.form.get('description', ''),
-                is_active=True
+                is_active=True,
+                # Manual override fields
+                use_manual_deductions=request.form.get('use_manual_deductions') == 'on',
+                manual_tax_monthly=Decimal(request.form.get('manual_tax_monthly', 0)) if request.form.get('manual_tax_monthly') else None,
+                manual_ni_monthly=Decimal(request.form.get('manual_ni_monthly', 0)) if request.form.get('manual_ni_monthly') else None,
+                manual_employee_pension=Decimal(request.form.get('manual_employee_pension', 0)) if request.form.get('manual_employee_pension') else None,
+                manual_employer_pension=Decimal(request.form.get('manual_employer_pension', 0)) if request.form.get('manual_employer_pension') else None,
+                manual_take_home=Decimal(request.form.get('manual_take_home', 0)) if request.form.get('manual_take_home') else None
             )
             
             db.session.add(recurring)
@@ -304,6 +359,22 @@ def edit_recurring(id):
             recurring.source = request.form.get('source', '')
             recurring.description = request.form.get('description', '')
             recurring.is_active = request.form.get('is_active') == 'on'
+            
+            # Manual override fields
+            recurring.use_manual_deductions = request.form.get('use_manual_deductions') == 'on'
+            if recurring.use_manual_deductions:
+                recurring.manual_tax_monthly = Decimal(request.form.get('manual_tax_monthly', 0)) if request.form.get('manual_tax_monthly') else None
+                recurring.manual_ni_monthly = Decimal(request.form.get('manual_ni_monthly', 0)) if request.form.get('manual_ni_monthly') else None
+                recurring.manual_employee_pension = Decimal(request.form.get('manual_employee_pension', 0)) if request.form.get('manual_employee_pension') else None
+                recurring.manual_employer_pension = Decimal(request.form.get('manual_employer_pension', 0)) if request.form.get('manual_employer_pension') else None
+                recurring.manual_take_home = Decimal(request.form.get('manual_take_home', 0)) if request.form.get('manual_take_home') else None
+            else:
+                # Clear manual values if not using manual mode
+                recurring.manual_tax_monthly = None
+                recurring.manual_ni_monthly = None
+                recurring.manual_employee_pension = None
+                recurring.manual_employer_pension = None
+                recurring.manual_take_home = None
             
             db.session.commit()
             flash('Recurring income updated successfully!', 'success')
@@ -348,3 +419,41 @@ def generate_missing():
         flash(f'Error generating income: {str(e)}', 'danger')
     
     return redirect(url_for('income.index'))
+
+
+@income_bp.route('/income/recurring/<int:id>/regenerate', methods=['POST'])
+def regenerate_range(id):
+    """Regenerate income records for a date range"""
+    recurring = RecurringIncome.query.get_or_404(id)
+    
+    try:
+        start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
+        end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d').date()
+        force = request.form.get('force') == 'on'
+        
+        result = IncomeService.regenerate_income_range(
+            recurring.id,
+            start_date,
+            end_date,
+            force=force
+        )
+        
+        # Build result message
+        messages = []
+        if result['deleted'] > 0:
+            messages.append(f"Deleted {result['deleted']} record(s)")
+        if result['regenerated'] > 0:
+            messages.append(f"regenerated {result['regenerated']} record(s)")
+        if result['skipped'] > 0:
+            messages.append(f"skipped {result['skipped']} record(s) with transactions")
+        
+        if messages:
+            flash(f"Successfully {', '.join(messages)}!", 'success')
+        else:
+            flash('No records were affected.', 'info')
+            
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error regenerating income: {str(e)}', 'danger')
+    
+    return redirect(url_for('income.edit_recurring', id=id))

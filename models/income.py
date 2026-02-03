@@ -42,15 +42,23 @@ class Income(db.Model):
     # Link to auto-created transaction
     transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
     
+    # Link to recurring income template that generated this record
+    recurring_income_id = db.Column(db.Integer, db.ForeignKey('recurring_income.id'), nullable=True)
+    
     source = db.Column(db.String(100))  # Employer name
     description = db.Column(db.String(255))
     is_recurring = db.Column(db.Boolean, default=True)
+    
+    # Manual override flag (if true, values were entered manually not calculated)
+    is_manual_override = db.Column(db.Boolean, default=False)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     deposit_account = db.relationship('Account', foreign_keys=[deposit_account_id])
-    transaction = db.relationship('Transaction', foreign_keys=[transaction_id])
+    transaction = db.relationship('Transaction', foreign_keys=[transaction_id], uselist=False)
+    recurring_income = db.relationship('RecurringIncome', foreign_keys=[recurring_income_id], backref='generated_income')
     
     def __repr__(self):
         return f'<Income {self.person} {self.pay_date}: £{self.take_home}>'

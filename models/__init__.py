@@ -21,6 +21,7 @@ from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
 from models.planned import PlannedTransaction
 from models.settings import Settings
+from models.tax_settings import TaxSettings
 from models.transactions import Transaction
 from models.trips import Trip
 from models.vehicles import Vehicle
@@ -49,6 +50,7 @@ __all__ = [
     'PensionSnapshot',
     'PlannedTransaction',
     'Settings',
+    'TaxSettings',
     'Transaction',
     'Trip',
     'Vehicle',
