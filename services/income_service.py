@@ -8,6 +8,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from models.categories import Category
 from models.tax_settings import TaxSettings
+from services.payday_service import PaydayService
 from extensions import db
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
@@ -305,6 +306,10 @@ class IncomeService:
             db.session.add(salary_category)
             db.session.flush()
         
+        # Determine if this is a future/forecasted transaction
+        today = date.today()
+        is_future = income.pay_date > today
+        
         # Create transaction
         transaction = Transaction(
             account_id=income.deposit_account_id,
@@ -314,8 +319,8 @@ class IncomeService:
             description=f"{income.person} Salary",
             item=f"Take home: £{income.take_home:,.2f}",
             payment_type='BACS',
-            is_paid=True,
-            is_forecasted=False,
+            is_paid=not is_future,  # Unpaid if in the future
+            is_forecasted=is_future,  # Mark as forecasted if in the future
             year_month=f"{income.pay_date.year}-{income.pay_date.month:02d}",
             income_id=income.id
         )
@@ -389,6 +394,9 @@ class IncomeService:
             pay_day = min(recurring_income.pay_day, calendar.monthrange(year, month)[1])
         
         pay_date = date(year, month, pay_day)
+        
+        # Adjust to previous working day if weekend
+        pay_date = PaydayService.get_previous_working_day(pay_date)
         
         # Check if this income already exists
         existing = Income.query.filter(

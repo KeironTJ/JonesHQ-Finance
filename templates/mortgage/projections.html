@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Mortgage Projections - {{ property.address }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Mortgage Projections</h2>
+            <p class="text-muted">{{ property.address }} - Excel-style Timeline</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('mortgage.property_detail', property_id=property.id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Property
+            </a>
+        </div>
+    </div>
+
+    <!-- Scenario Selector -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label for="scenarioSelect" class="form-label">Scenario:</label>
+            <select id="scenarioSelect" class="form-select" onchange="window.location.href='?scenario=' + this.value">
+                {% for scenario in scenarios %}
+                <option value="{{ scenario }}" {% if scenario == current_scenario %}selected{% endif %}>
+                    {{ scenario|title }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Projection Timeline -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Monthly Timeline ({{ current_scenario|title }} Scenario)</h5>
+        </div>
+        <div class="card-body">
+            {% if timeline %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-dark sticky-top">
+                            <tr>
+                                <th>Date</th>
+                                <th>Product</th>
+                                <th>Balance</th>
+                                <th>Payment</th>
+                                <th>Overpayment</th>
+                                <th>Interest</th>
+                                <th>Principal</th>
+                                <th>Rate %</th>
+                                <th>Valuation</th>
+                                <th>Equity</th>
+                                <th>Equity %</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in timeline %}
+                            <tr class="{% if row.is_paid %}table-success{% elif row.is_projection %}{% if row.notes and 'Assumed variable' in row.notes %}table-info{% else %}table-warning{% endif %}{% endif %}">
+                                <td>{{ row.date.strftime('%b %Y') }}</td>
+                                <td>
+                                    <small>{{ row.product_name }}</small>
+                                    {% if row.notes and 'Assumed variable' in row.notes %}
+                                        <span class="badge bg-info">Assumed Variable</span>
+                                    {% endif %}
+                                </td>
+                                <td>£{{ "{:,.0f}".format(row.balance) }}</td>
+                                <td>£{{ "{:,.2f}".format(row.payment) }}</td>
+                                <td>
+                                    {% if row.overpayment > 0 %}
+                                        <span class="text-success">£{{ "{:,.2f}".format(row.overpayment) }}</span>
+                                    {% else %}
+                                        £0.00
+                                    {% endif %}
+                                </td>
+                                <td><span class="text-danger">£{{ "{:,.2f}".format(row.interest) }}</span></td>
+                                <td><span class="text-success">£{{ "{:,.2f}".format(row.principal) }}</span></td>
+                                <td>{{ "{:.2f}".format(row.rate) }}%</td>
+                                <td>£{{ "{:,.0f}".format(row.valuation) }}</td>
+                                <td>£{{ "{:,.0f}".format(row.equity) }}</td>
+                                <td>{{ "{:.1f}".format(row.equity_pct) }}%</td>
+                                <td>
+                                    {% if row.is_paid %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> Paid
+                                        </span>
+                                    {% elif row.is_projection %}
+                                        <span class="badge bg-warning">Projected</span>
+                                    {% else %}
+                                        <span class="badge bg-info">Confirmed</span>
+                                    {% endif %}
+                                    
+                                    {% if row.transaction_id %}
+                                        <a href="{{ url_for('transactions.edit', id=row.transaction_id) }}" 
+                                           class="badge bg-primary text-decoration-none" 
+                                           title="View linked transaction">
+                                            <i class="bi bi-link-45deg"></i> Txn
+                                        </a>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.is_projection and not row.is_paid %}
+                                        <button type="button" class="btn btn-sm btn-primary" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#confirmModal{{ row.snapshot_id }}">
+                                            Confirm
+                                        </button>
+                                        <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
+                                              style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="return confirm('Delete this snapshot?')">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    {% elif row.is_projection and row.is_paid %}
+                                        <form method="POST" action="{{ url_for('mortgage.unlink_transaction', snapshot_id=row.snapshot_id) }}" 
+                                              style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary" 
+                                                    onclick="return confirm('Unlink this transaction?')">
+                                                Unlink
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
+                                              style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="return confirm('Delete this snapshot and its transaction?')">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    {% elif not row.is_projection and not row.is_paid %}
+                                        <form method="POST" action="{{ url_for('mortgage.create_transaction_for_snapshot', snapshot_id=row.snapshot_id) }}" 
+                                              style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-success">
+                                                Create Txn
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
+                                              style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="return confirm('Delete this confirmed snapshot?')">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="badge bg-success">Actual</span>
+                                        <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
+                                              style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="return confirm('Delete this paid snapshot? The transaction will also be deleted.')">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted">No projection data available. Please generate projections first.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modals (only for projections in base scenario) -->
+{% if current_scenario == 'base' %}
+    {% for row in timeline %}
+        {% if row.is_projection and not row.is_paid %}
+        <div class="modal fade" id="confirmModal{{ row.snapshot_id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirm Snapshot for {{ row.date.strftime('%B %Y') }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form method="POST" action="{{ url_for('mortgage.confirm_snapshot', snapshot_id=row.snapshot_id) }}">
+                        <div class="modal-body">
+                            <p>Projected values:</p>
+                            <ul>
+                                <li>Balance: £{{ "{:,.2f}".format(row.balance) }}</li>
+                                <li>Valuation: £{{ "{:,.0f}".format(row.valuation) }}</li>
+                            </ul>
+                            
+                            <div class="mb-3">
+                                <label for="actual_balance" class="form-label">Actual Balance (optional):</label>
+                                <input type="number" step="0.01" class="form-control" 
+                                       name="actual_balance" 
+                                       placeholder="Leave blank to use projected value">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="actual_valuation" class="form-label">Actual Valuation (optional):</label>
+                                <input type="number" step="0.01" class="form-control" 
+                                       name="actual_valuation" 
+                                       placeholder="Leave blank to use projected value">
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> 
+                                Confirming will create a transaction if the product has a linked bank account.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Confirm & Create Transaction</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+{% endblock %}

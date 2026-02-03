@@ -504,7 +504,7 @@ def edit(id):
     )
 
 
-@transactions_bp.route('/transactions/<int:id>/delete', methods=['POST'])
+@transactions_bp.route('/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete a transaction"""
     transaction = Transaction.query.get_or_404(id)

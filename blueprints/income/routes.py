@@ -3,6 +3,7 @@ from . import income_bp
 from models.income import Income
 from models.recurring_income import RecurringIncome
 from models.accounts import Account
+from models.categories import Category
 from services.income_service import IncomeService
 from extensions import db
 from datetime import datetime
@@ -335,6 +336,7 @@ def add_recurring():
                 avc=Decimal(request.form.get('avc', 0)),
                 other_deductions=Decimal(request.form.get('other', 0)),
                 deposit_account_id=int(request.form['deposit_account_id']) if request.form.get('deposit_account_id') else None,
+                category_id=int(request.form['category_id']) if request.form.get('category_id') else None,
                 auto_create_transaction=request.form.get('auto_create_transaction') == 'on',
                 source=request.form.get('source', ''),
                 description=request.form.get('description', ''),
@@ -362,7 +364,8 @@ def add_recurring():
             flash(f'Error adding recurring income: {str(e)}', 'danger')
     
     accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    return render_template('income/add_recurring.html', accounts=accounts)
+    categories = Category.query.filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
+    return render_template('income/add_recurring.html', accounts=accounts, categories=categories)
 
 
 @income_bp.route('/income/recurring/<int:id>/edit', methods=['GET', 'POST'])
@@ -383,6 +386,7 @@ def edit_recurring(id):
             recurring.avc = Decimal(request.form.get('avc', 0))
             recurring.other_deductions = Decimal(request.form.get('other', 0))
             recurring.deposit_account_id = int(request.form['deposit_account_id']) if request.form.get('deposit_account_id') else None
+            recurring.category_id = int(request.form['category_id']) if request.form.get('category_id') else None
             recurring.auto_create_transaction = request.form.get('auto_create_transaction') == 'on'
             recurring.source = request.form.get('source', '')
             recurring.description = request.form.get('description', '')
@@ -413,7 +417,8 @@ def edit_recurring(id):
             flash(f'Error updating recurring income: {str(e)}', 'danger')
     
     accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts)
+    categories = Category.query.filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
+    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories)
 
 
 @income_bp.route('/income/recurring/<int:id>/delete', methods=['POST'])

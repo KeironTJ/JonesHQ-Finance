@@ -30,6 +30,13 @@ class PaydayService:
         return date_obj
     
     @staticmethod
+    def get_next_working_day(date_obj):
+        """Get the next working day if date is a weekend"""
+        while PaydayService.is_weekend(date_obj):
+            date_obj = date_obj + timedelta(days=1)
+        return date_obj
+    
+    @staticmethod
     def get_payday_for_month(year, month):
         """
         Get the actual payday for a given month, accounting for weekends.
@@ -46,6 +53,30 @@ class PaydayService:
         
         # Adjust if weekend
         return PaydayService.get_previous_working_day(payday)
+    
+    @staticmethod
+    def get_payment_date_for_month(year, month, payment_day):
+        """
+        Get the actual payment date for a given month and day, accounting for weekends.
+        If the payment day falls on a weekend, return the next working day.
+        
+        Args:
+            year: Year
+            month: Month (1-12)
+            payment_day: Day of month (1-31)
+            
+        Returns:
+            date object adjusted to working day
+        """
+        # Handle months with fewer days
+        import calendar
+        max_day = calendar.monthrange(year, month)[1]
+        actual_day = min(payment_day, max_day)
+        
+        payment_date = date(year, month, actual_day)
+        
+        # Adjust if weekend - move to next working day
+        return PaydayService.get_next_working_day(payment_date)
     
     @staticmethod
     def get_payday_period(year, month):

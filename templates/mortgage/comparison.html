@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Scenario Comparison - {{ property.address }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Overpayment Scenario Comparison</h2>
+            <p class="text-muted">{{ property.address }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('mortgage.property_detail', property_id=property.id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Property
+            </a>
+        </div>
+    </div>
+
+    <!-- Scenario Cards -->
+    <div class="row">
+        {% for scenario_name, data in scenarios.items() %}
+        <div class="col-md-4 mb-4">
+            <div class="card {% if scenario_name == 'base' %}border-primary{% elif scenario_name == 'aggressive' %}border-success{% else %}border-info{% endif %}">
+                <div class="card-header {% if scenario_name == 'base' %}bg-primary{% elif scenario_name == 'aggressive' %}bg-success{% else %}bg-info{% endif %} text-white">
+                    <h5 class="mb-0">{{ scenario_name|title }} Scenario</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="text-muted">Mortgage-Free Date</h6>
+                        <h4>{{ data.mortgage_free_date.strftime('%B %Y') if data.mortgage_free_date else 'N/A' }}</h4>
+                    </div>
+                    
+                    {% if data.months_saved %}
+                    <div class="mb-3">
+                        <h6 class="text-muted">Time Saved</h6>
+                        <h4 class="text-success">{{ data.months_saved }} months</h4>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Total Interest Paid</h6>
+                        <h5 class="text-danger">£{{ "{:,.2f}".format(data.total_interest) }}</h5>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Total Payments</h6>
+                        <h5>£{{ "{:,.2f}".format(data.total_payments) }}</h5>
+                    </div>
+                    
+                    {% if scenario_name != 'base' and 'base' in scenarios %}
+                    <div class="alert alert-success mt-3">
+                        <strong>Savings:</strong><br>
+                        Interest saved: £{{ "{:,.2f}".format(scenarios['base'].total_interest - data.total_interest) }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Comparison Chart -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Scenario Summary</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Scenario</th>
+                            <th>Mortgage-Free Date</th>
+                            <th>Months Saved</th>
+                            <th>Total Interest</th>
+                            <th>Interest Saved</th>
+                            <th>Total Payments</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for scenario_name, data in scenarios.items() %}
+                        <tr>
+                            <td><strong>{{ scenario_name|title }}</strong></td>
+                            <td>{{ data.mortgage_free_date.strftime('%B %Y') if data.mortgage_free_date else 'N/A' }}</td>
+                            <td>
+                                {% if data.months_saved %}
+                                    <span class="badge bg-success">{{ data.months_saved }} months</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>£{{ "{:,.2f}".format(data.total_interest) }}</td>
+                            <td>
+                                {% if scenario_name != 'base' and 'base' in scenarios %}
+                                    <span class="text-success">£{{ "{:,.2f}".format(scenarios['base'].total_interest - data.total_interest) }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>£{{ "{:,.2f}".format(data.total_payments) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendation -->
+    {% if scenarios|length > 1 %}
+    <div class="card mt-4 border-success">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Recommendation</h5>
+        </div>
+        <div class="card-body">
+            {% set best_scenario = scenarios.items()|selectattr('1.total_interest')|min(attribute='1.total_interest') %}
+            <p class="mb-0">
+                The <strong>{{ best_scenario[0]|title }}</strong> scenario minimizes total interest paid 
+                (£{{ "{:,.2f}".format(best_scenario[1].total_interest) }}) 
+                {% if best_scenario[1].months_saved %}
+                and gets you mortgage-free {{ best_scenario[1].months_saved }} months earlier
+                {% endif %}.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

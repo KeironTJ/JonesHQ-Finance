@@ -1,41 +1,94 @@
 {% extends "base.html" %}
 
-{% block title %}Mortgage - JonesHQ Finance{% endblock %}
+{% block title %}Properties & Mortgages - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Mortgages</h1>
-    
-    <div class="mb-3">
-        <button class="btn btn-primary">Add Mortgage</button>
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Properties & Mortgages</h2>
+            <p class="text-muted">Track your properties and mortgage projections</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('mortgage.create_property') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Property
+            </a>
+        </div>
     </div>
-    
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Property Address</th>
-                <th>Principal</th>
-                <th>Interest Rate</th>
-                <th>Monthly Payment</th>
-                <th>Term</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for mortgage in mortgages %}
-            <tr>
-                <td>{{ mortgage.property_address }}</td>
-                <td>£{{ mortgage.principal }}</td>
-                <td>{{ mortgage.interest_rate }}%</td>
-                <td>£{{ mortgage.monthly_payment }}</td>
-                <td>{{ mortgage.term_years }} years</td>
-                <td>
-                    <button class="btn btn-sm btn-secondary">Edit</button>
-                    <button class="btn btn-sm btn-danger">Delete</button>
-                </td>
-            </tr>
+
+    {% if property_data %}
+        <div class="row">
+            {% for data in property_data %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">{{ data.property.address }}</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <p class="text-muted mb-1">Current Valuation</p>
+                                <h5>£{{ "{:,.0f}".format(data.property.current_valuation) }}</h5>
+                            </div>
+                            <div class="col-6">
+                                <p class="text-muted mb-1">Total Mortgage</p>
+                                <h5 class="text-danger">£{{ "{:,.0f}".format(data.total_balance) }}</h5>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <p class="text-muted mb-1">Equity</p>
+                                <h5 class="text-success">£{{ "{:,.0f}".format(data.property.current_equity) }}</h5>
+                            </div>
+                            <div class="col-6">
+                                <p class="text-muted mb-1">Equity %</p>
+                                <h5>{{ "{:.1f}".format(data.property.equity_percent) }}%</h5>
+                            </div>
+                        </div>
+
+                        {% if data.ltv %}
+                        <div class="mb-3">
+                            <p class="text-muted mb-1">LTV Ratio</p>
+                            <div class="progress">
+                                <div class="progress-bar" role="progressbar" 
+                                     style="width: {{ data.ltv }}%" 
+                                     aria-valuenow="{{ data.ltv }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    {{ "{:.1f}".format(data.ltv) }}%
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <p class="text-muted mb-1">Active Products</p>
+                            {% for product in data.active_products %}
+                                <span class="badge bg-info me-1">{{ product.product_name }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <a href="{{ url_for('mortgage.property_detail', property_id=data.property.id) }}" class="btn btn-sm btn-primary">
+                            View Details
+                        </a>
+                        <a href="{{ url_for('mortgage.projections', property_id=data.property.id) }}" class="btn btn-sm btn-info">
+                            Projections
+                        </a>
+                        <a href="{{ url_for('mortgage.scenario_comparison', property_id=data.property.id) }}" class="btn btn-sm btn-success">
+                            Scenarios
+                        </a>
+                    </div>
+                </div>
+            </div>
             {% endfor %}
-        </tbody>
-    </table>
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <h5><i class="bi bi-info-circle"></i> No Properties Found</h5>
+            <p class="mb-0">Get started by <a href="{{ url_for('mortgage.create_property') }}">adding your first property</a>.</p>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

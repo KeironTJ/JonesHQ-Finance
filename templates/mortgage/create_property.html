@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Create Property{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Create New Property</h2>
+            <p class="text-muted">Add a new property to track mortgages</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('mortgage.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Cancel
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('mortgage.create_property') }}">
+                <div class="mb-3">
+                    <label for="address" class="form-label">Property Address *</label>
+                    <input type="text" class="form-control" id="address" name="address" required>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="purchase_date" class="form-label">Purchase Date</label>
+                        <input type="date" class="form-control" id="purchase_date" name="purchase_date">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="purchase_price" class="form-label">Purchase Price (£)</label>
+                        <input type="number" step="0.01" class="form-control" id="purchase_price" name="purchase_price">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="current_valuation" class="form-label">Current Valuation (£) *</label>
+                        <input type="number" step="0.01" class="form-control" id="current_valuation" name="current_valuation" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="annual_appreciation_rate" class="form-label">Annual Appreciation Rate (%)</label>
+                        <input type="number" step="0.01" class="form-control" id="annual_appreciation_rate" name="annual_appreciation_rate" value="3.0">
+                        <small class="text-muted">Expected annual property value growth</small>
+                    </div>
+                </div>
+
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="is_primary_residence" name="is_primary_residence" checked>
+                    <label class="form-check-label" for="is_primary_residence">
+                        Primary Residence
+                    </label>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Create Property</button>
+                    <a href="{{ url_for('mortgage.index') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -135,6 +135,22 @@
                     </select>
                 </div>
                 
+                <div class="mb-3">
+                    <label for="category_id" class="form-label">Category</label>
+                    <select class="form-select" id="category_id" name="category_id">
+                        <option value="">-- Select Category --</option>
+                        {% for category in categories %}
+                        <option value="{{ category.id }}">
+                            {% if category.head_budget and category.sub_budget %}
+                                {{ category.head_budget }} > {{ category.sub_budget }}
+                            {% else %}
+                                {{ category.name }}
+                            {% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
                 <hr>
                 
                 <div class="mb-3">

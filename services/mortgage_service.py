@@ -1,25 +1,782 @@
-from models.mortgage import Mortgage
+"""
+Mortgage Service - Handles mortgage projections, calculations, and scenario modeling
+"""
+from decimal import Decimal, ROUND_HALF_UP
+from datetime import date, timedelta
+from dateutil.relativedelta import relativedelta
 from extensions import db
-from datetime import datetime
+from models.property import Property
+from models.mortgage import MortgageProduct
+from models.mortgage_payments import MortgageSnapshot
+from models.transactions import Transaction
+from models.categories import Category
+from models.settings import Settings
+from services.payday_service import PaydayService
 
 
 class MortgageService:
-    @staticmethod
-    def calculate_remaining_balance(mortgage_id):
-        """Calculate remaining balance on mortgage"""
-        pass
+    """Service for mortgage calculations and projections"""
     
     @staticmethod
-    def generate_amortization_schedule(mortgage_id):
-        """Generate amortization schedule"""
-        pass
+    def generate_projections(property_id, scenarios=None):
+        """
+        Generate mortgage projections for all products on a property
+        
+        Args:
+            property_id: The property to project
+            scenarios: List of scenario configs, e.g. [
+                {'name': 'base', 'overpayment': 0},
+                {'name': 'aggressive', 'overpayment': 500},
+                {'name': 'conservative', 'overpayment': 250}
+            ]
+        """
+        if scenarios is None:
+            scenarios = [
+                {'name': 'base', 'overpayment': Decimal('0')},
+                {'name': 'aggressive', 'overpayment': Decimal('500')},
+            ]
+        
+        property_obj = Property.query.get(property_id)
+        if not property_obj:
+            return False
+        
+        # Get all mortgage products for this property, ordered by start date
+        products = MortgageProduct.query.filter_by(
+            property_id=property_id
+        ).order_by(MortgageProduct.start_date).all()
+        
+        if not products:
+            return False
+        
+        # Delete existing projections for this property
+        for product in products:
+            # Get all unpaid projection snapshots with transactions
+            unpaid_projections = MortgageSnapshot.query.filter_by(
+                mortgage_product_id=product.id,
+                is_projection=True
+            ).join(
+                Transaction, MortgageSnapshot.transaction_id == Transaction.id, isouter=True
+            ).filter(
+                db.or_(
+                    MortgageSnapshot.transaction_id.is_(None),  # No transaction
+                    Transaction.is_paid == False  # Or transaction is unpaid
+                )
+            ).all()
+            
+            # Delete unpaid transactions and their snapshots
+            for snapshot in unpaid_projections:
+                if snapshot.transaction_id:
+                    transaction = Transaction.query.get(snapshot.transaction_id)
+                    if transaction and not transaction.is_paid:
+                        db.session.delete(transaction)
+                db.session.delete(snapshot)
+        
+        db.session.flush()  # Ensure deletions are committed before generating new ones
+        
+        # Generate projections for each scenario
+        for scenario in scenarios:
+            MortgageService._generate_scenario_projections(
+                property_obj, products, scenario
+            )
+        
+        db.session.commit()
+        return True
     
     @staticmethod
-    def calculate_equity(mortgage_id, property_value):
-        """Calculate home equity"""
-        pass
+    def _generate_scenario_projections(property_obj, products, scenario):
+        """Generate projections for a specific scenario"""
+        scenario_name = scenario['name']
+        monthly_overpayment = scenario['overpayment']
+        
+        current_date = date.today().replace(day=1)  # Start of current month
+        
+        # Get property appreciation rate (annual)
+        annual_appreciation = property_obj.annual_appreciation_rate or Decimal('3.0')
+        monthly_appreciation = annual_appreciation / Decimal('12') / Decimal('100')
+        
+        current_valuation = property_obj.current_valuation
+        
+        # Track the last product and balance for assumed variable calculation
+        last_product = None
+        final_balance = None
+        final_month = None
+        final_valuation = None
+        
+        for product in products:
+            # Skip if product hasn't started yet
+            if product.start_date > current_date:
+                balance = product.initial_balance
+                start_month = product.start_date.replace(day=1)
+            else:
+                # Product already active - get latest confirmed snapshot (non-projection) or latest projection with transaction
+                latest_confirmed = MortgageSnapshot.query.filter_by(
+                    mortgage_product_id=product.id,
+                    is_projection=False
+                ).order_by(MortgageSnapshot.date.desc()).first()
+                
+                # Also check for projections that have been paid (have transactions)
+                latest_paid_projection = MortgageSnapshot.query.filter_by(
+                    mortgage_product_id=product.id,
+                    is_projection=True,
+                    scenario_name=scenario_name
+                ).filter(
+                    MortgageSnapshot.transaction_id.isnot(None)
+                ).order_by(MortgageSnapshot.date.desc()).first()
+                
+                # Use whichever is more recent
+                latest_snapshot = None
+                if latest_confirmed and latest_paid_projection:
+                    latest_snapshot = latest_confirmed if latest_confirmed.date > latest_paid_projection.date else latest_paid_projection
+                elif latest_confirmed:
+                    latest_snapshot = latest_confirmed
+                elif latest_paid_projection:
+                    latest_snapshot = latest_paid_projection
+                
+                if latest_snapshot:
+                    balance = latest_snapshot.balance
+                    start_month = (latest_snapshot.date + relativedelta(months=1)).replace(day=1)
+                else:
+                    balance = product.current_balance
+                    start_month = current_date
+            
+            # Generate monthly snapshots from start to end of product
+            projection_month = start_month
+            end_month = product.end_date.replace(day=1)
+            
+            # Get payment day for this product (default to 1st if not set)
+            payment_day = product.payment_day or 1
+            
+            while projection_month <= end_month and balance > Decimal('0.01'):
+                # Calculate actual payment date for this month (adjust for working days)
+                payment_date = PaydayService.get_payment_date_for_month(
+                    projection_month.year, 
+                    projection_month.month, 
+                    payment_day
+                )
+                
+                # Skip if a snapshot already exists for this date and product
+                existing_snapshot = MortgageSnapshot.query.filter_by(
+                    mortgage_product_id=product.id,
+                    date=payment_date
+                ).first()
+                
+                if existing_snapshot:
+                    # Use existing snapshot's balance and move to next month
+                    balance = existing_snapshot.balance
+                    current_valuation = existing_snapshot.property_valuation
+                    projection_month = projection_month + relativedelta(months=1)
+                    continue
+                
+                # Calculate interest for this month
+                monthly_rate = product.annual_rate / Decimal('12') / Decimal('100')
+                interest_charge = (balance * monthly_rate).quantize(Decimal('0.01'), ROUND_HALF_UP)
+                
+                # Calculate payment (regular + overpayment)
+                total_payment = product.monthly_payment + monthly_overpayment
+                
+                # Principal reduction
+                principal_paid = total_payment - interest_charge
+                
+                # Ensure we don't overpay
+                if principal_paid > balance:
+                    principal_paid = balance
+                    total_payment = balance + interest_charge
+                    monthly_overpayment_actual = principal_paid - (product.monthly_payment - interest_charge)
+                else:
+                    monthly_overpayment_actual = monthly_overpayment
+                
+                # New balance
+                new_balance = balance - principal_paid
+                if new_balance < Decimal('0.01'):
+                    new_balance = Decimal('0')
+                
+                # Project property valuation
+                projected_valuation = (current_valuation * (Decimal('1') + monthly_appreciation)).quantize(
+                    Decimal('0.01'), ROUND_HALF_UP
+                )
+                
+                # Calculate equity
+                equity = projected_valuation - new_balance
+                equity_pct = (equity / projected_valuation * Decimal('100')).quantize(
+                    Decimal('0.01'), ROUND_HALF_UP
+                ) if projected_valuation > 0 else Decimal('0')
+                
+                # Create snapshot
+                snapshot = MortgageSnapshot(
+                    mortgage_product_id=product.id,
+                    date=payment_date,
+                    year_month=payment_date.strftime('%Y-%m'),
+                    balance=new_balance,
+                    monthly_payment=product.monthly_payment,
+                    overpayment=monthly_overpayment_actual,
+                    interest_charge=interest_charge,
+                    principal_paid=principal_paid,
+                    interest_rate=monthly_rate,
+                    property_valuation=projected_valuation,
+                    equity_amount=equity,
+                    equity_percent=equity_pct,
+                    is_projection=True,
+                    scenario_name=scenario_name
+                )
+                db.session.add(snapshot)
+                db.session.flush()  # Get snapshot ID
+                
+                # Create transaction for this projection if product has an account
+                if product.account_id and scenario_name == 'base':
+                    MortgageService._create_transaction_for_snapshot(snapshot, product, property_obj)
+                
+                # Move to next month
+                balance = new_balance
+                current_valuation = projected_valuation
+                projection_month = projection_month + relativedelta(months=1)
+            
+            # Track final state after this product
+            last_product = product
+            final_balance = balance
+            final_month = end_month
+            final_valuation = current_valuation
+        
+        # Check if we need to extend with assumed variable rate
+        # Find the product with the latest end date (chronologically last)
+        if products:
+            chronologically_last_product = max(products, key=lambda p: p.end_date)
+            
+            # Get the final balance from the chronologically last product
+            last_snapshots = MortgageSnapshot.query.filter_by(
+                mortgage_product_id=chronologically_last_product.id,
+                is_projection=True,
+                scenario_name=scenario_name
+            ).order_by(MortgageSnapshot.date.desc()).first()
+            
+            if last_snapshots:
+                final_balance = last_snapshots.balance
+                final_month = last_snapshots.date
+                final_valuation = last_snapshots.property_valuation
+                
+                # Extend if there's still a balance
+                if final_balance > Decimal('0.01'):
+                    MortgageService._generate_assumed_variable_projections(
+                        property_obj=property_obj,
+                        last_product=chronologically_last_product,
+                        starting_balance=final_balance,
+                        starting_month=final_month,
+                        starting_valuation=final_valuation,
+                        monthly_appreciation=monthly_appreciation,
+                        monthly_overpayment=monthly_overpayment,
+                        scenario_name=scenario_name
+                    )
     
     @staticmethod
-    def calculate_early_payoff(mortgage_id, extra_payment):
-        """Calculate impact of extra payments"""
-        pass
+    def _generate_assumed_variable_projections(property_obj, last_product, starting_balance, 
+                                               starting_month, starting_valuation, 
+                                               monthly_appreciation, monthly_overpayment, scenario_name):
+        """Generate assumed variable rate projections until mortgage is paid off"""
+        
+        # Get assumed variable rate from settings or use last product rate + 2%
+        assumed_annual_rate = last_product.annual_rate + Decimal('2.0')  # Conservative estimate
+        
+        # Calculate new monthly payment for the assumed variable rate
+        # Use the remaining term to calculate proper payment using amortization formula
+        # Standard approach: assume 25 years remaining from end of last product
+        remaining_term_months = 300  # 25 years standard term
+        
+        # Calculate monthly payment using amortization formula: M = P * [r(1+r)^n] / [(1+r)^n - 1]
+        monthly_rate = assumed_annual_rate / Decimal('12') / Decimal('100')
+        balance_decimal = starting_balance
+        n = Decimal(str(remaining_term_months))
+        
+        numerator = monthly_rate * ((Decimal('1') + monthly_rate) ** n)
+        denominator = ((Decimal('1') + monthly_rate) ** n) - Decimal('1')
+        
+        if denominator > 0:
+            assumed_monthly_payment = (balance_decimal * (numerator / denominator)).quantize(
+                Decimal('0.01'), ROUND_HALF_UP
+            )
+        else:
+            # Fallback to simple division if calculation fails
+            assumed_monthly_payment = (balance_decimal / n).quantize(Decimal('0.01'), ROUND_HALF_UP)
+        
+        balance = starting_balance
+        projection_month = (starting_month + relativedelta(months=1)).replace(day=1)
+        current_valuation = starting_valuation
+        
+        # Get payment day from last product
+        payment_day = last_product.payment_day or 1
+        
+        # Limit to 30 years to prevent infinite loops
+        max_months = 360
+        months_projected = 0
+        
+        while balance > Decimal('0.01') and months_projected < max_months:
+            # Calculate actual payment date (adjust for working days)
+            payment_date = PaydayService.get_payment_date_for_month(
+                projection_month.year,
+                projection_month.month,
+                payment_day
+            )
+            
+            # Skip if a snapshot already exists for this date and product
+            existing_snapshot = MortgageSnapshot.query.filter_by(
+                mortgage_product_id=last_product.id,
+                date=payment_date
+            ).first()
+            
+            if existing_snapshot:
+                # Use existing snapshot's balance and move to next month
+                balance = existing_snapshot.balance
+                current_valuation = existing_snapshot.property_valuation
+                projection_month = projection_month + relativedelta(months=1)
+                months_projected += 1
+                continue
+            
+            # Calculate interest for this month
+            monthly_rate = assumed_annual_rate / Decimal('12') / Decimal('100')
+            interest_charge = (balance * monthly_rate).quantize(Decimal('0.01'), ROUND_HALF_UP)
+            
+            # Calculate payment (regular + overpayment)
+            total_payment = assumed_monthly_payment + monthly_overpayment
+            
+            # Principal reduction
+            principal_paid = total_payment - interest_charge
+            
+            # Ensure we don't overpay
+            if principal_paid > balance:
+                principal_paid = balance
+                total_payment = balance + interest_charge
+                monthly_overpayment_actual = principal_paid - (assumed_monthly_payment - interest_charge)
+            else:
+                monthly_overpayment_actual = monthly_overpayment
+            
+            # New balance
+            new_balance = balance - principal_paid
+            if new_balance < Decimal('0.01'):
+                new_balance = Decimal('0')
+            
+            # Project property valuation
+            projected_valuation = (current_valuation * (Decimal('1') + monthly_appreciation)).quantize(
+                Decimal('0.01'), ROUND_HALF_UP
+            )
+            
+            # Calculate equity
+            equity = projected_valuation - new_balance
+            equity_pct = (equity / projected_valuation * Decimal('100')).quantize(
+                Decimal('0.01'), ROUND_HALF_UP
+            ) if projected_valuation > 0 else Decimal('0')
+            
+            # Create snapshot - note we use the last product ID but mark it differently
+            snapshot = MortgageSnapshot(
+                mortgage_product_id=last_product.id,
+                date=payment_date,
+                year_month=payment_date.strftime('%Y-%m'),
+                balance=new_balance,
+                monthly_payment=assumed_monthly_payment,
+                overpayment=monthly_overpayment_actual,
+                interest_charge=interest_charge,
+                principal_paid=principal_paid,
+                interest_rate=monthly_rate,
+                property_valuation=projected_valuation,
+                equity_amount=equity,
+                equity_percent=equity_pct,
+                is_projection=True,
+                scenario_name=scenario_name,
+                notes=f'Assumed variable rate ({assumed_annual_rate}% APR)'
+            )
+            db.session.add(snapshot)
+            db.session.flush()  # Get snapshot ID
+            
+            # Create transaction for assumed variable projections if account exists
+            if last_product.account_id and scenario_name == 'base':
+                MortgageService._create_transaction_for_snapshot(snapshot, last_product, property_obj)
+            
+            # Move to next month
+            balance = new_balance
+            current_valuation = projected_valuation
+            projection_month = projection_month + relativedelta(months=1)
+            months_projected += 1
+    
+    @staticmethod
+    def get_combined_timeline(property_id, scenario='base'):
+        """
+        Get combined actual + projected timeline for a property (all products)
+        Returns list of dictionaries with monthly data
+        """
+        property_obj = Property.query.get(property_id)
+        if not property_obj:
+            return []
+        
+        products = MortgageProduct.query.filter_by(
+            property_id=property_id
+        ).order_by(MortgageProduct.start_date).all()
+        
+        timeline = []
+        
+        for product in products:
+            # Get actual snapshots
+            actuals = MortgageSnapshot.query.filter_by(
+                mortgage_product_id=product.id,
+                is_projection=False
+            ).order_by(MortgageSnapshot.date).all()
+            
+            # Get projected snapshots for this scenario
+            projections = MortgageSnapshot.query.filter_by(
+                mortgage_product_id=product.id,
+                is_projection=True,
+                scenario_name=scenario
+            ).order_by(MortgageSnapshot.date).all()
+            
+            # Combine into timeline
+            for snapshot in actuals:
+                timeline.append({
+                    'snapshot_id': snapshot.id,
+                    'date': snapshot.date,
+                    'year_month': snapshot.year_month,
+                    'product_name': f"{product.lender} - {product.product_name}",
+                    'balance': snapshot.balance,
+                    'payment': snapshot.monthly_payment,
+                    'overpayment': snapshot.overpayment,
+                    'interest': snapshot.interest_charge,
+                    'principal': snapshot.principal_paid,
+                    'rate': product.annual_rate,
+                    'valuation': snapshot.property_valuation,
+                    'equity': snapshot.equity_amount,
+                    'equity_pct': snapshot.equity_percent,
+                    'is_projection': False,
+                    'is_paid': snapshot.is_paid,
+                    'transaction_id': snapshot.transaction_id,
+                    'notes': snapshot.notes
+                })
+            
+            for snapshot in projections:
+                timeline.append({
+                    'snapshot_id': snapshot.id,
+                    'date': snapshot.date,
+                    'year_month': snapshot.year_month,
+                    'product_name': f"{product.lender} - {product.product_name}",
+                    'balance': snapshot.balance,
+                    'payment': snapshot.monthly_payment,
+                    'overpayment': snapshot.overpayment,
+                    'interest': snapshot.interest_charge,
+                    'principal': snapshot.principal_paid,
+                    'rate': product.annual_rate,
+                    'valuation': snapshot.property_valuation,
+                    'equity': snapshot.equity_amount,
+                    'equity_pct': snapshot.equity_percent,
+                    'is_projection': True,
+                    'is_paid': snapshot.is_paid,
+                    'transaction_id': snapshot.transaction_id,
+                    'notes': snapshot.notes
+                })
+        
+        # Sort by date
+        timeline.sort(key=lambda x: x['date'])
+        
+        return timeline
+    
+    @staticmethod
+    def get_scenario_comparison(property_id):
+        """Get comparison data for all scenarios"""
+        property_obj = Property.query.get(property_id)
+        if not property_obj:
+            return {}
+        
+        scenarios = {}
+        
+        # Get unique scenario names
+        scenario_names = db.session.query(MortgageSnapshot.scenario_name).join(
+            MortgageProduct
+        ).filter(
+            MortgageProduct.property_id == property_id,
+            MortgageSnapshot.is_projection == True
+        ).distinct().all()
+        
+        for (scenario_name,) in scenario_names:
+            # Get all products for this property
+            products = MortgageProduct.query.filter_by(property_id=property_id).all()
+            
+            total_interest = Decimal('0')
+            total_payments = Decimal('0')
+            mortgage_free_date = None
+            
+            for product in products:
+                snapshots = MortgageSnapshot.query.filter_by(
+                    mortgage_product_id=product.id,
+                    is_projection=True,
+                    scenario_name=scenario_name
+                ).order_by(MortgageSnapshot.date).all()
+                
+                for snapshot in snapshots:
+                    total_interest += snapshot.interest_charge
+                    total_payments += (snapshot.monthly_payment + snapshot.overpayment)
+                    
+                    # Find mortgage-free date (when balance hits 0)
+                    if snapshot.balance == 0 and not mortgage_free_date:
+                        mortgage_free_date = snapshot.date
+            
+            scenarios[scenario_name] = {
+                'total_interest': total_interest,
+                'total_payments': total_payments,
+                'mortgage_free_date': mortgage_free_date,
+                'months_saved': None  # Calculate after getting all scenarios
+            }
+        
+        # Calculate months saved compared to base scenario
+        if 'base' in scenarios and scenarios['base']['mortgage_free_date']:
+            base_date = scenarios['base']['mortgage_free_date']
+            for scenario_name, data in scenarios.items():
+                if scenario_name != 'base' and data['mortgage_free_date']:
+                    delta = (base_date.year - data['mortgage_free_date'].year) * 12 + \
+                            (base_date.month - data['mortgage_free_date'].month)
+                    data['months_saved'] = delta
+        
+        return scenarios
+    
+    @staticmethod
+    def confirm_snapshot(snapshot_id, actual_balance=None, actual_valuation=None):
+        """
+        Convert a projected snapshot to actual, optionally updating values
+        Creates a transaction if the product has a linked account
+        """
+        snapshot = MortgageSnapshot.query.get(snapshot_id)
+        if not snapshot or not snapshot.is_projection:
+            return False
+        
+        product = snapshot.mortgage_product
+        property_obj = product.property
+        
+        # Update snapshot values
+        snapshot.is_projection = False
+        snapshot.scenario_name = None  # Clear scenario since it's now actual
+        
+        if actual_balance is not None:
+            snapshot.balance = actual_balance
+        
+        if actual_valuation is not None:
+            snapshot.property_valuation = actual_valuation
+            # Recalculate equity
+            snapshot.equity_amount = actual_valuation - snapshot.balance
+            snapshot.equity_percent = (
+                snapshot.equity_amount / actual_valuation * Decimal('100')
+            ).quantize(Decimal('0.01'), ROUND_HALF_UP) if actual_valuation > 0 else Decimal('0')
+        
+        # Update product current balance
+        product.current_balance = snapshot.balance
+        
+        # Update property current valuation
+        if actual_valuation is not None:
+            property_obj.current_valuation = actual_valuation
+        
+        # Create transaction if account is linked and no transaction exists yet
+        if product.account_id and not snapshot.transaction_id:
+            # Get or create mortgage category
+            mortgage_category = Category.query.filter_by(
+                name='Mortgage',
+                category_type='expense'
+            ).first()
+            if not mortgage_category:
+                mortgage_category = Category(
+                    name='Mortgage',
+                    category_type='expense',
+                    head_budget='Home',
+                    sub_budget='Mortgage'
+                )
+                db.session.add(mortgage_category)
+                db.session.flush()
+            
+            # Create transaction
+            transaction = Transaction(
+                account_id=product.account_id,
+                transaction_date=snapshot.date,
+                amount=-(snapshot.monthly_payment + snapshot.overpayment),  # Negative for expense
+                description=f"Mortgage Payment - {property_obj.address}",
+                category_id=mortgage_category.id,
+                payment_type='Direct Debit',
+                is_paid=True,
+                is_fixed=False,  # Allow regeneration to update if needed
+                year_month=snapshot.date.strftime('%Y-%m'),
+                payday_period=PaydayService.get_period_for_date(snapshot.date),
+                day_name=snapshot.date.strftime('%a'),
+                is_forecasted=False
+            )
+            db.session.add(transaction)
+            db.session.flush()
+            
+            # Link transaction to snapshot
+            snapshot.transaction_id = transaction.id
+        
+        db.session.commit()
+        return True
+    
+    @staticmethod
+    def create_transaction_for_snapshot(snapshot_id):
+        """
+        Create a transaction for an existing snapshot
+        Used when linking transactions to already confirmed snapshots
+        """
+        snapshot = MortgageSnapshot.query.get(snapshot_id)
+        if not snapshot or snapshot.transaction_id:
+            return False  # Already has transaction
+        
+        product = snapshot.mortgage_product
+        property_obj = product.property
+        
+        if not product.account_id:
+            return False  # No account linked
+        
+        # Get or create mortgage category (use product category if set)
+        if product.category_id:
+            category = Category.query.get(product.category_id)
+        else:
+            category = Category.query.filter_by(
+                name='Mortgage',
+                category_type='expense'
+            ).first()
+            if not category:
+                category = Category(
+                    name='Mortgage',
+                    category_type='expense',
+                    head_budget='Home',
+                    sub_budget='Mortgage'
+                )
+                db.session.add(category)
+                db.session.flush()
+        
+        # Create transaction
+        transaction = Transaction(
+            account_id=product.account_id,
+            transaction_date=snapshot.date,
+            amount=-(snapshot.monthly_payment + snapshot.overpayment),  # Negative for expense
+            description=f"Mortgage Payment - {property_obj.address}",
+            category_id=category.id,
+            vendor_id=product.vendor_id,  # Use product's vendor if set
+            payment_type='Direct Debit',
+            is_paid=True,
+            is_fixed=False,  # Allow regeneration to update if needed
+            year_month=snapshot.date.strftime('%Y-%m'),
+            payday_period=PaydayService.get_period_for_date(snapshot.date),
+            day_name=snapshot.date.strftime('%a'),
+            is_forecasted=False
+        )
+        db.session.add(transaction)
+        db.session.flush()
+        
+        # Link transaction to snapshot
+        snapshot.transaction_id = transaction.id
+        
+        db.session.commit()
+        return True
+    
+    @staticmethod
+    def _create_transaction_for_snapshot(snapshot, product, property_obj):
+        """
+        Internal helper to create a transaction for a snapshot during projection generation
+        Does not commit - assumes caller will commit
+        """
+        # Get or create mortgage category (use product category if set)
+        if product.category_id:
+            category = Category.query.get(product.category_id)
+        else:
+            category = Category.query.filter_by(
+                name='Mortgage',
+                category_type='expense'
+            ).first()
+            if not category:
+                category = Category(
+                    name='Mortgage',
+                    category_type='expense',
+                    head_budget='Home',
+                    sub_budget='Mortgage'
+                )
+                db.session.add(category)
+                db.session.flush()
+        
+        # Create transaction
+        transaction = Transaction(
+            account_id=product.account_id,
+            transaction_date=snapshot.date,
+            amount=-(snapshot.monthly_payment + snapshot.overpayment),  # Negative for expense
+            description=f"Mortgage Payment - {property_obj.address}",
+            category_id=category.id,
+            vendor_id=product.vendor_id,  # Use product's vendor if set
+            payment_type='Direct Debit',
+            is_paid=False,  # Projections start as unpaid
+            is_fixed=False,  # Allow regeneration to update if needed
+            year_month=snapshot.date.strftime('%Y-%m'),
+            payday_period=PaydayService.get_period_for_date(snapshot.date),
+            day_name=snapshot.date.strftime('%a'),
+            is_forecasted=True  # Mark as forecasted for projections
+        )
+        db.session.add(transaction)
+        db.session.flush()
+        
+        # Link transaction to snapshot
+        snapshot.transaction_id = transaction.id
+    
+    @staticmethod
+    def sync_transaction_to_snapshot(transaction_id):
+        """
+        Sync transaction changes back to the mortgage snapshot
+        Updates snapshot when transaction is modified
+        """
+        from models.transactions import Transaction
+        
+        transaction = Transaction.query.get(transaction_id)
+        if not transaction or not hasattr(transaction, 'mortgage_snapshot'):
+            return False
+        
+        snapshot = transaction.mortgage_snapshot
+        if not snapshot:
+            return False
+        
+        # Update snapshot based on transaction
+        total_payment = abs(transaction.amount)
+        snapshot.monthly_payment = total_payment - snapshot.overpayment
+        
+        # Recalculate balance
+        # Note: This is complex and might require recalculating the entire projection chain
+        # For now, just mark it for review
+        if snapshot.notes:
+            snapshot.notes += " | Transaction updated - verify balance"
+        else:
+            snapshot.notes = "Transaction updated - verify balance"
+        
+        db.session.commit()
+        return True
+    
+    @staticmethod
+    def get_mortgage_free_projection(property_id, scenario='base'):
+        """Calculate when the property will be mortgage-free"""
+        products = MortgageProduct.query.filter_by(property_id=property_id).all()
+        
+        latest_date = None
+        
+        for product in products:
+            last_snapshot = MortgageSnapshot.query.filter_by(
+                mortgage_product_id=product.id,
+                is_projection=True,
+                scenario_name=scenario
+            ).filter(
+                MortgageSnapshot.balance == 0
+            ).order_by(MortgageSnapshot.date.desc()).first()
+            
+            if last_snapshot:
+                if not latest_date or last_snapshot.date > latest_date:
+                    latest_date = last_snapshot.date
+        
+        return latest_date
+    
+    @staticmethod
+    def calculate_ltv(property_id):
+        """Calculate current Loan-to-Value ratio"""
+        property_obj = Property.query.get(property_id)
+        if not property_obj or not property_obj.current_valuation:
+            return None
+        
+        total_mortgage = sum([
+            p.current_balance for p in property_obj.mortgage_products if p.is_active
+        ])
+        
+        ltv = (total_mortgage / property_obj.current_valuation * Decimal('100')).quantize(
+            Decimal('0.01'), ROUND_HALF_UP
+        )
+        
+        return ltv

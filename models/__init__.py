@@ -14,12 +14,13 @@ from models.recurring_income import RecurringIncome
 from models.loans import Loan
 from models.loan_payments import LoanPayment
 from models.monthly_account_balance import MonthlyAccountBalance
-from models.mortgage import Mortgage
-from models.mortgage_payments import MortgagePayment
+from models.mortgage import Mortgage, MortgageProduct
+from models.mortgage_payments import MortgagePayment, MortgageSnapshot
 from models.networth import NetWorth
 from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
 from models.planned import PlannedTransaction
+from models.property import Property
 from models.settings import Settings
 from models.tax_settings import TaxSettings
 from models.transactions import Transaction
@@ -44,11 +45,14 @@ __all__ = [
     'LoanPayment',
     'MonthlyAccountBalance',
     'Mortgage',
+    'MortgageProduct',
     'MortgagePayment',
+    'MortgageSnapshot',
     'NetWorth',
     'Pension',
     'PensionSnapshot',
     'PlannedTransaction',
+    'Property',
     'Settings',
     'TaxSettings',
     'Transaction',

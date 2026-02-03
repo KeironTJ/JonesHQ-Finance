@@ -37,6 +37,7 @@ class RecurringIncome(db.Model):
     
     # Account & transaction settings
     deposit_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     auto_create_transaction = db.Column(db.Boolean, default=True)
     
     # Metadata
@@ -48,6 +49,7 @@ class RecurringIncome(db.Model):
     
     # Relationships
     deposit_account = db.relationship('Account', foreign_keys=[deposit_account_id])
+    category = db.relationship('Category', foreign_keys=[category_id])
     
     def __repr__(self):
         return f'<RecurringIncome {self.person} {self.source}: £{self.gross_annual_income}/year>'

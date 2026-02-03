@@ -1,7 +1,9 @@
 from models.networth import NetWorth
 from models.accounts import Account
 from models.loans import Loan
-from models.mortgage import Mortgage
+from models.mortgage import Mortgage, MortgageProduct
+from models.mortgage_payments import MortgagePayment, MortgageSnapshot
+from models.property import Property
 from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
 from models.loan_payments import LoanPayment
@@ -55,7 +57,7 @@ class NetWorthService:
             for p in active_pensions
         ]
         
-        # House value - TODO: implement when property tracking is added
+        # Initialize house_value (calculated below with mortgage section)
         house_value = 0.00
         
         total_assets = cash + savings + house_value + pensions_value
@@ -104,13 +106,37 @@ class NetWorthService:
                 loans_total += original
                 loan_details.append({'name': loan.name, 'balance': original})
         
-        # Mortgage - get remaining balance
+        # Mortgage - get remaining balance from all properties
         mortgage_total = 0.00
-        active_mortgage = Mortgage.query.filter_by(is_active=True).first()
-        if active_mortgage:
-            mortgage_total = float(active_mortgage.current_balance)
+        house_value = 0.00  # Reset to recalculate
+        property_details = []
+        
+        active_properties = Property.query.filter_by(is_active=True).all()
+        for prop in active_properties:
+            # Add property valuation to house value
+            if prop.current_valuation:
+                house_value += float(prop.current_valuation)
+            
+            # Sum all active mortgage products for this property
+            active_products = MortgageProduct.query.filter_by(
+                property_id=prop.id,
+                is_active=True
+            ).all()
+            
+            property_mortgage = sum([float(p.current_balance) for p in active_products])
+            mortgage_total += property_mortgage
+            
+            property_details.append({
+                'address': prop.address,
+                'valuation': float(prop.current_valuation) if prop.current_valuation else 0,
+                'mortgage': property_mortgage,
+                'equity': float(prop.current_equity)
+            })
         
         total_liabilities = credit_cards_total + loans_total + mortgage_total
+        
+        # Recalculate total assets now that we have house_value
+        total_assets = cash + savings + house_value + pensions_value
         
         # NET WORTH
         net_worth = total_assets - total_liabilities
@@ -137,7 +163,8 @@ class NetWorthService:
             'pension_details': pension_details,
             'cc_details': cc_details,
             'loan_details': loan_details,
-            'mortgage_balance': mortgage_total
+            'mortgage_balance': mortgage_total,
+            'property_details': property_details
         }
     
     @staticmethod
@@ -267,32 +294,59 @@ class NetWorthService:
                 # Loan started but no payments yet
                 loans_total += float(loan.loan_value)
         
-        # LIABILITIES - Mortgage
-        from models.mortgage_payments import MortgagePayment
-        
+        # LIABILITIES - Mortgage & Property Values
         mortgage_total = 0.00
-        active_mortgage = Mortgage.query.filter_by(is_active=True).first()
+        house_value = 0.00
         
-        if active_mortgage:
-            # For future dates, include unpaid payments; for past, only paid
-            query = MortgagePayment.query.filter(
-                MortgagePayment.mortgage_id == active_mortgage.id,
-                MortgagePayment.date <= target_date
-            )
-            
-            if target_date <= today:
-                query = query.filter(MortgagePayment.is_paid == True)
-            
-            latest_payment = query.order_by(
-                MortgagePayment.date.desc(), 
-                MortgagePayment.id.desc()
-            ).first()
-            
-            if latest_payment:
-                mortgage_total = float(latest_payment.closing_balance)
-            elif active_mortgage.start_date <= target_date:
-                # Mortgage started but no payments yet
-                mortgage_total = float(active_mortgage.loan_amount)
+        is_future_date = target_date > today
+        active_properties = Property.query.filter_by(is_active=True).all()
+        
+        for prop in active_properties:
+            # Get property valuation at target date
+            if prop.purchase_date and prop.purchase_date <= target_date:
+                # Use current valuation or calculate projected
+                if is_future_date and prop.annual_appreciation_rate:
+                    # Project forward from current valuation
+                    months_diff = (target_date.year - today.year) * 12 + (target_date.month - today.month)
+                    monthly_rate = Decimal(str(prop.annual_appreciation_rate)) / Decimal('12') / Decimal('100')
+                    projected_val = Decimal(str(prop.current_valuation)) * ((Decimal('1') + monthly_rate) ** months_diff)
+                    house_value += float(projected_val)
+                else:
+                    house_value += float(prop.current_valuation) if prop.current_valuation else 0
+                
+                # Get mortgage products for this property
+                active_products = MortgageProduct.query.filter_by(
+                    property_id=prop.id,
+                    is_active=True
+                ).all()
+                
+                for product in active_products:
+                    # Skip if product hasn't started yet
+                    if product.start_date > target_date:
+                        continue
+                    
+                    # Get snapshot at or before target date
+                    if is_future_date:
+                        # Use projection
+                        snapshot = MortgageSnapshot.query.filter(
+                            MortgageSnapshot.mortgage_product_id == product.id,
+                            MortgageSnapshot.date <= target_date,
+                            MortgageSnapshot.is_projection == True,
+                            MortgageSnapshot.scenario_name == 'base'
+                        ).order_by(MortgageSnapshot.date.desc()).first()
+                    else:
+                        # Use actual
+                        snapshot = MortgageSnapshot.query.filter(
+                            MortgageSnapshot.mortgage_product_id == product.id,
+                            MortgageSnapshot.date <= target_date,
+                            MortgageSnapshot.is_projection == False
+                        ).order_by(MortgageSnapshot.date.desc()).first()
+                    
+                    if snapshot:
+                        mortgage_total += float(snapshot.balance)
+                    elif product.start_date <= target_date:
+                        # Product started but no snapshot yet
+                        mortgage_total += float(product.initial_balance)
         
         total_liabilities = credit_cards_total + loans_total + mortgage_total
         net_worth = total_assets - total_liabilities
