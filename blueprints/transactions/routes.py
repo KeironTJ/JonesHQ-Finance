@@ -49,10 +49,8 @@ def index():
     if not request.args:
         from datetime import date
         today = date.today()
-        current_year = today.year
-        current_month = today.month
-        _, _, current_period = PaydayService.get_payday_period(current_year, current_month)
-        payday_period = current_period
+        # Use get_period_for_date to get the correct period that today falls into
+        payday_period = PaydayService.get_period_for_date(today)
         is_paid_filter = 'pending'
     
     # Build query

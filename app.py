@@ -1,7 +1,7 @@
 import os
 from flask import Flask
 from config import config
-from extensions import db, migrate
+from extensions import db, migrate, login_manager, csrf, limiter
 
 
 def create_app(config_name=None):
@@ -16,12 +16,36 @@ def create_app(config_name=None):
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    login_manager.init_app(app)
+    csrf.init_app(app)
+    limiter.init_app(app)
+    
+    # Add security headers
+    @app.after_request
+    def add_security_headers(response):
+        """Add security headers to all responses"""
+        headers = app.config.get('SECURITY_HEADERS', {})
+        for header, value in headers.items():
+            response.headers[header] = value
+        return response
+    
+    # Configure Flask-Login
+    login_manager.login_view = 'auth.login'
+    login_manager.login_message = 'Please log in to access this page.'
+    login_manager.login_message_category = 'info'
+    
+    # User loader callback for Flask-Login
+    @login_manager.user_loader
+    def load_user(user_id):
+        from models.users import User
+        return User.query.get(int(user_id))
     
     # Import models to ensure they're registered with SQLAlchemy
     with app.app_context():
         import models
     
     # Register blueprints
+    from blueprints.auth import auth_bp
     from blueprints.dashboard import dashboard_bp
     from blueprints.accounts import accounts_bp
     from blueprints.transactions import transactions_bp
@@ -39,6 +63,7 @@ def create_app(config_name=None):
     from blueprints.settings import settings_bp
     from blueprints.expenses import expenses_bp
     
+    app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(accounts_bp)
     app.register_blueprint(transactions_bp)

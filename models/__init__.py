@@ -25,6 +25,7 @@ from models.settings import Settings
 from models.tax_settings import TaxSettings
 from models.transactions import Transaction
 from models.trips import Trip
+from models.users import User
 from models.vehicles import Vehicle
 from models.vendors import Vendor
 
@@ -57,6 +58,7 @@ __all__ = [
     'TaxSettings',
     'Transaction',
     'Trip',
+    'User',
     'Vehicle',
     'Vendor',
 ]
