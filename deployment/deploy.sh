@@ -88,16 +88,22 @@ echo -e "${GREEN}Step 8: Initializing database...${NC}"
 cd $APP_DIR
 sudo -u $APP_USER bash << 'EOF'
 source venv/bin/activate
-export $(cat .env.production | xargs)
+# Load environment file safely: ignore comments and blank lines
+if [ -f .env.production ]; then
+    set -a
+    . .env.production
+    set +a
+fi
 flask db upgrade
 EOF
 
 echo -e "${YELLOW}Step 9: Creating user accounts...${NC}"
 echo "You will be prompted to create user accounts..."
 sudo -u $APP_USER bash << 'EOF'
-source venv/bin/activate
-export $(cat .env.production | xargs)
-python3 create_initial_users.py
+echo "The interactive user-creation step is intentionally left manual."
+echo "Run the following as the $APP_USER after deploy if you need to create users:"
+echo "  sudo -u $APP_USER bash -ic 'cd $APP_DIR && source venv/bin/activate && . .env.production && python3 create_initial_users.py'"
+echo "Skipping automatic user creation in automated deploy."
 EOF
 
 echo -e "${GREEN}Step 10: Installing systemd service...${NC}"
