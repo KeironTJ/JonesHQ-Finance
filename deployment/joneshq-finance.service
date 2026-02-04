@@ -1,0 +1,57 @@
+# Systemd Service for JonesHQ Finance
+# File: /etc/systemd/system/joneshq-finance.service
+# 
+# Installation:
+#   sudo cp deployment/joneshq-finance.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable joneshq-finance
+#   sudo systemctl start joneshq-finance
+
+[Unit]
+Description=JonesHQ Finance Application
+Documentation=https://github.com/yourusername/joneshq-finance
+After=network.target
+
+[Service]
+Type=notify
+User=joneshq
+Group=joneshq
+WorkingDirectory=/home/joneshq/app
+
+# Environment
+Environment="PATH=/home/joneshq/app/venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Load environment variables from file
+EnvironmentFile=/home/joneshq/app/.env.production
+
+# Gunicorn command (simple version for LXC behind reverse proxy)
+ExecStart=/home/joneshq/app/venv/bin/gunicorn \
+    --bind 0.0.0.0:8000 \
+    --workers 2 \
+    --timeout 60 \
+    --access-logfile /home/joneshq/app/logs/access.log \
+    --error-logfile /home/joneshq/app/logs/error.log \
+    "app:create_app()"
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=0
+
+# Performance tuning
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/joneshq/app/instance /home/joneshq/app/logs
+
+# Logging
+SyslogIdentifier=joneshq-finance
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}Server Error - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-6 text-center">
+            <div class="error-container">
+                <h1 class="display-1 text-danger">500</h1>
+                <h2 class="mb-4">Internal Server Error</h2>
+                <p class="lead text-muted mb-4">
+                    Oops! Something went wrong on our end. The error has been logged and we'll look into it.
+                </p>
+                <div class="mt-4">
+                    <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">
+                        <i class="bi bi-house-door"></i> Go to Dashboard
+                    </a>
+                    <a href="javascript:location.reload()" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-clockwise"></i> Try Again
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-container {
+    padding: 3rem 2rem;
+}
+.display-1 {
+    font-size: 8rem;
+    font-weight: 700;
+    opacity: 0.3;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}Security Error - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-6 text-center">
+            <div class="error-container">
+                <h1 class="display-1 text-danger">
+                    <i class="bi bi-shield-exclamation"></i>
+                </h1>
+                <h2 class="mb-4">CSRF Token Error</h2>
+                <p class="lead text-muted mb-4">
+                    The security token for this form has expired or is invalid. This usually happens if the page has been open for too long.
+                </p>
+                <p class="text-muted small mb-4">
+                    {{ reason }}
+                </p>
+                <div class="mt-4">
+                    <a href="javascript:location.reload()" class="btn btn-primary">
+                        <i class="bi bi-arrow-clockwise"></i> Reload Page
+                    </a>
+                    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-house-door"></i> Go to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-container {
+    padding: 3rem 2rem;
+}
+.display-1 {
+    font-size: 6rem;
+    opacity: 0.3;
+}
+</style>
+{% endblock %}

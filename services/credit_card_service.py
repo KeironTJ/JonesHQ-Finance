@@ -2,6 +2,7 @@
 Credit Card Service
 Handles interest calculations, statement generation, and payment automation
 """
+import logging
 from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 from models.credit_cards import CreditCard, CreditCardPromotion
@@ -554,7 +555,8 @@ class CreditCardService:
         
         This allows users to mark certain payments as "locked" and regenerate around them
         """
-        print(f"DEBUG: regenerate_future_transactions called for card_id={card_id}")
+        logger = logging.getLogger(__name__)
+        logger.info(f"Regenerating future transactions for card_id={card_id}")
         
         if not start_date:
             start_date = date.today()
@@ -572,7 +574,7 @@ class CreditCardService:
         from dateutil.relativedelta import relativedelta
         from decimal import Decimal
         
-        print(f"DEBUG Step 2a: Looking for locked statements for card {card_id}")
+        logger.debug(f"Looking for locked statements for card {card_id}")
         
         # Get the card object
         card = CreditCard.query.get(card_id)
@@ -587,14 +589,14 @@ class CreditCardService:
             CreditCardTransaction.is_fixed == True
         ).all()
         
-        print(f"DEBUG: Found {len(locked_statements)} locked statements")
+        logger.debug(f"Found {len(locked_statements)} locked statements")
         
         # For each locked statement, check if payment exists
         payments_generated = 0
         for locked_stmt in locked_statements:
-            print(f"DEBUG: Checking locked statement on {locked_stmt.date}")
+            logger.debug(f"Checking locked statement on {locked_stmt.date}")
             payment_date = locked_stmt.date + relativedelta(days=payment_offset_days)
-            print(f"DEBUG: Payment date would be {payment_date}, start_date is {start_date}")
+            logger.debug(f"Payment date would be {payment_date}, start_date is {start_date}")
             
             # Only generate payment if it's in our date range and doesn't exist
             if payment_date >= start_date:
@@ -615,7 +617,7 @@ class CreditCardService:
                     for t in transactions_up_to_statement:
                         balance_after_interest += t.amount
                     
-                    print(f"DEBUG: Locked statement on {locked_stmt.date}, payment due {payment_date}, balance: {balance_after_interest}")
+                    logger.debug(f"Locked statement on {locked_stmt.date}, payment due {payment_date}, balance: {balance_after_interest}")
                     
                     # Generate payment if there's debt (negative balance on credit card)
                     if balance_after_interest < 0:
@@ -628,7 +630,7 @@ class CreditCardService:
                         
                         if payment_txn:
                             payments_generated += 1
-                            print(f"DEBUG: Generated payment of £{abs(balance_after_interest)}")
+                            logger.info(f"Generated payment of £{abs(balance_after_interest)} for locked statement")
         
         # Commit locked statement payments
         if payments_generated > 0:

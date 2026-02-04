@@ -1,7 +1,38 @@
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 from flask import Flask
+from flask_wtf.csrf import CSRFError
 from config import config
 from extensions import db, migrate, login_manager, csrf, limiter
+
+
+def configure_logging(app):
+    """Configure application logging"""
+    if not app.debug and not app.testing:
+        # Create logs directory if it doesn't exist
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+        
+        # File handler for errors
+        file_handler = RotatingFileHandler(
+            'logs/joneshq_finance.log',
+            maxBytes=10240000,  # 10MB
+            backupCount=10
+        )
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s '
+            '[in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('JonesHQ Finance startup')
+    else:
+        # Development logging to console
+        app.logger.setLevel(logging.DEBUG)
+        app.logger.info('JonesHQ Finance startup (DEBUG mode)')
 
 
 def create_app(config_name=None):
@@ -12,6 +43,9 @@ def create_app(config_name=None):
     
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+    
+    # Configure logging
+    configure_logging(app)
     
     # Initialize extensions
     db.init_app(app)
@@ -94,9 +128,42 @@ def create_app(config_name=None):
     with app.app_context():
         db.create_all()
     
+    # Register error handlers
+    register_error_handlers(app)
+    
     return app
+
+
+def register_error_handlers(app):
+    """Register global error handlers"""
+    
+    @app.errorhandler(404)
+    def not_found_error(error):
+        from flask import render_template
+        return render_template('errors/404.html'), 404
+    
+    @app.errorhandler(500)
+    def internal_error(error):
+        from flask import render_template
+        db.session.rollback()
+        app.logger.error(f'Internal Server Error: {error}')
+        return render_template('errors/500.html'), 500
+    
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        from flask import render_template
+        return render_template('errors/403.html'), 403
+    
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(error):
+        from flask import render_template, flash
+        from flask_wtf.csrf import CSRFError
+        flash('CSRF token validation failed. Please try again.', 'danger')
+        return render_template('errors/csrf.html', reason=error.description), 400
 
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # SECURITY: Only bind to localhost in development
+    # Never use 0.0.0.0 with debug mode - it exposes the debugger to the network
+    app.run(host='127.0.0.1', port=5000, debug=True)
