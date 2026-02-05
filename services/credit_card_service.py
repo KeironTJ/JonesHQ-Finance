@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
 from models.categories import Category
+from services.payday_service import PaydayService
 from extensions import db
 
 
@@ -294,6 +295,12 @@ class CreditCardService:
                 db.session.add(vendor)
                 db.session.flush()
             
+            # Calculate computed fields
+            payday_period = PaydayService.get_period_for_date(payment_date)
+            year_month = payment_date.strftime('%Y-%m')
+            week_year = f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}"
+            day_name = payment_date.strftime('%a')
+            
             bank_txn = Transaction(
                 account_id=card.default_payment_account_id,
                 category_id=credit_card_category.id,
@@ -305,7 +312,11 @@ class CreditCardService:
                 payment_type='Transfer',
                 is_paid=False,
                 is_fixed=False,
-                credit_card_id=card.id
+                credit_card_id=card.id,
+                year_month=year_month,
+                week_year=week_year,
+                day_name=day_name,
+                payday_period=payday_period
             )
             db.session.add(bank_txn)
             db.session.flush()  # Get the bank transaction ID

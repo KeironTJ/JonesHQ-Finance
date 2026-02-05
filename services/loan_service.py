@@ -2,6 +2,7 @@ from models.loans import Loan
 from models.loan_payments import LoanPayment
 from models.transactions import Transaction
 from models.vendors import Vendor
+from services.payday_service import PaydayService
 from extensions import db
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -195,6 +196,12 @@ class LoanService:
             db.session.add(vendor)
             db.session.flush()
         
+        # Calculate computed fields
+        payday_period = PaydayService.get_period_for_date(loan_payment.date)
+        year_month = loan_payment.date.strftime('%Y-%m')
+        week_year = f"{loan_payment.date.isocalendar()[1]:02d}-{loan_payment.date.year}"
+        day_name = loan_payment.date.strftime('%a')
+        
         # Create bank transaction
         bank_txn = Transaction(
             account_id=loan.default_payment_account_id,
@@ -207,7 +214,10 @@ class LoanService:
             item=f"Period {loan_payment.period}",
             payment_type='Direct Debit',
             is_paid=loan_payment.is_paid,
-            year_month=loan_payment.date.strftime('%Y-%m')
+            year_month=year_month,
+            week_year=week_year,
+            day_name=day_name,
+            payday_period=payday_period
         )
         
         db.session.add(bank_txn)

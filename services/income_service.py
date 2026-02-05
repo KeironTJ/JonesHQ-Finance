@@ -310,6 +310,12 @@ class IncomeService:
         today = date.today()
         is_future = income.pay_date > today
         
+        # Calculate computed fields
+        payday_period = PaydayService.get_period_for_date(income.pay_date)
+        year_month = f"{income.pay_date.year}-{income.pay_date.month:02d}"
+        week_year = f"{income.pay_date.isocalendar()[1]:02d}-{income.pay_date.year}"
+        day_name = income.pay_date.strftime('%a')
+        
         # Create transaction
         transaction = Transaction(
             account_id=income.deposit_account_id,
@@ -321,7 +327,10 @@ class IncomeService:
             payment_type='BACS',
             is_paid=not is_future,  # Unpaid if in the future
             is_forecasted=is_future,  # Mark as forecasted if in the future
-            year_month=f"{income.pay_date.year}-{income.pay_date.month:02d}",
+            year_month=year_month,
+            week_year=week_year,
+            day_name=day_name,
+            payday_period=payday_period,
             income_id=income.id
         )
         
@@ -515,13 +524,22 @@ class IncomeService:
         if not transaction:
             return None
         
+        # Calculate computed fields
+        payday_period = PaydayService.get_period_for_date(income.pay_date)
+        year_month = f"{income.pay_date.year}-{income.pay_date.month:02d}"
+        week_year = f"{income.pay_date.isocalendar()[1]:02d}-{income.pay_date.year}"
+        day_name = income.pay_date.strftime('%a')
+        
         # Sync fields from income to transaction
         transaction.amount = income.take_home
         transaction.transaction_date = income.pay_date
         transaction.description = f"{income.person} Salary"
         transaction.item = f"Take home: £{income.take_home:,.2f}"
         transaction.account_id = income.deposit_account_id
-        transaction.year_month = f"{income.pay_date.year}-{income.pay_date.month:02d}"
+        transaction.year_month = year_month
+        transaction.week_year = week_year
+        transaction.day_name = day_name
+        transaction.payday_period = payday_period
         
         db.session.flush()
         

@@ -186,25 +186,11 @@ class ChildcareService:
         transaction_day = min(child.transaction_day or 28, monthrange(year, month)[1])
         transaction_date = date(year, month, transaction_day)
         
-        # Calculate year_month and payday_period
-        trans_year_month = f"{transaction_date.year:04d}-{transaction_date.month:02d}"
-        
-        # Determine which payday period this transaction falls into
-        trans_payday_period = None
-        # Check current month
-        start_date, end_date, period_label = PaydayService.get_payday_period(transaction_date.year, transaction_date.month)
-        if start_date <= transaction_date <= end_date:
-            trans_payday_period = period_label
-        else:
-            # Check previous month
-            prev_month = transaction_date.month - 1
-            prev_year = transaction_date.year
-            if prev_month < 1:
-                prev_month = 12
-                prev_year -= 1
-            start_date, end_date, period_label = PaydayService.get_payday_period(prev_year, prev_month)
-            if start_date <= transaction_date <= end_date:
-                trans_payday_period = period_label
+        # Calculate computed fields
+        payday_period = PaydayService.get_period_for_date(transaction_date)
+        year_month = transaction_date.strftime('%Y-%m')
+        week_year = f"{transaction_date.isocalendar()[1]:02d}-{transaction_date.year}"
+        day_name = transaction_date.strftime('%a')
         
         # Create transaction (negative amount = expense in new convention)
         transaction = Transaction(
@@ -217,8 +203,10 @@ class ChildcareService:
             item=f"{child.name} Childcare",
             is_paid=False,
             payment_type='Direct Debit',
-            year_month=trans_year_month,
-            payday_period=trans_payday_period
+            year_month=year_month,
+            week_year=week_year,
+            day_name=day_name,
+            payday_period=payday_period
         )
         db.session.add(transaction)
         db.session.commit()
