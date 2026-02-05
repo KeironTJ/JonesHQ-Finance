@@ -332,51 +332,316 @@
     </div>
     {% endif %}
 
+    <!-- Financial Summaries -->
+    <div class="row mb-4">
+        <!-- Credit Cards Summary -->
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="bi bi-credit-card"></i> Credit Cards</h6>
+                        <a href="{{ url_for('credit_cards.index') }}" class="btn btn-sm btn-light">
+                            <i class="bi bi-arrow-right-circle"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Active Cards</small>
+                        <h4 class="mb-0">{{ credit_card_summary.count }}</h4>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Total Balance</small>
+                        <h5 class="mb-0 text-danger">£{{ "{:,.2f}".format(credit_card_summary.total_balance) }}</h5>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Total Limit</small>
+                        <div>£{{ "{:,.2f}".format(credit_card_summary.total_limit) }}</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Available Credit</small>
+                        <div class="text-success">£{{ "{:,.2f}".format(credit_card_summary.total_available) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loans Summary -->
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card border-warning h-100">
+                <div class="card-header bg-warning text-dark">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="bi bi-cash-coin"></i> Loans</h6>
+                        <a href="{{ url_for('loans.index') }}" class="btn btn-sm btn-dark">
+                            <i class="bi bi-arrow-right-circle"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Active Loans</small>
+                        <h4 class="mb-0">{{ loan_summary.count }}</h4>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Total Balance</small>
+                        <h5 class="mb-0 text-danger">£{{ "{:,.2f}".format(loan_summary.total_balance) }}</h5>
+                    </div>
+                    <div>
+                        <small class="text-muted">Monthly Payments</small>
+                        <div>£{{ "{:,.2f}".format(loan_summary.total_monthly_payment) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mortgage Summary -->
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card border-info h-100">
+                <div class="card-header bg-info text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="bi bi-house-door"></i> Mortgage</h6>
+                        <a href="{{ url_for('mortgage.index') }}" class="btn btn-sm btn-light">
+                            <i class="bi bi-arrow-right-circle"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if mortgage_summary %}
+                    <div class="mb-2">
+                        <small class="text-muted">{{ mortgage_summary.lender }}</small>
+                        <div class="fw-bold">{{ mortgage_summary.product_name }}</div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Current Balance</small>
+                        <h5 class="mb-0 text-danger">£{{ "{:,.2f}".format(mortgage_summary.current_balance) }}</h5>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Monthly Payment</small>
+                        <div>£{{ "{:,.2f}".format(mortgage_summary.monthly_payment) }}</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Interest Rate</small>
+                        <div>{{ "{:.2f}".format(mortgage_summary.annual_rate) }}% APR</div>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="bi bi-info-circle"></i><br>
+                        No active mortgage
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Pensions Summary -->
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card border-success h-100">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="bi bi-piggy-bank"></i> Pensions</h6>
+                        <a href="{{ url_for('pensions.index') }}" class="btn btn-sm btn-light">
+                            <i class="bi bi-arrow-right-circle"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Active Pensions</small>
+                        <h4 class="mb-0">{{ pension_summary.count }}</h4>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Current Value</small>
+                        <h5 class="mb-0 text-success">£{{ "{:,.2f}".format(pension_summary.total_current_value) }}</h5>
+                    </div>
+                    <div>
+                        <small class="text-muted">Projected Value</small>
+                        <div class="text-primary">£{{ "{:,.2f}".format(pension_summary.total_projected_value) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Quick Links -->
-    <div class="row">
-        <div class="col-md-3 mb-3">
-            <a href="{{ url_for('transactions.index') }}" class="text-decoration-none">
-                <div class="card border-primary h-100 hover-shadow">
-                    <div class="card-body text-center">
-                        <i class="bi bi-receipt display-4 text-primary"></i>
-                        <h5 class="card-title mt-3">Transactions</h5>
-                        <p class="card-text text-muted">Manage income & expenses</p>
-                    </div>
-                </div>
-            </a>
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0"><i class="bi bi-compass"></i> Quick Navigation</h5>
         </div>
-        <div class="col-md-3 mb-3">
-            <a href="{{ url_for('accounts.index') }}" class="text-decoration-none">
-                <div class="card border-success h-100 hover-shadow">
-                    <div class="card-body text-center">
-                        <i class="bi bi-bank display-4 text-success"></i>
-                        <h5 class="card-title mt-3">Accounts</h5>
-                        <p class="card-text text-muted">Bank accounts overview</p>
-                    </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Row 1: Core Features -->
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('transactions.index') }}" class="text-decoration-none">
+                        <div class="card border-primary h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-receipt display-4 text-primary"></i>
+                                <h5 class="card-title mt-3">Transactions</h5>
+                                <p class="card-text text-muted small">View all transactions</p>
+                            </div>
+                        </div>
+                    </a>
                 </div>
-            </a>
-        </div>
-        <div class="col-md-3 mb-3">
-            <a href="{{ url_for('credit_cards.index') }}" class="text-decoration-none">
-                <div class="card border-danger h-100 hover-shadow">
-                    <div class="card-body text-center">
-                        <i class="bi bi-credit-card display-4 text-danger"></i>
-                        <h5 class="card-title mt-3">Credit Cards</h5>
-                        <p class="card-text text-muted">Track card balances</p>
-                    </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('accounts.index') }}" class="text-decoration-none">
+                        <div class="card border-success h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-bank display-4 text-success"></i>
+                                <h5 class="card-title mt-3">Accounts</h5>
+                                <p class="card-text text-muted small">Manage bank accounts</p>
+                            </div>
+                        </div>
+                    </a>
                 </div>
-            </a>
-        </div>
-        <div class="col-md-3 mb-3">
-            <a href="{{ url_for('loans.index') }}" class="text-decoration-none">
-                <div class="card border-warning h-100 hover-shadow">
-                    <div class="card-body text-center">
-                        <i class="bi bi-cash-coin display-4 text-warning"></i>
-                        <h5 class="card-title mt-3">Loans</h5>
-                        <p class="card-text text-muted">Manage loan payments</p>
-                    </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('networth.index') }}" class="text-decoration-none">
+                        <div class="card border-primary h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-graph-up-arrow display-4 text-primary"></i>
+                                <h5 class="card-title mt-3">Net Worth</h5>
+                                <p class="card-text text-muted small">Track overall wealth</p>
+                            </div>
+                        </div>
+                    </a>
                 </div>
-            </a>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('budgets.index') }}" class="text-decoration-none">
+                        <div class="card border-info h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-pie-chart display-4 text-info"></i>
+                                <h5 class="card-title mt-3">Budgets</h5>
+                                <p class="card-text text-muted small">Budget planning</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Row 2: Income & Expenses -->
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('income.index') }}" class="text-decoration-none">
+                        <div class="card border-success h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-arrow-down-circle display-4 text-success"></i>
+                                <h5 class="card-title mt-3">Income</h5>
+                                <p class="card-text text-muted small">Track income sources</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('expenses.index') }}" class="text-decoration-none">
+                        <div class="card border-danger h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-arrow-up-circle display-4 text-danger"></i>
+                                <h5 class="card-title mt-3">Expenses</h5>
+                                <p class="card-text text-muted small">Manage expenses</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('categories.index') }}" class="text-decoration-none">
+                        <div class="card border-secondary h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-tags display-4 text-secondary"></i>
+                                <h5 class="card-title mt-3">Categories</h5>
+                                <p class="card-text text-muted small">Manage categories</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('vendors.index') }}" class="text-decoration-none">
+                        <div class="card border-dark h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-shop display-4 text-dark"></i>
+                                <h5 class="card-title mt-3">Vendors</h5>
+                                <p class="card-text text-muted small">Manage vendors</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Row 3: Debt & Obligations -->
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('credit_cards.index') }}" class="text-decoration-none">
+                        <div class="card border-danger h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-credit-card display-4 text-danger"></i>
+                                <h5 class="card-title mt-3">Credit Cards</h5>
+                                <p class="card-text text-muted small">Track card balances</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('loans.index') }}" class="text-decoration-none">
+                        <div class="card border-warning h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-cash-coin display-4 text-warning"></i>
+                                <h5 class="card-title mt-3">Loans</h5>
+                                <p class="card-text text-muted small">Manage loan payments</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('mortgage.index') }}" class="text-decoration-none">
+                        <div class="card border-info h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-house-door display-4 text-info"></i>
+                                <h5 class="card-title mt-3">Mortgage</h5>
+                                <p class="card-text text-muted small">Mortgage details</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('pensions.index') }}" class="text-decoration-none">
+                        <div class="card border-success h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-piggy-bank display-4 text-success"></i>
+                                <h5 class="card-title mt-3">Pensions</h5>
+                                <p class="card-text text-muted small">Retirement planning</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Row 4: Other Features -->
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('vehicles.index') }}" class="text-decoration-none">
+                        <div class="card border-primary h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-car-front display-4 text-primary"></i>
+                                <h5 class="card-title mt-3">Vehicles</h5>
+                                <p class="card-text text-muted small">Cars & fuel tracking</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('childcare.index') }}" class="text-decoration-none">
+                        <div class="card border-warning h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-people display-4 text-warning"></i>
+                                <h5 class="card-title mt-3">Childcare</h5>
+                                <p class="card-text text-muted small">Childcare expenses</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <a href="{{ url_for('settings.index') }}" class="text-decoration-none">
+                        <div class="card border-secondary h-100 hover-shadow">
+                            <div class="card-body text-center">
+                                <i class="bi bi-gear display-4 text-secondary"></i>
+                                <h5 class="card-title mt-3">Settings</h5>
+                                <p class="card-text text-muted small">App configuration</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 </div>
