@@ -19,6 +19,7 @@
     <div class="card">
         <div class="card-body">
             <form method="POST" action="{{ url_for('mortgage.edit_product', product_id=product.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="lender" class="form-label">Lender *</label>
@@ -214,6 +215,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <form method="POST" action="{{ url_for('mortgage.delete_product', product_id=product.id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-trash"></i> Yes, Delete Product
                     </button>

@@ -59,6 +59,7 @@
     <div class="row mb-4">
         <div class="col-12">
             <form method="POST" action="{{ url_for('mortgage.generate_projections', property_id=property.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-primary">
                     <i class="bi bi-calculator"></i> Generate Projections
                 </button>

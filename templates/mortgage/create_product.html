@@ -19,6 +19,7 @@
     <div class="card">
         <div class="card-body">
             <form method="POST" action="{{ url_for('mortgage.create_product', property_id=property.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="lender" class="form-label">Lender *</label>

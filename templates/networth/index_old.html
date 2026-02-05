@@ -387,6 +387,7 @@
                                 <form method="POST" action="{{ url_for('networth.delete_snapshot', id=record.id) }}" 
                                       style="display: inline;" 
                                       onsubmit="return confirm('Delete this snapshot?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -413,6 +414,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('networth.create_snapshot') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="snapshot_date" class="form-label">Snapshot Date</label>

@@ -39,6 +39,7 @@
         <div>
             {% if selected_vehicle_id %}
             <form method="post" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=selected_vehicle_id) }}" class="d-inline" onsubmit="return confirm('Refresh forecasted fuel transactions for this vehicle?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-warning btn-sm me-2">
                     <i class="bi bi-arrow-clockwise"></i> Refresh Forecasts
                 </button>
@@ -153,6 +154,7 @@
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_fuel', fuel_id=fuel.id) }}" style="display:inline;" onsubmit="return confirm('Delete this fuel record?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -171,6 +173,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('vehicles.add_fuel') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Add Fuel Record</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -232,6 +235,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" id="editFuelForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Fuel Record</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

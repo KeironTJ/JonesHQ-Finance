@@ -7,6 +7,7 @@
     <h1>{% if card %}Edit{% else %}Add{% endif %} Credit Card</h1>
     
     <form method="POST" class="mt-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="row">
             <!-- Card Details -->
             <div class="col-md-6">

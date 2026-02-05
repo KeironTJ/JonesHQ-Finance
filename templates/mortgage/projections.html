@@ -109,6 +109,7 @@
                                         </button>
                                         <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
                                               style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button type="submit" class="btn btn-sm btn-outline-danger" 
                                                     onclick="return confirm('Delete this snapshot?')">
                                                 Delete
@@ -117,6 +118,7 @@
                                     {% elif row.is_projection and row.is_paid %}
                                         <form method="POST" action="{{ url_for('mortgage.unlink_transaction', snapshot_id=row.snapshot_id) }}" 
                                               style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button type="submit" class="btn btn-sm btn-outline-secondary" 
                                                     onclick="return confirm('Unlink this transaction?')">
                                                 Unlink
@@ -124,6 +126,7 @@
                                         </form>
                                         <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
                                               style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button type="submit" class="btn btn-sm btn-outline-danger" 
                                                     onclick="return confirm('Delete this snapshot and its transaction?')">
                                                 Delete
@@ -132,12 +135,14 @@
                                     {% elif not row.is_projection and not row.is_paid %}
                                         <form method="POST" action="{{ url_for('mortgage.create_transaction_for_snapshot', snapshot_id=row.snapshot_id) }}" 
                                               style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button type="submit" class="btn btn-sm btn-outline-success">
                                                 Create Txn
                                             </button>
                                         </form>
                                         <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
                                               style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button type="submit" class="btn btn-sm btn-outline-danger" 
                                                     onclick="return confirm('Delete this confirmed snapshot?')">
                                                 Delete
@@ -147,6 +152,7 @@
                                         <span class="badge bg-success">Actual</span>
                                         <form method="POST" action="{{ url_for('mortgage.delete_snapshot', snapshot_id=row.snapshot_id) }}" 
                                               style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button type="submit" class="btn btn-sm btn-outline-danger" 
                                                     onclick="return confirm('Delete this paid snapshot? The transaction will also be deleted.')">
                                                 Delete
@@ -178,6 +184,7 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <form method="POST" action="{{ url_for('mortgage.confirm_snapshot', snapshot_id=row.snapshot_id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="modal-body">
                             <p>Projected values:</p>
                             <ul>

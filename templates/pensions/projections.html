@@ -11,6 +11,7 @@
         </div>
         <div class="col-auto">
             <form method="post" action="{{ url_for('pensions.generate_projections') }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="scenario" value="{{ current_scenario }}">
                 <button type="submit" class="btn btn-success" onclick="return confirm('Regenerate all projections? This will replace existing {{ current_scenario }} scenario data.')">
                     <i class="bi bi-arrow-repeat"></i> Regenerate Projections

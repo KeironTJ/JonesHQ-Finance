@@ -78,6 +78,7 @@
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;" onsubmit="return confirm('Delete {{ vehicle.name }}? This will delete all fuel and trip records!');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -96,6 +97,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('vehicles.add_vehicle') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Add Vehicle</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -166,6 +168,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" id="editVehicleForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Vehicle</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

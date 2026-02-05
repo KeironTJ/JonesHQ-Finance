@@ -135,6 +135,7 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
                             <form method="POST" action="{{ url_for('accounts.edit', id=account.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <div class="modal-body">
                                     <div class="mb-3">
                                         <label for="edit_name{{ account.id }}" class="form-label">Account Name</label>
@@ -254,6 +255,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST" action="{{ url_for('accounts.create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="account_name" class="form-label">Account Name</label>
@@ -305,6 +307,7 @@
 
 <!-- Delete Confirmation Form (hidden) -->
 <form id="deleteForm" method="POST" style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 </form>
 
 <style>

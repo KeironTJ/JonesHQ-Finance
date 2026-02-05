@@ -178,6 +178,7 @@
                     <h6>Generate New Schedule</h6>
                     <p class="text-muted">Create payment schedule from loan start date</p>
                     <form method="POST" action="{{ url_for('loans.generate_schedule', id=loan.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label for="end_date_generate" class="form-label">End Date</label>
                             <input type="date" 
@@ -195,6 +196,7 @@
                     <h6>Regenerate Schedule</h6>
                     <p class="text-muted">Delete future payments and regenerate from today</p>
                     <form method="POST" action="{{ url_for('loans.regenerate_schedule', id=loan.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-3">
                             <label for="end_date_regenerate" class="form-label">End Date</label>
                             <input type="date" 
@@ -289,6 +291,7 @@
                                       action="{{ url_for('loans.delete_payment', id=loan.id, payment_id=payment.id) }}" 
                                       style="display: inline;"
                                       onsubmit="return confirm('Delete this payment?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete payment">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -344,6 +347,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('loans.edit_payment', id=loan.id, payment_id=payment.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Date</label>
