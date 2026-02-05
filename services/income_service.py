@@ -299,12 +299,21 @@ class IncomeService:
     @staticmethod
     def create_income_transaction(income):
         """Create a linked transaction for income record"""
-        # Find or create "Salary" category
-        salary_category = Category.query.filter_by(name='Salary', category_type='Income').first()
-        if not salary_category:
-            salary_category = Category(name='Salary', category_type='Income')
-            db.session.add(salary_category)
-            db.session.flush()
+        # Determine category to use
+        category_id = None
+        
+        # First, check if this income came from recurring income with a category
+        if income.recurring_income_id and income.recurring_income:
+            category_id = income.recurring_income.category_id
+        
+        # If no category from recurring income, use default "Salary" category
+        if not category_id:
+            salary_category = Category.query.filter_by(name='Salary', category_type='Income').first()
+            if not salary_category:
+                salary_category = Category(name='Salary', category_type='Income')
+                db.session.add(salary_category)
+                db.session.flush()
+            category_id = salary_category.id
         
         # Determine if this is a future/forecasted transaction
         today = date.today()
@@ -319,7 +328,7 @@ class IncomeService:
         # Create transaction
         transaction = Transaction(
             account_id=income.deposit_account_id,
-            category_id=salary_category.id,
+            category_id=category_id,
             amount=income.take_home,
             transaction_date=income.pay_date,
             description=f"{income.person} Salary",
@@ -524,6 +533,22 @@ class IncomeService:
         if not transaction:
             return None
         
+        # Determine category to use
+        category_id = None
+        
+        # First, check if this income came from recurring income with a category
+        if income.recurring_income_id and income.recurring_income:
+            category_id = income.recurring_income.category_id
+        
+        # If no category from recurring income, use default "Salary" category
+        if not category_id:
+            salary_category = Category.query.filter_by(name='Salary', category_type='Income').first()
+            if not salary_category:
+                salary_category = Category(name='Salary', category_type='Income')
+                db.session.add(salary_category)
+                db.session.flush()
+            category_id = salary_category.id
+        
         # Calculate computed fields
         payday_period = PaydayService.get_period_for_date(income.pay_date)
         year_month = f"{income.pay_date.year}-{income.pay_date.month:02d}"
@@ -536,6 +561,7 @@ class IncomeService:
         transaction.description = f"{income.person} Salary"
         transaction.item = f"Take home: £{income.take_home:,.2f}"
         transaction.account_id = income.deposit_account_id
+        transaction.category_id = category_id
         transaction.year_month = year_month
         transaction.week_year = week_year
         transaction.day_name = day_name
