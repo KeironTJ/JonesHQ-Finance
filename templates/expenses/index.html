@@ -228,6 +228,7 @@
                                     Edit
                                 </button>
                                 <form method="post" action="{{ url_for('expenses.delete_expense', expense_id=e.id) }}" style="display:inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')">Delete</button>
                                 </form>
                             </td>
@@ -249,6 +250,7 @@
             <div class="card-body">
                 <div class="d-flex gap-2 align-items-center">
                     <form method="POST" action="{{ url_for('expenses.bulk_delete_linked') }}" id="expenseBulkDeleteForm" onsubmit="return confirm('Delete linked transactions for selected expenses? This will remove linked bank and card transactions.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <input type="hidden" name="expense_ids" id="expenseBulkIds">
                         <input type="hidden" name="return_url" value="{{ request.url }}">
                         <button type="submit" class="btn btn-outline-danger">
@@ -257,6 +259,7 @@
                     </form>
 
                     <form method="POST" action="{{ url_for('expenses.bulk_delete_expenses') }}" id="expenseBulkDeleteExpensesForm" onsubmit="return confirm('Delete selected expenses? This will remove the expense rows and any linked transactions.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <input type="hidden" name="expense_ids" id="expenseBulkIdsForDelete">
                         <input type="hidden" name="return_url" value="{{ request.url }}">
                         <button type="submit" class="btn btn-danger">
@@ -275,6 +278,7 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form method="post" action="{{ url_for('expenses.add_expense') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="modal-header">
         <h5 class="modal-title">Add Expense</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -373,6 +377,7 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form method="post" id="editExpenseForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="modal-header">
         <h5 class="modal-title">Edit Expense</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -636,6 +641,7 @@ function clearExpenseSelection() {
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form method="post" action="{{ url_for('expenses.generate_reimbursements') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="modal-body">
         <p>This will create monthly reimbursement transactions for all <strong>submitted</strong> expenses.</p>
         <p><strong>Workflow:</strong></p>
@@ -669,6 +675,7 @@ function clearExpenseSelection() {
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="post" action="{{ url_for('expenses.generate_cc_payments') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <div class="modal-body">
         <p>This will create automatic credit card payment transactions to clear expense charges.</p>
         <p><strong>Workflow:</strong></p>

@@ -9,6 +9,7 @@
     <div class="card mt-4">
         <div class="card-body">
             <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-3">
                     <label for="person" class="form-label">Person</label>
                     <select class="form-select" id="person" name="person" required>

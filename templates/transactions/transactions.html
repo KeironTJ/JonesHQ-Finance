@@ -259,6 +259,7 @@
         </div>
         <div class="card-body">
             <form method="POST" action="{{ url_for('transactions.bulk_edit') }}" id="bulkEditForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="return_url" value="{{ request.url }}">
                 <input type="hidden" name="transaction_ids" id="bulkTransactionIds">
                 <div class="row g-3">
@@ -319,6 +320,7 @@
             <div class="mt-2" style="display: inline; margin-left: .5rem;">
                 <!-- Delete Selected (separate form to avoid nested forms) -->
                 <form method="POST" action="{{ url_for('transactions.bulk_delete') }}" id="bulkDeleteForm" style="display: inline;" onsubmit="return confirm('Delete selected transactions? This will update account balances.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="transaction_ids" id="bulkDeleteTransactionIds">
                     <input type="hidden" name="return_url" value="{{ request.url }}">
                     <button type="submit" class="btn btn-outline-danger">
@@ -463,6 +465,7 @@
                                 <td class="text-center">
                                     <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}" 
                                           style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <button type="submit" 
                                                 class="badge bg-{% if transaction.is_paid %}success{% else %}warning{% endif %} status-toggle" 
                                                 style="border: none; cursor: pointer; padding: 0.5em 0.75em;"
@@ -498,6 +501,7 @@
                                             <!-- Pay/Unpaid toggle -->
                                             <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}" 
                                                   style="display: inline;">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" class="btn btn-outline-success" title="Mark as Paid">
                                                     <i class="bi bi-check-circle"></i>
                                                 </button>
@@ -506,6 +510,7 @@
                                             <!-- Lock/Unlock toggle -->
                                             <form method="POST" action="{{ url_for('transactions.toggle_fixed', id=transaction.id) }}" 
                                                   style="display: inline;">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" 
                                                         class="btn btn-outline-{% if transaction.is_fixed %}warning{% else %}secondary{% endif %}" 
                                                         title="{% if transaction.is_fixed %}Unlock Transaction{% else %}Lock Transaction{% endif %}">
@@ -517,6 +522,7 @@
                                             <form method="POST" action="{{ url_for('transactions.delete', id=transaction.id) }}" 
                                                   style="display: inline;"
                                                   onsubmit="return confirm('Delete this transaction? Account balance will be updated.');">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <input type="hidden" name="return_url" value="{{ request.url }}">
                                                 <button type="submit" class="btn btn-outline-danger" title="Delete">
                                                     <i class="bi bi-trash"></i>
@@ -583,6 +589,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST" id="editTransactionForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="edit_transaction_date" class="form-label">Date</label>

@@ -27,6 +27,7 @@
             <div class="card">
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <input type="hidden" name="return_url" value="{{ request.referrer or url_for('transactions.index') }}">
                         <div class="row">
                             <!-- Account -->
@@ -205,6 +206,7 @@
                     <p class="mb-2">Delete this transaction permanently. This action cannot be undone.</p>
                     <form method="POST" action="{{ url_for('transactions.delete', id=transaction.id) }}" 
                           onsubmit="return confirm('Are you sure you want to delete this transaction? This will update the account balance.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <button type="submit" class="btn btn-danger">
                             <i class="bi bi-trash"></i> Delete Transaction
                         </button>

@@ -11,6 +11,7 @@
         </div>
         <div class="col-auto">
             <form method="post" action="{{ url_for('pensions.generate_pension_projection', id=pension.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="scenario" value="default">
                 <button type="submit" class="btn btn-success">
                     <i class="bi bi-arrow-repeat"></i> Regenerate Projections
@@ -119,6 +120,7 @@
                                 {% endif %}
                                 <form method="post" action="{{ url_for('pensions.delete_snapshot', pension_id=pension.id, snapshot_id=snapshot.id) }}" class="d-inline"
                                       onsubmit="return confirm('Delete this snapshot?')">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -146,6 +148,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="post" action="{{ url_for('pensions.confirm_snapshot', pension_id=pension.id, snapshot_id=snapshot.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Confirm Snapshot for {{ snapshot.review_date.strftime('%d/%m/%Y') }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

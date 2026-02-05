@@ -11,6 +11,7 @@
     <div class="row">
         <div class="col-md-8">
             <form method="POST" action="{{ url_for('settings.update') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 
                 <!-- Credit Card Settings -->
                 <div class="card mb-4">

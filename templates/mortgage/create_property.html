@@ -19,6 +19,7 @@
     <div class="card">
         <div class="card-body">
             <form method="POST" action="{{ url_for('mortgage.create_property') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-3">
                     <label for="address" class="form-label">Property Address *</label>
                     <input type="text" class="form-control" id="address" name="address" required>

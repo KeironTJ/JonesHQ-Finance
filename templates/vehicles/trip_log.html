@@ -39,12 +39,14 @@
         <div>
             {% if selected_vehicle_id_trip %}
             <form method="POST" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=selected_vehicle_id_trip) }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for this vehicle?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-warning btn-sm me-2" title="Refresh forecasted fuel transactions for this vehicle">
                     <i class="bi bi-arrow-clockwise"></i> Refresh Forecasts
                 </button>
             </form>
             {% else %}
             <form method="POST" action="{{ url_for('vehicles.refresh_all_forecasts') }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for ALL vehicles?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-warning btn-sm me-2" title="Refresh forecasted fuel transactions for all vehicles">
                     <i class="bi bi-arrow-clockwise"></i> Refresh All Forecasts
                 </button>
@@ -197,6 +199,7 @@
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_trip', trip_id=trip.id) }}" style="display:inline;" onsubmit="return confirm('Delete this trip?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -215,6 +218,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('vehicles.add_trip') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Add Trip</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -265,6 +269,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" id="editTripForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Trip</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -315,6 +320,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('vehicles.bulk_add_trips') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title">Bulk Add Recurring Trips</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

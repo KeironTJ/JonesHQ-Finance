@@ -13,6 +13,7 @@
     <div class="card">
         <div class="card-body">
             <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="mb-3">
@@ -292,6 +293,7 @@
             
             <form method="post" action="{{ url_for('income.regenerate_range', id=recurring.id) }}" 
                   onsubmit="return confirm('Are you sure you want to regenerate income records in this range? This will delete and recreate them with current settings.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="row">
                     <div class="col-md-5">
                         <div class="mb-3">

@@ -37,6 +37,7 @@
                         <ul class="dropdown-menu">
                             <li>
                                 <form method="POST" action="{{ url_for('childcare.apply_templates') }}" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <input type="hidden" name="year" value="{{ current_year }}">
                                     <input type="hidden" name="month" value="{{ current_month }}">
                                     <button type="submit" class="dropdown-item" onclick="return confirm('Apply weekly templates to this entire month?');">
@@ -46,6 +47,7 @@
                             </li>
                             <li>
                                 <form method="POST" action="{{ url_for('childcare.copy_previous_month') }}" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <input type="hidden" name="year" value="{{ current_year }}">
                                     <input type="hidden" name="month" value="{{ current_month }}">
                                     <button type="submit" class="dropdown-item" onclick="return confirm('Copy last month activities to this month?');">
@@ -56,6 +58,7 @@
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="POST" action="{{ url_for('childcare.clear_month') }}" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <input type="hidden" name="year" value="{{ current_year }}">
                                     <input type="hidden" name="month" value="{{ current_month }}">
                                     <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Clear ALL activities for this month?');">

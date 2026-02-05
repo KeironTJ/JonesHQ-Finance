@@ -19,6 +19,7 @@
     <div class="card">
         <div class="card-body">
             <form method="POST" action="{{ url_for('mortgage.edit_property', property_id=property.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-3">
                     <label for="address" class="form-label">Property Address *</label>
                     <input type="text" class="form-control" id="address" name="address" value="{{ property.address }}" required>
@@ -102,6 +103,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <form method="POST" action="{{ url_for('mortgage.delete_property', property_id=property.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <button type="submit" class="btn btn-danger">
                             <i class="bi bi-trash"></i> Yes, Delete Property
                         </button>
