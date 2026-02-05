@@ -567,7 +567,13 @@ document.addEventListener('DOMContentLoaded', function(){
         btn.addEventListener('click', function(e){
             const id = this.dataset.id;
             const field = this.dataset.field;
-            fetch(`/expenses/toggle/${id}/${field}`, {method: 'POST', headers: {'Content-Type':'application/json'}})
+            fetch(`/expenses/toggle/${id}/${field}`, {
+                method: 'POST', 
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) {

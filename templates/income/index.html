@@ -281,6 +281,13 @@
             form.method = 'POST';
             form.action = '{{ url_for("income.delete_multiple") }}';
             
+            // Add CSRF token
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = '{{ csrf_token() }}';
+            form.appendChild(csrfInput);
+            
             checkedIds.forEach(id => {
                 const input = document.createElement('input');
                 input.type = 'hidden';

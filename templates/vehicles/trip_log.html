@@ -489,6 +489,13 @@ function bulkDeleteTrips() {
     form.method = 'POST';
     form.action = '/vehicles/trips/bulk-delete';
     
+    // Add CSRF token
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrf_token';
+    csrfInput.value = '{{ csrf_token() }}';
+    form.appendChild(csrfInput);
+    
     const input = document.createElement('input');
     input.type = 'hidden';
     input.name = 'trip_ids';
