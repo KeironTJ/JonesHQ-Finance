@@ -32,7 +32,7 @@
                                     <option value="">Select Source Account...</option>
                                     {% for account in accounts %}
                                     <option value="{{ account.id }}">
-                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.balance or 0) }})
+                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.calculated_balance or 0) }})
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -47,7 +47,7 @@
                                     <option value="">Select Destination Account...</option>
                                     {% for account in accounts %}
                                     <option value="{{ account.id }}">
-                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.balance or 0) }})
+                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.calculated_balance or 0) }})
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -82,6 +82,17 @@
                                 <input type="text" class="form-control" id="description" name="description"
                                     placeholder="e.g., Monthly savings transfer, Bill payment, etc.">
                                 <small class="form-text text-muted">Optional - helps identify the purpose of this transfer</small>
+                            </div>
+
+                            <!-- Is Paid -->
+                            <div class="col-md-12 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="is_paid" name="is_paid" checked>
+                                    <label class="form-check-label" for="is_paid">
+                                        <i class="bi bi-check-circle"></i> <strong>Mark as Paid</strong>
+                                        <small class="d-block text-muted">Uncheck if this is a scheduled/future transfer that hasn't happened yet</small>
+                                    </label>
+                                </div>
                             </div>
 
                             <!-- Category -->

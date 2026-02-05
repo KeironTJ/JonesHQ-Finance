@@ -322,11 +322,16 @@ class FuelForecastingService:
             forecasted.account_id = account_id
             forecasted.vendor_id = fuel_vendor.id if fuel_vendor else forecasted.vendor_id
             
+            # Update computed fields
+            forecasted.year_month = fuel_record.date.strftime('%Y-%m')
+            forecasted.day_name = fuel_record.date.strftime('%a')
+            forecasted.payday_period = PaydayService.get_period_for_date(fuel_record.date)
+            
             fuel_record.linked_transaction_id = forecasted.id
             transaction = forecasted
         else:
             # Create new actual transaction
-            _, _, payday_period = PaydayService.get_payday_period(fuel_record.date.year, fuel_record.date.month)
+            payday_period = PaydayService.get_period_for_date(fuel_record.date)
             
             transaction = Transaction(
                 account_id=account_id,
