@@ -17,5 +17,19 @@ class Account(db.Model):
     transactions = db.relationship('Transaction', backref='account', lazy=True)
     balances = db.relationship('Balance', backref='account', lazy=True)
     
+    @property
+    def paid_balance(self):
+        """Calculate balance from PAID transactions only"""
+        from decimal import Decimal
+        from models.transactions import Transaction
+        
+        paid_transactions = Transaction.query.filter_by(
+            account_id=self.id,
+            is_paid=True
+        ).all()
+        
+        balance = sum([Decimal(str(t.amount)) for t in paid_transactions], Decimal('0'))
+        return float(balance)
+    
     def __repr__(self):
         return f'<Account {self.name}>'

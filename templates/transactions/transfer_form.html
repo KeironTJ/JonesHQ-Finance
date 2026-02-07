@@ -32,7 +32,7 @@
                                     <option value="">Select Source Account...</option>
                                     {% for account in accounts %}
                                     <option value="{{ account.id }}">
-                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.balance or 0) }})
+                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.paid_balance or 0) }})
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -47,7 +47,7 @@
                                     <option value="">Select Destination Account...</option>
                                     {% for account in accounts %}
                                     <option value="{{ account.id }}">
-                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.balance or 0) }})
+                                        {{ account.name }} (Balance: £{{ "%.2f"|format(account.paid_balance or 0) }})
                                     </option>
                                     {% endfor %}
                                 </select>
