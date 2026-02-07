@@ -86,7 +86,7 @@
                             <div class="col-md-6 mb-3">
                                 <label for="transaction_date" class="form-label">Date *</label>
                                 <input type="date" class="form-control" id="transaction_date" name="transaction_date"
-                                    value="{{ transaction.transaction_date.strftime('%Y-%m-%d') if transaction else '' }}" required>
+                                    value="{{ transaction.transaction_date.strftime('%Y-%m-%d') if transaction else (today.strftime('%Y-%m-%d') if today else '') }}" required>
                             </div>
 
                             <!-- Payment Type -->

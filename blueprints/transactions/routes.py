@@ -267,7 +267,7 @@ def create():
             item = request.form.get('item', '')
             assigned_to = request.form.get('assigned_to', '')
             payment_type = request.form.get('payment_type', '')
-            is_paid = request.form.get('is_paid') == 'on'
+            is_paid = request.form.get('is_paid') == '1'
             
             # Recurring options
             is_recurring = request.form.get('is_recurring') == 'on'
@@ -372,6 +372,7 @@ def create():
             return redirect(url_for('transactions.index'))
     
     # GET request - show form
+    from datetime import date
     accounts = Account.query.order_by(Account.name).all()
     categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
     vendors = Vendor.query.order_by(Vendor.name).all()
@@ -382,7 +383,8 @@ def create():
         accounts=accounts,
         categories=categories,
         vendors=vendors,
-        action='Create'
+        action='Create',
+        today=date.today()
     )
 
 
@@ -866,7 +868,7 @@ def create_transfer():
             transfer_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d').date()
             description = request.form.get('description', 'Transfer')
             category_id = request.form.get('category_id', type=int)
-            is_paid = request.form.get('is_paid') == 'on'
+            is_paid = request.form.get('is_paid') == '1'
             
             # Bulk transfer options
             is_recurring = request.form.get('is_recurring') == 'on'
