@@ -5,6 +5,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from blueprints.vendors import bp
 from extensions import db
 from models import Vendor, Category
+from models.settings import Settings
 from services.payday_service import PaydayService
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -42,13 +43,16 @@ def index():
     # Get vendor types for filter
     vendor_types = db.session.query(Vendor.vendor_type).distinct().filter(Vendor.vendor_type.isnot(None)).all()
     vendor_types = [t[0] for t in vendor_types]
+
+    collapse_all_default = Settings.get_value('vendors.collapse_all_default', False)
     
     return render_template('vendors/vendors.html', 
                          vendors=vendors,
                          vendor_types=vendor_types,
                          current_type=vendor_type,
                          current_search=search,
-                         current_sort=sort_by)
+                         current_sort=sort_by,
+                         collapse_all_default=collapse_all_default)
 
 
 @bp.route('/analytics')

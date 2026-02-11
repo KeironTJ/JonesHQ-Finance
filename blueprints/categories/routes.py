@@ -5,6 +5,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from blueprints.categories import bp
 from extensions import db
 from models import Category
+from models.settings import Settings
 from models.transactions import Transaction
 from services.payday_service import PaydayService
 from datetime import datetime
@@ -41,9 +42,12 @@ def index():
     categories_by_head = dict(sorted(categories_by_head.items(), 
                                      key=lambda x: x[1]['total_count'], 
                                      reverse=True))
+
+    collapse_all_default = Settings.get_value('categories.collapse_all_default', False)
     
     return render_template('categories/categories.html', 
-                         categories_by_head=categories_by_head)
+                         categories_by_head=categories_by_head,
+                         collapse_all_default=collapse_all_default)
 
 @bp.route('/add', methods=['GET', 'POST'])
 def add():

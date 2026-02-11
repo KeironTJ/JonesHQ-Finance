@@ -394,6 +394,26 @@ footer {
     font-weight: 500;
 }
 
+.categories-page .page-title,
+.vendors-page .page-title {
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    color: #1f2d3d;
+}
+
+.categories-page .page-subtitle,
+.vendors-page .page-subtitle {
+    font-size: 1rem;
+    color: #566572;
+    font-weight: 500;
+}
+
+.categories-page .accordion-button strong,
+.vendors-page .accordion-button strong {
+    font-size: 1.02rem;
+    color: #1f2d3d;
+}
+
 /* Vendors Page Styles */
 .vendors-page .accordion-button {
     background-color: #f8f9fb;
@@ -421,4 +441,9 @@ footer {
 
 .vendors-page .badge {
     font-weight: 500;
+}
+
+.categories-page .form-check,
+.vendors-page .form-check {
+    margin-bottom: 0;
 }

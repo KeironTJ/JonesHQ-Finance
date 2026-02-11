@@ -6,10 +6,14 @@
 <div class="container-fluid vendors-page">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
-            <h1><i class="bi bi-shop"></i> Vendors</h1>
-            <p class="text-muted mb-0">Manage your income and expense vendors</p>
+            <h1 class="page-title"><i class="bi bi-shop"></i> Vendors</h1>
+            <p class="page-subtitle mb-0">Manage your income and expense vendors</p>
         </div>
         <div class="d-flex gap-2">
+            <div class="form-check form-switch d-flex align-items-center me-2">
+                <input class="form-check-input" type="checkbox" id="collapseAllDefault" {% if collapse_all_default %}checked{% endif %}>
+                <label class="form-check-label ms-2" for="collapseAllDefault">Collapse all by default</label>
+            </div>
             <a href="{{ url_for('vendors.analytics') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-bar-chart"></i> Analytics
             </a>
@@ -126,9 +130,9 @@
         {% for vtype, type_vendors in vendors_by_type.items()|sort %}
         <div class="accordion-item vendor-group" data-vendor-type="{{ vtype|lower }}">
             <h2 class="accordion-header" id="headingType{{ loop.index }}">
-                <button class="accordion-button {% if loop.index > 3 %}collapsed{% endif %}" type="button" 
+                <button class="accordion-button {% if collapse_all_default or loop.index > 3 %}collapsed{% endif %}" type="button" 
                         data-bs-toggle="collapse" data-bs-target="#collapseType{{ loop.index }}" 
-                        aria-expanded="{% if loop.index <= 3 %}true{% else %}false{% endif %}" 
+                    aria-expanded="{% if not collapse_all_default and loop.index <= 3 %}true{% else %}false{% endif %}" 
                         aria-controls="collapseType{{ loop.index }}">
                     <div class="d-flex justify-content-between align-items-center w-100 me-3">
                         <div>
@@ -145,7 +149,7 @@
                     </div>
                 </button>
             </h2>
-            <div id="collapseType{{ loop.index }}" class="accordion-collapse collapse {% if loop.index <= 3 %}show{% endif %}" 
+              <div id="collapseType{{ loop.index }}" class="accordion-collapse collapse {% if not collapse_all_default and loop.index <= 3 %}show{% endif %}" 
                  aria-labelledby="headingType{{ loop.index }}" data-bs-parent="#vendorsAccordion">
                 <div class="accordion-body p-0">
                     <div class="table-responsive">
@@ -270,6 +274,54 @@
 <script>
 // Calculate and display stats
 document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const jsonHeaders = csrfToken
+        ? { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+        : { 'Content-Type': 'application/json' };
+    const collapseAllToggle = document.getElementById('collapseAllDefault');
+    const collapseAllDefault = collapseAllToggle?.checked ?? false;
+    const storageKey = 'vendors.openSections';
+
+    if (!collapseAllDefault) {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        if (saved.length > 0) {
+            document.querySelectorAll('.accordion-collapse').forEach(el => {
+                const instance = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
+                instance.hide();
+            });
+            saved.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    const instance = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
+                    instance.show();
+                }
+            });
+        }
+    }
+
+    document.querySelectorAll('.accordion-collapse').forEach(el => {
+        el.addEventListener('shown.bs.collapse', () => {
+            const saved = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'));
+            saved.add(el.id);
+            localStorage.setItem(storageKey, JSON.stringify(Array.from(saved)));
+        });
+        el.addEventListener('hidden.bs.collapse', () => {
+            const saved = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'));
+            saved.delete(el.id);
+            localStorage.setItem(storageKey, JSON.stringify(Array.from(saved)));
+        });
+    });
+
+    if (collapseAllToggle) {
+        collapseAllToggle.addEventListener('change', () => {
+            const value = collapseAllToggle.checked;
+            fetch('{{ url_for("settings.save_preference") }}', {
+                method: 'POST',
+                headers: jsonHeaders,
+                body: JSON.stringify({ key: 'vendors.collapse_all_default', value })
+            });
+        });
+    }
     const activeCount = document.querySelectorAll('[data-status="active"]').length;
     const allRows = document.querySelectorAll('.vendor-row');
     let totalTransactions = 0;

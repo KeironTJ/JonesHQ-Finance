@@ -1,4 +1,5 @@
 from flask import render_template, request, redirect, url_for, flash
+from flask import jsonify
 from . import settings_bp
 from models.settings import Settings
 from models.accounts import Account
@@ -157,11 +158,29 @@ def update():
     return redirect(url_for('settings.index'))
 
 
+@settings_bp.route('/settings/save_preference', methods=['POST'])
+def save_preference():
+    """Save a lightweight user preference (AJAX)"""
+    data = request.get_json() or {}
+    key = data.get('key')
+    value = data.get('value')
+
+    if not key:
+        return jsonify({'success': False, 'error': 'Missing preference key'}), 400
+
+    setting_type = 'boolean' if isinstance(value, bool) else 'string'
+    Settings.set_value(key, value, f'User preference: {key}', setting_type)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
 @settings_bp.route('/settings/tax')
 def tax_settings():
     """Display tax and NI settings"""
     tax_years = TaxSettings.query.order_by(TaxSettings.effective_from.desc()).all()
     return render_template('settings/tax_settings.html', tax_years=tax_years)
+        
 
 
 @settings_bp.route('/settings/tax/<int:id>/edit', methods=['GET', 'POST'])
