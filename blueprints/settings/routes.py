@@ -27,6 +27,7 @@ def index():
     payday_expanded = Settings.get_value('dashboard.payday_expanded', True)
     summaries_expanded = Settings.get_value('dashboard.summaries_expanded', True)
     quick_nav_expanded = Settings.get_value('dashboard.quick_nav_expanded', True)
+
     
     # Get all active accounts
     accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
@@ -144,6 +145,7 @@ def update():
             'Default expanded state for Quick Navigation on dashboard',
             'boolean'
         )
+
         
         db.session.commit()
         flash(f'Settings updated successfully! Payday set to {payday_day} of each month.', 'success')

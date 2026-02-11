@@ -31,13 +31,28 @@
 
                         <div class="mb-3">
                             <label for="vendor_type" class="form-label">Vendor Type</label>
-                            <select class="form-select" id="vendor_type" name="vendor_type">
-                                <option value="">Select a type (optional)</option>
-                                {% for vtype in vendor_types %}
-                                <option value="{{ vtype }}">{{ vtype }}</option>
-                                {% endfor %}
-                            </select>
+                            {% if vendor_types %}
+                            <div class="d-flex gap-2">
+                                <select class="form-select" id="vendor_type" name="vendor_type">
+                                    <option value="">Select a type (optional)</option>
+                                    {% for vtype in vendor_types %}
+                                    <option value="{{ vtype.id }}">{{ vtype.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <a href="{{ url_for('vendors.types_index') }}" class="btn btn-outline-secondary" title="Manage types">
+                                    <i class="bi bi-gear"></i>
+                                </a>
+                            </div>
                             <div class="form-text">Helps organize and filter vendors</div>
+                            {% else %}
+                            <div class="alert alert-info d-flex justify-content-between align-items-center">
+                                <span>No vendor types yet.</span>
+                                <form method="POST" action="{{ url_for('vendors.seed_types') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-sm btn-primary">Add Default Types</button>
+                                </form>
+                            </div>
+                            {% endif %}
                         </div>
 
                         <div class="mb-3">

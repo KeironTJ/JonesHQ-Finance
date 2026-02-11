@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Vendor Types - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid vendors-page">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="page-title"><i class="bi bi-tags"></i> Vendor Types</h1>
+            <p class="page-subtitle mb-0">Define and organize vendor types used across the app</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('vendors.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Vendors
+            </a>
+        </div>
+    </div>
+
+    {% if not has_types %}
+    <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <i class="bi bi-info-circle"></i>
+            No vendor types found. You can add your own, or seed the default list.
+        </div>
+        <form method="POST" action="{{ url_for('vendors.seed_types') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-lightning-charge"></i> Add Default Types
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Add Vendor Type</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('vendors.add_type') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="mb-3">
+                            <label class="form-label" for="name">Type Name</label>
+                            <input class="form-control" id="name" name="name" placeholder="e.g., Grocery" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="sort_order">Sort Order</label>
+                            <input class="form-control" id="sort_order" name="sort_order" type="number" placeholder="Optional">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" checked>
+                            <label class="form-check-label" for="is_active">Active</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-check-circle"></i> Save Type
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="mb-2"><i class="bi bi-lightbulb"></i> Tips</h6>
+                    <ul class="small mb-0">
+                        <li>Use consistent, human‑friendly names.</li>
+                        <li>Set sort order to control dropdown order.</li>
+                        <li>Deactivate a type to hide it from forms.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-list-ul"></i> Current Vendor Types</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if vendor_types %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Type</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end">Sort</th>
+                                    <th class="text-end">Vendors</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for vtype in vendor_types %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ vtype.name }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if vtype.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ vtype.sort_order if vtype.sort_order is not none else '-' }}</td>
+                                    <td class="text-end">{{ type_counts.get(vtype.id, 0) }}</td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#editType{{ vtype.id }}">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form method="POST" action="{{ url_for('vendors.delete_type', type_id=vtype.id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" {% if type_counts.get(vtype.id, 0) > 0 %}disabled{% endif %}>
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                <tr class="collapse bg-light" id="editType{{ vtype.id }}">
+                                    <td colspan="5">
+                                        <form method="POST" action="{{ url_for('vendors.update_type', type_id=vtype.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-md-5">
+                                                    <label class="form-label">Type Name</label>
+                                                    <input class="form-control" name="name" value="{{ vtype.name }}" required>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Sort Order</label>
+                                                    <input class="form-control" name="sort_order" type="number" value="{{ vtype.sort_order if vtype.sort_order is not none else '' }}">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label d-block">Active</label>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="is_active" value="1" {% if vtype.is_active %}checked{% endif %}>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-2 text-end">
+                                                    <button type="submit" class="btn btn-primary">
+                                                        <i class="bi bi-check-circle"></i> Save
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-3">
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle"></i> No vendor types defined yet.
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

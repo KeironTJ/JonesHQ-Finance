@@ -17,6 +17,9 @@
             <a href="{{ url_for('vendors.analytics') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-bar-chart"></i> Analytics
             </a>
+                <a href="{{ url_for('vendors.types_index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-tags"></i> Types
+                </a>
             <a href="{{ url_for('vendors.add') }}" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> Add Vendor
             </a>
@@ -93,8 +96,9 @@
                     <select id="typeFilter" class="form-select">
                         <option value="">All Types</option>
                         {% for vtype in vendor_types %}
-                        <option value="{{ vtype|lower }}">{{ vtype }}</option>
+                        <option value="{{ vtype.name|lower }}">{{ vtype.name }}</option>
                         {% endfor %}
+                        <option value="uncategorized">Uncategorized</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -120,7 +124,7 @@
     <div class="accordion" id="vendorsAccordion">
         {% set vendors_by_type = {} %}
         {% for vendor in vendors %}
-            {% set vtype = vendor.vendor_type or 'Uncategorized' %}
+            {% set vtype = vendor.vendor_type_rel.name if vendor.vendor_type_rel else (vendor.vendor_type or 'Uncategorized') %}
             {% if vtype not in vendors_by_type %}
                 {% set _ = vendors_by_type.update({vtype: []}) %}
             {% endif %}

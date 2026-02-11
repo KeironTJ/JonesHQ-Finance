@@ -4,12 +4,19 @@ Routes for vendor management
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from blueprints.vendors import bp
 from extensions import db
-from models import Vendor, Category
+from models import Vendor, Category, VendorType
 from models.settings import Settings
 from services.payday_service import PaydayService
 from datetime import datetime, timedelta
 from decimal import Decimal
 import json
+from sqlalchemy import func
+
+DEFAULT_VENDOR_TYPES = [
+    'Grocery', 'Fuel', 'Restaurant', 'Online Retailer',
+    'Utility', 'Insurance', 'Bank', 'Government',
+    'Entertainment', 'Healthcare', 'Education', 'Other'
+]
 
 @bp.route('/')
 def index():
@@ -23,7 +30,10 @@ def index():
     query = Vendor.query
     
     if vendor_type:
-        query = query.filter_by(vendor_type=vendor_type)
+        if vendor_type.lower() == 'uncategorized':
+            query = query.filter(Vendor.vendor_type_id.is_(None))
+        else:
+            query = query.join(VendorType, isouter=True).filter(func.lower(VendorType.name) == vendor_type.lower())
     
     if search:
         query = query.filter(Vendor.name.ilike(f'%{search}%'))
@@ -41,8 +51,7 @@ def index():
         vendors = sorted(vendors, key=lambda v: v.name.lower())
     
     # Get vendor types for filter
-    vendor_types = db.session.query(Vendor.vendor_type).distinct().filter(Vendor.vendor_type.isnot(None)).all()
-    vendor_types = [t[0] for t in vendor_types]
+    vendor_types = VendorType.query.order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
 
     collapse_all_default = Settings.get_value('vendors.collapse_all_default', False)
     
@@ -53,6 +62,107 @@ def index():
                          current_search=search,
                          current_sort=sort_by,
                          collapse_all_default=collapse_all_default)
+
+
+@bp.route('/types')
+def types_index():
+    """Manage vendor types"""
+    vendor_types = VendorType.query.order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
+    type_counts = {
+        vt.id: Vendor.query.filter_by(vendor_type_id=vt.id).count()
+        for vt in vendor_types
+    }
+    return render_template(
+        'vendors/types.html',
+        vendor_types=vendor_types,
+        type_counts=type_counts,
+        has_types=bool(vendor_types),
+        default_types=DEFAULT_VENDOR_TYPES,
+    )
+
+
+@bp.route('/types/add', methods=['POST'])
+def add_type():
+    """Add a vendor type"""
+    name = (request.form.get('name') or '').strip()
+    sort_order = request.form.get('sort_order')
+    is_active = request.form.get('is_active') == '1'
+
+    if not name:
+        flash('Vendor type name is required.', 'danger')
+        return redirect(url_for('vendors.types_index'))
+
+    existing = VendorType.query.filter(func.lower(VendorType.name) == name.lower()).first()
+    if existing:
+        flash(f'Vendor type "{name}" already exists.', 'warning')
+        return redirect(url_for('vendors.types_index'))
+
+    vendor_type = VendorType(
+        name=name,
+        is_active=is_active,
+        sort_order=int(sort_order) if sort_order else None,
+    )
+    db.session.add(vendor_type)
+    db.session.commit()
+
+    flash(f'Vendor type "{name}" added.', 'success')
+    return redirect(url_for('vendors.types_index'))
+
+
+@bp.route('/types/<int:type_id>/update', methods=['POST'])
+def update_type(type_id):
+    """Update a vendor type"""
+    vendor_type = VendorType.query.get_or_404(type_id)
+    name = (request.form.get('name') or '').strip()
+    sort_order = request.form.get('sort_order')
+    is_active = request.form.get('is_active') == '1'
+
+    if not name:
+        flash('Vendor type name is required.', 'danger')
+        return redirect(url_for('vendors.types_index'))
+
+    existing = VendorType.query.filter(func.lower(VendorType.name) == name.lower(), VendorType.id != type_id).first()
+    if existing:
+        flash(f'Vendor type "{name}" already exists.', 'warning')
+        return redirect(url_for('vendors.types_index'))
+
+    vendor_type.name = name
+    vendor_type.is_active = is_active
+    vendor_type.sort_order = int(sort_order) if sort_order else None
+    db.session.commit()
+
+    flash(f'Vendor type "{name}" updated.', 'success')
+    return redirect(url_for('vendors.types_index'))
+
+
+@bp.route('/types/<int:type_id>/delete', methods=['POST'])
+def delete_type(type_id):
+    """Delete a vendor type if unused"""
+    vendor_type = VendorType.query.get_or_404(type_id)
+    usage_count = Vendor.query.filter_by(vendor_type_id=vendor_type.id).count()
+    if usage_count > 0:
+        flash('Cannot delete a vendor type that is in use.', 'warning')
+        return redirect(url_for('vendors.types_index'))
+
+    db.session.delete(vendor_type)
+    db.session.commit()
+    flash(f'Vendor type "{vendor_type.name}" deleted.', 'success')
+    return redirect(url_for('vendors.types_index'))
+
+
+@bp.route('/types/seed', methods=['POST'])
+def seed_types():
+    """Seed default vendor types if none exist"""
+    if VendorType.query.count() > 0:
+        flash('Vendor types already exist.', 'info')
+        return redirect(url_for('vendors.types_index'))
+
+    for index, name in enumerate(DEFAULT_VENDOR_TYPES, start=1):
+        db.session.add(VendorType(name=name, is_active=True, sort_order=index))
+    db.session.commit()
+
+    flash('Default vendor types added.', 'success')
+    return redirect(url_for('vendors.types_index'))
 
 
 @bp.route('/analytics')
@@ -117,7 +227,7 @@ def analytics():
         if not vendor:
             continue
 
-        head_group = vendor.vendor_type or 'Uncategorized'
+        head_group = vendor.vendor_type_rel.name if vendor.vendor_type_rel else (vendor.vendor_type or 'Uncategorized')
         vendor_name = vendor.name
 
         amount_value = Decimal(str(txn.amount))
@@ -293,7 +403,7 @@ def _analytics_monthly():
         if not vendor:
             continue
 
-        head_group = vendor.vendor_type or 'Uncategorized'
+        head_group = vendor.vendor_type_rel.name if vendor.vendor_type_rel else (vendor.vendor_type or 'Uncategorized')
         vendor_name = vendor.name
 
         amount_value = Decimal(str(txn.amount))
@@ -415,6 +525,7 @@ def add():
         default_category_id = request.form.get('default_category_id')
         website = request.form.get('website')
         notes = request.form.get('notes')
+        vendor_type_id = int(vendor_type) if vendor_type else None
         
         # Check if vendor already exists
         existing = Vendor.query.filter_by(name=name).first()
@@ -424,6 +535,7 @@ def add():
         else:
             vendor = Vendor(
                 name=name,
+                vendor_type_id=vendor_type_id,
                 vendor_type=vendor_type if vendor_type else None,
                 default_category_id=int(default_category_id) if default_category_id else None,
                 website=website if website else None,
@@ -439,12 +551,7 @@ def add():
     # Get categories for dropdown
     categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
     
-    # Predefined vendor types
-    vendor_types = [
-        'Grocery', 'Fuel', 'Restaurant', 'Online Retailer', 
-        'Utility', 'Insurance', 'Bank', 'Government',
-        'Entertainment', 'Healthcare', 'Education', 'Other'
-    ]
+    vendor_types = VendorType.query.filter_by(is_active=True).order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
     
     return render_template('vendors/add.html', 
                          categories=categories,
@@ -462,6 +569,7 @@ def edit(id):
         website = request.form.get('website')
         notes = request.form.get('notes')
         is_active = request.form.get('is_active') == 'on'
+        vendor_type_id = int(vendor_type) if vendor_type else None
         
         # Check if updated name conflicts
         existing = Vendor.query.filter(Vendor.id != id, Vendor.name == name).first()
@@ -470,6 +578,7 @@ def edit(id):
             flash(f'Vendor name "{name}" is already taken!', 'warning')
         else:
             vendor.name = name
+            vendor.vendor_type_id = vendor_type_id
             vendor.vendor_type = vendor_type if vendor_type else None
             vendor.default_category_id = int(default_category_id) if default_category_id else None
             vendor.website = website if website else None
@@ -492,7 +601,8 @@ def edit(id):
         'Entertainment', 'Healthcare', 'Education', 'Other'
     ]
     
-    return render_template('vendors/edit.html', 
+    vendor_types = VendorType.query.order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
+    return render_template('vendors/edit.html',
                          vendor=vendor,
                          categories=categories,
                          vendor_types=vendor_types)
@@ -531,7 +641,7 @@ def api_search():
     return jsonify([{
         'id': v.id,
         'name': v.name,
-        'vendor_type': v.vendor_type,
+        'vendor_type': v.vendor_type_rel.name if v.vendor_type_rel else v.vendor_type,
         'default_category_id': v.default_category_id
     } for v in vendors])
 

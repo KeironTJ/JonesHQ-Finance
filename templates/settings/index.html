@@ -162,6 +162,21 @@
                     </div>
                 </div>
 
+                <!-- Vendor Types -->
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="bi bi-shop"></i> Vendor Types</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-3">
+                            Vendor types are managed in a dedicated list so you can add, edit, and order them.
+                        </p>
+                        <a href="{{ url_for('vendors.types_index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-tags"></i> Manage Vendor Types
+                        </a>
+                    </div>
+                </div>
+
                 <!-- Save Button -->
                 <div class="d-flex justify-content-between">
                     <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">
@@ -188,10 +203,18 @@
                     </p>
                     <hr>
                     <h6>Default: 10 Years</h6>
-                    <p class="small mb-0">
+                    <p class="small">
                         The default is set to 10 years, which is suitable for most credit card repayment scenarios.
                         You can adjust this from 1 to 50 years based on your planning needs.
                     </p>
+                    <hr>
+                    <h6>Vendor Types</h6>
+                    <p class="small mb-2">
+                        Keep vendor types organized and tailored to your spending.
+                    </p>
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vendors.types_index') }}">
+                        <i class="bi bi-tags"></i> Manage Vendor Types
+                    </a>
                 </div>
             </div>
         </div>

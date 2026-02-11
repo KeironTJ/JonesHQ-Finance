@@ -27,7 +27,7 @@ from models.transactions import Transaction
 from models.trips import Trip
 from models.users import User
 from models.vehicles import Vehicle
-from models.vendors import Vendor
+from models.vendors import Vendor, VendorType
 
 __all__ = [
     'Account',
@@ -61,4 +61,5 @@ __all__ = [
     'User',
     'Vehicle',
     'Vendor',
+    'VendorType',
 ]
