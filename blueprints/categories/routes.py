@@ -158,7 +158,8 @@ def analytics():
     if view_mode == 'monthly':
         return _analytics_monthly()
     
-    periods = PaydayService.get_recent_periods(num_periods=18, include_future=False)
+    include_future = '1' in request.args.getlist('include_future')
+    periods = PaydayService.get_recent_periods(num_periods=18, include_future=include_future)
     period_labels = [p['label'] for p in periods]
     period_display = {p['label']: p['display_name'] for p in periods}
 
@@ -167,7 +168,8 @@ def analytics():
 
     start_period = request.args.get('start_period', default_start)
     end_period = request.args.get('end_period', default_end)
-    paid_only = request.args.get('paid_only', '1') == '1'
+    paid_only_values = request.args.getlist('paid_only')
+    paid_only = True if not paid_only_values else ('1' in paid_only_values)
 
     if start_period not in period_labels:
         start_period = default_start
@@ -307,6 +309,7 @@ def analytics():
         start_period=start_period,
         end_period=end_period,
         paid_only=paid_only,
+        include_future=include_future,
         category_data=sorted_categories,
         period_totals=period_totals,
         total_income=total_income,
@@ -322,13 +325,15 @@ def _analytics_monthly():
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
     
-    paid_only = request.args.get('paid_only', '1') == '1'
+    paid_only_values = request.args.getlist('paid_only')
+    paid_only = True if not paid_only_values else ('1' in paid_only_values)
     num_months = int(request.args.get('num_months', '12'))
+    future_months = int(request.args.get('future_months', '0'))
     
     # Generate list of months
     today = datetime.now()
     months = []
-    for i in range(num_months - 1, -1, -1):
+    for i in range(num_months - 1, -future_months - 1, -1):
         month_date = today - relativedelta(months=i)
         months.append({
             'key': month_date.strftime('%Y-%m'),
@@ -445,6 +450,7 @@ def _analytics_monthly():
         view_mode='monthly',
         paid_only=paid_only,
         num_months=num_months,
+        future_months=future_months,
         months=months,
         category_data=sorted_categories,
         month_totals=month_totals,

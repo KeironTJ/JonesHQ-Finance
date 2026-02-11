@@ -89,16 +89,19 @@ footer {
     transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 }
 
-.categories-analytics .analytics-summary-card {
+.categories-analytics .analytics-summary-card,
+.vendors-analytics .analytics-summary-card {
     border: 1px solid #e6e9ee;
 }
 
-.categories-analytics .analytics-chart-wrap {
+.categories-analytics .analytics-chart-wrap,
+.vendors-analytics .analytics-chart-wrap {
     height: 500px;
     position: relative;
 }
 
-.categories-analytics .analytics-chart-wrap canvas {
+.categories-analytics .analytics-chart-wrap canvas,
+.vendors-analytics .analytics-chart-wrap canvas {
     position: absolute !important;
     top: 0;
     left: 0;
@@ -199,55 +202,68 @@ footer {
     padding: 0.5rem 0.75rem;
 }
 
-.categories-analytics .analytics-filter-card {
+.categories-analytics .analytics-filter-card,
+.vendors-analytics .analytics-filter-card {
     border: 1px solid #e6e9ee;
 }
 
-.categories-analytics .analytics-stat-card {
+.categories-analytics .analytics-stat-card,
+.vendors-analytics .analytics-stat-card {
     border: 1px solid #e6e9ee;
     background: linear-gradient(135deg, #ffffff 0%, #f6f8fb 100%);
 }
 
-.categories-analytics .analytics-chart-card {
+.categories-analytics .analytics-chart-card,
+.vendors-analytics .analytics-chart-card {
     border: 1px solid #e6e9ee;
 }
 
-.categories-analytics .analytics-table-card {
+.categories-analytics .analytics-table-card,
+.vendors-analytics .analytics-table-card {
     border: 1px solid #e6e9ee;
 }
 
-.categories-analytics .accordion-button {
+.categories-analytics .accordion-button,
+.vendors-analytics .accordion-button {
     background: #f8f9fb;
 }
 
-.categories-analytics .table thead th {
+.categories-analytics .table thead th,
+.vendors-analytics .table thead th {
     background: #f1f3f6;
     border-bottom: 1px solid #e6e9ee;
 }
 
-.categories-analytics .table-responsive {
+.categories-analytics .table-responsive,
+.vendors-analytics .table-responsive {
     max-height: 600px;
     overflow-y: auto;
 }
 
-.categories-analytics .sticky-top {
+.categories-analytics .sticky-top,
+.vendors-analytics .sticky-top {
     position: sticky;
     top: 0;
     z-index: 10;
 }
 
 .categories-analytics .table-bordered td,
-.categories-analytics .table-bordered th {
+.categories-analytics .table-bordered th,
+.vendors-analytics .table-bordered td,
+.vendors-analytics .table-bordered th {
     border-color: #e6e9ee;
 }
 
-.categories-analytics .bg-primary .table {
+.categories-analytics .bg-primary .table,
+.vendors-analytics .bg-primary .table {
     --bs-table-bg: transparent;
     --bs-table-border-color: rgba(255, 255, 255, 0.2);
 }
 
 .categories-analytics .bg-primary .table th,
-.categories-analytics .bg-primary .table td {
+.categories-analytics .bg-primary .table td,
+.vendors-analytics .bg-primary .table th,
+.vendors-analytics .bg-primary .table td {
     border-color: rgba(255, 255, 255, 0.2);
 }
 

@@ -5,7 +5,10 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from blueprints.vendors import bp
 from extensions import db
 from models import Vendor, Category
-from datetime import datetime
+from services.payday_service import PaydayService
+from datetime import datetime, timedelta
+from decimal import Decimal
+import json
 
 @bp.route('/')
 def index():
@@ -46,6 +49,358 @@ def index():
                          current_type=vendor_type,
                          current_search=search,
                          current_sort=sort_by)
+
+
+@bp.route('/analytics')
+def analytics():
+    """Vendor analytics with payday period filters"""
+    view_mode = request.args.get('view_mode', 'payday')
+
+    if view_mode == 'monthly':
+        return _analytics_monthly()
+
+    from models.transactions import Transaction
+
+    include_future = '1' in request.args.getlist('include_future')
+    periods = PaydayService.get_recent_periods(num_periods=18, include_future=include_future)
+    period_labels = [p['label'] for p in periods]
+    period_display = {p['label']: p['display_name'] for p in periods}
+
+    default_end = period_labels[-1] if period_labels else None
+    default_start = period_labels[-6] if period_labels and len(period_labels) >= 6 else (period_labels[0] if period_labels else None)
+
+    start_period = request.args.get('start_period', default_start)
+    end_period = request.args.get('end_period', default_end)
+    paid_only_values = request.args.getlist('paid_only')
+    paid_only = True if not paid_only_values else ('1' in paid_only_values)
+
+    if start_period not in period_labels:
+        start_period = default_start
+    if end_period not in period_labels:
+        end_period = default_end
+
+    if start_period and end_period and start_period > end_period:
+        start_period, end_period = end_period, start_period
+
+    filtered_labels = [label for label in period_labels if start_period and end_period and start_period <= label <= end_period]
+
+    query = Transaction.query.join(Vendor).filter(Transaction.payday_period.isnot(None))
+
+    if paid_only:
+        query = query.filter(Transaction.is_paid.is_(True))
+
+    if start_period and end_period:
+        query = query.filter(
+            Transaction.payday_period >= start_period,
+            Transaction.payday_period <= end_period
+        )
+
+    transactions = query.all()
+
+    category_data = {}
+    period_totals = {label: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for label in filtered_labels}
+    vendor_totals = {}
+    total_transactions = 0
+    total_income = Decimal('0.00')
+    total_expense = Decimal('0.00')
+
+    for txn in transactions:
+        period_label = txn.payday_period
+        if period_label not in period_totals:
+            continue
+
+        vendor = txn.vendor
+        if not vendor:
+            continue
+
+        head_group = vendor.vendor_type or 'Uncategorized'
+        vendor_name = vendor.name
+
+        amount_value = Decimal(str(txn.amount))
+        income_value = amount_value if amount_value >= 0 else Decimal('0.00')
+        expense_value = (amount_value * Decimal('-1')) if amount_value < 0 else Decimal('0.00')
+
+        if head_group not in category_data:
+            category_data[head_group] = {
+                'total_income': Decimal('0.00'),
+                'total_expense': Decimal('0.00'),
+                'total_count': 0,
+                'periods': {label: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for label in filtered_labels},
+                'subcategories': {}
+            }
+
+        if vendor_name not in category_data[head_group]['subcategories']:
+            category_data[head_group]['subcategories'][vendor_name] = {
+                'total_income': Decimal('0.00'),
+                'total_expense': Decimal('0.00'),
+                'total_count': 0,
+                'periods': {label: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for label in filtered_labels}
+            }
+
+        if vendor_name not in vendor_totals:
+            vendor_totals[vendor_name] = {
+                'total_income': Decimal('0.00'),
+                'total_expense': Decimal('0.00'),
+                'periods': {label: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for label in filtered_labels}
+            }
+
+        category_data[head_group]['total_income'] += income_value
+        category_data[head_group]['total_expense'] += expense_value
+        category_data[head_group]['total_count'] += 1
+        category_data[head_group]['periods'][period_label]['income'] += income_value
+        category_data[head_group]['periods'][period_label]['expense'] += expense_value
+
+        category_data[head_group]['subcategories'][vendor_name]['total_income'] += income_value
+        category_data[head_group]['subcategories'][vendor_name]['total_expense'] += expense_value
+        category_data[head_group]['subcategories'][vendor_name]['total_count'] += 1
+        category_data[head_group]['subcategories'][vendor_name]['periods'][period_label]['income'] += income_value
+        category_data[head_group]['subcategories'][vendor_name]['periods'][period_label]['expense'] += expense_value
+
+        vendor_totals[vendor_name]['total_income'] += income_value
+        vendor_totals[vendor_name]['total_expense'] += expense_value
+        vendor_totals[vendor_name]['periods'][period_label]['income'] += income_value
+        vendor_totals[vendor_name]['periods'][period_label]['expense'] += expense_value
+
+        period_totals[period_label]['income'] += income_value
+        period_totals[period_label]['expense'] += expense_value
+        total_transactions += 1
+        total_income += income_value
+        total_expense += expense_value
+
+    sorted_groups = sorted(
+        category_data.items(),
+        key=lambda x: x[1]['total_income'] + x[1]['total_expense'],
+        reverse=True
+    )
+
+    sorted_vendors = sorted(
+        vendor_totals.items(),
+        key=lambda x: x[1]['total_income'] + x[1]['total_expense'],
+        reverse=True
+    )
+    chart_vendors = [vendor for vendor, _ in sorted_vendors[:6]]
+
+    chart_labels = [period_display.get(label, label) for label in filtered_labels]
+    income_datasets = []
+    expense_datasets = []
+
+    for vendor_name in chart_vendors:
+        vendor_data = vendor_totals[vendor_name]
+        income_datasets.append({
+            'label': f"{vendor_name} (Income)",
+            'data': [float(vendor_data['periods'][label]['income']) for label in filtered_labels]
+        })
+        expense_datasets.append({
+            'label': f"{vendor_name} (Expense)",
+            'data': [float(vendor_data['periods'][label]['expense']) for label in filtered_labels]
+        })
+
+    if len(sorted_vendors) > len(chart_vendors):
+        other_vendors = [vendor for vendor, _ in sorted_vendors][len(chart_vendors):]
+        other_income = []
+        other_expense = []
+        for label in filtered_labels:
+            income_sum = sum([vendor_totals[v]['periods'][label]['income'] for v in other_vendors], Decimal('0.00'))
+            expense_sum = sum([vendor_totals[v]['periods'][label]['expense'] for v in other_vendors], Decimal('0.00'))
+            other_income.append(float(income_sum))
+            other_expense.append(float(expense_sum))
+        income_datasets.append({'label': 'Other (Income)', 'data': other_income})
+        expense_datasets.append({'label': 'Other (Expense)', 'data': other_expense})
+
+    chart_payload = json.dumps({
+        'labels': chart_labels,
+        'income_datasets': income_datasets,
+        'expense_datasets': expense_datasets
+    })
+
+    net_total = total_income - total_expense
+    average_per_period = (net_total / len(filtered_labels)) if filtered_labels else Decimal('0.00')
+
+    return render_template(
+        'vendors/analytics.html',
+        view_mode='payday',
+        periods=periods,
+        period_display=period_display,
+        period_labels=filtered_labels,
+        start_period=start_period,
+        end_period=end_period,
+        paid_only=paid_only,
+        include_future=include_future,
+        category_data=sorted_groups,
+        period_totals=period_totals,
+        total_income=total_income,
+        total_expense=total_expense,
+        net_total=net_total,
+        total_transactions=total_transactions,
+        average_per_period=average_per_period,
+        chart_payload=chart_payload
+    )
+
+
+def _analytics_monthly():
+    """Monthly view with month-on-month vendor comparison"""
+    from dateutil.relativedelta import relativedelta
+    from models.transactions import Transaction
+
+    paid_only_values = request.args.getlist('paid_only')
+    paid_only = True if not paid_only_values else ('1' in paid_only_values)
+    num_months = int(request.args.get('num_months', '12'))
+    future_months = int(request.args.get('future_months', '0'))
+
+    today = datetime.now()
+    months = []
+    for i in range(num_months - 1, -future_months - 1, -1):
+        month_date = today - relativedelta(months=i)
+        months.append({
+            'key': month_date.strftime('%Y-%m'),
+            'label': month_date.strftime('%b %Y'),
+            'start': month_date.replace(day=1),
+            'end': (month_date.replace(day=1) + relativedelta(months=1)) - timedelta(days=1)
+        })
+
+    query = Transaction.query.join(Vendor).filter(Transaction.transaction_date.isnot(None))
+
+    if paid_only:
+        query = query.filter(Transaction.is_paid.is_(True))
+
+    if months:
+        query = query.filter(
+            Transaction.transaction_date >= months[0]['start'],
+            Transaction.transaction_date <= months[-1]['end']
+        )
+
+    transactions = query.all()
+
+    category_data = {}
+    month_totals = {month['key']: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for month in months}
+    vendor_totals = {}
+    total_income = Decimal('0.00')
+    total_expense = Decimal('0.00')
+
+    for txn in transactions:
+        if not txn.transaction_date:
+            continue
+
+        month_key = txn.transaction_date.strftime('%Y-%m')
+        if month_key not in month_totals:
+            continue
+
+        vendor = txn.vendor
+        if not vendor:
+            continue
+
+        head_group = vendor.vendor_type or 'Uncategorized'
+        vendor_name = vendor.name
+
+        amount_value = Decimal(str(txn.amount))
+        income_value = amount_value if amount_value >= 0 else Decimal('0.00')
+        expense_value = (amount_value * Decimal('-1')) if amount_value < 0 else Decimal('0.00')
+
+        if head_group not in category_data:
+            category_data[head_group] = {
+                'total_income': Decimal('0.00'),
+                'total_expense': Decimal('0.00'),
+                'months': {month['key']: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for month in months},
+                'subcategories': {}
+            }
+
+        if vendor_name not in category_data[head_group]['subcategories']:
+            category_data[head_group]['subcategories'][vendor_name] = {
+                'total_income': Decimal('0.00'),
+                'total_expense': Decimal('0.00'),
+                'months': {month['key']: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for month in months}
+            }
+
+        if vendor_name not in vendor_totals:
+            vendor_totals[vendor_name] = {
+                'total_income': Decimal('0.00'),
+                'total_expense': Decimal('0.00'),
+                'months': {month['key']: {'income': Decimal('0.00'), 'expense': Decimal('0.00')} for month in months}
+            }
+
+        category_data[head_group]['total_income'] += income_value
+        category_data[head_group]['total_expense'] += expense_value
+        category_data[head_group]['months'][month_key]['income'] += income_value
+        category_data[head_group]['months'][month_key]['expense'] += expense_value
+
+        category_data[head_group]['subcategories'][vendor_name]['total_income'] += income_value
+        category_data[head_group]['subcategories'][vendor_name]['total_expense'] += expense_value
+        category_data[head_group]['subcategories'][vendor_name]['months'][month_key]['income'] += income_value
+        category_data[head_group]['subcategories'][vendor_name]['months'][month_key]['expense'] += expense_value
+
+        vendor_totals[vendor_name]['total_income'] += income_value
+        vendor_totals[vendor_name]['total_expense'] += expense_value
+        vendor_totals[vendor_name]['months'][month_key]['income'] += income_value
+        vendor_totals[vendor_name]['months'][month_key]['expense'] += expense_value
+
+        month_totals[month_key]['income'] += income_value
+        month_totals[month_key]['expense'] += expense_value
+        total_income += income_value
+        total_expense += expense_value
+
+    sorted_groups = sorted(
+        category_data.items(),
+        key=lambda x: x[1]['total_income'] + x[1]['total_expense'],
+        reverse=True
+    )
+
+    sorted_vendors = sorted(
+        vendor_totals.items(),
+        key=lambda x: x[1]['total_income'] + x[1]['total_expense'],
+        reverse=True
+    )
+    chart_vendors = [vendor for vendor, _ in sorted_vendors[:6]]
+
+    chart_labels = [month['label'] for month in months]
+    income_datasets = []
+    expense_datasets = []
+
+    for vendor_name in chart_vendors:
+        vendor_data = vendor_totals[vendor_name]
+        income_datasets.append({
+            'label': f"{vendor_name} (Income)",
+            'data': [float(vendor_data['months'][month['key']]['income']) for month in months]
+        })
+        expense_datasets.append({
+            'label': f"{vendor_name} (Expense)",
+            'data': [float(vendor_data['months'][month['key']]['expense']) for month in months]
+        })
+
+    if len(sorted_vendors) > len(chart_vendors):
+        other_vendors = [vendor for vendor, _ in sorted_vendors][len(chart_vendors):]
+        other_income = []
+        other_expense = []
+        for month in months:
+            month_key = month['key']
+            income_sum = sum([vendor_totals[v]['months'][month_key]['income'] for v in other_vendors], Decimal('0.00'))
+            expense_sum = sum([vendor_totals[v]['months'][month_key]['expense'] for v in other_vendors], Decimal('0.00'))
+            other_income.append(float(income_sum))
+            other_expense.append(float(expense_sum))
+        income_datasets.append({'label': 'Other (Income)', 'data': other_income})
+        expense_datasets.append({'label': 'Other (Expense)', 'data': other_expense})
+
+    chart_payload = json.dumps({
+        'labels': chart_labels,
+        'income_datasets': income_datasets,
+        'expense_datasets': expense_datasets
+    })
+
+    net_total = total_income - total_expense
+
+    return render_template(
+        'vendors/analytics.html',
+        view_mode='monthly',
+        paid_only=paid_only,
+        num_months=num_months,
+        future_months=future_months,
+        months=months,
+        category_data=sorted_groups,
+        month_totals=month_totals,
+        total_income=total_income,
+        total_expense=total_expense,
+        net_total=net_total,
+        chart_payload=chart_payload
+    )
 
 @bp.route('/add', methods=['GET', 'POST'])
 def add():
