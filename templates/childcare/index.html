@@ -234,6 +234,11 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const jsonHeaders = csrfToken
+        ? { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+        : { 'Content-Type': 'application/json' };
+
     // Save account selection as default
     document.querySelectorAll('.account-selector').forEach(select => {
         select.addEventListener('change', function() {
@@ -244,9 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Save as default account for this child
                 fetch('{{ url_for("childcare.set_default_account") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: jsonHeaders,
                     body: JSON.stringify({
                         child_id: childId,
                         account_id: accountId
@@ -302,9 +305,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create all transactions
             fetch('{{ url_for("childcare.bulk_create_transactions") }}', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: jsonHeaders,
                 body: JSON.stringify({
                     year: {{ current_year }},
                     month: {{ current_month }},
@@ -369,9 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Send AJAX request to update
             fetch('{{ url_for("childcare.update_activity") }}', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: jsonHeaders,
                 body: JSON.stringify({
                     date: date,
                     child_id: childId,
@@ -519,9 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (confirm(`Update transaction to £${newTotal.toFixed(2)}?`)) {
                 fetch('{{ url_for("childcare.update_transaction") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: jsonHeaders,
                     body: JSON.stringify({
                         transaction_id: transactionId,
                         child_id: childId,
