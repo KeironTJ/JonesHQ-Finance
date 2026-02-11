@@ -19,6 +19,13 @@ def index():
     expense_reimburse_account = Settings.get_value('expenses.reimburse_account_id')
     expense_payment_account = Settings.get_value('expenses.payment_account_id')
     expense_auto_sync = Settings.get_value('expenses.auto_sync', True)
+
+    # Dashboard preferences
+    networth_expanded = Settings.get_value('dashboard.networth_expanded', True)
+    account_selection_expanded = Settings.get_value('dashboard.account_selection_expanded', True)
+    payday_expanded = Settings.get_value('dashboard.payday_expanded', True)
+    summaries_expanded = Settings.get_value('dashboard.summaries_expanded', True)
+    quick_nav_expanded = Settings.get_value('dashboard.quick_nav_expanded', True)
     
     # Get all active accounts
     accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
@@ -29,7 +36,12 @@ def index():
                          expense_reimburse_account=int(expense_reimburse_account) if expense_reimburse_account else None,
                          expense_payment_account=int(expense_payment_account) if expense_payment_account else None,
                          expense_auto_sync=expense_auto_sync,
-                         accounts=accounts)
+                         accounts=accounts,
+                         networth_expanded=networth_expanded,
+                         account_selection_expanded=account_selection_expanded,
+                         payday_expanded=payday_expanded,
+                         summaries_expanded=summaries_expanded,
+                         quick_nav_expanded=quick_nav_expanded)
 
 
 @settings_bp.route('/settings/update', methods=['POST'])
@@ -92,6 +104,44 @@ def update():
             expense_auto_sync,
             'Automatically sync expense transactions',
             'bool'
+        )
+
+        # Dashboard Preferences
+        networth_expanded = request.form.get('dashboard_networth_expanded') == '1'
+        account_selection_expanded = request.form.get('dashboard_account_selection_expanded') == '1'
+        payday_expanded = request.form.get('dashboard_payday_expanded') == '1'
+        summaries_expanded = request.form.get('dashboard_summaries_expanded') == '1'
+        quick_nav_expanded = request.form.get('dashboard_quick_nav_expanded') == '1'
+
+        Settings.set_value(
+            'dashboard.networth_expanded',
+            networth_expanded,
+            'Default expanded state for Net Worth Summary on dashboard',
+            'boolean'
+        )
+        Settings.set_value(
+            'dashboard.account_selection_expanded',
+            account_selection_expanded,
+            'Default expanded state for Account Selection on dashboard',
+            'boolean'
+        )
+        Settings.set_value(
+            'dashboard.payday_expanded',
+            payday_expanded,
+            'Default expanded state for Payday Period Tracking on dashboard',
+            'boolean'
+        )
+        Settings.set_value(
+            'dashboard.summaries_expanded',
+            summaries_expanded,
+            'Default expanded state for Financial Summaries on dashboard',
+            'boolean'
+        )
+        Settings.set_value(
+            'dashboard.quick_nav_expanded',
+            quick_nav_expanded,
+            'Default expanded state for Quick Navigation on dashboard',
+            'boolean'
         )
         
         db.session.commit()

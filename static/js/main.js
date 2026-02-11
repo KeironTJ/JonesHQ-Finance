@@ -81,3 +81,9 @@ function jumpToCurrentPeriod(selectId) {
         if (sel.form) sel.form.submit();
     }
 }
+
+function changeYear(year) {
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('year', year);
+    window.location.search = urlParams.toString();
+}

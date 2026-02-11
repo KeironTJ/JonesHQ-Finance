@@ -120,6 +120,48 @@
                     </div>
                 </div>
 
+                <!-- Dashboard Preferences -->
+                <div class="card mb-4">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0"><i class="bi bi-speedometer2"></i> Dashboard Preferences</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="dashboard_networth_expanded" name="dashboard_networth_expanded" value="1" {% if networth_expanded %}checked{% endif %}>
+                            <label class="form-check-label" for="dashboard_networth_expanded">
+                                Net Worth Summary expanded by default
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="dashboard_account_selection_expanded" name="dashboard_account_selection_expanded" value="1" {% if account_selection_expanded %}checked{% endif %}>
+                            <label class="form-check-label" for="dashboard_account_selection_expanded">
+                                Account Selection expanded by default
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="dashboard_payday_expanded" name="dashboard_payday_expanded" value="1" {% if payday_expanded %}checked{% endif %}>
+                            <label class="form-check-label" for="dashboard_payday_expanded">
+                                Payday Period Tracking expanded by default
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="dashboard_summaries_expanded" name="dashboard_summaries_expanded" value="1" {% if summaries_expanded %}checked{% endif %}>
+                            <label class="form-check-label" for="dashboard_summaries_expanded">
+                                Financial Summaries expanded by default
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="dashboard_quick_nav_expanded" name="dashboard_quick_nav_expanded" value="1" {% if quick_nav_expanded %}checked{% endif %}>
+                            <label class="form-check-label" for="dashboard_quick_nav_expanded">
+                                Quick Navigation expanded by default
+                            </label>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            These defaults are used when the dashboard loads.
+                        </small>
+                    </div>
+                </div>
+
                 <!-- Save Button -->
                 <div class="d-flex justify-content-between">
                     <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">

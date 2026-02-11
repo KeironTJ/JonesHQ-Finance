@@ -1,6 +1,7 @@
 from flask import render_template, request
 from . import dashboard_bp
 from models.accounts import Account
+from models.transactions import Transaction
 from models.credit_cards import CreditCard
 from models.loans import Loan
 from models.mortgage import MortgageProduct
@@ -35,6 +36,17 @@ def index():
     
     # Get all active accounts for selector
     accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+
+    # Calculate balances from PAID transactions for account cards
+    for account in accounts:
+        paid_transactions = Transaction.query.filter_by(
+            account_id=account.id,
+            is_paid=True
+        ).all()
+        balance = Decimal('0.00')
+        for txn in paid_transactions:
+            balance += Decimal(str(txn.amount))
+        account.calculated_balance = float(balance)
     
     # Get payday summary
     payday_data = []
@@ -97,4 +109,9 @@ def index():
                          credit_card_summary=credit_card_summary,
                          loan_summary=loan_summary,
                          mortgage_summary=mortgage_summary,
-                         pension_summary=pension_summary)
+                         pension_summary=pension_summary,
+                         networth_expanded=Settings.get_value('dashboard.networth_expanded', True),
+                         account_selection_expanded=Settings.get_value('dashboard.account_selection_expanded', True),
+                         payday_expanded=Settings.get_value('dashboard.payday_expanded', True),
+                         summaries_expanded=Settings.get_value('dashboard.summaries_expanded', True),
+                         quick_nav_expanded=Settings.get_value('dashboard.quick_nav_expanded', True))

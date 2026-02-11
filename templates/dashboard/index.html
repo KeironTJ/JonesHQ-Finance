@@ -3,7 +3,7 @@
 {% block title %}Dashboard - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div class="container-fluid dashboard-page">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
         <div>
@@ -22,20 +22,26 @@
     {% endif %}
 
     <!-- Net Worth Summary Card -->
-    <div class="card mb-4 border-primary">
+    <div class="card mb-4 border-primary dashboard-section">
         <div class="card-header bg-primary text-white">
-            <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Net Worth Summary</h5>
-                <a href="{{ url_for('networth.index') }}" class="btn btn-sm btn-light">
-                    <i class="bi bi-arrow-right-circle"></i> View Details
-                </a>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ url_for('networth.index') }}" class="btn btn-sm btn-light">
+                        <i class="bi bi-arrow-right-circle"></i> View Details
+                    </a>
+                    <button class="btn btn-sm btn-light dashboard-collapse-toggle {% if not networth_expanded %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#networthCollapse" aria-expanded="{{ 'true' if networth_expanded else 'false' }}" aria-controls="networthCollapse">
+                        <i class="bi bi-chevron-down"></i>
+                    </button>
+                </div>
             </div>
         </div>
-        <div class="card-body">
+        <div id="networthCollapse" class="collapse {% if networth_expanded %}show{% endif %}">
+            <div class="card-body">
             <div class="row">
                 <!-- Total Net Worth -->
                 <div class="col-md-3 mb-3 mb-md-0">
-                    <div class="text-center p-3 rounded" style="background-color: {% if networth.net_worth >= 0 %}#d1e7dd{% else %}#f8d7da{% endif %};">
+                    <div class="text-center p-3 rounded networth-metric {% if networth.net_worth >= 0 %}is-positive{% else %}is-negative{% endif %}">
                         <h6 class="text-muted mb-2">Total Net Worth</h6>
                         <h3 class="mb-0 {% if networth.net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
                             £{{ "{:,.2f}".format(networth.net_worth) }}
@@ -46,7 +52,7 @@
                 
                 <!-- Liquid Net Worth -->
                 <div class="col-md-3 mb-3 mb-md-0">
-                    <div class="text-center p-3 rounded" style="background-color: {% if networth.liquid_net_worth >= 0 %}#d1e7dd{% else %}#f8d7da{% endif %};">
+                    <div class="text-center p-3 rounded networth-metric {% if networth.liquid_net_worth >= 0 %}is-positive{% else %}is-negative{% endif %}">
                         <h6 class="text-muted mb-2">Liquid Net Worth</h6>
                         <h3 class="mb-0 {% if networth.liquid_net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
                             £{{ "{:,.2f}".format(networth.liquid_net_worth) }}
@@ -83,69 +89,84 @@
                     </div>
                 </div>
             </div>
+            </div>
         </div>
     </div>
 
     <!-- Account Selector -->
     {% if accounts %}
-    <div class="card mb-4">
+    <div class="card mb-4 dashboard-section">
         <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-bank"></i> Account Selection</h5>
-        </div>
-        <div class="card-body">
-            <form method="GET" action="{{ url_for('dashboard.index') }}" class="row g-3">
-                <div class="col-md-10">
-                    <select name="account_id" class="form-select" onchange="this.form.submit()">
-                        <option value="">Select an account to track...</option>
-                        {% for account in accounts %}
-                        <option value="{{ account.id }}" {% if selected_account and account.id == selected_account.id %}selected{% endif %}>
-                            {{ account.name }} ({{ account.account_type }})
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-arrow-repeat"></i> Update
-                    </button>
-                </div>
-            </form>
-            {% if selected_account %}
-            <div class="mt-3">
-                <strong>Tracking:</strong> {{ selected_account.name }} 
-                <span class="badge bg-info">{{ selected_account.account_type }}</span>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-bank"></i> Account Selection</h5>
+                <button class="btn btn-sm btn-light dashboard-collapse-toggle {% if not account_selection_expanded %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#accountSelectionCollapse" aria-expanded="{{ 'true' if account_selection_expanded else 'false' }}" aria-controls="accountSelectionCollapse">
+                    <i class="bi bi-chevron-down"></i>
+                </button>
             </div>
-            {% endif %}
+        </div>
+        <div id="accountSelectionCollapse" class="collapse {% if account_selection_expanded %}show{% endif %}">
+            <div class="card-body">
+                <div class="account-card-grid">
+                    {% for account in accounts %}
+                    <a href="{{ url_for('dashboard.index', account_id=account.id, year=selected_year) }}" class="account-card text-decoration-none {% if selected_account and account.id == selected_account.id %}account-card-selected{% endif %}" {% if selected_account and account.id == selected_account.id %}aria-current="true"{% endif %}>
+                        <div class="account-card-title">{{ account.name }}</div>
+                        <div class="account-card-meta">{{ account.account_type }}</div>
+                        <div class="account-card-balance {% if account.calculated_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            £{{ "{:,.2f}".format(account.calculated_balance) }}
+                        </div>
+                        {% if selected_account and account.id == selected_account.id %}
+                        <span class="badge bg-primary account-card-badge">
+                            <i class="bi bi-check-circle"></i> Selected
+                        </span>
+                        {% endif %}
+                    </a>
+                    {% endfor %}
+                </div>
+                {% if selected_account %}
+                <div class="mt-3 text-muted small">
+                    Tracking: <strong>{{ selected_account.name }}</strong> ({{ selected_account.account_type }})
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
     {% endif %}
 
     <!-- Payday Period Tracking -->
     {% if payday_data %}
-    <div class="card mb-4">
+    <div class="card mb-4 dashboard-section">
         <div class="card-header bg-success text-white">
-            <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0">
                     <i class="bi bi-calendar-check"></i> Payday Period Tracking 
-                    <small class="ms-2">(Payday: {{ payday_day }}{{ 'st' if payday_day == 1 or payday_day == 21 or payday_day == 31 else 'nd' if payday_day == 2 or payday_day == 22 else 'rd' if payday_day == 3 or payday_day == 23 else 'th' }} of each month)</small>
+                    <small class="ms-2 payday-subtitle">(Payday: {{ payday_day }}{{ 'st' if payday_day == 1 or payday_day == 21 or payday_day == 31 else 'nd' if payday_day == 2 or payday_day == 22 else 'rd' if payday_day == 3 or payday_day == 23 else 'th' }} of each month)</small>
                 </h5>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    {% if selected_account %}
+                    <span class="badge bg-light text-dark selected-account-badge">
+                        <i class="bi bi-bank"></i> {{ selected_account.name }}
+                    </span>
+                    {% endif %}
                     <button class="btn btn-sm btn-light" onclick="changeYear({{ selected_year - 1 }})" title="Previous Year">
                         <i class="bi bi-chevron-left"></i>
                     </button>
                     <span class="badge bg-light text-dark px-3 py-2">
                         {{ selected_year }}
                         {% if selected_year == current_year %}
-                            <i class="bi bi-circle-fill text-success" style="font-size: 0.5rem;" title="Current Year"></i>
+                            <i class="bi bi-circle-fill text-success status-dot" title="Current Year"></i>
                         {% endif %}
                     </span>
                     <button class="btn btn-sm btn-light" onclick="changeYear({{ selected_year + 1 }})" title="Next Year">
                         <i class="bi bi-chevron-right"></i>
                     </button>
+                    <button class="btn btn-sm btn-light dashboard-collapse-toggle {% if not payday_expanded %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#paydayCollapse" aria-expanded="{{ 'true' if payday_expanded else 'false' }}" aria-controls="paydayCollapse">
+                        <i class="bi bi-chevron-down"></i>
+                    </button>
                 </div>
             </div>
         </div>
-        <div class="card-body">
+        <div id="paydayCollapse" class="collapse {% if payday_expanded %}show{% endif %}">
+            <div class="card-body payday-body payday-compact">
             <p class="text-muted mb-4">
                 <i class="bi bi-info-circle"></i> 
                 Showing projected balances from payday to payday, including both paid and unpaid transactions. 
@@ -153,12 +174,12 @@
             </p>
             
             <!-- Column Headers -->
-            <div class="d-flex justify-content-between align-items-center mb-2 px-3">
-                <div class="text-muted small" style="flex: 1;">Period</div>
-                <div class="d-flex gap-4 text-muted small">
-                    <div style="width: 100px; text-align: right;">Ending Balance</div>
-                    <div style="width: 100px; text-align: right;">Minimum</div>
-                    <div style="width: 100px; text-align: right;">Extra Spend</div>
+            <div class="d-flex justify-content-between align-items-center mb-2 px-3 payday-columns">
+                <div class="text-muted small payday-period-label">Period</div>
+                <div class="d-flex gap-4 text-muted small payday-metrics">
+                    <div class="payday-metric payday-metric-header">Ending Balance</div>
+                    <div class="payday-metric payday-metric-header">Minimum</div>
+                    <div class="payday-metric payday-metric-header">Extra Spend</div>
                 </div>
             </div>
             
@@ -168,7 +189,7 @@
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="heading{{ loop.index }}">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
-                            <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                            <div class="d-flex justify-content-between align-items-center w-100 me-3 payday-row">
                                 <div style="flex: 1;">
                                     <strong class="me-2">{{ period.period_label }}</strong>
                                     <span class="text-muted small">{{ period.start_date.strftime('%d %b') }} - {{ period.end_date.strftime('%d %b %Y') }}</span>
@@ -176,10 +197,10 @@
                                         <span class="badge bg-success ms-2">Current Period</span>
                                     {% endif %}
                                 </div>
-                                <div class="d-flex gap-4">
-                                    <strong class="text-primary" style="width: 100px; text-align: right;">£{{ "%.2f"|format(period.rolling_balance) }}</strong>
-                                    <strong class="text-warning" style="width: 100px; text-align: right;">£{{ "%.2f"|format(period.min_balance) }}</strong>
-                                    <strong class="text-info" style="width: 100px; text-align: right;">£{{ "%.2f"|format(period.max_extra_spend) }}</strong>
+                                <div class="d-flex gap-4 payday-metrics">
+                                    <strong class="text-primary payday-metric">£{{ "%.2f"|format(period.rolling_balance) }}</strong>
+                                    <strong class="text-warning payday-metric">£{{ "%.2f"|format(period.min_balance) }}</strong>
+                                    <strong class="text-info payday-metric">£{{ "%.2f"|format(period.max_extra_spend) }}</strong>
                                 </div>
                             </div>
                         </button>
@@ -328,12 +349,24 @@
                     </div>
                 </div>
             </div>
+            </div>
         </div>
     </div>
     {% endif %}
 
     <!-- Financial Summaries -->
-    <div class="row mb-4">
+    <div class="card mb-4 dashboard-section">
+        <div class="card-header bg-secondary text-white">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Financial Summaries</h5>
+                <button class="btn btn-sm btn-light dashboard-collapse-toggle {% if not summaries_expanded %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#summariesCollapse" aria-expanded="{{ 'true' if summaries_expanded else 'false' }}" aria-controls="summariesCollapse">
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+            </div>
+        </div>
+        <div id="summariesCollapse" class="collapse {% if summaries_expanded %}show{% endif %}">
+            <div class="card-body">
+                <div class="row">
         <!-- Credit Cards Summary -->
         <div class="col-md-6 col-lg-3 mb-3">
             <div class="card border-danger h-100">
@@ -460,14 +493,23 @@
                 </div>
             </div>
         </div>
-    </div>
+            </div>
+        </div>
+        </div>
+
 
     <!-- Quick Links -->
-    <div class="card mb-4">
+    <div class="card mb-4 dashboard-section">
         <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="bi bi-compass"></i> Quick Navigation</h5>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-compass"></i> Quick Navigation</h5>
+                <button class="btn btn-sm btn-light dashboard-collapse-toggle {% if not quick_nav_expanded %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#quickNavCollapse" aria-expanded="{{ 'true' if quick_nav_expanded else 'false' }}" aria-controls="quickNavCollapse">
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+            </div>
         </div>
-        <div class="card-body">
+        <div id="quickNavCollapse" class="collapse {% if quick_nav_expanded %}show{% endif %}">
+            <div class="card-body">
             <div class="row">
                 <!-- Row 1: Core Features -->
                 <div class="col-md-3 col-sm-6 mb-3">
@@ -642,28 +684,8 @@
                     </a>
                 </div>
             </div>
+            </div>
         </div>
     </div>
 </div>
-
-<style>
-.hover-shadow:hover {
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
-    transform: translateY(-2px);
-    transition: all 0.3s ease;
-}
-.sticky-top {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-</style>
-
-<script>
-function changeYear(year) {
-    const urlParams = new URLSearchParams(window.location.search);
-    urlParams.set('year', year);
-    window.location.search = urlParams.toString();
-}
-</script>
 {% endblock %}
