@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}Category Analytics - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid categories-analytics">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1><i class="bi bi-bar-chart"></i> Budget Category Analytics</h1>
+            <p class="text-muted mb-0">
+                {% if view_mode == 'monthly' %}
+                Track spending by category across calendar months with month-on-month comparison.
+                {% else %}
+                Track spending by category and sub-category across payday periods.
+                {% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <div class="btn-group" role="group">
+                <a href="{{ url_for('categories.analytics', view_mode='payday', paid_only='1' if paid_only else '0') }}" 
+                   class="btn btn-sm {% if view_mode == 'payday' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="bi bi-calendar-week"></i> Payday View
+                </a>
+                <a href="{{ url_for('categories.analytics', view_mode='monthly', paid_only='1' if paid_only else '0') }}" 
+                   class="btn btn-sm {% if view_mode == 'monthly' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="bi bi-calendar-month"></i> Monthly View
+                </a>
+            </div>
+            <a href="{{ url_for('categories.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-tags"></i> Categories
+            </a>
+            <a href="{{ url_for('categories.add') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Category
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4 analytics-filter-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filters</h5>
+            <button class="btn btn-sm btn-light dashboard-collapse-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#analyticsFilters" aria-expanded="true" aria-controls="analyticsFilters">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+        </div>
+        <div id="analyticsFilters" class="collapse show">
+            <form method="GET" action="{{ url_for('categories.analytics') }}" class="card-body">
+                <input type="hidden" name="view_mode" value="{{ view_mode }}">
+                
+                {% if view_mode == 'monthly' %}
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                        <label class="form-label" for="num_months">Number of Months</label>
+                        <select id="num_months" name="num_months" class="form-select">
+                            <option value="3" {% if num_months == 3 %}selected{% endif %}>Last 3 Months</option>
+                            <option value="6" {% if num_months == 6 %}selected{% endif %}>Last 6 Months</option>
+                            <option value="12" {% if num_months == 12 %}selected{% endif %}>Last 12 Months</option>
+                            <option value="18" {% if num_months == 18 %}selected{% endif %}>Last 18 Months</option>
+                            <option value="24" {% if num_months == 24 %}selected{% endif %}>Last 24 Months</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="paid_only" name="paid_only" value="1" {% if paid_only %}checked{% endif %}>
+                            <label class="form-check-label" for="paid_only">Paid only</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-funnel"></i> Apply
+                        </button>
+                    </div>
+                </div>
+                {% else %}
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label" for="start_period">Start Payday Period</label>
+                        <select id="start_period" name="start_period" class="form-select">
+                            {% for period in periods %}
+                            <option value="{{ period.label }}" {% if period.label == start_period %}selected{% endif %}>
+                                {{ period.display_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="end_period">End Payday Period</label>
+                        <select id="end_period" name="end_period" class="form-select">
+                            {% for period in periods %}
+                            <option value="{{ period.label }}" {% if period.label == end_period %}selected{% endif %}>
+                                {{ period.display_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="paid_only" name="paid_only" value="1" {% if paid_only %}checked{% endif %}>
+                            <label class="form-check-label" for="paid_only">Paid only</label>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-funnel"></i> Apply
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-4 analytics-summary-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-collection"></i> Total Summary</h5>
+            <button class="btn btn-sm btn-light dashboard-collapse-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#analyticsSummary" aria-expanded="true" aria-controls="analyticsSummary">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+        </div>
+        <div id="analyticsSummary" class="collapse show">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="card h-100 analytics-stat-card">
+                            <div class="card-body">
+                                <div class="text-muted">Total Income</div>
+                                <div class="display-6 fw-bold text-success">£{{ "{:,.2f}".format(total_income) }}</div>
+                                <div class="text-muted small">Positive transactions</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card h-100 analytics-stat-card">
+                            <div class="card-body">
+                                <div class="text-muted">Total Expense</div>
+                                <div class="display-6 fw-bold text-danger">£{{ "{:,.2f}".format(total_expense) }}</div>
+                                <div class="text-muted small">Negative transactions</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card h-100 analytics-stat-card">
+                            <div class="card-body">
+                                <div class="text-muted">Net Total</div>
+                                <div class="display-6 fw-bold">£{{ "{:,.2f}".format(net_total) }}</div>
+                                {% if view_mode == 'payday' %}
+                                <div class="text-muted small">Avg per period: £{{ "{:,.2f}".format(average_per_period) }}</div>
+                                {% else %}
+                                <div class="text-muted small">Income minus expense</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% if view_mode == 'payday' %}
+                    <div class="col-md-3">
+                        <div class="card h-100 analytics-stat-card">
+                            <div class="card-body">
+                                <div class="text-muted">Transactions</div>
+                                <div class="display-6 fw-bold">{{ total_transactions }}</div>
+                                <div class="text-muted small">Within selected payday periods</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-md-3">
+                        <div class="card h-100 analytics-stat-card">
+                            <div class="card-body">
+                                <div class="text-muted">Period</div>
+                                <div class="h5 fw-bold mt-2">{{ num_months }} Months</div>
+                                <div class="text-muted small">{{ months[0].label }} to {{ months[-1].label }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4 analytics-chart-card">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-bar-chart-line"></i> Net Flow by Category over Time</h5>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-light text-dark">Income above · Expense below</span>
+                <button class="btn btn-sm btn-light dashboard-collapse-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#analyticsChart" aria-expanded="true" aria-controls="analyticsChart">
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+            </div>
+        </div>
+        <div id="analyticsChart" class="collapse show">
+            <div class="card-body">
+                <div class="analytics-chart-wrap">
+                    <canvas id="categorySpendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4 analytics-table-card">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> 
+                {% if view_mode == 'monthly' %}Month-on-Month Comparison{% else %}Payday Period Comparison{% endif %}
+            </h5>
+            <button class="btn btn-sm btn-light dashboard-collapse-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#analyticsBreakdown" aria-expanded="true" aria-controls="analyticsBreakdown">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+        </div>
+        <div id="analyticsBreakdown" class="collapse show">
+            <div class="card-body">
+            {% if category_data %}
+                <div class="accordion" id="comparisonBreakdown">
+                    {% for cat_name, cat_data in category_data %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ loop.index }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
+                                <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                                    <div>
+                                        <strong>{{ cat_name }}</strong>
+                                        <span class="badge bg-light text-dark ms-2">{{ cat_data.subcategories|length }} subcategories</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="fw-bold">£{{ "{:,.2f}".format(cat_data.total_income - cat_data.total_expense) }}</div>
+                                        <small class="text-success">+£{{ "{:,.2f}".format(cat_data.total_income) }}</small>
+                                        <small class="text-danger ms-2">-£{{ "{:,.2f}".format(cat_data.total_expense) }}</small>
+                                    </div>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#comparisonBreakdown">
+                            <div class="accordion-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered align-middle mb-0">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th style="min-width: 150px;">Sub-category</th>
+                                                <th class="text-end">Total</th>
+                                                {% if view_mode == 'monthly' %}
+                                                    {% for month in months %}
+                                                    <th class="text-end" style="min-width: 90px;">{{ month.label }}</th>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {% for period_label in period_labels %}
+                                                    <th class="text-end" style="min-width: 100px;">{{ period_display.get(period_label, period_label) }}</th>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for sub_name, sub_data in cat_data.subcategories.items()|sort(attribute='1.total_income,1.total_expense', reverse=True) %}
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ sub_name }}</strong>
+                                                    <div class="small text-muted">
+                                                        <span class="text-success">+£{{ "{:,.0f}".format(sub_data.total_income) }}</span>
+                                                        <span class="text-danger ms-1">-£{{ "{:,.0f}".format(sub_data.total_expense) }}</span>
+                                                    </div>
+                                                </td>
+                                                <td class="text-end fw-bold">
+                                                    £{{ "{:,.2f}".format(sub_data.total_income - sub_data.total_expense) }}
+                                                </td>
+                                                {% if view_mode == 'monthly' %}
+                                                    {% for month in months %}
+                                                    {% set period_income = sub_data.months[month.key].income %}
+                                                    {% set period_expense = sub_data.months[month.key].expense %}
+                                                    {% set period_net = period_income - period_expense %}
+                                                    <td class="text-end {% if period_net > 0 %}table-success{% elif period_net < 0 %}table-danger{% endif %}">
+                                                        {% if period_net != 0 %}
+                                                        £{{ "{:,.0f}".format(period_net) }}
+                                                        {% else %}
+                                                        <span class="text-muted">-</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {% for period_label in period_labels %}
+                                                    {% set period_income = sub_data.periods[period_label].income %}
+                                                    {% set period_expense = sub_data.periods[period_label].expense %}
+                                                    {% set period_net = period_income - period_expense %}
+                                                    <td class="text-end {% if period_net > 0 %}table-success{% elif period_net < 0 %}table-danger{% endif %}">
+                                                        {% if period_net != 0 %}
+                                                        £{{ "{:,.0f}".format(period_net) }}
+                                                        {% else %}
+                                                        <span class="text-muted">-</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </tr>
+                                            {% endfor %}
+                                            <tr class="table-secondary fw-bold">
+                                                <td>Total {{ cat_name }}</td>
+                                                <td class="text-end">£{{ "{:,.2f}".format(cat_data.total_income - cat_data.total_expense) }}</td>
+                                                {% if view_mode == 'monthly' %}
+                                                    {% for month in months %}
+                                                    {% set period_income = cat_data.months[month.key].income %}
+                                                    {% set period_expense = cat_data.months[month.key].expense %}
+                                                    {% set period_net = period_income - period_expense %}
+                                                    <td class="text-end">
+                                                        {% if period_net != 0 %}
+                                                        £{{ "{:,.0f}".format(period_net) }}
+                                                        {% else %}
+                                                        <span class="text-muted">-</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {% for period_label in period_labels %}
+                                                    {% set period_income = cat_data.periods[period_label].income %}
+                                                    {% set period_expense = cat_data.periods[period_label].expense %}
+                                                    {% set period_net = period_income - period_expense %}
+                                                    <td class="text-end">
+                                                        {% if period_net != 0 %}
+                                                        £{{ "{:,.0f}".format(period_net) }}
+                                                        {% else %}
+                                                        <span class="text-muted">-</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- Grand Total Row -->
+                    <div class="accordion-item border-0">
+                        <div class="card mt-3 bg-primary text-white">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0 text-white">
+                                        <thead>
+                                            <tr>
+                                                <th style="min-width: 150px;">Grand Total</th>
+                                                <th class="text-end">Total</th>
+                                                {% if view_mode == 'monthly' %}
+                                                    {% for month in months %}
+                                                    <th class="text-end" style="min-width: 90px;">{{ month.label }}</th>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {% for period_label in period_labels %}
+                                                    <th class="text-end" style="min-width: 100px;">{{ period_display.get(period_label, period_label) }}</th>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr class="fw-bold">
+                                                <td>All Categories</td>
+                                                <td class="text-end">£{{ "{:,.2f}".format(net_total) }}</td>
+                                                {% if view_mode == 'monthly' %}
+                                                    {% for month in months %}
+                                                    {% set period_net = month_totals[month.key].income - month_totals[month.key].expense %}
+                                                    <td class="text-end">£{{ "{:,.0f}".format(period_net) }}</td>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {% for period_label in period_labels %}
+                                                    {% set period_net = period_totals[period_label].income - period_totals[period_label].expense %}
+                                                    <td class="text-end">£{{ "{:,.0f}".format(period_net) }}</td>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No transactions in this range.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const chartPayload = {{ chart_payload | safe }};
+const viewMode = '{{ view_mode }}';
+const ctx = document.getElementById('categorySpendChart');
+
+if (ctx && chartPayload.labels && chartPayload.labels.length) {
+    // Both views now use the same format: separate income and expense datasets
+    const datasets = [];
+    
+    // Add income datasets (positive, stacked)
+    if (chartPayload.income_datasets) {
+        chartPayload.income_datasets.forEach((set, idx) => {
+            datasets.push({
+                label: set.label,
+                data: set.data,
+                backgroundColor: `hsla(${120 + idx * 30}, 70%, 50%, 0.7)`,
+                borderColor: `hsla(${120 + idx * 30}, 70%, 40%, 1)`,
+                borderWidth: 1,
+                stack: 'income'
+            });
+        });
+    }
+    
+    // Add expense datasets (negative, stacked)
+    if (chartPayload.expense_datasets) {
+        chartPayload.expense_datasets.forEach((set, idx) => {
+            datasets.push({
+                label: set.label,
+                data: set.data.map(v => -v), // Negate for visual separation
+                backgroundColor: `hsla(${0 + idx * 30}, 70%, 50%, 0.7)`,
+                borderColor: `hsla(${0 + idx * 30}, 70%, 40%, 1)`,
+                borderWidth: 1,
+                stack: 'expense'
+            });
+        });
+    }
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartPayload.labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true },
+                y: {
+                    stacked: true,
+                    ticks: {
+                        callback: (value) => `£${Math.abs(value).toLocaleString()}`
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: £${Math.abs(ctx.raw).toLocaleString()}`
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

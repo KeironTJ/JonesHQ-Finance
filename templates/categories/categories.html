@@ -3,71 +3,207 @@
 {% block title %}Categories - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Budget Categories</h1>
-        <a href="{{ url_for('categories.add') }}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Add Category
-        </a>
+<div class="container-fluid categories-page">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1><i class="bi bi-tags"></i> Budget Categories</h1>
+            <p class="text-muted mb-0">Manage your income and expense categories</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('categories.analytics') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-bar-chart"></i> Analytics
+            </a>
+            <a href="{{ url_for('categories.add') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Category
+            </a>
+        </div>
     </div>
 
-    <div class="row">
-        {% for head_budget, data in categories_by_head.items() %}
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-primary text-white">
+    <!-- Summary Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h5 class="mb-0">{{ head_budget }}</h5>
-                            <small>{{ data.categories|length }} sub-categories · {{ data.total_count }} transactions</small>
+                            <div class="text-white-50">Head Categories</div>
+                            <div class="h3 mb-0">{{ categories_by_head|length }}</div>
                         </div>
-                        <a href="{{ url_for('transactions.index', head_budget=head_budget) }}" 
-                           class="btn btn-sm btn-light"
-                           title="View all transactions">
-                            <i class="bi bi-list-ul"></i>
-                        </a>
+                        <i class="bi bi-folder text-white-50" style="font-size: 2rem;"></i>
                     </div>
                 </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
                 <div class="card-body">
-                    <ul class="list-group list-group-flush">
-                        {% for category in data.categories %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center p-2">
-                            <div class="flex-grow-1">
-                                <a href="{{ url_for('transactions.index', category_id=category.id) }}" 
-                                   class="text-decoration-none text-dark">
-                                    {% if category.sub_budget %}
-                                        <strong>{{ category.sub_budget }}</strong>
-                                    {% else %}
-                                        <em class="text-muted">(No sub-category)</em>
-                                    {% endif %}
-                                    <span class="badge bg-secondary ms-2">{{ category.transaction_count }}</span>
-                                </a>
-                                <br>
-                                <small class="text-muted">
-                                    <span class="badge 
-                                        {% if category.category_type == 'income' %}bg-success
-                                        {% elif category.category_type == 'expense' %}bg-danger
-                                        {% else %}bg-info{% endif %}">
-                                        {{ category.category_type }}
-                                    </span>
-                                </small>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50">Total Categories</div>
+                            <div class="h3 mb-0">
+                                {% set total_cats = namespace(count=0) %}
+                                {% for head_budget, data in categories_by_head.items() %}
+                                    {% set total_cats.count = total_cats.count + data.categories|length %}
+                                {% endfor %}
+                                {{ total_cats.count }}
                             </div>
-                            <div class="btn-group btn-group-sm">
-                                <a href="{{ url_for('categories.edit', id=category.id) }}" 
-                                   class="btn btn-outline-primary btn-sm"
-                                   title="Edit">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <button type="button" 
-                                        class="btn btn-outline-danger btn-sm"
-                                        onclick="confirmDelete({{ category.id }}, '{{ category.name }}')"
-                                        title="Delete">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
+                        </div>
+                        <i class="bi bi-tags text-white-50" style="font-size: 2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50">Income Categories</div>
+                            <div class="h3 mb-0" id="incomeCount">0</div>
+                        </div>
+                        <i class="bi bi-arrow-up-circle text-white-50" style="font-size: 2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50">Expense Categories</div>
+                            <div class="h3 mb-0" id="expenseCount">0</div>
+                        </div>
+                        <i class="bi bi-arrow-down-circle text-white-50" style="font-size: 2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Search categories...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select id="typeFilter" class="form-select">
+                        <option value="">All Types</option>
+                        <option value="income">Income</option>
+                        <option value="expense">Expense</option>
+                        <option value="transfer">Transfer</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="sortBy" class="form-select">
+                        <option value="usage">Sort by Usage</option>
+                        <option value="name">Sort by Name</option>
+                        <option value="type">Sort by Type</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Categories Accordion -->
+    <div class="accordion" id="categoriesAccordion">
+        {% for head_budget, data in categories_by_head.items() %}
+        <div class="accordion-item category-group" data-head-budget="{{ head_budget|lower }}">
+            <h2 class="accordion-header" id="heading{{ loop.index }}">
+                <button class="accordion-button {% if loop.index > 3 %}collapsed{% endif %}" type="button" 
+                        data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" 
+                        aria-expanded="{% if loop.index <= 3 %}true{% else %}false{% endif %}" 
+                        aria-controls="collapse{{ loop.index }}">
+                    <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                        <div>
+                            <strong><i class="bi bi-folder2-open"></i> {{ head_budget }}</strong>
+                            <span class="badge bg-secondary ms-2">{{ data.categories|length }} categories</span>
+                            <span class="badge bg-info ms-1">{{ data.total_count }} transactions</span>
+                        </div>
+                    </div>
+                </button>
+            </h2>
+            <div id="collapse{{ loop.index }}" class="accordion-collapse collapse {% if loop.index <= 3 %}show{% endif %}" 
+                 aria-labelledby="heading{{ loop.index }}" data-bs-parent="#categoriesAccordion">
+                <div class="accordion-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 40%;">Sub-Category</th>
+                                    <th style="width: 15%;">Type</th>
+                                    <th style="width: 15%;" class="text-end">Transactions</th>
+                                    <th style="width: 15%;" class="text-center">Status</th>
+                                    <th style="width: 15%;" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for category in data.categories %}
+                                <tr class="category-row" 
+                                    data-name="{{ category.sub_budget|lower if category.sub_budget else '' }}"
+                                    data-type="{{ category.category_type|lower }}"
+                                    data-count="{{ category.transaction_count }}">
+                                    <td>
+                                        <a href="{{ url_for('transactions.index', category_id=category.id) }}" 
+                                           class="text-decoration-none">
+                                            {% if category.sub_budget %}
+                                                <strong>{{ category.sub_budget }}</strong>
+                                            {% else %}
+                                                <em class="text-muted">(No sub-category)</em>
+                                            {% endif %}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if category.category_type == 'income' %}bg-success
+                                            {% elif category.category_type == 'expense' %}bg-danger
+                                            {% else %}bg-info{% endif %}">
+                                            <i class="bi {% if category.category_type == 'income' %}bi-arrow-up-circle
+                                               {% elif category.category_type == 'expense' %}bi-arrow-down-circle
+                                               {% else %}bi-arrow-left-right{% endif %}"></i>
+                                            {{ category.category_type|title }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="badge bg-secondary">{{ category.transaction_count }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if category.transaction_count > 0 %}
+                                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Active</span>
+                                        {% else %}
+                                            <span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Unused</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('transactions.index', category_id=category.id) }}" 
+                                               class="btn btn-outline-secondary btn-sm"
+                                               title="View Transactions">
+                                                <i class="bi bi-list-ul"></i>
+                                            </a>
+                                            <a href="{{ url_for('categories.edit', id=category.id) }}" 
+                                               class="btn btn-outline-primary btn-sm"
+                                               title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <button type="button" 
+                                                    class="btn btn-outline-danger btn-sm"
+                                                    onclick="confirmDelete({{ category.id }}, '{{ category.name }}')"
+                                                    title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -105,6 +241,80 @@
 </div>
 
 <script>
+// Calculate and display category type counts
+document.addEventListener('DOMContentLoaded', function() {
+    const incomeCount = document.querySelectorAll('[data-type="income"]').length;
+    const expenseCount = document.querySelectorAll('[data-type="expense"]').length;
+    document.getElementById('incomeCount').textContent = incomeCount;
+    document.getElementById('expenseCount').textContent = expenseCount;
+    
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    const typeFilter = document.getElementById('typeFilter');
+    const sortBy = document.getElementById('sortBy');
+    
+    function filterCategories() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedType = typeFilter.value.toLowerCase();
+        
+        // Filter rows
+        document.querySelectorAll('.category-row').forEach(row => {
+            const name = row.dataset.name;
+            const type = row.dataset.type;
+            
+            const matchesSearch = !searchTerm || name.includes(searchTerm);
+            const matchesType = !selectedType || type === selectedType;
+            
+            if (matchesSearch && matchesType) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Hide empty groups
+        document.querySelectorAll('.category-group').forEach(group => {
+            const visibleRows = group.querySelectorAll('.category-row:not([style*="display: none"])');
+            if (visibleRows.length === 0) {
+                group.style.display = 'none';
+            } else {
+                group.style.display = '';
+            }
+        });
+    }
+    
+    function sortCategories() {
+        const sortValue = sortBy.value;
+        
+        document.querySelectorAll('.accordion-item').forEach(item => {
+            const tbody = item.querySelector('tbody');
+            if (!tbody) return;
+            
+            const rows = Array.from(tbody.querySelectorAll('.category-row'));
+            
+            rows.sort((a, b) => {
+                if (sortValue === 'usage') {
+                    return parseInt(b.dataset.count) - parseInt(a.dataset.count);
+                } else if (sortValue === 'name') {
+                    return a.dataset.name.localeCompare(b.dataset.name);
+                } else if (sortValue === 'type') {
+                    return a.dataset.type.localeCompare(b.dataset.type);
+                }
+                return 0;
+            });
+            
+            rows.forEach(row => tbody.appendChild(row));
+        });
+    }
+    
+    searchInput.addEventListener('input', filterCategories);
+    typeFilter.addEventListener('change', filterCategories);
+    sortBy.addEventListener('change', sortCategories);
+    
+    // Initial sort
+    sortCategories();
+});
+
 function confirmDelete(categoryId, categoryName) {
     document.getElementById('deleteCategoryName').textContent = categoryName;
     document.getElementById('deleteForm').action = '{{ url_for("categories.delete", id=0) }}'.replace('0', categoryId);

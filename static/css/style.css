@@ -62,11 +62,13 @@ footer {
     background-color: #f8d7da;
 }
 
-.dashboard-page .dashboard-collapse-toggle .bi {
+.dashboard-page .dashboard-collapse-toggle .bi,
+.categories-analytics .dashboard-collapse-toggle .bi {
     transition: transform 0.2s ease;
 }
 
-.dashboard-page .dashboard-collapse-toggle[aria-expanded="true"] .bi {
+.dashboard-page .dashboard-collapse-toggle[aria-expanded="true"] .bi,
+.categories-analytics .dashboard-collapse-toggle[aria-expanded="true"] .bi {
     transform: rotate(180deg);
 }
 
@@ -85,6 +87,23 @@ footer {
     position: relative;
     color: inherit;
     transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.categories-analytics .analytics-summary-card {
+    border: 1px solid #e6e9ee;
+}
+
+.categories-analytics .analytics-chart-wrap {
+    height: 500px;
+    position: relative;
+}
+
+.categories-analytics .analytics-chart-wrap canvas {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 .dashboard-page .account-card:hover {
@@ -178,6 +197,58 @@ footer {
 
 .dashboard-page .payday-compact .alert {
     padding: 0.5rem 0.75rem;
+}
+
+.categories-analytics .analytics-filter-card {
+    border: 1px solid #e6e9ee;
+}
+
+.categories-analytics .analytics-stat-card {
+    border: 1px solid #e6e9ee;
+    background: linear-gradient(135deg, #ffffff 0%, #f6f8fb 100%);
+}
+
+.categories-analytics .analytics-chart-card {
+    border: 1px solid #e6e9ee;
+}
+
+.categories-analytics .analytics-table-card {
+    border: 1px solid #e6e9ee;
+}
+
+.categories-analytics .accordion-button {
+    background: #f8f9fb;
+}
+
+.categories-analytics .table thead th {
+    background: #f1f3f6;
+    border-bottom: 1px solid #e6e9ee;
+}
+
+.categories-analytics .table-responsive {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.categories-analytics .sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.categories-analytics .table-bordered td,
+.categories-analytics .table-bordered th {
+    border-color: #e6e9ee;
+}
+
+.categories-analytics .bg-primary .table {
+    --bs-table-bg: transparent;
+    --bs-table-border-color: rgba(255, 255, 255, 0.2);
+}
+
+.categories-analytics .bg-primary .table th,
+.categories-analytics .bg-primary .table td {
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .accounts-page .account-card-compact .card-body {
@@ -277,4 +348,61 @@ footer {
         flex: 0 0 50%;
         max-width: 50%;
     }
+}
+/* Categories Page Styles */
+.categories-page .accordion-button {
+    background-color: #f8f9fb;
+    font-size: 1rem;
+}
+
+.categories-page .accordion-button:not(.collapsed) {
+    background-color: #e7f1ff;
+    color: #0d6efd;
+}
+
+.categories-page .category-row {
+    transition: background-color 0.2s ease;
+}
+
+.categories-page .category-row:hover {
+    background-color: #f8f9fa;
+}
+
+.categories-page .table thead th {
+    background-color: #f1f3f6;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.categories-page .badge {
+    font-weight: 500;
+}
+
+/* Vendors Page Styles */
+.vendors-page .accordion-button {
+    background-color: #f8f9fb;
+    font-size: 1rem;
+}
+
+.vendors-page .accordion-button:not(.collapsed) {
+    background-color: #e7f1ff;
+    color: #0d6efd;
+}
+
+.vendors-page .vendor-row {
+    transition: background-color 0.2s ease;
+}
+
+.vendors-page .vendor-row:hover {
+    background-color: #f8f9fa;
+}
+
+.vendors-page .table thead th {
+    background-color: #f1f3f6;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.vendors-page .badge {
+    font-weight: 500;
 }

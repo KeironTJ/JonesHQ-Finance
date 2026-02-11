@@ -1,124 +1,234 @@
 {% extends "base.html" %}
 
-{% block title %}Vendors{% endblock %}
+{% block title %}Vendors - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-shop"></i> Vendors</h2>
-        <a href="{{ url_for('vendors.add') }}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Add Vendor
-        </a>
-    </div>
-
-    <!-- Filters -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="GET" class="row g-3">
-                <div class="col-md-3">
-                    <label for="search" class="form-label">Search</label>
-                    <input type="text" 
-                           class="form-control" 
-                           id="search" 
-                           name="search" 
-                           placeholder="Search vendors..." 
-                           value="{{ current_search or '' }}">
-                </div>
-                <div class="col-md-3">
-                    <label for="type" class="form-label">Vendor Type</label>
-                    <select class="form-select" id="type" name="type">
-                        <option value="">All Types</option>
-                        {% for vtype in vendor_types %}
-                        <option value="{{ vtype }}" {% if current_type == vtype %}selected{% endif %}>{{ vtype }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label for="sort" class="form-label">Sort By</label>
-                    <select class="form-select" id="sort" name="sort">
-                        <option value="usage" {% if current_sort == 'usage' %}selected{% endif %}>Most Used</option>
-                        <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Name (A-Z)</option>
-                    </select>
-                </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <button type="submit" class="btn btn-secondary me-2">
-                        <i class="bi bi-funnel"></i> Filter
-                    </button>
-                    <a href="{{ url_for('vendors.index') }}" class="btn btn-outline-secondary">
-                        <i class="bi bi-x-circle"></i> Clear
-                    </a>
-                </div>
-            </form>
+<div class="container-fluid vendors-page">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1><i class="bi bi-shop"></i> Vendors</h1>
+            <p class="text-muted mb-0">Manage your income and expense vendors</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('vendors.add') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Vendor
+            </a>
         </div>
     </div>
 
-    <!-- Vendors List -->
-    {% if vendors %}
-    <div class="row">
-        {% for vendor in vendors %}
-        <div class="col-md-6 col-lg-4 mb-3">
-            <div class="card h-100 {% if not vendor.is_active %}border-secondary{% endif %}">
+    <!-- Summary Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h5 class="card-title mb-0">
-                            <a href="{{ url_for('transactions.index', vendor_id=vendor.id) }}" 
-                               class="text-decoration-none text-dark">
-                                {{ vendor.name }}
-                            </a>
-                            {% if not vendor.is_active %}
-                            <span class="badge bg-secondary">Inactive</span>
-                            {% endif %}
-                        </h5>
-                    </div>
-                    
-                    <p class="mb-2">
-                        <span class="badge bg-primary">{{ vendor.transaction_count }} transactions</span>
-                    </p>
-                    
-                    {% if vendor.vendor_type %}
-                    <p class="text-muted mb-2">
-                        <i class="bi bi-tag"></i> {{ vendor.vendor_type }}
-                    </p>
-                    {% endif %}
-                    
-                    {% if vendor.default_category %}
-                    <p class="mb-2">
-                        <i class="bi bi-folder"></i> Default: 
-                        <span class="badge bg-info">{{ vendor.default_category.head_budget }} → {{ vendor.default_category.sub_budget }}</span>
-                    </p>
-                    {% endif %}
-                    
-                    {% if vendor.website %}
-                    <p class="mb-2">
-                        <i class="bi bi-globe"></i> 
-                        <a href="{{ vendor.website }}" target="_blank" class="text-decoration-none">
-                            {{ vendor.website[:30] }}{% if vendor.website|length > 30 %}...{% endif %}
-                        </a>
-                    </p>
-                    {% endif %}
-                    
-                    {% if vendor.notes %}
-                    <p class="text-muted small mb-2">
-                        <i class="bi bi-sticky"></i> {{ vendor.notes[:50] }}{% if vendor.notes|length > 50 %}...{% endif %}
-                    </p>
-                    {% endif %}
-                    
-                    <div class="d-flex justify-content-between mt-3">
-                        <a href="{{ url_for('vendors.edit', id=vendor.id) }}" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-pencil"></i> Edit
-                        </a>
-                        <form method="POST" action="{{ url_for('vendors.delete', id=vendor.id) }}" 
-                              onsubmit="return confirm('Are you sure you want to delete {{ vendor.name }}?');" 
-                              class="d-inline">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                                <i class="bi bi-trash"></i> Delete
-                            </button>
-                        </form>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50">Total Vendors</div>
+                            <div class="h3 mb-0">{{ vendors|length }}</div>
+                        </div>
+                        <i class="bi bi-shop text-white-50" style="font-size: 2rem;"></i>
                     </div>
                 </div>
-                <div class="card-footer text-muted small">
-                    Created: {{ vendor.created_at.strftime('%Y-%m-%d') }}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50">Active Vendors</div>
+                            <div class="h3 mb-0" id="activeCount">0</div>
+                        </div>
+                        <i class="bi bi-check-circle text-white-50" style="font-size: 2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50">Vendor Types</div>
+                            <div class="h3 mb-0">{{ vendor_types|length }}</div>
+                        </div>
+                        <i class="bi bi-tags text-white-50" style="font-size: 2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50">Total Transactions</div>
+                            <div class="h3 mb-0" id="totalTransactions">0</div>
+                        </div>
+                        <i class="bi bi-receipt text-white-50" style="font-size: 2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Search vendors...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select id="typeFilter" class="form-select">
+                        <option value="">All Types</option>
+                        {% for vtype in vendor_types %}
+                        <option value="{{ vtype|lower }}">{{ vtype }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="statusFilter" class="form-select">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="sortBy" class="form-select">
+                        <option value="usage">Sort by Usage</option>
+                        <option value="name">Sort by Name</option>
+                        <option value="type">Sort by Type</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vendors by Type -->
+    {% if vendors %}
+    <div class="accordion" id="vendorsAccordion">
+        {% set vendors_by_type = {} %}
+        {% for vendor in vendors %}
+            {% set vtype = vendor.vendor_type or 'Uncategorized' %}
+            {% if vtype not in vendors_by_type %}
+                {% set _ = vendors_by_type.update({vtype: []}) %}
+            {% endif %}
+            {% set _ = vendors_by_type[vtype].append(vendor) %}
+        {% endfor %}
+        
+        {% for vtype, type_vendors in vendors_by_type.items()|sort %}
+        <div class="accordion-item vendor-group" data-vendor-type="{{ vtype|lower }}">
+            <h2 class="accordion-header" id="headingType{{ loop.index }}">
+                <button class="accordion-button {% if loop.index > 3 %}collapsed{% endif %}" type="button" 
+                        data-bs-toggle="collapse" data-bs-target="#collapseType{{ loop.index }}" 
+                        aria-expanded="{% if loop.index <= 3 %}true{% else %}false{% endif %}" 
+                        aria-controls="collapseType{{ loop.index }}">
+                    <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                        <div>
+                            <strong><i class="bi bi-tag"></i> {{ vtype }}</strong>
+                            <span class="badge bg-secondary ms-2">{{ type_vendors|length }} vendors</span>
+                            <span class="badge bg-info ms-1">
+                                {% set total_txns = namespace(count=0) %}
+                                {% for v in type_vendors %}
+                                    {% set total_txns.count = total_txns.count + v.transaction_count %}
+                                {% endfor %}
+                                {{ total_txns.count }} transactions
+                            </span>
+                        </div>
+                    </div>
+                </button>
+            </h2>
+            <div id="collapseType{{ loop.index }}" class="accordion-collapse collapse {% if loop.index <= 3 %}show{% endif %}" 
+                 aria-labelledby="headingType{{ loop.index }}" data-bs-parent="#vendorsAccordion">
+                <div class="accordion-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 25%;">Vendor Name</th>
+                                    <th style="width: 20%;">Default Category</th>
+                                    <th style="width: 15%;" class="text-end">Transactions</th>
+                                    <th style="width: 10%;" class="text-center">Status</th>
+                                    <th style="width: 15%;">Website</th>
+                                    <th style="width: 15%;" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for vendor in type_vendors %}
+                                <tr class="vendor-row" 
+                                    data-name="{{ vendor.name|lower }}"
+                                    data-type="{{ vtype|lower }}"
+                                    data-status="{{ 'active' if vendor.is_active else 'inactive' }}"
+                                    data-count="{{ vendor.transaction_count }}">
+                                    <td>
+                                        <a href="{{ url_for('transactions.index', vendor_id=vendor.id) }}" 
+                                           class="text-decoration-none">
+                                            <strong>{{ vendor.name }}</strong>
+                                        </a>
+                                        {% if vendor.notes %}
+                                        <br><small class="text-muted">
+                                            <i class="bi bi-sticky"></i> {{ vendor.notes[:40] }}{% if vendor.notes|length > 40 %}...{% endif %}
+                                        </small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if vendor.default_category %}
+                                        <span class="badge bg-light text-dark">
+                                            {{ vendor.default_category.head_budget }}
+                                        </span>
+                                        <br><small class="text-muted">{{ vendor.default_category.sub_budget }}</small>
+                                        {% else %}
+                                        <em class="text-muted">None</em>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="badge bg-secondary">{{ vendor.transaction_count }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if vendor.is_active %}
+                                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if vendor.website %}
+                                        <a href="{{ vendor.website }}" target="_blank" class="text-decoration-none small">
+                                            <i class="bi bi-globe"></i> Link
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('transactions.index', vendor_id=vendor.id) }}" 
+                                               class="btn btn-outline-secondary btn-sm"
+                                               title="View Transactions">
+                                                <i class="bi bi-list-ul"></i>
+                                            </a>
+                                            <a href="{{ url_for('vendors.edit', id=vendor.id) }}" 
+                                               class="btn btn-outline-primary btn-sm"
+                                               title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <button type="button" 
+                                                    class="btn btn-outline-danger btn-sm"
+                                                    onclick="confirmDelete({{ vendor.id }}, '{{ vendor.name }}')"
+                                                    title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -126,8 +236,125 @@
     </div>
     {% else %}
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> No vendors found. <a href="{{ url_for('vendors.add') }}">Add your first vendor</a>
+        <i class="bi bi-info-circle"></i> No vendors found. 
+        <a href="{{ url_for('vendors.add') }}">Add your first vendor</a>
     </div>
     {% endif %}
 </div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete vendor <strong id="deleteVendorName"></strong>?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Calculate and display stats
+document.addEventListener('DOMContentLoaded', function() {
+    const activeCount = document.querySelectorAll('[data-status="active"]').length;
+    const allRows = document.querySelectorAll('.vendor-row');
+    let totalTransactions = 0;
+    
+    allRows.forEach(row => {
+        totalTransactions += parseInt(row.dataset.count) || 0;
+    });
+    
+    document.getElementById('activeCount').textContent = activeCount;
+    document.getElementById('totalTransactions').textContent = totalTransactions.toLocaleString();
+    
+    // Search and filter functionality
+    const searchInput = document.getElementById('searchInput');
+    const typeFilter = document.getElementById('typeFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    const sortBy = document.getElementById('sortBy');
+    
+    function filterVendors() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedType = typeFilter.value.toLowerCase();
+        const selectedStatus = statusFilter.value.toLowerCase();
+        
+        // Filter rows
+        document.querySelectorAll('.vendor-row').forEach(row => {
+            const name = row.dataset.name;
+            const type = row.dataset.type;
+            const status = row.dataset.status;
+            
+            const matchesSearch = !searchTerm || name.includes(searchTerm);
+            const matchesType = !selectedType || type === selectedType;
+            const matchesStatus = !selectedStatus || status === selectedStatus;
+            
+            if (matchesSearch && matchesType && matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Hide empty groups
+        document.querySelectorAll('.vendor-group').forEach(group => {
+            const visibleRows = group.querySelectorAll('.vendor-row:not([style*="display: none"])');
+            if (visibleRows.length === 0) {
+                group.style.display = 'none';
+            } else {
+                group.style.display = '';
+            }
+        });
+    }
+    
+    function sortVendors() {
+        const sortValue = sortBy.value;
+        
+        document.querySelectorAll('.accordion-item').forEach(item => {
+            const tbody = item.querySelector('tbody');
+            if (!tbody) return;
+            
+            const rows = Array.from(tbody.querySelectorAll('.vendor-row'));
+            
+            rows.sort((a, b) => {
+                if (sortValue === 'usage') {
+                    return parseInt(b.dataset.count) - parseInt(a.dataset.count);
+                } else if (sortValue === 'name') {
+                    return a.dataset.name.localeCompare(b.dataset.name);
+                } else if (sortValue === 'type') {
+                    return a.dataset.type.localeCompare(b.dataset.type);
+                }
+                return 0;
+            });
+            
+            rows.forEach(row => tbody.appendChild(row));
+        });
+    }
+    
+    searchInput.addEventListener('input', filterVendors);
+    typeFilter.addEventListener('change', filterVendors);
+    statusFilter.addEventListener('change', filterVendors);
+    sortBy.addEventListener('change', sortVendors);
+    
+    // Initial sort
+    sortVendors();
+});
+
+function confirmDelete(vendorId, vendorName) {
+    document.getElementById('deleteVendorName').textContent = vendorName;
+    document.getElementById('deleteForm').action = '{{ url_for("vendors.delete", id=0) }}'.replace('0', vendorId);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+
 {% endblock %}
