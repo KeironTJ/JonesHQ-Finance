@@ -80,12 +80,17 @@
 
                             <!-- Amount -->
                             <div class="col-md-6 mb-3">
-                                <label for="amount" class="form-label">Amount (£) *</label>
-                                <input type="number" step="0.01" class="form-control" id="amount" name="amount" 
-                                    value="{{ transaction.amount if transaction else '' }}" required>
-                                <small class="form-text text-muted">
-                                    Positive = Expense, Negative = Income
-                                </small>
+                                <label class="form-label">Amount (£) *</label>
+                                <div class="input-group">
+                                    <button type="button" id="amountSignBtn" class="btn btn-danger" style="min-width:90px" onclick="toggleAmountSign()">
+                                        Expense
+                                    </button>
+                                    <span class="input-group-text">£</span>
+                                    <input type="text" inputmode="decimal" class="form-control" id="amountDisplay"
+                                           placeholder="0.00" required autocomplete="off">
+                                </div>
+                                <input type="hidden" id="amount" name="amount">
+                                <small class="form-text text-muted" id="amountHint">Expense = positive debit from account</small>
                             </div>
 
                             <!-- Transaction Date -->
@@ -273,6 +278,58 @@
 </div>
 
 <script>
+    // ── Amount sign toggle ────────────────────────────────────────────────
+    function toggleAmountSign() {
+        const btn = document.getElementById('amountSignBtn');
+        const hint = document.getElementById('amountHint');
+        if (btn.classList.contains('btn-danger')) {
+            btn.classList.replace('btn-danger', 'btn-success');
+            btn.textContent = 'Income';
+            hint.textContent = 'Income = credit into account';
+        } else {
+            btn.classList.replace('btn-success', 'btn-danger');
+            btn.textContent = 'Expense';
+            hint.textContent = 'Expense = positive debit from account';
+        }
+        syncAmountHidden();
+    }
+
+    function syncAmountHidden() {
+        const display = document.getElementById('amountDisplay').value.replace(/[^0-9.]/g, '');
+        const btn = document.getElementById('amountSignBtn');
+        const isIncome = btn.classList.contains('btn-success');
+        document.getElementById('amount').value = display ? (isIncome ? '-' + display : display) : '';
+    }
+
+    document.getElementById('amountDisplay').addEventListener('input', syncAmountHidden);
+
+    // Pre-populate display from existing value (edit mode)
+    (function initAmountDisplay() {
+        const hidden = document.getElementById('amount');
+        {% if transaction %}
+        const rawVal = '{{ transaction.amount }}';
+        {% else %}
+        const rawVal = '';
+        {% endif %}
+        if (rawVal !== '') {
+            const num = parseFloat(rawVal);
+            const btn = document.getElementById('amountSignBtn');
+            const hint = document.getElementById('amountHint');
+            if (num < 0) {
+                btn.classList.replace('btn-danger', 'btn-success');
+                btn.textContent = 'Income';
+                hint.textContent = 'Income = credit into account';
+            }
+            document.getElementById('amountDisplay').value = Math.abs(num).toFixed(2);
+            hidden.value = rawVal;
+        }
+    })();
+
+    // Ensure hidden amount is set before submit
+    document.querySelector('form').addEventListener('submit', function() {
+        syncAmountHidden();
+    });
+
     // Auto-populate period fields when date changes
     function recalcPeriodFields() {
         const dateVal = document.getElementById('transaction_date').value;

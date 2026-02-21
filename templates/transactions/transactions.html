@@ -645,9 +645,17 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="edit_amount" class="form-label">Amount</label>
-                        <input type="number" step="0.01" class="form-control" name="amount" id="edit_amount" required>
-                        <small class="text-muted">Positive for expenses, negative for income</small>
+                        <label class="form-label">Amount</label>
+                        <div class="input-group">
+                            <button type="button" id="editAmountSignBtn" class="btn btn-danger" style="min-width:90px" onclick="toggleEditAmountSign()">
+                                Expense
+                            </button>
+                            <span class="input-group-text">£</span>
+                            <input type="text" inputmode="decimal" class="form-control" id="edit_amount_display"
+                                   placeholder="0.00" autocomplete="off">
+                        </div>
+                        <input type="hidden" name="amount" id="edit_amount">
+                        <small class="form-text text-muted">Expense = positive debit, Income = negative</small>
                     </div>
                     
                     <div class="mb-3">
@@ -754,9 +762,21 @@ document.addEventListener('DOMContentLoaded', function() {
             const form = document.getElementById('editTransactionForm');
             form.action = `/transactions/${txnId}/edit`;
             
+            // Populate amount with sign toggle
+            const amt = parseFloat(txnAmount);
+            const editBtn = document.getElementById('editAmountSignBtn');
+            if (amt < 0) {
+                editBtn.classList.remove('btn-danger'); editBtn.classList.add('btn-success');
+                editBtn.textContent = 'Income';
+            } else {
+                editBtn.classList.remove('btn-success'); editBtn.classList.add('btn-danger');
+                editBtn.textContent = 'Expense';
+            }
+            document.getElementById('edit_amount_display').value = isNaN(amt) ? '' : Math.abs(amt).toFixed(2);
+            document.getElementById('edit_amount').value = txnAmount;
+
             // Populate form fields
             document.getElementById('edit_transaction_date').value = txnDate;
-            document.getElementById('edit_amount').value = txnAmount;
             document.getElementById('edit_description').value = txnDescription;
             document.getElementById('edit_item').value = txnItem;
             document.getElementById('edit_category_id').value = txnCategory;
@@ -918,6 +938,25 @@ window.addEventListener('load', function() {
 </div>
 <script>
 let _quickAddTargetSelectId = null;
+function toggleEditAmountSign() {
+    const btn = document.getElementById('editAmountSignBtn');
+    if (btn.classList.contains('btn-danger')) {
+        btn.classList.replace('btn-danger', 'btn-success');
+        btn.textContent = 'Income';
+    } else {
+        btn.classList.replace('btn-success', 'btn-danger');
+        btn.textContent = 'Expense';
+    }
+    syncEditAmountHidden();
+}
+function syncEditAmountHidden() {
+    const display = document.getElementById('edit_amount_display').value.replace(/[^0-9.]/g, '');
+    const btn = document.getElementById('editAmountSignBtn');
+    const isIncome = btn.classList.contains('btn-success');
+    document.getElementById('edit_amount').value = display ? (isIncome ? '-' + display : display) : '';
+}
+document.getElementById('edit_amount_display').addEventListener('input', syncEditAmountHidden);
+document.getElementById('editTransactionForm').addEventListener('submit', syncEditAmountHidden);
 function openQuickAddVendor(selectId) {
     _quickAddTargetSelectId = selectId;
     document.getElementById('quickVendorName').value = '';
