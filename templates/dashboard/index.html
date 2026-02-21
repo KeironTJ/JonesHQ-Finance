@@ -186,15 +186,17 @@
             <!-- Payday Periods Accordion -->
             <div class="accordion" id="paydayAccordion">
                 {% for period in payday_data %}
-                <div class="accordion-item">
+                {% set is_current = period.start_date <= today <= period.end_date %}
+                {% set is_past = period.end_date < today %}
+                <div class="accordion-item{% if is_current %} current-period-item{% elif is_past %} past-period-item{% endif %}">
                     <h2 class="accordion-header" id="heading{{ loop.index }}">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
+                        <button class="accordion-button collapsed{% if is_current %} current-period-btn{% elif is_past %} past-period-btn{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
                             <div class="d-flex justify-content-between align-items-center w-100 me-3 payday-row">
                                 <div style="flex: 1;">
                                     <strong class="me-2">{{ period.period_label }}</strong>
                                     <span class="text-muted small">{{ period.start_date.strftime('%d %b') }} - {{ period.end_date.strftime('%d %b %Y') }}</span>
-                                    {% if loop.index == 1 %}
-                                        <span class="badge bg-success ms-2">Current Period</span>
+                                    {% if is_current %}
+                                        <span class="badge bg-success ms-2"><i class="bi bi-star-fill me-1"></i>Current Period</span>
                                     {% endif %}
                                 </div>
                                 <div class="d-flex gap-4 payday-metrics">
@@ -541,17 +543,6 @@
                                 <i class="bi bi-graph-up-arrow display-4 text-primary"></i>
                                 <h5 class="card-title mt-3">Net Worth</h5>
                                 <p class="card-text text-muted small">Track overall wealth</p>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-md-3 col-sm-6 mb-3">
-                    <a href="{{ url_for('budgets.index') }}" class="text-decoration-none">
-                        <div class="card border-info h-100 hover-shadow">
-                            <div class="card-body text-center">
-                                <i class="bi bi-pie-chart display-4 text-info"></i>
-                                <h5 class="card-title mt-3">Budgets</h5>
-                                <p class="card-text text-muted small">Budget planning</p>
                             </div>
                         </div>
                     </a>

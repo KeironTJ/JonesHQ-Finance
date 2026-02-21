@@ -129,20 +129,28 @@ class PensionService:
     def save_projections(pension, scenario='default', replace_existing=True):
         """Save projections to database"""
         if replace_existing:
-            # Delete existing projections for this scenario
-            PensionSnapshot.query.filter_by(
-                pension_id=pension.id,
-                is_projection=True,
-                scenario_name=scenario
+            # Only delete FUTURE projections for this scenario - preserve past projection
+            # records for months where no actual snapshot was ever confirmed, so historic
+            # rows don't disappear from the projections table.
+            today = date.today()
+            PensionSnapshot.query.filter(
+                PensionSnapshot.pension_id == pension.id,
+                PensionSnapshot.is_projection == True,
+                PensionSnapshot.scenario_name == scenario,
+                PensionSnapshot.review_date >= today
             ).delete()
         
         projections = PensionService.generate_projections(pension, scenario)
         
-        for proj_data in projections:
+        # Only save projections for today onwards - past projections are preserved in DB
+        today = date.today()
+        future_projections = [p for p in projections if p['review_date'] >= today]
+        
+        for proj_data in future_projections:
             snapshot = PensionSnapshot(**proj_data)
             db.session.add(snapshot)
         
-        # Update projected value at retirement
+        # Update projected value at retirement (use full projection list for accuracy)
         if projections:
             pension.projected_value_at_retirement = projections[-1]['value']
         

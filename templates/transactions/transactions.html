@@ -232,7 +232,7 @@
                                         <span>{{ sub_budget }}</span>
                                         <div>
                                             <span class="badge bg-secondary me-1">{{ cat_data.count }}</span>
-                                            <span class="badge {% if cat_data.total > 0 %}bg-danger{% else %}bg-success{% endif %}">
+                                            <span class="badge {% if cat_data.total > 0 %}bg-success{% else %}bg-danger{% endif %}">
                                                 £{{ "%.2f"|format(cat_data.total|abs) }}
                                             </span>
                                         </div>
@@ -494,7 +494,11 @@
                                                     data-txn-assigned="{{ transaction.assigned_to }}"
                                                     data-txn-payment-type="{{ transaction.payment_type }}"
                                                     data-txn-fixed="{{ '1' if transaction.is_fixed else '0' }}"
-                                                    data-txn-paid="{{ '1' if transaction.is_paid else '0' }}">
+                                                    data-txn-paid="{{ '1' if transaction.is_paid else '0' }}"
+                                                    data-txn-year-month="{{ transaction.year_month or '' }}"
+                                                    data-txn-week-year="{{ transaction.week_year or '' }}"
+                                                    data-txn-day-name="{{ transaction.day_name or '' }}"
+                                                    data-txn-payday-period="{{ transaction.payday_period or '' }}">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             
@@ -678,6 +682,37 @@
                             Mark as paid
                         </label>
                     </div>
+
+                    <!-- Period Overrides -->
+                    <hr>
+                    <p class="text-muted small mb-2"><i class="bi bi-calendar3"></i> Period fields — leave blank to auto-calculate from date</p>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Year-Month</label>
+                            <input type="text" class="form-control form-control-sm" name="year_month" id="edit_year_month" placeholder="2026-02">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Week-Year</label>
+                            <input type="text" class="form-control form-control-sm" name="week_year" id="edit_week_year" placeholder="08-2026">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Day Name</label>
+                            <select class="form-select form-select-sm" name="day_name" id="edit_day_name">
+                                <option value="">(auto)</option>
+                                <option value="Mon">Mon</option>
+                                <option value="Tue">Tue</option>
+                                <option value="Wed">Wed</option>
+                                <option value="Thu">Thu</option>
+                                <option value="Fri">Fri</option>
+                                <option value="Sat">Sat</option>
+                                <option value="Sun">Sun</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">Payday Period</label>
+                            <input type="text" class="form-control form-control-sm" name="payday_period_override" id="edit_payday_period" placeholder="2026-02">
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -725,6 +760,12 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_payment_type').value = txnPaymentType;
             document.getElementById('edit_txn_fixed').checked = (txnFixed === '1');
             document.getElementById('edit_is_paid').checked = (txnPaid === '1');
+
+            // Period override fields
+            document.getElementById('edit_year_month').value = button.getAttribute('data-txn-year-month') || '';
+            document.getElementById('edit_week_year').value = button.getAttribute('data-txn-week-year') || '';
+            document.getElementById('edit_day_name').value = button.getAttribute('data-txn-day-name') || '';
+            document.getElementById('edit_payday_period').value = button.getAttribute('data-txn-payday-period') || '';
         });
     }
 });

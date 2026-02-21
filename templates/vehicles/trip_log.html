@@ -132,7 +132,13 @@
                 </thead>
                 <tbody>
                     {% for trip in trips %}
+                    {% if trip.date == today %}
+                    <tr id="trip-{{ trip.id }}" class="trip-row-today">
+                    {% elif trip.date < today %}
+                    <tr id="trip-{{ trip.id }}" class="trip-row-past">
+                    {% else %}
                     <tr id="trip-{{ trip.id }}">
+                    {% endif %}
                         <td>
                             <input type="checkbox" class="trip-checkbox" value="{{ trip.id }}" onchange="updateBulkDeleteButton()">
                         </td>
@@ -234,7 +240,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Date</label>
-                        <input type="date" name="date" class="form-control" value="{{ today() }}" required>
+                        <input type="date" name="date" class="form-control" value="{{ today.isoformat() }}" required>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">

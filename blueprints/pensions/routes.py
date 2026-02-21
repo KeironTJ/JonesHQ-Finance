@@ -158,6 +158,13 @@ def add_snapshot(id):
                 growth_percent=growth_percent
             )
             
+            # Remove any existing projection for this exact date (now superseded by actual)
+            PensionSnapshot.query.filter_by(
+                pension_id=id,
+                review_date=review_date,
+                is_projection=True
+            ).delete()
+            
             db.session.add(snapshot)
             
             # Update pension current value

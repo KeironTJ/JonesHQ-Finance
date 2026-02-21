@@ -105,6 +105,7 @@ def index():
                          payday_day=payday_day,
                          selected_year=selected_year,
                          current_year=today.year,
+                         today=today,
                          networth=networth,
                          credit_card_summary=credit_card_summary,
                          loan_summary=loan_summary,

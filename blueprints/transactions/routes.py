@@ -327,11 +327,22 @@ def create():
                 if adjust_working_days:
                     current_date = adjust_to_working_day(current_date, weekend_adjustment)
                 
-                # Calculate computed fields
+                # Calculate computed fields — use form overrides if provided, else auto-calculate
                 year_month = current_date.strftime('%Y-%m')
                 week_year = f"{current_date.isocalendar()[1]:02d}-{current_date.year}"
                 day_name = current_date.strftime('%a')
                 payday_period = PaydayService.get_period_for_date(current_date)
+
+                # Apply manual overrides (only for first occurrence on recurring; always for single)
+                if i == 0:
+                    if request.form.get('year_month', '').strip():
+                        year_month = request.form.get('year_month').strip()
+                    if request.form.get('week_year', '').strip():
+                        week_year = request.form.get('week_year').strip()
+                    if request.form.get('day_name', '').strip():
+                        day_name = request.form.get('day_name').strip()
+                    if request.form.get('payday_period_override', '').strip():
+                        payday_period = request.form.get('payday_period_override').strip()
                 
                 # Create transaction
                 transaction = Transaction(
@@ -411,12 +422,12 @@ def edit(id):
             transaction.is_paid = request.form.get('is_paid') == '1'
             transaction.is_fixed = request.form.get('txn_fixed') == '1'
             
-            # Recalculate computed fields
+            # Recalculate computed fields — use form overrides if provided, else auto-calculate
             date = transaction.transaction_date
-            transaction.year_month = date.strftime('%Y-%m')
-            transaction.week_year = f"{date.isocalendar()[1]:02d}-{date.year}"
-            transaction.day_name = date.strftime('%a')
-            transaction.payday_period = PaydayService.get_period_for_date(date)
+            transaction.year_month = request.form.get('year_month', '').strip() or date.strftime('%Y-%m')
+            transaction.week_year = request.form.get('week_year', '').strip() or f"{date.isocalendar()[1]:02d}-{date.year}"
+            transaction.day_name = request.form.get('day_name', '').strip() or date.strftime('%a')
+            transaction.payday_period = request.form.get('payday_period_override', '').strip() or PaydayService.get_period_for_date(date)
             transaction.updated_at = datetime.now()
             
             # Sync changes to linked transfer transaction if exists (BEFORE commit)

@@ -187,7 +187,8 @@ def trips():
         selected_vehicle_id_trip=selected_vehicle_id_trip,
         fuel_records_dict=fuel_records_dict,
         forecasted_transactions=forecasted_transactions,
-        fuel_expenses_dict=fuel_expenses_dict
+        fuel_expenses_dict=fuel_expenses_dict,
+        today=date.today()
     )
 
 

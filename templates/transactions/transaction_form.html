@@ -187,6 +187,54 @@
                         </div>
                         {% endif %}
 
+                        <!-- Period Overrides -->
+                        <div class="card mb-3">
+                            <div class="card-header" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#periodOverridesCollapse">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0"><i class="bi bi-calendar3 me-2"></i>Period Fields <small class="text-muted fw-normal">(auto-calculated from date, override if needed)</small></h6>
+                                    <i class="bi bi-chevron-down"></i>
+                                </div>
+                            </div>
+                            <div id="periodOverridesCollapse" class="collapse">
+                                <div class="card-body">
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label class="form-label">Year-Month <small class="text-muted">(YYYY-MM)</small></label>
+                                            <input type="text" class="form-control" id="year_month" name="year_month"
+                                                   pattern="\d{4}-\d{2}" placeholder="2026-02"
+                                                   value="{{ transaction.year_month if transaction else '' }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Week-Year <small class="text-muted">(WW-YYYY)</small></label>
+                                            <input type="text" class="form-control" id="week_year" name="week_year"
+                                                   pattern="\d{2}-\d{4}" placeholder="08-2026"
+                                                   value="{{ transaction.week_year if transaction else '' }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Day Name</label>
+                                            <select class="form-select" id="day_name" name="day_name">
+                                                <option value="">(auto)</option>
+                                                {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+                                                <option value="{{ d }}" {% if transaction and transaction.day_name == d %}selected{% endif %}>{{ d }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Payday Period <small class="text-muted">(YYYY-MM)</small></label>
+                                            <input type="text" class="form-control" id="payday_period_override" name="payday_period_override"
+                                                   pattern="\d{4}-\d{2}" placeholder="2026-02"
+                                                   value="{{ transaction.payday_period if transaction else '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="recalcPeriodFields()">
+                                            <i class="bi bi-arrow-clockwise"></i> Reset to auto-calculated values
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-check-circle"></i> <span id="submit-text">Save Transaction{% if not transaction %}(s){% endif %}</span>
@@ -219,6 +267,41 @@
 </div>
 
 <script>
+    // Auto-populate period fields when date changes
+    function recalcPeriodFields() {
+        const dateVal = document.getElementById('transaction_date').value;
+        if (!dateVal) return;
+        const d = new Date(dateVal + 'T12:00:00'); // noon to avoid TZ shifts
+        // year_month
+        const ym = dateVal.substring(0, 7);
+        document.getElementById('year_month').value = ym;
+        // week_year
+        const jan4 = new Date(d.getFullYear(), 0, 4);
+        const startOfWeek1 = new Date(jan4);
+        startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+        const weekNum = Math.floor((d - startOfWeek1) / (7 * 86400000)) + 1;
+        document.getElementById('week_year').value = String(weekNum).padStart(2, '0') + '-' + d.getFullYear();
+        // day_name
+        const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        document.getElementById('day_name').value = days[d.getDay()];
+        // payday_period - same as year_month as a baseline (server will use PaydayService)
+        document.getElementById('payday_period_override').value = ym;
+    }
+
+    // Wire up date change
+    const dateInput = document.getElementById('transaction_date');
+    if (dateInput) {
+        dateInput.addEventListener('change', function() {
+            // Only auto-fill if the section has no user-set values (i.e. creating new)
+            const ymInput = document.getElementById('year_month');
+            if (!ymInput.value) recalcPeriodFields();
+        });
+        // On load for create form: pre-fill if date already has a value
+        if (!document.getElementById('year_month').value && dateInput.value) {
+            recalcPeriodFields();
+        }
+    }
+
     // Recurring transaction toggle
     const isRecurringCheckbox = document.getElementById('is_recurring');
     if (isRecurringCheckbox) {

@@ -85,7 +85,6 @@ def create_app(config_name=None):
     from blueprints.transactions import transactions_bp
     from blueprints.categories import bp as categories_bp
     from blueprints.vendors import bp as vendors_bp
-    from blueprints.budgets import budgets_bp
     from blueprints.loans import loans_bp
     from blueprints.credit_cards import credit_cards_bp
     from blueprints.vehicles import vehicles_bp
@@ -103,7 +102,6 @@ def create_app(config_name=None):
     app.register_blueprint(transactions_bp)
     app.register_blueprint(categories_bp)
     app.register_blueprint(vendors_bp)
-    app.register_blueprint(budgets_bp)
     app.register_blueprint(loans_bp, url_prefix='/loans')
     app.register_blueprint(credit_cards_bp)
     app.register_blueprint(vehicles_bp)

@@ -202,6 +202,40 @@ footer {
     padding: 0.5rem 0.75rem;
 }
 
+.dashboard-page .current-period-item {
+    border-left: 4px solid #198754 !important;
+    box-shadow: 0 0 0 1px rgba(25, 135, 84, 0.25);
+}
+
+.dashboard-page .current-period-btn {
+    background-color: rgba(25, 135, 84, 0.08) !important;
+    font-weight: 600;
+}
+
+.dashboard-page .current-period-btn:not(.collapsed) {
+    background-color: rgba(25, 135, 84, 0.15) !important;
+    color: inherit !important;
+    box-shadow: none !important;
+}
+
+.dashboard-page .past-period-item {
+    opacity: 0.55;
+}
+
+.dashboard-page .past-period-item:hover {
+    opacity: 0.85;
+    transition: opacity 0.15s ease;
+}
+
+.dashboard-page .past-period-btn {
+    color: #6c757d !important;
+}
+
+.dashboard-page .past-period-btn:not(.collapsed) {
+    color: #6c757d !important;
+    box-shadow: none !important;
+}
+
 .categories-analytics .analytics-filter-card,
 .vendors-analytics .analytics-filter-card {
     border: 1px solid #e6e9ee;
@@ -446,4 +480,24 @@ footer {
 .categories-page .form-check,
 .vendors-page .form-check {
     margin-bottom: 0;
+}
+
+/* Trip Log Row Highlighting */
+tr.trip-row-today,
+tr.trip-row-today > td {
+    background-color: rgba(25, 135, 84, 0.18) !important;
+    font-weight: 600;
+}
+
+tr.trip-row-today > td:first-child {
+    border-left: 3px solid #198754;
+}
+
+tr.trip-row-past {
+    opacity: 0.55;
+}
+
+tr.trip-row-past:hover {
+    opacity: 0.85;
+    transition: opacity 0.15s ease;
 }

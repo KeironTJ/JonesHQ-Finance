@@ -26,6 +26,42 @@
         </div>
     </div>
 
+    <!-- Retirement Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Current Total Value</h6>
+                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_current_value) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Projected @ Retirement</h6>
+                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_projected_value) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Estimated Annual Income</h6>
+                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_annual_income) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Monthly Income</h6>
+                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_monthly_income) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Filters -->
     <div class="card mb-4">
         <div class="card-body">
@@ -53,43 +89,6 @@
                     </a>
                 </div>
             </form>
-        </div>
-    </div>
-
-    <!-- Retirement Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Current Total Value</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_current_value) }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
-                <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Projected @ Retirement</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_projected_value) }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
-                <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Estimated Annual Income</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_annual_income) }}</h3>
-                    <small>Annuity + Gov Pension</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark">
-                <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Monthly Income</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_monthly_income) }}</h3>
-                </div>
-            </div>
         </div>
     </div>
 
