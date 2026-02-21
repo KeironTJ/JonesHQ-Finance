@@ -338,7 +338,10 @@ class PaydayService:
         from models.categories import Category
         from sqlalchemy import func
         
-        # Get all transactions in the period
+        # Load all relevant categories in one query and index by id — eliminates N+1
+        category_map = {c.id: c for c in Category.query.all()}
+        
+        # Get all transactions in the period with eager-loaded relationships
         query = Transaction.query.filter(
             Transaction.transaction_date >= start_date,
             Transaction.transaction_date <= end_date
@@ -361,7 +364,7 @@ class PaydayService:
             is_income = txn.amount > 0
             
             if txn.category_id:
-                category = Category.query.get(txn.category_id)
+                category = category_map.get(txn.category_id)  # O(1) dict lookup, no DB hit
                 if category:
                     head = category.head_budget or 'Uncategorized'
                     sub = category.sub_budget or 'General'
@@ -474,32 +477,125 @@ class PaydayService:
     def get_payday_summary_for_year(account_id, year, include_unpaid=True):
         """
         Get summary of all payday periods for a specific year.
-        
-        Args:
-            account_id: Bank account ID to track
-            year: Year to display periods for
-            include_unpaid: Whether to include unpaid transactions
-            
-        Returns:
-            List of dicts with period info and metrics for all 12 months of the year
+        Optimised: loads all transactions once and computes all 12 periods in a single pass
+        instead of issuing 12+ separate full-table scans.
         """
-        # Get payday periods starting from January of the selected year
+        from models.categories import Category
+
+        # Build the 12 payday-period date ranges for the year
         periods = PaydayService.get_payday_periods(year, 1, num_periods=12)
-        
+
+        if not periods:
+            return []
+
+        # The earliest date we need a balance for is the day before the first period start
+        first_period_start = periods[0][0]
+        last_period_end   = periods[-1][1]
+        history_cutoff    = first_period_start - timedelta(days=1)
+
+        # ── Single query: all transactions for this account up to end of last period ──
+        all_txns = (
+            Transaction.query
+            .filter(
+                Transaction.account_id == account_id,
+                Transaction.transaction_date <= last_period_end,
+            )
+            .order_by(Transaction.transaction_date)
+            .all()
+        )
+
+        # ── Single query: full category map (no per-transaction DB hits) ──
+        category_map = {c.id: c for c in Category.query.all()}
+
+        # Compute opening balance for the first period (cumulative up to history_cutoff)
+        opening_balance = Decimal('0')
+        for txn in all_txns:
+            if txn.transaction_date <= history_cutoff:
+                if txn.amount > 0:
+                    opening_balance += Decimal(str(txn.amount))
+                else:
+                    opening_balance -= abs(Decimal(str(txn.amount)))
+
+        # Bucket transactions into periods by date range
+        period_txns = [[] for _ in periods]
+        for txn in all_txns:
+            if txn.transaction_date < first_period_start:
+                continue
+            for idx, (start, end, _) in enumerate(periods):
+                if start <= txn.transaction_date <= end:
+                    period_txns[idx].append(txn)
+                    break
+
+        # Build results, carrying the running balance forward across periods
         results = []
-        for start_date, end_date, period_label in periods:
-            metrics = PaydayService.calculate_period_balances(account_id, start_date, end_date, include_unpaid)
-            category_breakdown = PaydayService.get_category_breakdown(account_id, start_date, end_date, include_unpaid)
-            
+        running_balance = opening_balance
+
+        for idx, (start_date, end_date, period_label) in enumerate(periods):
+            txns = period_txns[idx]
+            period_opening = running_balance
+
+            # Rolling balance & minimum within the period
+            current = period_opening
+            min_balance = period_opening
+            for txn in sorted(txns, key=lambda t: t.transaction_date):
+                if txn.amount > 0:
+                    current += Decimal(str(txn.amount))
+                else:
+                    current -= abs(Decimal(str(txn.amount)))
+                if current < min_balance:
+                    min_balance = current
+
+            rolling_balance   = current
+            max_extra_spend   = rolling_balance - period_opening
+            running_balance   = rolling_balance  # carry forward
+
+            # Category breakdown (uses pre-loaded category_map — no extra DB queries)
+            income_totals  = {}
+            expense_totals = {}
+            uncategorized_income  = 0
+            uncategorized_expense = 0
+
+            for txn in txns:
+                amount    = abs(float(txn.amount))
+                is_income = txn.amount > 0
+                category  = category_map.get(txn.category_id) if txn.category_id else None
+
+                if category:
+                    head   = category.head_budget or 'Uncategorized'
+                    sub    = category.sub_budget  or 'General'
+                    totals = income_totals if is_income else expense_totals
+                    if head not in totals:
+                        totals[head] = {'total': 0, 'subcategories': {}}
+                    totals[head]['subcategories'].setdefault(sub, 0)
+                    totals[head]['total']              += amount
+                    totals[head]['subcategories'][sub] += amount
+                else:
+                    if is_income:
+                        uncategorized_income  += amount
+                    else:
+                        uncategorized_expense += amount
+
+            if uncategorized_income > 0:
+                income_totals['Uncategorized'] = {'total': uncategorized_income,  'subcategories': {'No Category': uncategorized_income}}
+            if uncategorized_expense > 0:
+                expense_totals['Uncategorized'] = {'total': uncategorized_expense, 'subcategories': {'No Category': uncategorized_expense}}
+
+            def _to_list(totals_dict):
+                result = []
+                for head, data in sorted(totals_dict.items(), key=lambda x: x[1]['total'], reverse=True):
+                    subcats = [{'name': s, 'amount': a} for s, a in sorted(data['subcategories'].items(), key=lambda x: x[1], reverse=True)]
+                    result.append({'category': head, 'total': data['total'], 'subcategories': subcats})
+                return result
+
             results.append({
-                'period_label': period_label,
-                'start_date': start_date,
-                'end_date': end_date,
-                'rolling_balance': metrics['rolling_balance'],
-                'min_balance': metrics['min_balance'],
-                'max_extra_spend': metrics['max_extra_spend'],
-                'opening_balance': metrics['opening_balance'],
-                'category_breakdown': category_breakdown
+                'period_label':       period_label,
+                'start_date':         start_date,
+                'end_date':           end_date,
+                'rolling_balance':    float(rolling_balance),
+                'min_balance':        float(min_balance),
+                'max_extra_spend':    float(max_extra_spend),
+                'opening_balance':    float(period_opening),
+                'category_breakdown': {'income': _to_list(income_totals), 'expenses': _to_list(expense_totals)},
             })
-        
+
         return results

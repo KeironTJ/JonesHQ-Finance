@@ -55,6 +55,12 @@ class ChildcareService:
             DailyChildcareActivity.date <= last_day
         ).all()
         
+        # Pre-index activities by (date, child_id) for O(1) lookup instead of O(n) per day/child
+        from collections import defaultdict
+        activity_index = defaultdict(list)
+        for a in activities:
+            activity_index[(a.date, a.child_id)].append(a)
+
         # Organize activities by date and child
         calendar_data = {}
         current_date = first_day
@@ -66,7 +72,7 @@ class ChildcareService:
             }
             
             for child in children:
-                child_activities = [a for a in activities if a.date == current_date and a.child_id == child.id]
+                child_activities = activity_index[(current_date, child.id)]  # O(1) lookup
                 day_data['children'][child.id] = {
                     'child': child,
                     'activities': child_activities,
