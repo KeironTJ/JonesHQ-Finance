@@ -4,8 +4,9 @@ from datetime import datetime
 
 class Expense(db.Model):
     __tablename__ = 'expenses'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     date = db.Column(db.Date, nullable=False)
     month = db.Column(db.String(7))  # 2025-04
     week = db.Column(db.String(7))  # 14-2025

@@ -5,9 +5,10 @@ from datetime import datetime
 class Settings(db.Model):
     """Application settings and preferences"""
     __tablename__ = 'settings'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(100), unique=True, nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    key = db.Column(db.String(100), nullable=False)
     value = db.Column(db.String(500))
     description = db.Column(db.String(255))
     setting_type = db.Column(db.String(50))  # 'int', 'float', 'string', 'boolean', 'date'

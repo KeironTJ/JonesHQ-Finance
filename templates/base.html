@@ -28,7 +28,7 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
-                    <!-- Dashboard -->
+                    <!-- Dashboard – always visible -->
                     <li class="nav-item">
                         <a class="nav-link" href="/">
                             <i class="bi bi-speedometer2"></i> Dashboard
@@ -36,75 +36,109 @@
                     </li>
                     
                     <!-- Banking & Accounts -->
+                    {% if can_access_section('accounts') or can_access_section('transactions') or can_access_section('expenses') or can_access_section('categories') or can_access_section('vendors') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-bank"></i> Banking
                         </a>
                         <ul class="dropdown-menu">
+                            {% if can_access_section('accounts') %}
                             <li><a class="dropdown-item" href="/accounts">
                                 <i class="bi bi-wallet2"></i> Accounts
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('transactions') %}
                             <li><a class="dropdown-item" href="/transactions">
                                 <i class="bi bi-list-ul"></i> Transactions
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('expenses') %}
                             <li><a class="dropdown-item" href="/expenses">
                                 <i class="bi bi-receipt"></i> Work Expenses
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('transactions') %}
                             <li><a class="dropdown-item" href="/transactions/consolidated">
                                 <i class="bi bi-diagram-3"></i> Consolidated View
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('categories') or can_access_section('vendors') %}
                             <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+                            {% if can_access_section('categories') %}
                             <li><a class="dropdown-item" href="/categories">
                                 <i class="bi bi-tags"></i> Categories
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('vendors') %}
                             <li><a class="dropdown-item" href="/vendors">
                                 <i class="bi bi-shop"></i> Vendors
                             </a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
                     
                     <!-- Credit & Debt -->
+                    {% if can_access_section('credit_cards') or can_access_section('loans') or can_access_section('mortgage') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-credit-card"></i> Credit & Debt
                         </a>
                         <ul class="dropdown-menu">
+                            {% if can_access_section('credit_cards') %}
                             <li><a class="dropdown-item" href="/credit-cards">
                                 <i class="bi bi-credit-card-2-front"></i> Credit Cards
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('loans') %}
                             <li><a class="dropdown-item" href="/loans">
                                 <i class="bi bi-cash-stack"></i> Loans
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('mortgage') %}
                             <li><a class="dropdown-item" href="/mortgage">
                                 <i class="bi bi-house-door"></i> Mortgage
                             </a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
                     
                     <!-- Planning & Wealth -->
+                    {% if can_access_section('income') or can_access_section('pensions') or can_access_section('networth') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-graph-up"></i> Wealth
                         </a>
                         <ul class="dropdown-menu">
+                            {% if can_access_section('income') %}
                             <li><a class="dropdown-item" href="/income">
                                 <i class="bi bi-cash-coin"></i> Income
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('pensions') %}
                             <li><a class="dropdown-item" href="/pensions">
                                 <i class="bi bi-piggy-bank"></i> Pensions
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('networth') %}
                             <li><a class="dropdown-item" href="/networth">
                                 <i class="bi bi-trophy"></i> Net Worth
                             </a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
                     
                     <!-- Lifestyle -->
+                    {% if can_access_section('vehicles') or can_access_section('childcare') %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-heart"></i> Lifestyle
                         </a>
                         <ul class="dropdown-menu">
+                            {% if can_access_section('vehicles') %}
                             <li><a class="dropdown-item" href="/vehicles">
                                 <i class="bi bi-car-front"></i> Vehicles (Overview)
                             </a></li>
@@ -114,18 +148,24 @@
                             <li><a class="dropdown-item" href="/vehicles/trips">
                                 <i class="bi bi-map"></i> Trip Log
                             </a></li>
+                            {% endif %}
+                            {% if can_access_section('childcare') %}
                             <li><a class="dropdown-item" href="/childcare">
                                 <i class="bi bi-people"></i> Childcare
                             </a></li>
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
                     
-                    <!-- Settings -->
+                    <!-- Settings – admin only -->
+                    {% if can_access_section('settings') %}
                     <li class="nav-item">
                         <a class="nav-link" href="/settings">
                             <i class="bi bi-gear"></i> Settings
                         </a>
                     </li>
+                    {% endif %}
                 </ul>
                 
                 <!-- User menu on the right -->
@@ -134,8 +174,17 @@
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle"></i> {{ current_user.name }}
+                            {% if not current_user.is_admin %}
+                            <span class="badge bg-secondary ms-1" style="font-size:0.65em;">Member</span>
+                            {% endif %}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            {% if current_user.is_admin %}
+                            <li><a class="dropdown-item" href="{{ url_for('family.index') }}">
+                                <i class="bi bi-people-fill"></i> Family
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                 <i class="bi bi-box-arrow-right"></i> Logout
                             </a></li>

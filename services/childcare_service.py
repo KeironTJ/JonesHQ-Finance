@@ -7,6 +7,7 @@ from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from calendar import monthrange
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class ChildcareService:
@@ -14,7 +15,7 @@ class ChildcareService:
     @staticmethod
     def get_or_create_child(name, year_group=None):
         """Get existing child or create new one"""
-        child = Child.query.filter_by(name=name).first()
+        child = family_query(Child).filter_by(name=name).first()
         if not child:
             child = Child(name=name, year_group=year_group)
             db.session.add(child)
@@ -41,14 +42,14 @@ class ChildcareService:
         Returns a structure suitable for rendering a calendar view.
         """
         # Get all active children
-        children = Child.query.filter_by(is_active=True).order_by(Child.sort_order, Child.name).all()
+        children = family_query(Child).filter_by(is_active=True).order_by(Child.sort_order, Child.name).all()
         
         # Get first and last day of month
         first_day = date(year, month, 1)
         last_day = date(year, month, monthrange(year, month)[1])
         
         # Get all activities for this month (eager load relationships)
-        activities = DailyChildcareActivity.query.options(
+        activities = family_query(DailyChildcareActivity).options(
             db.joinedload(DailyChildcareActivity.activity_type)
         ).filter(
             DailyChildcareActivity.date >= first_day,
@@ -88,7 +89,7 @@ class ChildcareService:
     @staticmethod
     def update_daily_activity(date, child_id, activity_type_id, occurred, cost_override=None):
         """Update or create a daily activity record"""
-        activity = DailyChildcareActivity.query.filter_by(
+        activity = family_query(DailyChildcareActivity).filter_by(
             date=date,
             child_id=child_id,
             activity_type_id=activity_type_id
@@ -118,7 +119,7 @@ class ChildcareService:
         first_day = date(year, month, 1)
         last_day = date(year, month, monthrange(year, month)[1])
         
-        activities = DailyChildcareActivity.query.filter(
+        activities = family_query(DailyChildcareActivity).filter(
             DailyChildcareActivity.date >= first_day,
             DailyChildcareActivity.date <= last_day,
             DailyChildcareActivity.occurred == True
@@ -151,7 +152,7 @@ class ChildcareService:
         first_day = date(year, month, 1)
         last_day = date(year, month, monthrange(year, month)[1])
         
-        activities = DailyChildcareActivity.query.filter(
+        activities = family_query(DailyChildcareActivity).filter(
             DailyChildcareActivity.date >= first_day,
             DailyChildcareActivity.date <= last_day,
             DailyChildcareActivity.child_id == child_id,
@@ -164,14 +165,14 @@ class ChildcareService:
             return None
         
         # Get child
-        child = Child.query.get(child_id)
+        child = family_get(Child, child_id)
         
         # Use configured category or create default Childcare category
         if child.category_id:
             category_id = child.category_id
         else:
             # Get or create Childcare category
-            category = Category.query.filter_by(
+            category = family_query(Category).filter_by(
                 name='Childcare',
                 category_type='Expense'
             ).first()
@@ -218,7 +219,7 @@ class ChildcareService:
         db.session.commit()
         
         # Create or update monthly summary
-        summary = MonthlyChildcareSummary.query.filter_by(
+        summary = family_query(MonthlyChildcareSummary).filter_by(
             year_month=year_month,
             child_id=child_id
         ).first()
@@ -243,7 +244,7 @@ class ChildcareService:
     @staticmethod
     def get_annual_costs(year, child_id=None):
         """Get annual childcare costs for a specific year"""
-        query = MonthlyChildcareSummary.query.filter(
+        query = family_query(MonthlyChildcareSummary).filter(
             MonthlyChildcareSummary.year_month.like(f'{year}%')
         )
         
@@ -310,7 +311,7 @@ class ChildcareService:
         last_day = date(year, month, monthrange(year, month)[1])
         
         # Get all active children and their activity types
-        children = Child.query.filter_by(is_active=True).all()
+        children = family_query(Child).filter_by(is_active=True).all()
         
         current_date = first_day
         count = 0
@@ -351,7 +352,7 @@ class ChildcareService:
         prev_first_day = date(prev_year, prev_month, 1)
         prev_last_day = date(prev_year, prev_month, monthrange(prev_year, prev_month)[1])
         
-        prev_activities = DailyChildcareActivity.query.filter(
+        prev_activities = family_query(DailyChildcareActivity).filter(
             DailyChildcareActivity.date >= prev_first_day,
             DailyChildcareActivity.date <= prev_last_day,
             DailyChildcareActivity.occurred == True
@@ -386,7 +387,7 @@ class ChildcareService:
         first_day = date(year, month, 1)
         last_day = date(year, month, monthrange(year, month)[1])
         
-        deleted = DailyChildcareActivity.query.filter(
+        deleted = family_query(DailyChildcareActivity).filter(
             DailyChildcareActivity.date >= first_day,
             DailyChildcareActivity.date <= last_day
         ).delete()

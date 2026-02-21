@@ -8,6 +8,7 @@ from services.income_service import IncomeService
 from extensions import db
 from datetime import datetime
 from decimal import Decimal
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @income_bp.route('/income')
@@ -21,13 +22,13 @@ def index():
     summary = IncomeService.get_income_summary(person=person, year=year)
     
     # Get all accounts for the dropdown
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
     # Get unique people and years for filters
-    people = db.session.query(Income.person).distinct().order_by(Income.person).all()
+    people = family_query(Income).with_entities(Income.person).distinct().order_by(Income.person).all()
     people = [p[0] for p in people] if people else ['Keiron']
     
-    years = db.session.query(db.func.substr(Income.tax_year, 1, 4).label('year')).distinct().all()
+    years = family_query(Income).with_entities(db.func.substr(Income.tax_year, 1, 4).label('year')).distinct().all()
     years = sorted([y[0] for y in years], reverse=True) if years else []
     
     return render_template('income/index.html',
@@ -87,14 +88,14 @@ def add():
             return redirect(url_for('income.add'))
     
     # GET request - show form
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     return render_template('income/add.html', accounts=accounts)
 
 
 @income_bp.route('/income/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
     """Edit an income record"""
-    income = Income.query.get_or_404(id)
+    income = family_get_or_404(Income, id)
     
     if request.method == 'POST':
         try:
@@ -145,21 +146,21 @@ def edit(id):
             flash(f'Error updating income: {str(e)}', 'danger')
     
     # GET request - show form
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     return render_template('income/edit.html', income=income, accounts=accounts)
 
 
 @income_bp.route('/income/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete an income record"""
-    income = Income.query.get_or_404(id)
+    income = family_get_or_404(Income, id)
     
     try:
         from models.transactions import Transaction
         
         # Break circular reference first
         if income.transaction_id:
-            transaction = Transaction.query.get(income.transaction_id)
+            transaction = family_get(Transaction, income.transaction_id)
             if transaction:
                 # Clear both sides of the relationship
                 transaction.income_id = None
@@ -192,11 +193,11 @@ def delete_multiple():
         from models.transactions import Transaction
         
         for income_id in income_ids:
-            income = Income.query.get(income_id)
+            income = family_get(Income, income_id)
             if income:
                 # Break circular reference first
                 if income.transaction_id:
-                    transaction = Transaction.query.get(income.transaction_id)
+                    transaction = family_get(Transaction, income.transaction_id)
                     if transaction:
                         # Clear both sides of the relationship
                         transaction.income_id = None
@@ -220,7 +221,7 @@ def delete_multiple():
 @income_bp.route('/income/toggle/<int:id>/paid', methods=['POST'])
 def toggle_paid(id):
     """Toggle the is_paid flag for an income record"""
-    income = Income.query.get_or_404(id)
+    income = family_get_or_404(Income, id)
     
     try:
         # Toggle the paid status
@@ -229,7 +230,7 @@ def toggle_paid(id):
         # Sync with linked transaction if it exists
         if income.transaction_id:
             from models.transactions import Transaction
-            transaction = Transaction.query.get(income.transaction_id)
+            transaction = family_get(Transaction, income.transaction_id)
             if transaction:
                 transaction.is_paid = income.is_paid
         
@@ -300,17 +301,17 @@ def recurring():
     """List all recurring income templates"""
     person = request.args.get('person', None)
     
-    query = RecurringIncome.query
+    query = family_query(RecurringIncome)
     if person:
         query = query.filter_by(person=person)
     
     recurring_incomes = query.order_by(RecurringIncome.person, RecurringIncome.source).all()
     
     # Get unique people for filter
-    people = db.session.query(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()
+    people = family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()
     people = [p[0] for p in people] if people else ['Keiron']
     
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
     return render_template('income/recurring.html',
                          recurring_incomes=recurring_incomes,
@@ -363,15 +364,15 @@ def add_recurring():
             db.session.rollback()
             flash(f'Error adding recurring income: {str(e)}', 'danger')
     
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    categories = Category.query.filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+    categories = family_query(Category).filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
     return render_template('income/add_recurring.html', accounts=accounts, categories=categories)
 
 
 @income_bp.route('/income/recurring/<int:id>/edit', methods=['GET', 'POST'])
 def edit_recurring(id):
     """Edit a recurring income template"""
-    recurring = RecurringIncome.query.get_or_404(id)
+    recurring = family_get_or_404(RecurringIncome, id)
     
     if request.method == 'POST':
         try:
@@ -416,15 +417,15 @@ def edit_recurring(id):
             db.session.rollback()
             flash(f'Error updating recurring income: {str(e)}', 'danger')
     
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    categories = Category.query.filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+    categories = family_query(Category).filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
     return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories)
 
 
 @income_bp.route('/income/recurring/<int:id>/delete', methods=['POST'])
 def delete_recurring(id):
     """Delete a recurring income template"""
-    recurring = RecurringIncome.query.get_or_404(id)
+    recurring = family_get_or_404(RecurringIncome, id)
     
     try:
         db.session.delete(recurring)
@@ -457,7 +458,7 @@ def generate_missing():
 @income_bp.route('/income/recurring/<int:id>/regenerate', methods=['POST'])
 def regenerate_range(id):
     """Regenerate income records for a date range"""
-    recurring = RecurringIncome.query.get_or_404(id)
+    recurring = family_get_or_404(RecurringIncome, id)
     
     try:
         start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()

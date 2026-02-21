@@ -5,9 +5,10 @@ from datetime import datetime
 class TaxSettings(db.Model):
     """UK Tax and National Insurance rate settings - can be updated annually"""
     __tablename__ = 'tax_settings'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    tax_year = db.Column(db.String(9), nullable=False, unique=True)  # e.g., "2024-2025"
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    tax_year = db.Column(db.String(9), nullable=False)# e.g., "2024-2025"
     effective_from = db.Column(db.Date, nullable=False)  # Start date (typically April 6)
     effective_to = db.Column(db.Date, nullable=True)  # End date (typically April 5 next year)
     

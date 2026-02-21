@@ -4,9 +4,10 @@ from datetime import datetime
 
 class NetWorth(db.Model):
     __tablename__ = 'net_worth'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date, nullable=False, unique=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    date = db.Column(db.Date, nullable=False)
     year_month = db.Column(db.String(7))  # 2023-01
     is_active_month = db.Column(db.Boolean, default=True)
     

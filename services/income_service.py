@@ -14,6 +14,7 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 import calendar
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class IncomeService:
@@ -308,7 +309,7 @@ class IncomeService:
         
         # If no category from recurring income, use default "Salary" category
         if not category_id:
-            salary_category = Category.query.filter_by(name='Salary', category_type='Income').first()
+            salary_category = family_query(Category).filter_by(name='Salary', category_type='Income').first()
             if not salary_category:
                 salary_category = Category(name='Salary', category_type='Income')
                 db.session.add(salary_category)
@@ -354,7 +355,7 @@ class IncomeService:
     @staticmethod
     def get_income_summary(person=None, year=None):
         """Get income summary statistics"""
-        query = Income.query
+        query = family_query(Income)
         
         if person:
             query = query.filter_by(person=person)
@@ -417,7 +418,7 @@ class IncomeService:
         pay_date = PaydayService.get_previous_working_day(pay_date)
         
         # Check if this income already exists
-        existing = Income.query.filter(
+        existing = family_query(Income).filter(
             Income.person == recurring_income.person,
             Income.pay_date == pay_date
         ).first()
@@ -467,7 +468,7 @@ class IncomeService:
     @staticmethod
     def generate_missing_income(recurring_income_id, end_date=None):
         """Generate all missing income records for a recurring income template"""
-        recurring = RecurringIncome.query.get(recurring_income_id)
+        recurring = family_get(RecurringIncome, recurring_income_id)
         if not recurring or not recurring.is_active:
             return []
         
@@ -514,7 +515,7 @@ class IncomeService:
     @staticmethod
     def generate_all_missing_income(end_date=None):
         """Generate missing income for all active recurring income templates"""
-        recurring_incomes = RecurringIncome.query.filter_by(is_active=True).all()
+        recurring_incomes = family_query(RecurringIncome).filter_by(is_active=True).all()
         
         all_generated = []
         for recurring in recurring_incomes:
@@ -529,7 +530,7 @@ class IncomeService:
         if not income.transaction_id:
             return None
         
-        transaction = Transaction.query.get(income.transaction_id)
+        transaction = family_get(Transaction, income.transaction_id)
         if not transaction:
             return None
         
@@ -542,7 +543,7 @@ class IncomeService:
         
         # If no category from recurring income, use default "Salary" category
         if not category_id:
-            salary_category = Category.query.filter_by(name='Salary', category_type='Income').first()
+            salary_category = family_query(Category).filter_by(name='Salary', category_type='Income').first()
             if not salary_category:
                 salary_category = Category(name='Salary', category_type='Income')
                 db.session.add(salary_category)
@@ -589,12 +590,12 @@ class IncomeService:
         Returns:
             dict with deleted count and any warnings
         """
-        recurring = RecurringIncome.query.get(recurring_income_id)
+        recurring = family_get(RecurringIncome, recurring_income_id)
         if not recurring:
             raise ValueError("Recurring income not found")
         
         # Find all income records in this range from this specific recurring income template
-        income_records = Income.query.filter(
+        income_records = family_query(Income).filter(
             Income.recurring_income_id == recurring_income_id,
             Income.pay_date >= start_date,
             Income.pay_date <= end_date
@@ -607,7 +608,7 @@ class IncomeService:
             # Check if linked to a PAID transaction
             should_protect = False
             if income.transaction_id:
-                transaction = Transaction.query.get(income.transaction_id)
+                transaction = family_get(Transaction, income.transaction_id)
                 if transaction and transaction.is_paid:
                     should_protect = True
             
@@ -622,7 +623,7 @@ class IncomeService:
                     continue
                 else:
                     # Force mode: break the link before deletion (even for paid)
-                    transaction = Transaction.query.get(income.transaction_id)
+                    transaction = family_get(Transaction, income.transaction_id)
                     if transaction:
                         transaction.income_id = None
                     income.transaction_id = None
@@ -630,7 +631,7 @@ class IncomeService:
             else:
                 # Unpaid or no transaction - safe to delete, break link if exists
                 if income.transaction_id:
-                    transaction = Transaction.query.get(income.transaction_id)
+                    transaction = family_get(Transaction, income.transaction_id)
                     if transaction:
                         transaction.income_id = None
                     income.transaction_id = None

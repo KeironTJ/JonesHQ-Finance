@@ -4,8 +4,9 @@ from datetime import datetime
 
 class Account(db.Model):
     __tablename__ = 'accounts'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     name = db.Column(db.String(100), nullable=False)
     account_type = db.Column(db.String(50), nullable=False)  # Joint, Personal, Savings, etc.
     balance = db.Column(db.Numeric(10, 2), default=0.00)

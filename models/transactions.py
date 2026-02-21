@@ -4,9 +4,10 @@ from datetime import datetime
 
 class Transaction(db.Model):
     __tablename__ = 'transactions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    account_id= db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'), nullable=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)

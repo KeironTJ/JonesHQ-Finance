@@ -4,8 +4,9 @@ from datetime import datetime
 
 class Pension(db.Model):
     __tablename__ = 'pensions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     person = db.Column(db.String(50), nullable=False, default='Keiron')  # 'Keiron', 'Emma'
     provider = db.Column(db.String(100), nullable=False)  # Peoples Pension, Aviva, Aegon, etc.
     account_number = db.Column(db.String(50))

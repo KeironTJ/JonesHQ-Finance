@@ -4,9 +4,10 @@ from datetime import datetime
 
 class LoanPayment(db.Model):
     __tablename__ = 'loan_payments'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    loan_id= db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=False)
     
     date = db.Column(db.Date, nullable=False)
     year_month = db.Column(db.String(7))  # 2026-01

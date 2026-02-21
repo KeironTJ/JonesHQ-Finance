@@ -4,9 +4,10 @@ from datetime import datetime
 
 class FuelRecord(db.Model):
     __tablename__ = 'fuel_records'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    vehicle_id= db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
     date = db.Column(db.Date, nullable=False)
     price_per_litre = db.Column(db.Numeric(6, 2))  # Price in pence
     mileage = db.Column(db.Integer, nullable=False)  # Odometer reading

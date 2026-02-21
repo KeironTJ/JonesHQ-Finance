@@ -15,6 +15,7 @@ from services.payday_service import PaydayService
 from extensions import db
 from flask import current_app
 from models.expenses import Expense
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @transactions_bp.route('/transactions')
@@ -37,7 +38,7 @@ def index():
     
     # If filtering by specific transaction ID, adjust filters to show that transaction
     if transaction_id:
-        target_transaction = Transaction.query.get(transaction_id)
+        target_transaction = family_get(Transaction, transaction_id)
         if target_transaction:
             # Set filters to the transaction's context
             account_id = target_transaction.account_id
@@ -54,7 +55,7 @@ def index():
         is_paid_filter = 'pending'
     
     # Build query
-    query = Transaction.query
+    query = family_query(Transaction)
     
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
@@ -108,7 +109,7 @@ def index():
     for txn in transactions:
         # Get ALL transactions from the SAME ACCOUNT up to and including this transaction's date
         # Order by date ascending, then by ID to ensure consistent ordering
-        all_txns_up_to_date = Transaction.query.filter(
+        all_txns_up_to_date = family_query(Transaction).filter(
             Transaction.account_id == txn.account_id,
             db.or_(
                 Transaction.transaction_date < txn.transaction_date,
@@ -151,30 +152,30 @@ def index():
                                   reverse=True))
     
     # Get filter options
-    accounts = Account.query.order_by(Account.name).all()
+    accounts = family_query(Account).order_by(Account.name).all()
     
     # Get unique head budgets for primary filter
-    head_budgets = db.session.query(Category.head_budget).distinct().order_by(Category.head_budget).all()
+    head_budgets = family_query(Category).with_entities(Category.head_budget).distinct().order_by(Category.head_budget).all()
     head_budgets = [hb[0] for hb in head_budgets if hb[0]]
     
     # Get categories (filtered by head_budget if selected)
     if head_budget:
-        categories = Category.query.filter_by(head_budget=head_budget).order_by(Category.sub_budget).all()
+        categories = family_query(Category).filter_by(head_budget=head_budget).order_by(Category.sub_budget).all()
     else:
-        categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+        categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
     # Get all categories for bulk edit dropdown (unfiltered)
-    all_categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    all_categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
-    vendors = Vendor.query.order_by(Vendor.name).all()
+    vendors = family_query(Vendor).order_by(Vendor.name).all()
     
     # Get unique year_months from transactions
-    year_months = db.session.query(Transaction.year_month).distinct().order_by(Transaction.year_month.desc()).all()
+    year_months = family_query(Transaction).with_entities(Transaction.year_month).distinct().order_by(Transaction.year_month.desc()).all()
     year_months = [ym[0] for ym in year_months if ym[0]]
     
     # Get payday periods for filter - generate from min to max transaction dates
-    min_date = db.session.query(func.min(Transaction.transaction_date)).scalar()
-    max_date = db.session.query(func.max(Transaction.transaction_date)).scalar()
+    min_date = family_query(Transaction).with_entities(func.min(Transaction.transaction_date)).scalar()
+    max_date = family_query(Transaction).with_entities(func.max(Transaction.transaction_date)).scalar()
     
     if min_date and max_date:
         # Calculate number of months between min and max
@@ -233,10 +234,10 @@ def index():
         total_count=total_count,
         transaction_count=total_count,
         category_summary=category_summary,
-        selected_account=Account.query.get(account_id) if account_id else None,
+        selected_account=family_get(Account, account_id) if account_id else None,
         selected_head_budget=head_budget,
-        selected_category=Category.query.get(category_id) if category_id else None,
-        selected_vendor=Vendor.query.get(vendor_id) if vendor_id else None,
+        selected_category=family_get(Category, category_id) if category_id else None,
+        selected_vendor=family_get(Vendor, vendor_id) if vendor_id else None,
         selected_year_month=year_month,
         selected_payday_period=payday_period,
         prev_payday_period=prev_period,
@@ -384,9 +385,9 @@ def create():
     
     # GET request - show form
     from datetime import date
-    accounts = Account.query.order_by(Account.name).all()
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-    vendors = Vendor.query.order_by(Vendor.name).all()
+    accounts = family_query(Account).order_by(Account.name).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+    vendors = family_query(Vendor).order_by(Vendor.name).all()
     
     return render_template(
         'transactions/transaction_form.html',
@@ -402,7 +403,7 @@ def create():
 @transactions_bp.route('/transactions/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
     """Edit a transaction"""
-    transaction = Transaction.query.get_or_404(id)
+    transaction = family_get_or_404(Transaction, id)
     
     if request.method == 'POST':
         try:
@@ -433,7 +434,7 @@ def edit(id):
             # Sync changes to linked transfer transaction if exists (BEFORE commit)
             linked_account_id = None
             if transaction.linked_transaction_id:
-                linked_txn = Transaction.query.get(transaction.linked_transaction_id)
+                linked_txn = family_get(Transaction, transaction.linked_transaction_id)
                 if linked_txn:
                     linked_account_id = linked_txn.account_id
                     
@@ -468,7 +469,7 @@ def edit(id):
             # Sync changes to linked loan payment if exists
             if transaction.loan_id:
                 from models.loan_payments import LoanPayment
-                loan_payment = LoanPayment.query.filter_by(
+                loan_payment = family_query(LoanPayment).filter_by(
                     bank_transaction_id=transaction.id
                 ).first()
                 if loan_payment:
@@ -501,9 +502,9 @@ def edit(id):
             return redirect(url_for('transactions.edit', id=id))
     
     # GET request - show form
-    accounts = Account.query.order_by(Account.name).all()
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
-    vendors = Vendor.query.order_by(Vendor.name).all()
+    accounts = family_query(Account).order_by(Account.name).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+    vendors = family_query(Vendor).order_by(Vendor.name).all()
     
     return render_template(
         'transactions/transaction_form.html',
@@ -518,7 +519,7 @@ def edit(id):
 @transactions_bp.route('/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete a transaction"""
-    transaction = Transaction.query.get_or_404(id)
+    transaction = family_get_or_404(Transaction, id)
     
     try:
         account_id = transaction.account_id
@@ -529,7 +530,7 @@ def delete(id):
         # Delete linked credit card payment if exists
         if transaction.credit_card_id:
             from models.credit_card_transactions import CreditCardTransaction
-            linked_cc_payment = CreditCardTransaction.query.filter_by(
+            linked_cc_payment = family_query(CreditCardTransaction).filter_by(
                 bank_transaction_id=transaction.id
             ).first()
             if linked_cc_payment:
@@ -537,7 +538,7 @@ def delete(id):
         
         # Delete linked transfer transaction if exists
         if transaction.linked_transaction_id:
-            linked_transfer = Transaction.query.get(transaction.linked_transaction_id)
+            linked_transfer = family_get(Transaction, transaction.linked_transaction_id)
             if linked_transfer:
                 linked_transfer_account_id = linked_transfer.account_id
                 db.session.delete(linked_transfer)
@@ -547,7 +548,7 @@ def delete(id):
 
         # Clear any Expense links pointing to this deleted transaction to avoid automatic recreation
         try:
-            linked_expenses = Expense.query.filter(
+            linked_expenses = family_query(Expense).filter(
                 (Expense.bank_transaction_id == id) | (Expense.credit_card_transaction_id == id)
             ).all()
             for exp in linked_expenses:
@@ -592,7 +593,7 @@ def delete(id):
 @transactions_bp.route('/transactions/<int:id>/toggle_paid', methods=['POST'])
 def toggle_paid(id):
     """Toggle the paid status of a transaction and sync with linked loan/credit card payments"""
-    transaction = Transaction.query.get_or_404(id)
+    transaction = family_get_or_404(Transaction, id)
     
     try:
         transaction.is_paid = not transaction.is_paid
@@ -601,7 +602,7 @@ def toggle_paid(id):
         # Sync with linked loan payment if exists
         if transaction.loan_id:
             from models.loan_payments import LoanPayment
-            loan_payment = LoanPayment.query.filter_by(
+            loan_payment = family_query(LoanPayment).filter_by(
                 bank_transaction_id=transaction.id
             ).first()
             if loan_payment:
@@ -610,7 +611,7 @@ def toggle_paid(id):
         # Sync with linked credit card payment if exists
         if transaction.credit_card_id:
             from models.credit_card_transactions import CreditCardTransaction
-            cc_payment = CreditCardTransaction.query.filter_by(
+            cc_payment = family_query(CreditCardTransaction).filter_by(
                 bank_transaction_id=transaction.id
             ).first()
             if cc_payment:
@@ -618,14 +619,14 @@ def toggle_paid(id):
         
         # Sync with linked transfer transaction if exists
         if transaction.linked_transaction_id:
-            linked_txn = Transaction.query.get(transaction.linked_transaction_id)
+            linked_txn = family_get(Transaction, transaction.linked_transaction_id)
             if linked_txn:
                 linked_txn.is_paid = transaction.is_paid
                 linked_txn.updated_at = datetime.now()
         
         # Sync with linked expense if exists
         from models.expenses import Expense
-        expense = Expense.query.filter_by(bank_transaction_id=transaction.id).first()
+        expense = family_query(Expense).filter_by(bank_transaction_id=transaction.id).first()
         if expense:
             expense.paid_for = transaction.is_paid
         
@@ -648,7 +649,7 @@ def toggle_paid(id):
 @transactions_bp.route('/transactions/<int:id>/toggle_fixed', methods=['POST'])
 def toggle_fixed(id):
     """Toggle the fixed/locked status of a transaction"""
-    transaction = Transaction.query.get_or_404(id)
+    transaction = family_get_or_404(Transaction, id)
     
     try:
         transaction.is_fixed = not transaction.is_fixed
@@ -700,7 +701,7 @@ def bulk_edit():
         
         # Update each transaction
         for transaction_id in transaction_ids:
-            transaction = Transaction.query.get(transaction_id)
+            transaction = family_get(Transaction, transaction_id)
             if transaction:
                 affected_accounts.add(transaction.account_id)
                 
@@ -717,7 +718,7 @@ def bulk_edit():
                     transaction.is_paid = is_paid
                     # Sync with linked transfer if exists
                     if transaction.linked_transaction_id:
-                        linked_txn = Transaction.query.get(transaction.linked_transaction_id)
+                        linked_txn = family_get(Transaction, transaction.linked_transaction_id)
                         if linked_txn:
                             linked_txn.is_paid = is_paid
                             if linked_txn.account_id:
@@ -761,7 +762,7 @@ def bulk_delete():
         
         transaction_ids = [int(tid) for tid in transaction_ids_str.split(',') if tid]
         # Inspect which transactions exist before deletion
-        existing_before = Transaction.query.filter(Transaction.id.in_(transaction_ids)).all()
+        existing_before = family_query(Transaction).filter(Transaction.id.in_(transaction_ids)).all()
         existing_before_ids = [t.id for t in existing_before]
         current_app.logger.info(f"Bulk delete - existing before: {existing_before_ids}")
 
@@ -770,13 +771,13 @@ def bulk_delete():
         cards_to_recalc = set()
         
         for txn_id in transaction_ids:
-            transaction = Transaction.query.get(txn_id)
+            transaction = family_get(Transaction, txn_id)
             if transaction:
                 accounts_to_recalc.add(transaction.account_id)
                 
                 # Delete linked credit card payment if exists
                 if transaction.credit_card_id:
-                    linked_cc_payment = CreditCardTransaction.query.filter_by(
+                    linked_cc_payment = family_query(CreditCardTransaction).filter_by(
                         bank_transaction_id=transaction.id
                     ).first()
                     if linked_cc_payment:
@@ -787,7 +788,7 @@ def bulk_delete():
                 deleted_count += 1
                 # Clear any Expense links pointing to this deleted transaction
                 try:
-                    linked_expenses = Expense.query.filter(
+                    linked_expenses = family_query(Expense).filter(
                         (Expense.bank_transaction_id == txn_id) | (Expense.credit_card_transaction_id == txn_id)
                     ).all()
                     for exp in linked_expenses:
@@ -810,7 +811,7 @@ def bulk_delete():
         for card_id in cards_to_recalc:
             CreditCardTransaction.recalculate_card_balance(card_id)
         # Check which of the requested IDs still exist after deletion
-        remaining = Transaction.query.filter(Transaction.id.in_(transaction_ids)).all()
+        remaining = family_query(Transaction).filter(Transaction.id.in_(transaction_ids)).all()
         remaining_ids = [t.id for t in remaining]
         current_app.logger.info(f"Bulk delete - remaining after: {remaining_ids}")
 
@@ -864,15 +865,15 @@ def create_transfer():
             # Validate required fields first
             if not from_account_id or not to_account_id:
                 flash('Please select both accounts', 'danger')
-                accounts = Account.query.order_by(Account.name).all()
-                categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+                accounts = family_query(Account).order_by(Account.name).all()
+                categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
                 return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
             
             amount_str = request.form.get('amount', '')
             if not amount_str:
                 flash('Please enter an amount', 'danger')
-                accounts = Account.query.order_by(Account.name).all()
-                categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+                accounts = family_query(Account).order_by(Account.name).all()
+                categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
                 return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
             
             amount = abs(float(amount_str))  # Ensure positive
@@ -901,17 +902,17 @@ def create_transfer():
                 return redirect(url_for('transactions.create_transfer'))
             
             # Get accounts
-            from_account = Account.query.get(from_account_id)
-            to_account = Account.query.get(to_account_id)
+            from_account = family_get(Account, from_account_id)
+            to_account = family_get(Account, to_account_id)
             
             # Get or create vendor entries for accounts (for filtering)
-            from_vendor = Vendor.query.filter_by(name=to_account.name).first()
+            from_vendor = family_query(Vendor).filter_by(name=to_account.name).first()
             if not from_vendor:
                 from_vendor = Vendor(name=to_account.name)
                 db.session.add(from_vendor)
                 db.session.flush()
             
-            to_vendor = Vendor.query.filter_by(name=from_account.name).first()
+            to_vendor = family_query(Vendor).filter_by(name=from_account.name).first()
             if not to_vendor:
                 to_vendor = Vendor(name=from_account.name)
                 db.session.add(to_vendor)
@@ -919,15 +920,15 @@ def create_transfer():
             
             # Get category (use selected or default to Transfer)
             if category_id:
-                transfer_category = Category.query.get(category_id)
+                transfer_category = family_get(Category, category_id)
                 if not transfer_category:
                     flash('Invalid category selected', 'danger')
-                    accounts = Account.query.order_by(Account.name).all()
-                    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+                    accounts = family_query(Account).order_by(Account.name).all()
+                    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
                     return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
             else:
                 # Get or create default Transfer category
-                transfer_category = Category.query.filter_by(
+                transfer_category = family_query(Category).filter_by(
                     head_budget='Transfer',
                     sub_budget='Account Transfer'
                 ).first()
@@ -1026,8 +1027,8 @@ def create_transfer():
         except ValueError as e:
             db.session.rollback()
             flash(f'Invalid input: {str(e)}', 'danger')
-            accounts = Account.query.order_by(Account.name).all()
-            categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+            accounts = family_query(Account).order_by(Account.name).all()
+            categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
             return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
         except Exception as e:
             db.session.rollback()
@@ -1036,14 +1037,14 @@ def create_transfer():
             print(f"Transfer creation error: {error_detail}")  # Log to console
             flash(f'Error creating transfer: {str(e)}', 'danger')
             from datetime import date
-            accounts = Account.query.order_by(Account.name).all()
-            categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+            accounts = family_query(Account).order_by(Account.name).all()
+            categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
             return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories, today=date.today())
     
     # GET request - show form
     from datetime import date
-    accounts = Account.query.order_by(Account.name).all()
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    accounts = family_query(Account).order_by(Account.name).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
     return render_template(
         'transactions/transfer_form.html',
@@ -1068,7 +1069,7 @@ def consolidated():
     
     # 1. Bank Account Transactions
     if not source or source == 'all' or source == 'bank':
-        bank_txns = Transaction.query
+        bank_txns = family_query(Transaction)
         
         if start_date:
             bank_txns = bank_txns.filter(Transaction.transaction_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
@@ -1094,7 +1095,7 @@ def consolidated():
     
     # 2. Credit Card Transactions
     if not source or source == 'all' or source == 'credit_card':
-        cc_txns = CreditCardTransaction.query
+        cc_txns = family_query(CreditCardTransaction)
         
         if start_date:
             cc_txns = cc_txns.filter(CreditCardTransaction.date >= datetime.strptime(start_date, '%Y-%m-%d').date())
@@ -1120,7 +1121,7 @@ def consolidated():
     
     # 3. Loan Payments
     if not source or source == 'all' or source == 'loan':
-        loan_txns = LoanPayment.query
+        loan_txns = family_query(LoanPayment)
         
         if start_date:
             loan_txns = loan_txns.filter(LoanPayment.payment_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
@@ -1151,10 +1152,10 @@ def consolidated():
     net_position = total_inflows - total_outflows
     
     # Get filter options
-    accounts = Account.query.order_by(Account.name).all()
-    credit_cards = CreditCard.query.order_by(CreditCard.card_name).all()
-    loans = Loan.query.order_by(Loan.name).all()
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    accounts = family_query(Account).order_by(Account.name).all()
+    credit_cards = family_query(CreditCard).order_by(CreditCard.card_name).all()
+    loans = family_query(Loan).order_by(Loan.name).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
     return render_template('transactions/consolidated.html',
                          transactions=consolidated_transactions,

@@ -7,6 +7,7 @@ from extensions import db
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class LoanService:
@@ -19,7 +20,7 @@ class LoanService:
         Period 0 = Opening balance (no payment)
         Period 1+ = Actual payments
         """
-        loan = Loan.query.get(loan_id)
+        loan = family_get(Loan, loan_id)
         if not loan:
             return None
         
@@ -32,7 +33,7 @@ class LoanService:
             end_date = loan.end_date
         
         # Get opening balance (either from last payment or loan value)
-        last_payment = LoanPayment.query.filter_by(loan_id=loan_id)\
+        last_payment = family_query(LoanPayment).filter_by(loan_id=loan_id)\
             .filter(LoanPayment.date < start_date)\
             .order_by(LoanPayment.date.desc()).first()
         
@@ -50,7 +51,7 @@ class LoanService:
         
         # Create Period 0 - Opening Balance (if first time)
         if create_opening_record:
-            existing = LoanPayment.query.filter_by(
+            existing = family_query(LoanPayment).filter_by(
                 loan_id=loan_id,
                 date=current_date,
                 period=0
@@ -80,7 +81,7 @@ class LoanService:
         # Create actual payment schedule
         while current_date <= end_date and opening_balance > Decimal('0.01'):  # Continue until balance is essentially zero
             # Check if payment already exists for this date
-            existing = LoanPayment.query.filter_by(
+            existing = family_query(LoanPayment).filter_by(
                 loan_id=loan_id,
                 date=current_date
             ).first()
@@ -161,21 +162,21 @@ class LoanService:
         """
         from models.categories import Category
         
-        loan = Loan.query.get(loan_id)
+        loan = family_get(Loan, loan_id)
         if not loan or not loan.default_payment_account_id:
             return None
         
         # Get the loan payment
-        loan_payment = LoanPayment.query.get(payment_id)
+        loan_payment = family_get(LoanPayment, payment_id)
         if not loan_payment:
             return None
         
         # Check if bank transaction already linked
         if loan_payment.bank_transaction_id:
-            return Transaction.query.get(loan_payment.bank_transaction_id)
+            return family_get(Transaction, loan_payment.bank_transaction_id)
         
         # Get or create "Loans > {LoanName}" category
-        loan_category = Category.query.filter_by(
+        loan_category = family_query(Category).filter_by(
             head_budget='Loans',
             sub_budget=loan.name
         ).first()
@@ -190,7 +191,7 @@ class LoanService:
             db.session.flush()
         
         # Find or create vendor for this loan
-        vendor = Vendor.query.filter_by(name=loan.name).first()
+        vendor = family_query(Vendor).filter_by(name=loan.name).first()
         if not vendor:
             vendor = Vendor(name=loan.name)
             db.session.add(vendor)
@@ -237,7 +238,7 @@ class LoanService:
     @staticmethod
     def delete_future_payments(loan_id, from_date, commit=True):
         """Delete all loan payments from a specific date onwards"""
-        payments = LoanPayment.query.filter(
+        payments = family_query(LoanPayment).filter(
             LoanPayment.loan_id == loan_id,
             LoanPayment.date >= from_date
         ).all()
@@ -256,7 +257,7 @@ class LoanService:
         Regenerate amortization schedule from a specific date
         Deletes existing future payments and regenerates
         """
-        loan = Loan.query.get(loan_id)
+        loan = family_get(Loan, loan_id)
         if not loan:
             return None
         
@@ -285,26 +286,26 @@ class LoanService:
     @staticmethod
     def calculate_total_interest(loan_id):
         """Calculate total interest paid/to be paid over life of loan"""
-        payments = LoanPayment.query.filter_by(loan_id=loan_id).all()
+        payments = family_query(LoanPayment).filter_by(loan_id=loan_id).all()
         total_interest = sum(float(p.interest_charge) for p in payments)
         return total_interest
     
     @staticmethod
     def calculate_remaining_balance(loan_id):
         """Get the most recent closing balance from paid payments only"""
-        last_payment = LoanPayment.query.filter_by(loan_id=loan_id, is_paid=True)\
+        last_payment = family_query(LoanPayment).filter_by(loan_id=loan_id, is_paid=True)\
             .order_by(LoanPayment.date.desc(), LoanPayment.id.desc()).first()
         
         if last_payment:
             return float(last_payment.closing_balance)
         
-        loan = Loan.query.get(loan_id)
+        loan = family_get(Loan, loan_id)
         return float(loan.loan_value) if loan else 0.0
     
     @staticmethod
     def get_payment_statistics(loan_id):
         """Get statistics about loan payments"""
-        payments = LoanPayment.query.filter_by(loan_id=loan_id).all()
+        payments = family_query(LoanPayment).filter_by(loan_id=loan_id).all()
         
         if not payments:
             return {

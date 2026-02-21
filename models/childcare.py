@@ -7,7 +7,8 @@ class Child(db.Model):
     __tablename__ = 'children'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    name = db.Column(db.String(100), nullable=False)
     year_group = db.Column(db.String(50))  # Year 4, Nursery, etc.
     is_active = db.Column(db.Boolean, default=True)
     sort_order = db.Column(db.Integer, default=0)

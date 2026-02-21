@@ -6,6 +6,7 @@ class ExpenseCalendarEntry(db.Model):
     __tablename__ = 'expense_calendar_entries'
 
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     date = db.Column(db.Date, nullable=False)
     assigned_to = db.Column(db.String(100), nullable=True)
     expense_id = db.Column(db.Integer, db.ForeignKey('expenses.id'), nullable=True)

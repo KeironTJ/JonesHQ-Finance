@@ -10,12 +10,13 @@ from services.mortgage_service import MortgageService
 from extensions import db
 from decimal import Decimal
 from datetime import datetime
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @mortgage_bp.route('/mortgage')
 def index():
     """List all properties with their mortgages"""
-    properties = Property.query.filter_by(is_active=True).all()
+    properties = family_query(Property).filter_by(is_active=True).all()
     
     # Calculate summary data for each property
     property_data = []
@@ -36,8 +37,8 @@ def index():
 @mortgage_bp.route('/mortgage/property/<int:property_id>')
 def property_detail(property_id):
     """View detailed information for a property"""
-    prop = Property.query.get_or_404(property_id)
-    products = MortgageProduct.query.filter_by(property_id=property_id).order_by(
+    prop = family_get_or_404(Property, property_id)
+    products = family_query(MortgageProduct).filter_by(property_id=property_id).order_by(
         MortgageProduct.start_date
     ).all()
     
@@ -47,7 +48,7 @@ def property_detail(property_id):
 @mortgage_bp.route('/mortgage/property/<int:property_id>/projections')
 def projections(property_id):
     """View Excel-style projection timeline"""
-    prop = Property.query.get_or_404(property_id)
+    prop = family_get_or_404(Property, property_id)
     
     # Get scenario from query params
     scenario = request.args.get('scenario', 'base')
@@ -56,7 +57,7 @@ def projections(property_id):
     timeline = MortgageService.get_combined_timeline(property_id, scenario)
     
     # Get available scenarios
-    scenarios = db.session.query(MortgageSnapshot.scenario_name).join(
+    scenarios = family_query(MortgageSnapshot).with_entities(MortgageSnapshot.scenario_name).join(
         MortgageProduct
     ).filter(
         MortgageProduct.property_id == property_id,
@@ -75,7 +76,7 @@ def projections(property_id):
 @mortgage_bp.route('/mortgage/property/<int:property_id>/comparison')
 def scenario_comparison(property_id):
     """Compare different overpayment scenarios"""
-    prop = Property.query.get_or_404(property_id)
+    prop = family_get_or_404(Property, property_id)
     
     scenarios = MortgageService.get_scenario_comparison(property_id)
     
@@ -87,7 +88,7 @@ def scenario_comparison(property_id):
 @mortgage_bp.route('/mortgage/property/<int:property_id>/generate-projections', methods=['POST'])
 def generate_projections(property_id):
     """Generate projections for all scenarios"""
-    prop = Property.query.get_or_404(property_id)
+    prop = family_get_or_404(Property, property_id)
     
     # Get scenario parameters from form
     scenarios = [
@@ -122,7 +123,7 @@ def generate_projections(property_id):
 @mortgage_bp.route('/mortgage/snapshot/<int:snapshot_id>/confirm', methods=['POST'])
 def confirm_snapshot(snapshot_id):
     """Convert projected snapshot to actual"""
-    snapshot = MortgageSnapshot.query.get_or_404(snapshot_id)
+    snapshot = family_get_or_404(MortgageSnapshot, snapshot_id)
     
     # Get optional actual values from form
     actual_balance = request.form.get('actual_balance')
@@ -176,7 +177,7 @@ def create_property():
 @mortgage_bp.route('/mortgage/property/<int:property_id>/product/create', methods=['GET', 'POST'])
 def create_product(property_id):
     """Create a new mortgage product for a property"""
-    prop = Property.query.get_or_404(property_id)
+    prop = family_get_or_404(Property, property_id)
     
     if request.method == 'POST':
         account_id = request.form.get('account_id')
@@ -209,16 +210,16 @@ def create_product(property_id):
         flash('Mortgage product created successfully!', 'success')
         return redirect(url_for('mortgage.property_detail', property_id=property_id))
     
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    vendors = Vendor.query.filter_by(is_active=True).order_by(Vendor.name).all()
-    categories = Category.query.filter_by(category_type='expense').order_by(Category.head_budget, Category.sub_budget).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+    vendors = family_query(Vendor).filter_by(is_active=True).order_by(Vendor.name).all()
+    categories = family_query(Category).filter_by(category_type='expense').order_by(Category.head_budget, Category.sub_budget).all()
     return render_template('mortgage/create_product.html', property=prop, accounts=accounts, vendors=vendors, categories=categories)
 
 
 @mortgage_bp.route('/mortgage/product/<int:product_id>/edit', methods=['GET', 'POST'])
 def edit_product(product_id):
     """Edit an existing mortgage product"""
-    product = MortgageProduct.query.get_or_404(product_id)
+    product = family_get_or_404(MortgageProduct, product_id)
     prop = product.property
     
     if request.method == 'POST':
@@ -248,16 +249,16 @@ def edit_product(product_id):
         flash('Mortgage product updated successfully!', 'success')
         return redirect(url_for('mortgage.property_detail', property_id=prop.id))
     
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    vendors = Vendor.query.filter_by(is_active=True).order_by(Vendor.name).all()
-    categories = Category.query.filter_by(category_type='expense').order_by(Category.head_budget, Category.sub_budget).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+    vendors = family_query(Vendor).filter_by(is_active=True).order_by(Vendor.name).all()
+    categories = family_query(Category).filter_by(category_type='expense').order_by(Category.head_budget, Category.sub_budget).all()
     return render_template('mortgage/edit_product.html', product=product, property=prop, accounts=accounts, vendors=vendors, categories=categories)
 
 
 @mortgage_bp.route('/mortgage/product/<int:product_id>/delete', methods=['POST'])
 def delete_product(product_id):
     """Delete a mortgage product"""
-    product = MortgageProduct.query.get_or_404(product_id)
+    product = family_get_or_404(MortgageProduct, product_id)
     property_id = product.property_id
     
     # The cascade delete will automatically remove all snapshots
@@ -271,7 +272,7 @@ def delete_product(product_id):
 @mortgage_bp.route('/mortgage/property/<int:property_id>/edit', methods=['GET', 'POST'])
 def edit_property(property_id):
     """Edit an existing property"""
-    prop = Property.query.get_or_404(property_id)
+    prop = family_get_or_404(Property, property_id)
     
     if request.method == 'POST':
         prop.address = request.form.get('address')
@@ -293,7 +294,7 @@ def edit_property(property_id):
 @mortgage_bp.route('/mortgage/property/<int:property_id>/delete', methods=['POST'])
 def delete_property(property_id):
     """Delete a property and all associated mortgage products"""
-    prop = Property.query.get_or_404(property_id)
+    prop = family_get_or_404(Property, property_id)
     
     # The cascade delete will automatically remove all mortgage products and snapshots
     db.session.delete(prop)
@@ -313,7 +314,7 @@ def create():
 @mortgage_bp.route('/mortgage/snapshot/<int:snapshot_id>/create_transaction', methods=['POST'])
 def create_transaction_for_snapshot(snapshot_id):
     """Create a transaction for an existing snapshot"""
-    snapshot = MortgageSnapshot.query.get_or_404(snapshot_id)
+    snapshot = family_get_or_404(MortgageSnapshot, snapshot_id)
     
     if snapshot.transaction_id:
         flash('Transaction already exists for this snapshot.', 'warning')
@@ -331,7 +332,7 @@ def create_transaction_for_snapshot(snapshot_id):
 @mortgage_bp.route('/mortgage/snapshot/<int:snapshot_id>/mark_paid', methods=['POST'])
 def mark_snapshot_paid(snapshot_id):
     """Mark a projection as paid by linking to an existing transaction"""
-    snapshot = MortgageSnapshot.query.get_or_404(snapshot_id)
+    snapshot = family_get_or_404(MortgageSnapshot, snapshot_id)
     transaction_id = request.form.get('transaction_id')
     
     if transaction_id:
@@ -347,7 +348,7 @@ def mark_snapshot_paid(snapshot_id):
 @mortgage_bp.route('/mortgage/snapshot/<int:snapshot_id>/unlink_transaction', methods=['POST'])
 def unlink_transaction(snapshot_id):
     """Remove transaction link from snapshot"""
-    snapshot = MortgageSnapshot.query.get_or_404(snapshot_id)
+    snapshot = family_get_or_404(MortgageSnapshot, snapshot_id)
     
     snapshot.transaction_id = None
     db.session.commit()
@@ -359,12 +360,12 @@ def unlink_transaction(snapshot_id):
 @mortgage_bp.route('/mortgage/snapshot/<int:snapshot_id>/delete', methods=['POST'])
 def delete_snapshot(snapshot_id):
     """Delete a snapshot and its linked transaction if exists"""
-    snapshot = MortgageSnapshot.query.get_or_404(snapshot_id)
+    snapshot = family_get_or_404(MortgageSnapshot, snapshot_id)
     property_id = snapshot.mortgage_product.property_id
     
     # Delete linked transaction if exists
     if snapshot.transaction_id:
-        transaction = Transaction.query.get(snapshot.transaction_id)
+        transaction = family_get(Transaction, snapshot.transaction_id)
         if transaction:
             db.session.delete(transaction)
     

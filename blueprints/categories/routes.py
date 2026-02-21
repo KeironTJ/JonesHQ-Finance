@@ -12,6 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 import json
 from sqlalchemy import func
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 @bp.route('/')
 def index():
@@ -19,16 +20,16 @@ def index():
     from models.transactions import Transaction
     
     # Get all head budgets
-    head_budgets = db.session.query(Category.head_budget).distinct().order_by(Category.head_budget).all()
+    head_budgets = family_query(Category).with_entities(Category.head_budget).distinct().order_by(Category.head_budget).all()
     
     # Organize categories by head budget with transaction counts
     categories_by_head = {}
     for (head_budget,) in head_budgets:
-        categories = Category.query.filter_by(head_budget=head_budget).order_by(Category.sub_budget).all()
+        categories = family_query(Category).filter_by(head_budget=head_budget).order_by(Category.sub_budget).all()
         
         # Add transaction count to each category
         for category in categories:
-            category.transaction_count = Transaction.query.filter_by(category_id=category.id).count()
+            category.transaction_count = family_query(Transaction).filter_by(category_id=category.id).count()
         
         # Calculate total for head budget
         head_transaction_count = sum(c.transaction_count for c in categories)
@@ -58,7 +59,7 @@ def add():
         category_type = request.form.get('category_type')
         
         # Check if category already exists
-        existing = Category.query.filter_by(
+        existing = family_query(Category).filter_by(
             head_budget=head_budget,
             sub_budget=sub_budget if sub_budget else None
         ).first()
@@ -85,7 +86,7 @@ def add():
             return redirect(url_for('categories.index'))
     
     # Get existing head budgets for dropdown
-    head_budgets = db.session.query(Category.head_budget).distinct().order_by(Category.head_budget).all()
+    head_budgets = family_query(Category).with_entities(Category.head_budget).distinct().order_by(Category.head_budget).all()
     existing_heads = [h[0] for h in head_budgets]
     
     return render_template('categories/add.html', existing_heads=existing_heads)
@@ -93,7 +94,7 @@ def add():
 @bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit(id):
     """Edit an existing category"""
-    category = Category.query.get_or_404(id)
+    category = family_get_or_404(Category, id)
     
     if request.method == 'POST':
         head_budget = request.form.get('head_budget')
@@ -101,7 +102,7 @@ def edit(id):
         category_type = request.form.get('category_type')
         
         # Check if updated category conflicts with existing
-        existing = Category.query.filter(
+        existing = family_query(Category).filter(
             Category.id != id,
             Category.head_budget == head_budget,
             Category.sub_budget == (sub_budget if sub_budget else None)
@@ -123,7 +124,7 @@ def edit(id):
             return redirect(url_for('categories.index'))
     
     # Get existing head budgets for dropdown
-    head_budgets = db.session.query(Category.head_budget).distinct().order_by(Category.head_budget).all()
+    head_budgets = family_query(Category).with_entities(Category.head_budget).distinct().order_by(Category.head_budget).all()
     existing_heads = [h[0] for h in head_budgets]
     
     return render_template('categories/edit.html', category=category, existing_heads=existing_heads)
@@ -131,7 +132,7 @@ def edit(id):
 @bp.route('/delete/<int:id>', methods=['POST'])
 def delete(id):
     """Delete a category"""
-    category = Category.query.get_or_404(id)
+    category = family_get_or_404(Category, id)
     
     # Check if category is being used
     if category.transactions:
@@ -149,7 +150,7 @@ def delete(id):
 @bp.route('/api/subcategories/<head_budget>')
 def get_subcategories(head_budget):
     """API endpoint to get sub-categories for a head budget"""
-    categories = Category.query.filter_by(head_budget=head_budget).all()
+    categories = family_query(Category).filter_by(head_budget=head_budget).all()
     subcategories = [cat.sub_budget for cat in categories if cat.sub_budget]
     return jsonify(subcategories)
 
@@ -185,7 +186,7 @@ def analytics():
 
     filtered_labels = [label for label in period_labels if start_period and end_period and start_period <= label <= end_period]
 
-    query = Transaction.query.join(Category).filter(
+    query = family_query(Transaction).join(Category).filter(
         Transaction.payday_period.isnot(None),
         func.lower(Category.category_type).in_(['income', 'expense'])
     )
@@ -346,7 +347,7 @@ def _analytics_monthly():
             'end': (month_date.replace(day=1) + relativedelta(months=1)) - timedelta(days=1)
         })
     
-    query = Transaction.query.join(Category).filter(
+    query = family_query(Transaction).join(Category).filter(
         Transaction.transaction_date.isnot(None),
         func.lower(Category.category_type).in_(['income', 'expense'])
     )

@@ -6,6 +6,7 @@ from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 import calendar
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class PensionService:
@@ -74,7 +75,7 @@ class PensionService:
             return []
         
         # Get the most recent actual snapshot
-        last_actual = PensionSnapshot.query.filter_by(
+        last_actual = family_query(PensionSnapshot).filter_by(
             pension_id=pension.id,
             is_projection=False
         ).order_by(PensionSnapshot.review_date.desc()).first()
@@ -133,7 +134,7 @@ class PensionService:
             # records for months where no actual snapshot was ever confirmed, so historic
             # rows don't disappear from the projections table.
             today = date.today()
-            PensionSnapshot.query.filter(
+            family_query(PensionSnapshot).filter(
                 PensionSnapshot.pension_id == pension.id,
                 PensionSnapshot.is_projection == True,
                 PensionSnapshot.scenario_name == scenario,
@@ -160,7 +161,7 @@ class PensionService:
     @staticmethod
     def regenerate_all_projections(scenario='default'):
         """Regenerate projections for all active pensions"""
-        pensions = Pension.query.filter_by(is_active=True).all()
+        pensions = family_query(Pension).filter_by(is_active=True).all()
         total_generated = 0
         
         for pension in pensions:
@@ -181,7 +182,7 @@ class PensionService:
         Get comprehensive retirement summary
         Returns projected values at retirement for all pensions
         """
-        query = Pension.query.filter_by(is_active=True)
+        query = family_query(Pension).filter_by(is_active=True)
         if person:
             query = query.filter_by(person=person)
         
@@ -235,7 +236,7 @@ class PensionService:
         Get combined historical and projected snapshots across all pensions
         Grouped by review date (month)
         """
-        query = db.session.query(PensionSnapshot, Pension).join(Pension)
+        query = family_query(PensionSnapshot).join(Pension).with_entities(PensionSnapshot, Pension)
         
         if person:
             query = query.filter(Pension.person == person)

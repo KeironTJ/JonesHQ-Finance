@@ -7,6 +7,7 @@ from models.tax_settings import TaxSettings
 from extensions import db
 from decimal import Decimal
 from datetime import datetime
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @settings_bp.route('/settings')
@@ -30,7 +31,7 @@ def index():
 
     
     # Get all active accounts
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
     return render_template('settings/index.html',
                          default_generation_years=default_generation_years,
@@ -180,7 +181,7 @@ def save_preference():
 @settings_bp.route('/settings/tax')
 def tax_settings():
     """Display tax and NI settings"""
-    tax_years = TaxSettings.query.order_by(TaxSettings.effective_from.desc()).all()
+    tax_years = family_query(TaxSettings).order_by(TaxSettings.effective_from.desc()).all()
     return render_template('settings/tax_settings.html', tax_years=tax_years)
         
 
@@ -188,7 +189,7 @@ def tax_settings():
 @settings_bp.route('/settings/tax/<int:id>/edit', methods=['GET', 'POST'])
 def edit_tax_settings(id):
     """Edit tax settings for a specific tax year"""
-    tax_year = TaxSettings.query.get_or_404(id)
+    tax_year = family_get_or_404(TaxSettings, id)
     
     if request.method == 'POST':
         try:

@@ -7,6 +7,7 @@ from services.childcare_service import ChildcareService
 from extensions import db
 from datetime import datetime, date
 from decimal import Decimal
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @childcare_bp.route('/childcare')
@@ -23,16 +24,16 @@ def index():
     monthly_totals = ChildcareService.get_monthly_totals(year, month)
     
     # Get all accounts for transaction creation
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
     # Check for existing monthly summaries/transactions
     year_month = f"{year}-{month:02d}"
-    summaries = MonthlyChildcareSummary.query.filter_by(year_month=year_month).all()
+    summaries = family_query(MonthlyChildcareSummary).filter_by(year_month=year_month).all()
     
     # Clear transaction_id from summaries where the transaction no longer exists
     for summary in summaries:
         if summary.transaction_id:
-            transaction_exists = Transaction.query.get(summary.transaction_id)
+            transaction_exists = family_get(Transaction, summary.transaction_id)
             if not transaction_exists:
                 summary.transaction_id = None
                 db.session.commit()
@@ -70,7 +71,7 @@ def update_activity():
     )
     
     # Recalculate daily total for this child
-    day_activities = DailyChildcareActivity.query.filter_by(
+    day_activities = family_query(DailyChildcareActivity).filter_by(
         date=activity_date,
         child_id=child_id,
         occurred=True
@@ -84,7 +85,7 @@ def update_activity():
     first_day = date(year, month, 1)
     last_day = date(year, month, monthrange(year, month)[1])
     
-    month_activities = DailyChildcareActivity.query.filter(
+    month_activities = family_query(DailyChildcareActivity).filter(
         DailyChildcareActivity.child_id == child_id,
         DailyChildcareActivity.date >= first_day,
         DailyChildcareActivity.date <= last_day,
@@ -130,7 +131,7 @@ def update_transaction():
     
     try:
         # Get the transaction
-        transaction = Transaction.query.get(transaction_id)
+        transaction = family_get(Transaction, transaction_id)
         if not transaction:
             return jsonify({'success': False, 'error': 'Transaction not found'})
         
@@ -138,7 +139,7 @@ def update_transaction():
         transaction.amount = -new_amount
         
         # Update the monthly summary
-        summary = MonthlyChildcareSummary.query.filter_by(
+        summary = family_query(MonthlyChildcareSummary).filter_by(
             transaction_id=transaction_id,
             child_id=child_id
         ).first()
@@ -167,7 +168,7 @@ def set_default_account():
     account_id = int(data['account_id'])
     
     try:
-        child = Child.query.get(child_id)
+        child = family_get(Child, child_id)
         if child:
             child.default_account_id = account_id
             db.session.commit()
@@ -194,7 +195,7 @@ def bulk_create_transactions():
             
             # Check if transaction already exists
             year_month = f"{year}-{month:02d}"
-            existing_summary = MonthlyChildcareSummary.query.filter_by(
+            existing_summary = family_query(MonthlyChildcareSummary).filter_by(
                 year_month=year_month,
                 child_id=child_id
             ).first()
@@ -222,17 +223,17 @@ def setup():
     from models.categories import Category
     from models.vendors import Vendor
     
-    children = Child.query.order_by(Child.sort_order, Child.name).all()
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
-    categories = Category.query.filter(
+    children = family_query(Child).order_by(Child.sort_order, Child.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+    categories = family_query(Category).filter(
         db.func.lower(Category.category_type) == 'expense'
     ).order_by(Category.head_budget, Category.sub_budget).all()
-    vendors = Vendor.query.filter_by(is_active=True).order_by(Vendor.name).all()
+    vendors = family_query(Vendor).filter_by(is_active=True).order_by(Vendor.name).all()
     
     # Get activity types for each child
     children_with_activities = []
     for child in children:
-        activity_types = ChildActivityType.query.filter_by(child_id=child.id).order_by(ChildActivityType.sort_order, ChildActivityType.name).all()
+        activity_types = family_query(ChildActivityType).filter_by(child_id=child.id).order_by(ChildActivityType.sort_order, ChildActivityType.name).all()
         children_with_activities.append({
             'child': child,
             'activity_types': activity_types
@@ -263,7 +264,7 @@ def add_child():
         return redirect(url_for('childcare.setup'))
     
     # Check if child already exists
-    existing = Child.query.filter_by(name=name).first()
+    existing = family_query(Child).filter_by(name=name).first()
     if existing:
         flash(f'{name} already exists', 'warning')
         return redirect(url_for('childcare.setup'))
@@ -289,7 +290,7 @@ def add_child():
 @childcare_bp.route('/childcare/update_child/<int:child_id>', methods=['POST'])
 def update_child(child_id):
     """Update child details"""
-    child = Child.query.get_or_404(child_id)
+    child = family_get_or_404(Child, child_id)
     
     child.name = request.form.get('name', child.name)
     child.year_group = request.form.get('year_group', child.year_group)
@@ -319,7 +320,7 @@ def update_child(child_id):
 @childcare_bp.route('/childcare/delete_child/<int:child_id>', methods=['POST'])
 def delete_child(child_id):
     """Delete a child (and all their data)"""
-    child = Child.query.get_or_404(child_id)
+    child = family_get_or_404(Child, child_id)
     name = child.name
     
     db.session.delete(child)
@@ -332,7 +333,7 @@ def delete_child(child_id):
 @childcare_bp.route('/childcare/add_activity_type/<int:child_id>', methods=['POST'])
 def add_activity_type(child_id):
     """Add an activity type for a child"""
-    child = Child.query.get_or_404(child_id)
+    child = family_get_or_404(Child, child_id)
     
     name = request.form.get('name')
     cost = request.form.get('cost', type=float)
@@ -365,7 +366,7 @@ def add_activity_type(child_id):
 @childcare_bp.route('/childcare/update_activity_type/<int:activity_type_id>', methods=['POST'])
 def update_activity_type(activity_type_id):
     """Update an activity type"""
-    activity_type = ChildActivityType.query.get_or_404(activity_type_id)
+    activity_type = family_get_or_404(ChildActivityType, activity_type_id)
     
     activity_type.name = request.form.get('name', activity_type.name)
     activity_type.cost = request.form.get('cost', type=float, default=activity_type.cost)
@@ -387,7 +388,7 @@ def update_activity_type(activity_type_id):
 @childcare_bp.route('/childcare/delete_activity_type/<int:activity_type_id>', methods=['POST'])
 def delete_activity_type(activity_type_id):
     """Delete an activity type"""
-    activity_type = ChildActivityType.query.get_or_404(activity_type_id)
+    activity_type = family_get_or_404(ChildActivityType, activity_type_id)
     name = activity_type.name
     
     db.session.delete(activity_type)
@@ -406,7 +407,7 @@ def reports():
     annual_data = ChildcareService.get_annual_costs(year)
     
     # Get all years with data
-    all_summaries = MonthlyChildcareSummary.query.all()
+    all_summaries = family_query(MonthlyChildcareSummary).all()
     years = sorted(list(set([int(s.year_month.split('-')[0]) for s in all_summaries])), reverse=True)
     
     return render_template(

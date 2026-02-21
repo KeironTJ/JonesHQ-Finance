@@ -4,16 +4,17 @@ from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
 from decimal import Decimal
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @accounts_bp.route('/accounts')
 def index():
     """List all accounts"""
-    accounts = Account.query.all()
+    accounts = family_query(Account).all()
     
     # Calculate actual balances from PAID transactions for each account
     for account in accounts:
-        paid_transactions = Transaction.query.filter_by(
+        paid_transactions = family_query(Transaction).filter_by(
             account_id=account.id,
             is_paid=True
         ).all()
@@ -86,7 +87,7 @@ def create():
 def edit(id):
     """Edit an account"""
     try:
-        account = Account.query.get_or_404(id)
+        account = family_get_or_404(Account, id)
         
         account.name = request.form.get('name')
         account.account_type = request.form.get('account_type')
@@ -107,7 +108,7 @@ def edit(id):
 def delete(id):
     """Delete an account"""
     try:
-        account = Account.query.get_or_404(id)
+        account = family_get_or_404(Account, id)
         name = account.name
         
         db.session.delete(account)

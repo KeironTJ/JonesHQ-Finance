@@ -11,6 +11,7 @@ from models.pensions import Pension
 from extensions import db
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class NetWorthService:
@@ -23,7 +24,7 @@ class NetWorthService:
         
         # ASSETS
         # Get all active account balances using cache
-        active_accounts = Account.query.filter_by(is_active=True).all()
+        active_accounts = family_query(Account).filter_by(is_active=True).all()
         cash = 0.00
         savings = 0.00
         
@@ -49,7 +50,7 @@ class NetWorthService:
                 savings += balance
         
         # Get pension values (sum of current values from active pensions)
-        active_pensions = Pension.query.filter_by(is_active=True).all()
+        active_pensions = family_query(Pension).filter_by(is_active=True).all()
         pensions_value = sum(float(pension.current_value) for pension in active_pensions)
         
         pension_details = [
@@ -64,12 +65,12 @@ class NetWorthService:
         
         # LIABILITIES
         # Credit cards - sum of balances (negative balances = owe money)
-        active_credit_cards = CreditCard.query.filter_by(is_active=True).all()
+        active_credit_cards = family_query(CreditCard).filter_by(is_active=True).all()
         credit_cards_total = 0.00
         cc_details = []
         for card in active_credit_cards:
             # Get latest transaction balance (paid only for current, all for projection)
-            latest_txn = CreditCardTransaction.query.filter_by(
+            latest_txn = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card.id,
                 is_paid=True
             ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).first()
@@ -86,12 +87,12 @@ class NetWorthService:
                 cc_details.append({'name': card.card_name, 'balance': 0, 'owed': 0})
         
         # Loans - sum of remaining balances
-        active_loans = Loan.query.filter_by(is_active=True).all()
+        active_loans = family_query(Loan).filter_by(is_active=True).all()
         loans_total = 0.00
         loan_details = []
         for loan in active_loans:
             # Get latest paid loan payment
-            latest_payment = LoanPayment.query.filter_by(
+            latest_payment = family_query(LoanPayment).filter_by(
                 loan_id=loan.id,
                 is_paid=True
             ).order_by(LoanPayment.date.desc(), LoanPayment.id.desc()).first()
@@ -111,14 +112,14 @@ class NetWorthService:
         house_value = 0.00  # Reset to recalculate
         property_details = []
         
-        active_properties = Property.query.filter_by(is_active=True).all()
+        active_properties = family_query(Property).filter_by(is_active=True).all()
         for prop in active_properties:
             # Add property valuation to house value
             if prop.current_valuation:
                 house_value += float(prop.current_valuation)
             
             # Sum all active mortgage products for this property
-            active_products = MortgageProduct.query.filter_by(
+            active_products = family_query(MortgageProduct).filter_by(
                 property_id=prop.id,
                 is_active=True
             ).all()
@@ -174,7 +175,7 @@ class NetWorthService:
         # Use monthly balance cache for efficient lookups
         from services.monthly_balance_service import MonthlyBalanceService
         
-        active_accounts = Account.query.filter_by(is_active=True).all()
+        active_accounts = family_query(Account).filter_by(is_active=True).all()
         cash = 0.00
         savings = 0.00
         
@@ -208,14 +209,14 @@ class NetWorthService:
         from models.pension_snapshots import PensionSnapshot
         
         # Include both active AND inactive pensions in net worth
-        all_pensions = Pension.query.all()
+        all_pensions = family_query(Pension).all()
         pensions_value = 0.00
         is_future_date = target_date > datetime.now().date()
         
         for pension in all_pensions:
             if is_future_date:
                 # For future dates, use projected snapshots (default scenario)
-                latest_snapshot = PensionSnapshot.query.filter(
+                latest_snapshot = family_query(PensionSnapshot).filter(
                     PensionSnapshot.pension_id == pension.id,
                     PensionSnapshot.review_date <= target_date,
                     PensionSnapshot.is_projection == True,
@@ -229,7 +230,7 @@ class NetWorthService:
                     pensions_value += float(pension.current_value)
             else:
                 # For past/present dates, use actual snapshots only
-                latest_snapshot = PensionSnapshot.query.filter(
+                latest_snapshot = family_query(PensionSnapshot).filter(
                     PensionSnapshot.pension_id == pension.id,
                     PensionSnapshot.review_date <= target_date,
                     PensionSnapshot.is_projection == False
@@ -246,12 +247,12 @@ class NetWorthService:
         liquid_assets = cash + savings
         
         # LIABILITIES - Credit Cards
-        active_credit_cards = CreditCard.query.filter_by(is_active=True).all()
+        active_credit_cards = family_query(CreditCard).filter_by(is_active=True).all()
         credit_cards_total = 0.00
         
         for card in active_credit_cards:
             # For future dates, include unpaid transactions; for past, only paid
-            query = CreditCardTransaction.query.filter(
+            query = family_query(CreditCardTransaction).filter(
                 CreditCardTransaction.credit_card_id == card.id,
                 CreditCardTransaction.date <= target_date
             )
@@ -270,12 +271,12 @@ class NetWorthService:
                     credit_cards_total += abs(balance)
         
         # LIABILITIES - Loans
-        active_loans = Loan.query.filter_by(is_active=True).all()
+        active_loans = family_query(Loan).filter_by(is_active=True).all()
         loans_total = 0.00
         
         for loan in active_loans:
             # For future dates, include unpaid payments; for past, only paid
-            query = LoanPayment.query.filter(
+            query = family_query(LoanPayment).filter(
                 LoanPayment.loan_id == loan.id,
                 LoanPayment.date <= target_date
             )
@@ -299,7 +300,7 @@ class NetWorthService:
         house_value = 0.00
         
         is_future_date = target_date > today
-        active_properties = Property.query.filter_by(is_active=True).all()
+        active_properties = family_query(Property).filter_by(is_active=True).all()
         
         for prop in active_properties:
             # Get property valuation at target date
@@ -315,7 +316,7 @@ class NetWorthService:
                     house_value += float(prop.current_valuation) if prop.current_valuation else 0
                 
                 # Get mortgage products for this property
-                active_products = MortgageProduct.query.filter_by(
+                active_products = family_query(MortgageProduct).filter_by(
                     property_id=prop.id,
                     is_active=True
                 ).all()
@@ -328,7 +329,7 @@ class NetWorthService:
                     # Get snapshot at or before target date
                     if is_future_date:
                         # Use projection
-                        snapshot = MortgageSnapshot.query.filter(
+                        snapshot = family_query(MortgageSnapshot).filter(
                             MortgageSnapshot.mortgage_product_id == product.id,
                             MortgageSnapshot.date <= target_date,
                             MortgageSnapshot.is_projection == True,
@@ -336,7 +337,7 @@ class NetWorthService:
                         ).order_by(MortgageSnapshot.date.desc()).first()
                     else:
                         # Use actual
-                        snapshot = MortgageSnapshot.query.filter(
+                        snapshot = family_query(MortgageSnapshot).filter(
                             MortgageSnapshot.mortgage_product_id == product.id,
                             MortgageSnapshot.date <= target_date,
                             MortgageSnapshot.is_projection == False
@@ -423,7 +424,7 @@ class NetWorthService:
             snapshot_date = date.today()
         
         # Check if snapshot already exists for this date
-        existing = NetWorth.query.filter_by(date=snapshot_date).first()
+        existing = family_query(NetWorth).filter_by(date=snapshot_date).first()
         if existing:
             # Update existing snapshot
             snapshot = existing
@@ -465,7 +466,7 @@ class NetWorthService:
         three_months_ago = snapshot.date - timedelta(days=90)
         
         # Find closest snapshot to 1 month ago
-        prev_1m = NetWorth.query.filter(NetWorth.date < snapshot.date)\
+        prev_1m = family_query(NetWorth).filter(NetWorth.date < snapshot.date)\
             .order_by(NetWorth.date.desc()).first()
         
         if prev_1m and float(prev_1m.net_worth) != 0:
@@ -473,7 +474,7 @@ class NetWorthService:
             snapshot.one_month_track = Decimal(str((change / float(prev_1m.net_worth)) * 100))
         
         # Find snapshot closest to 3 months ago
-        prev_3m = NetWorth.query.filter(NetWorth.date <= three_months_ago)\
+        prev_3m = family_query(NetWorth).filter(NetWorth.date <= three_months_ago)\
             .order_by(NetWorth.date.desc()).first()
         
         if prev_3m and float(prev_3m.net_worth) != 0:
@@ -483,7 +484,7 @@ class NetWorthService:
     @staticmethod
     def get_networth_trend():
         """Analyze net worth trend over time"""
-        recent_snapshots = NetWorth.query.order_by(NetWorth.date.desc()).limit(12).all()
+        recent_snapshots = family_query(NetWorth).order_by(NetWorth.date.desc()).limit(12).all()
         
         if len(recent_snapshots) < 2:
             return {

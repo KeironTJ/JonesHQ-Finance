@@ -4,9 +4,10 @@ from datetime import datetime
 
 class Trip(db.Model):
     __tablename__ = 'trips'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    vehicle_id= db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
     
     date = db.Column(db.Date, nullable=False)
     month = db.Column(db.String(7))  # 2025-11

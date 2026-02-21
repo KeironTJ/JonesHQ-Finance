@@ -95,6 +95,7 @@ def create_app(config_name=None):
     from blueprints.networth import networth_bp
     from blueprints.settings import settings_bp
     from blueprints.expenses import expenses_bp
+    from blueprints.family import family_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -112,16 +113,56 @@ def create_app(config_name=None):
     app.register_blueprint(networth_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(expenses_bp)
+    app.register_blueprint(family_bp)
+
+    # ── Section-level access enforcement ──────────────────────────────────
+    @app.before_request
+    def enforce_section_access():
+        """Abort 403 when a member tries to access a forbidden section."""
+        from utils.permissions import check_section_access
+        check_section_access()
+
+    # ── Jinja2 custom filter ────────────────────────────────────────────
+    import json as _json
+
+    @app.template_filter('from_json')
+    def from_json_filter(value):
+        """Parse a JSON string in templates, returning [] on failure."""
+        if not value:
+            return []
+        try:
+            return _json.loads(value)
+        except (ValueError, TypeError):
+            return []
     
     # Add context processors
     @app.context_processor
     def utility_processor():
         from datetime import date, timedelta
+        from utils.permissions import can_access_section
         return dict(
             today=lambda: date.today().strftime('%Y-%m-%d'),
-            timedelta=timedelta
+            timedelta=timedelta,
+            can_access_section=can_access_section,
         )
     
+    # ── Auto-set family_id on every new record ─────────────────────────────
+    from sqlalchemy import event as _sa_event
+
+    @_sa_event.listens_for(db.session, 'before_flush')
+    def _auto_family_id(session, flush_context, instances):
+        """Automatically stamp family_id on any new record that has the column
+        but no value, using the currently logged-in user's family."""
+        try:
+            from flask_login import current_user
+            if current_user and current_user.is_authenticated and current_user.family_id:
+                fid = current_user.family_id
+                for obj in session.new:
+                    if hasattr(obj, 'family_id') and obj.family_id is None:
+                        obj.family_id = fid
+        except RuntimeError:
+            pass  # outside request context (e.g. db.create_all() at startup)
+
     # Create database tables
     with app.app_context():
         db.create_all()

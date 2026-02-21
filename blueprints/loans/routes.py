@@ -8,12 +8,13 @@ from extensions import db
 from services.loan_service import LoanService
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @loans_bp.route('/')
 def index():
     """List all loans with summary statistics"""
-    loans = Loan.query.all()
+    loans = family_query(Loan).all()
     
     # Calculate summary statistics for active loans
     active_loans = [loan for loan in loans if loan.is_active]
@@ -111,17 +112,17 @@ def add():
             flash(f'Error adding loan: {str(e)}', 'danger')
             return redirect(url_for('loans.add'))
     
-    accounts = Account.query.order_by(Account.name).all()
+    accounts = family_query(Account).order_by(Account.name).all()
     return render_template('loans/form.html', loan=None, accounts=accounts)
 
 
 @loans_bp.route('/<int:id>')
 def detail(id):
     """View loan details with payment schedule"""
-    loan = Loan.query.get_or_404(id)
+    loan = family_get_or_404(Loan, id)
     
     # Get all payments ordered by date
-    payments = LoanPayment.query.filter_by(loan_id=id).order_by(LoanPayment.date).all()
+    payments = family_query(LoanPayment).filter_by(loan_id=id).order_by(LoanPayment.date).all()
     
     # Get statistics
     stats = LoanService.get_payment_statistics(id)
@@ -144,7 +145,7 @@ def detail(id):
 def edit(id):
     """Edit a loan"""
     from models.accounts import Account
-    loan = Loan.query.get_or_404(id)
+    loan = family_get_or_404(Loan, id)
     
     if request.method == 'POST':
         try:
@@ -181,18 +182,18 @@ def edit(id):
             db.session.rollback()
             flash(f'Error updating loan: {str(e)}', 'danger')
     
-    accounts = Account.query.order_by(Account.name).all()
+    accounts = family_query(Account).order_by(Account.name).all()
     return render_template('loans/form.html', loan=loan, accounts=accounts)
 
 
 @loans_bp.route('/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete a loan"""
-    loan = Loan.query.get_or_404(id)
+    loan = family_get_or_404(Loan, id)
     
     try:
         # Delete all associated payments
-        LoanPayment.query.filter_by(loan_id=id).delete()
+        family_query(LoanPayment).filter_by(loan_id=id).delete()
         
         name = loan.name
         db.session.delete(loan)
@@ -210,7 +211,7 @@ def delete(id):
 @loans_bp.route('/<int:id>/generate', methods=['POST'])
 def generate_schedule(id):
     """Generate amortization schedule for a loan"""
-    loan = Loan.query.get_or_404(id)
+    loan = family_get_or_404(Loan, id)
     
     try:
         # Get end date from form, default to loan's end date
@@ -239,7 +240,7 @@ def generate_schedule(id):
 @loans_bp.route('/<int:id>/regenerate', methods=['POST'])
 def regenerate_schedule(id):
     """Regenerate amortization schedule from today"""
-    loan = Loan.query.get_or_404(id)
+    loan = family_get_or_404(Loan, id)
     
     try:
         # Get end date from form
@@ -268,14 +269,14 @@ def regenerate_schedule(id):
 @loans_bp.route('/<int:id>/payment/<int:payment_id>/toggle-paid', methods=['POST'])
 def toggle_payment_paid(id, payment_id):
     """Toggle payment paid status and sync with bank transaction"""
-    payment = LoanPayment.query.get_or_404(payment_id)
+    payment = family_get_or_404(LoanPayment, payment_id)
     
     try:
         payment.is_paid = not payment.is_paid
         
         # Sync bank transaction if it exists
         if payment.bank_transaction_id:
-            bank_txn = Transaction.query.get(payment.bank_transaction_id)
+            bank_txn = family_get(Transaction, payment.bank_transaction_id)
             if bank_txn:
                 bank_txn.is_paid = payment.is_paid
                 # Recalculate account balance
@@ -295,8 +296,8 @@ def toggle_payment_paid(id, payment_id):
 def edit_payment(id, payment_id):
     """Edit a loan payment"""
     try:
-        loan = Loan.query.get_or_404(id)
-        payment = LoanPayment.query.get_or_404(payment_id)
+        loan = family_get_or_404(Loan, id)
+        payment = family_get_or_404(LoanPayment, payment_id)
         
         # Verify payment belongs to this loan
         if payment.loan_id != loan.id:
@@ -335,7 +336,7 @@ def edit_payment(id, payment_id):
         
         # Sync changes to linked bank transaction if exists
         if payment.bank_transaction_id:
-            bank_txn = Transaction.query.get(payment.bank_transaction_id)
+            bank_txn = family_get(Transaction, payment.bank_transaction_id)
             if bank_txn:
                 # Update all relevant transaction fields
                 bank_txn.transaction_date = payment.date
@@ -368,8 +369,8 @@ def edit_payment(id, payment_id):
 def delete_payment(id, payment_id):
     """Delete a loan payment and linked bank transaction"""
     try:
-        loan = Loan.query.get_or_404(id)
-        payment = LoanPayment.query.get_or_404(payment_id)
+        loan = family_get_or_404(Loan, id)
+        payment = family_get_or_404(LoanPayment, payment_id)
         
         # Verify payment belongs to this loan
         if payment.loan_id != loan.id:
@@ -378,7 +379,7 @@ def delete_payment(id, payment_id):
         
         # Delete linked bank transaction if exists
         if payment.bank_transaction_id:
-            bank_txn = Transaction.query.get(payment.bank_transaction_id)
+            bank_txn = family_get(Transaction, payment.bank_transaction_id)
             if bank_txn:
                 account_id = bank_txn.account_id
                 db.session.delete(bank_txn)
@@ -403,7 +404,7 @@ def delete_payment(id, payment_id):
 def bulk_delete_payments(id):
     """Bulk delete multiple loan payments"""
     try:
-        loan = Loan.query.get_or_404(id)
+        loan = family_get_or_404(Loan, id)
         payment_ids_str = request.form.get('payment_ids', '')
         
         if not payment_ids_str:
@@ -416,11 +417,11 @@ def bulk_delete_payments(id):
         accounts_to_recalc = set()
         
         for payment_id in payment_ids:
-            payment = LoanPayment.query.get(payment_id)
+            payment = family_get(LoanPayment, payment_id)
             if payment and payment.loan_id == loan.id:
                 # Delete linked bank transaction if exists
                 if payment.bank_transaction_id:
-                    bank_txn = Transaction.query.get(payment.bank_transaction_id)
+                    bank_txn = family_get(Transaction, payment.bank_transaction_id)
                     if bank_txn:
                         accounts_to_recalc.add(bank_txn.account_id)
                         db.session.delete(bank_txn)
@@ -447,7 +448,7 @@ def bulk_delete_payments(id):
 @loans_bp.route('/generate-all', methods=['POST'])
 def generate_all():
     """Generate schedules for all active loans"""
-    active_loans = Loan.query.filter_by(is_active=True).all()
+    active_loans = family_query(Loan).filter_by(is_active=True).all()
     
     try:
         total_created = 0

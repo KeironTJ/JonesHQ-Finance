@@ -13,17 +13,18 @@ from models.settings import Settings
 from services.credit_card_service import CreditCardService
 from services.payday_service import PaydayService
 from extensions import db
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @credit_cards_bp.route('/credit-cards')
 def index():
     """List all credit cards with summary"""
-    cards = CreditCard.query.order_by(CreditCard.is_active.desc(), CreditCard.card_name).all()
+    cards = family_query(CreditCard).order_by(CreditCard.is_active.desc(), CreditCard.card_name).all()
     
     # Calculate actual balance from paid transactions only for each card
     for card in cards:
         # Get the latest PAID transaction (with consistent ordering)
-        latest_paid = CreditCardTransaction.query.filter_by(
+        latest_paid = family_query(CreditCardTransaction).filter_by(
             credit_card_id=card.id,
             is_paid=True
         ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).first()
@@ -102,14 +103,14 @@ def add():
             flash(f'Error adding credit card: {str(e)}', 'danger')
     
     # Get accounts for form
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     return render_template('credit_cards/form.html', card=None, accounts=accounts)
 
 
 @credit_cards_bp.route('/credit-cards/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
     """Edit a credit card"""
-    card = CreditCard.query.get_or_404(id)
+    card = family_get_or_404(CreditCard, id)
     
     if request.method == 'POST':
         try:
@@ -155,7 +156,7 @@ def edit(id):
             flash(f'Error updating credit card: {str(e)}', 'danger')
     
     # Get accounts for form
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     return render_template('credit_cards/form.html', card=card, accounts=accounts)
 
 
@@ -163,7 +164,7 @@ def edit(id):
 def delete(id):
     """Delete a credit card"""
     try:
-        card = CreditCard.query.get_or_404(id)
+        card = family_get_or_404(CreditCard, id)
         card_name = card.card_name
         
         db.session.delete(card)
@@ -180,7 +181,7 @@ def delete(id):
 @credit_cards_bp.route('/credit-cards/<int:id>')
 def detail(id):
     """View credit card details and transactions"""
-    card = CreditCard.query.get_or_404(id)
+    card = family_get_or_404(CreditCard, id)
     
     # Get transaction ID filter if provided
     transaction_id = request.args.get('txn_id', type=int)
@@ -188,13 +189,13 @@ def detail(id):
     # Get all transactions for this card
     # Order by date DESC, then ID DESC for display (newest first)
     # This ensures same-day transactions appear in reverse chronological order
-    transactions = CreditCardTransaction.query.filter_by(
+    transactions = family_query(CreditCardTransaction).filter_by(
         credit_card_id=id
     ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).all()
     
     # Calculate current balance from latest PAID transaction
     # Must use same ordering as display (date DESC, id DESC) to get the truly latest
-    latest_paid = CreditCardTransaction.query.filter_by(
+    latest_paid = family_query(CreditCardTransaction).filter_by(
         credit_card_id=id,
         is_paid=True
     ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).first()
@@ -213,7 +214,7 @@ def detail(id):
     total_interest = sum([float(t.amount) for t in transactions if t.transaction_type == 'Interest' and t.is_paid])
     
     # Get promotional offers
-    promotions = CreditCardPromotion.query.filter_by(credit_card_id=id).order_by(
+    promotions = family_query(CreditCardPromotion).filter_by(credit_card_id=id).order_by(
         CreditCardPromotion.end_date.desc()
     ).all()
     
@@ -223,10 +224,10 @@ def detail(id):
     active_bt_promo = card.balance_transfer_0_percent_until and today <= card.balance_transfer_0_percent_until
     
     # Get all accounts for the account selector
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
     # Get all categories for the add transaction modal
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
     return render_template('credit_cards/detail.html',
                          card=card,
@@ -247,7 +248,7 @@ def detail(id):
 def add_transaction(id):
     """Add a new credit card transaction"""
     try:
-        card = CreditCard.query.get_or_404(id)
+        card = family_get_or_404(CreditCard, id)
         
         # Get form data
         txn_date_str = request.form.get('txn_date')
@@ -308,7 +309,7 @@ def add_transaction(id):
         head_budget = None
         sub_budget = None
         if category_id:
-            category = Category.query.get(int(category_id))
+            category = family_get(Category, int(category_id))
             if category:
                 head_budget = category.head_budget
                 sub_budget = category.sub_budget
@@ -353,19 +354,19 @@ def add_transaction(id):
             # If it's a payment and an account is selected, create linked bank transaction
             if txn_type == 'Payment' and account_id:
                 # Find Credit Cards category matching this specific card
-                credit_card_category = Category.query.filter_by(
+                credit_card_category = family_query(Category).filter_by(
                     head_budget='Credit Cards',
                     sub_budget=card.card_name
                 ).first()
                 
                 # If not found, try to find any Credit Cards category as fallback
                 if not credit_card_category:
-                    credit_card_category = Category.query.filter_by(
+                    credit_card_category = family_query(Category).filter_by(
                         head_budget='Credit Cards'
                     ).first()
                 
                 # Find or create vendor matching card name
-                vendor = Vendor.query.filter_by(name=card.card_name).first()
+                vendor = family_query(Vendor).filter_by(name=card.card_name).first()
                 if not vendor:
                     vendor = Vendor(name=card.card_name)
                     db.session.add(vendor)
@@ -418,7 +419,7 @@ def add_transaction(id):
 def toggle_fixed(txn_id):
     """Toggle is_fixed flag on a transaction"""
     try:
-        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        txn = family_get_or_404(CreditCardTransaction, txn_id)
         txn.is_fixed = not txn.is_fixed
         db.session.commit()
         
@@ -436,8 +437,8 @@ def toggle_fixed(txn_id):
 def edit_transaction(id, txn_id):
     """Edit a credit card transaction"""
     try:
-        card = CreditCard.query.get_or_404(id)
-        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        card = family_get_or_404(CreditCard, id)
+        txn = family_get_or_404(CreditCardTransaction, txn_id)
         
         # Verify transaction belongs to this card
         if txn.credit_card_id != card.id:
@@ -494,8 +495,8 @@ def edit_transaction(id, txn_id):
 def delete_transaction(id, txn_id):
     """Delete a credit card transaction and linked bank transaction"""
     try:
-        card = CreditCard.query.get_or_404(id)
-        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        card = family_get_or_404(CreditCard, id)
+        txn = family_get_or_404(CreditCardTransaction, txn_id)
         
         # Verify transaction belongs to this card
         if txn.credit_card_id != card.id:
@@ -505,7 +506,7 @@ def delete_transaction(id, txn_id):
         # Delete linked bank transaction if exists
         if txn.bank_transaction_id:
             from models.transactions import Transaction
-            bank_txn = Transaction.query.get(txn.bank_transaction_id)
+            bank_txn = family_get(Transaction, txn.bank_transaction_id)
             if bank_txn:
                 account_id = bank_txn.account_id
                 db.session.delete(bank_txn)
@@ -533,8 +534,8 @@ def delete_transaction(id, txn_id):
 def edit_payment(id, txn_id):
     """Edit a payment transaction amount and automatically lock it"""
     try:
-        card = CreditCard.query.get_or_404(id)
-        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        card = family_get_or_404(CreditCard, id)
+        txn = family_get_or_404(CreditCardTransaction, txn_id)
         
         # Verify transaction belongs to this card
         if txn.credit_card_id != card.id:
@@ -573,19 +574,19 @@ def edit_payment(id, txn_id):
         # Handle account linking
         if account_id:
             # Find Credit Cards category matching this specific card
-            credit_card_category = Category.query.filter_by(
+            credit_card_category = family_query(Category).filter_by(
                 head_budget='Credit Cards',
                 sub_budget=card.card_name
             ).first()
             
             # If not found, try to find any Credit Cards category as fallback
             if not credit_card_category:
-                credit_card_category = Category.query.filter_by(
+                credit_card_category = family_query(Category).filter_by(
                     head_budget='Credit Cards'
                 ).first()
             
             # Find or create vendor matching card name
-            vendor = Vendor.query.filter_by(name=card.card_name).first()
+            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
             if not vendor:
                 vendor = Vendor(name=card.card_name)
                 db.session.add(vendor)
@@ -593,7 +594,7 @@ def edit_payment(id, txn_id):
             
             # If there's an existing linked transaction, update it
             if txn.bank_transaction_id:
-                bank_txn = Transaction.query.get(txn.bank_transaction_id)
+                bank_txn = family_get(Transaction, txn.bank_transaction_id)
                 if bank_txn:
                     bank_txn.transaction_date = txn.date
                     bank_txn.amount = -abs(payment_amount)  # Negative = expense from bank account (money out)
@@ -653,7 +654,7 @@ def edit_payment(id, txn_id):
 def toggle_paid(txn_id):
     """Toggle is_paid flag on a transaction and lock it when paid"""
     try:
-        txn = CreditCardTransaction.query.get_or_404(txn_id)
+        txn = family_get_or_404(CreditCardTransaction, txn_id)
         txn.is_paid = not txn.is_paid
         
         # When marking as paid, also lock it to prevent regeneration
@@ -662,7 +663,7 @@ def toggle_paid(txn_id):
         
         # Sync with linked expense if exists
         from models.expenses import Expense
-        expense = Expense.query.filter_by(credit_card_transaction_id=txn.id).first()
+        expense = family_query(Expense).filter_by(credit_card_transaction_id=txn.id).first()
         if expense:
             expense.paid_for = txn.is_paid
         
@@ -682,7 +683,7 @@ def toggle_paid(txn_id):
 def generate_future(id):
     """Regenerate future monthly statements (deletes unlocked, keeps locked)"""
     try:
-        card = CreditCard.query.get_or_404(id)
+        card = family_get_or_404(CreditCard, id)
         
         # Get date range from form or use defaults
         start_date = date.today()

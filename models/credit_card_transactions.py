@@ -4,9 +4,10 @@ from datetime import datetime
 
 class CreditCardTransaction(db.Model):
     __tablename__ = 'credit_card_transactions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    credit_card_id = db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    credit_card_id= db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     
     # Transaction Details

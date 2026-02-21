@@ -4,8 +4,9 @@ from datetime import datetime
 
 class Category(db.Model):
     __tablename__ = 'categories'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     name = db.Column(db.String(100), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     category_type = db.Column(db.String(50), nullable=False)  # Income, Expense, Transfer, etc.

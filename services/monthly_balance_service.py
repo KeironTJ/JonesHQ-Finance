@@ -10,6 +10,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
 import calendar
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class MonthlyBalanceService:
@@ -43,7 +44,7 @@ class MonthlyBalanceService:
         month_end = MonthlyBalanceService.get_month_end_date(year, month)
         
         # Get all transactions up to and including this month
-        query = Transaction.query.filter(
+        query = family_query(Transaction).filter(
             Transaction.account_id == account_id,
             Transaction.transaction_date <= month_end
         ).order_by(Transaction.transaction_date.asc(), Transaction.id.asc())
@@ -80,7 +81,7 @@ class MonthlyBalanceService:
         )
         
         # Find or create cache entry
-        cache_entry = MonthlyAccountBalance.query.filter_by(
+        cache_entry = family_query(MonthlyAccountBalance).filter_by(
             account_id=account_id,
             year_month=year_month
         ).first()
@@ -140,7 +141,7 @@ class MonthlyBalanceService:
     @staticmethod
     def update_all_accounts_from_month(start_year, start_month, num_months=None, future_months=24):
         """Update all active accounts from a specific month forward"""
-        accounts = Account.query.filter_by(is_active=True).all()
+        accounts = family_query(Account).filter_by(is_active=True).all()
         
         for account in accounts:
             MonthlyBalanceService.update_account_from_month(
@@ -164,7 +165,7 @@ class MonthlyBalanceService:
         """
         year_month = MonthlyBalanceService.get_year_month_string(year, month)
         
-        cache_entry = MonthlyAccountBalance.query.filter_by(
+        cache_entry = family_query(MonthlyAccountBalance).filter_by(
             account_id=account_id,
             year_month=year_month
         ).first()
@@ -187,7 +188,7 @@ class MonthlyBalanceService:
         db.session.commit()
         
         # Find earliest transaction date across all accounts
-        earliest = db.session.query(db.func.min(Transaction.transaction_date)).scalar()
+        earliest = family_query(Transaction).with_entities(db.func.min(Transaction.transaction_date)).scalar()
         
         if not earliest:
             print("No transactions found")

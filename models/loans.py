@@ -4,9 +4,10 @@ from datetime import datetime
 
 class Loan(db.Model):
     __tablename__ = 'loans'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)  # EE, JN Bank, Loft Loan, etc.
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    name = db.Column(db.String(100), nullable=False)# EE, JN Bank, Loft Loan, etc.
     loan_value = db.Column(db.Numeric(10, 2), nullable=False)  # Original loan amount
     principal = db.Column(db.Numeric(10, 2), nullable=False)   # Original principal (same as loan_value)
     current_balance = db.Column(db.Numeric(10, 2), nullable=False)

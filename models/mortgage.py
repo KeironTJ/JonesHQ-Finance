@@ -5,9 +5,10 @@ from datetime import datetime
 class MortgageProduct(db.Model):
     """Represents a mortgage product (e.g., 2YR Fixed, 3YR Fixed, Variable)"""
     __tablename__ = 'mortgage_products'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    property_id = db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    property_id= db.Column(db.Integer, db.ForeignKey('properties.id'), nullable=False)
     account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'))  # Bank account for payments
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'))  # Lender as vendor
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))  # Transaction category
@@ -58,6 +59,7 @@ class Mortgage(db.Model):
     __tablename__ = 'mortgages'
     
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     property_address = db.Column(db.String(255), nullable=False)
     principal = db.Column(db.Numeric(10, 2), nullable=False)
     current_balance = db.Column(db.Numeric(10, 2), nullable=False)

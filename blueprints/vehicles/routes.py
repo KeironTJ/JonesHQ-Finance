@@ -11,13 +11,14 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 from services.payday_service import PaydayService
 from sqlalchemy.orm import joinedload
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @vehicles_bp.route('/vehicles')
 def index():
     """Vehicle overview page"""
-    vehicles = Vehicle.query.filter_by(is_active=True).order_by(Vehicle.name).all()
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
 
     # Get stats for each vehicle
     vehicle_stats = {}
@@ -35,8 +36,8 @@ def index():
 @vehicles_bp.route('/vehicles/fuel')
 def fuel():
     """Fuel log page (standalone)"""
-    vehicles = Vehicle.query.filter_by(is_active=True).order_by(Vehicle.name).all()
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
 
     # Payday filter for fuel
     selected_payday_period = request.args.get('payday_period')
@@ -49,8 +50,8 @@ def fuel():
         selected_payday_period = ''
 
     # Get date range of fuel records to determine relevant periods
-    min_date_result = db.session.query(db.func.min(FuelRecord.date)).scalar()
-    max_date_result = db.session.query(db.func.max(FuelRecord.date)).scalar()
+    min_date_result = family_query(FuelRecord).with_entities(db.func.min(FuelRecord.date)).scalar()
+    max_date_result = family_query(FuelRecord).with_entities(db.func.max(FuelRecord.date)).scalar()
     
     if min_date_result and max_date_result:
         # Calculate number of months between min and max dates
@@ -68,7 +69,7 @@ def fuel():
     selected_vehicle_id = request.args.get('vehicle_id')
 
     # Get fuel records
-    fuel_query = FuelRecord.query
+    fuel_query = family_query(FuelRecord)
     if selected_payday_period:
         try:
             year, month = map(int, selected_payday_period.split('-'))
@@ -97,7 +98,7 @@ def fuel():
 @vehicles_bp.route('/vehicles/trips')
 def trips():
     """Trip log page (standalone)"""
-    vehicles = Vehicle.query.filter_by(is_active=True).order_by(Vehicle.name).all()
+    vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all()
 
     # Trip-specific payday filter
     selected_payday_period_trip = request.args.get('payday_period_trip')
@@ -110,8 +111,8 @@ def trips():
         selected_payday_period_trip = ''
 
     # Get date range of trip records to determine relevant periods
-    min_date_result = db.session.query(db.func.min(Trip.date)).scalar()
-    max_date_result = db.session.query(db.func.max(Trip.date)).scalar()
+    min_date_result = family_query(Trip).with_entities(db.func.min(Trip.date)).scalar()
+    max_date_result = family_query(Trip).with_entities(db.func.max(Trip.date)).scalar()
     
     if min_date_result and max_date_result:
         # Calculate number of months between min and max dates
@@ -129,7 +130,7 @@ def trips():
     selected_vehicle_id_trip = request.args.get('vehicle_id_trip')
 
     # Get trip records
-    trip_query = Trip.query.options(joinedload(Trip.fuel_record))
+    trip_query = family_query(Trip).options(joinedload(Trip.fuel_record))
     if selected_payday_period_trip:
         try:
             year, month = map(int, selected_payday_period_trip.split('-'))
@@ -147,17 +148,17 @@ def trips():
     # Get all fuel records to check for linked transactions
     fuel_records_dict = {}
     for vehicle in vehicles:
-        fuel_records = FuelRecord.query.filter_by(vehicle_id=vehicle.id).all()
+        fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle.id).all()
         fuel_records_dict[vehicle.id] = {f.date: f for f in fuel_records}
     
     # Get forecasted fuel transactions
     from models.categories import Category
     from models.transactions import Transaction
     from models.expenses import Expense
-    fuel_category = Category.query.filter_by(name='Transportation - Fuel').first()
+    fuel_category = family_query(Category).filter_by(name='Transportation - Fuel').first()
     forecasted_transactions = {}
     if fuel_category:
-        forecasted_fuel = Transaction.query.filter(
+        forecasted_fuel = family_query(Transaction).filter(
             Transaction.is_forecasted == True,
             Transaction.category_id == fuel_category.id
         ).all()
@@ -172,7 +173,7 @@ def trips():
                     break
     
     # Get fuel expenses to show linked entries
-    fuel_expenses = Expense.query.filter_by(expense_type='Fuel').all()
+    fuel_expenses = family_query(Expense).filter_by(expense_type='Fuel').all()
     fuel_expenses_dict = {}
     for vehicle in vehicles:
         vehicle_expenses = [e for e in fuel_expenses if e.vehicle_registration == vehicle.registration]
@@ -195,8 +196,8 @@ def trips():
 @vehicles_bp.route('/vehicles/manage')
 def manage():
     """Manage vehicles page (standalone)"""
-    vehicles = Vehicle.query.order_by(Vehicle.is_active.desc(), Vehicle.name).all()
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    vehicles = family_query(Vehicle).order_by(Vehicle.is_active.desc(), Vehicle.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
 
     return render_template(
         'vehicles/manage_vehicles.html',
@@ -248,7 +249,7 @@ def add_vehicle():
 def update_vehicle(vehicle_id):
     """Update vehicle details"""
     try:
-        vehicle = Vehicle.query.get_or_404(vehicle_id)
+        vehicle = family_get_or_404(Vehicle, vehicle_id)
         
         vehicle.name = request.form.get('name', vehicle.name)
         vehicle.make = request.form.get('make', vehicle.make)
@@ -281,7 +282,7 @@ def update_vehicle(vehicle_id):
 def refresh_forecasts(vehicle_id):
     """Manually refresh forecasted fuel transactions for a vehicle"""
     try:
-        vehicle = Vehicle.query.get_or_404(vehicle_id)
+        vehicle = family_get_or_404(Vehicle, vehicle_id)
         FuelForecastingService.sync_forecasted_transactions(vehicle_id)
         
         # Update monthly balance cache for fuel account
@@ -306,7 +307,7 @@ def refresh_all_forecasts():
     """Manually refresh forecasted fuel transactions for all vehicles"""
     try:
         # Get all vehicle data BEFORE calling any services that commit
-        vehicles = Vehicle.query.filter_by(is_active=True).all()
+        vehicles = family_query(Vehicle).filter_by(is_active=True).all()
         vehicle_data = [(v.id, v.name) for v in vehicles]
         
         refreshed_count = 0
@@ -334,7 +335,7 @@ def refresh_all_forecasts():
 def delete_vehicle(vehicle_id):
     """Delete a vehicle"""
     try:
-        vehicle = Vehicle.query.get_or_404(vehicle_id)
+        vehicle = family_get_or_404(Vehicle, vehicle_id)
         name = vehicle.name
         
         db.session.delete(vehicle)
@@ -391,7 +392,7 @@ def add_fuel():
         from services.monthly_balance_service import MonthlyBalanceService
         from models.transactions import Transaction
         if fuel_record.transaction_id:
-            txn = Transaction.query.get(fuel_record.transaction_id)
+            txn = family_get(Transaction, fuel_record.transaction_id)
             if txn and txn.account_id:
                 MonthlyBalanceService.handle_transaction_change(txn.account_id, txn.transaction_date)
         
@@ -410,7 +411,7 @@ def add_fuel():
 def update_fuel(fuel_id):
     """Update a fuel record"""
     try:
-        fuel_record = FuelRecord.query.get_or_404(fuel_id)
+        fuel_record = family_get_or_404(FuelRecord, fuel_id)
         
         fuel_record.date = datetime.strptime(request.form.get('date'), '%Y-%m-%d').date()
         fuel_record.price_per_litre = Decimal(request.form.get('price_per_litre'))
@@ -446,7 +447,7 @@ def update_fuel(fuel_id):
 def delete_fuel(fuel_id):
     """Delete a fuel record"""
     try:
-        fuel_record = FuelRecord.query.get_or_404(fuel_id)
+        fuel_record = family_get_or_404(FuelRecord, fuel_id)
         vehicle_id = fuel_record.vehicle_id  # Store before deletion
         db.session.delete(fuel_record)
         db.session.commit()
@@ -484,7 +485,7 @@ def add_trip():
         vehicle_last_fill = latest_fuel.date if latest_fuel else None
         
         # Get cumulative miles from previous trip
-        previous_trip = Trip.query.filter(
+        previous_trip = family_query(Trip).filter(
             Trip.vehicle_id == vehicle_id,
             Trip.date < trip_date
         ).order_by(Trip.date.desc()).first()
@@ -532,7 +533,7 @@ def add_trip():
 def update_trip(trip_id):
     """Update a trip record"""
     try:
-        trip = Trip.query.get_or_404(trip_id)
+        trip = family_get_or_404(Trip, trip_id)
         
         trip.date = datetime.strptime(request.form.get('date'), '%Y-%m-%d').date()
         trip.personal_miles = int(request.form.get('personal_miles', 0))
@@ -564,7 +565,7 @@ def update_trip(trip_id):
 def delete_trip(trip_id):
     """Delete a trip record"""
     try:
-        trip = Trip.query.get_or_404(trip_id)
+        trip = family_get_or_404(Trip, trip_id)
         db.session.delete(trip)
         db.session.commit()
         
@@ -591,7 +592,7 @@ def bulk_delete_trips():
         # Delete all selected trips
         deleted_count = 0
         for trip_id in trip_ids:
-            trip = Trip.query.get(int(trip_id))
+            trip = family_get(Trip, int(trip_id))
             if trip:
                 db.session.delete(trip)
                 deleted_count += 1

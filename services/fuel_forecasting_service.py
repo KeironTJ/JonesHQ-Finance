@@ -11,6 +11,7 @@ from models.trips import Trip
 from models.transactions import Transaction
 from models.categories import Category
 from services.payday_service import PaydayService
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class FuelForecastingService:
@@ -18,7 +19,7 @@ class FuelForecastingService:
     @staticmethod
     def get_average_fuel_price(vehicle_id, recent_count=5):
         """Get average fuel price per litre from recent fills"""
-        recent_fills = FuelRecord.query.filter_by(
+        recent_fills = family_query(FuelRecord).filter_by(
             vehicle_id=vehicle_id
         ).filter(
             FuelRecord.price_per_litre > 0
@@ -33,7 +34,7 @@ class FuelForecastingService:
     @staticmethod
     def get_average_mpg(vehicle_id, recent_count=10):
         """Get average MPG from recent fills"""
-        recent_fills = FuelRecord.query.filter_by(
+        recent_fills = family_query(FuelRecord).filter_by(
             vehicle_id=vehicle_id
         ).filter(
             FuelRecord.mpg.isnot(None),
@@ -52,7 +53,7 @@ class FuelForecastingService:
         Calculate cumulative fuel consumption from trips.
         Returns dict with date -> {gallons_used, cumulative_gallons, estimated_cost}
         """
-        vehicle = Vehicle.query.get(vehicle_id)
+        vehicle = family_get(Vehicle, vehicle_id)
         if not vehicle:
             return {}
         
@@ -65,10 +66,10 @@ class FuelForecastingService:
         avg_price = FuelForecastingService.get_average_fuel_price(vehicle_id)
         
         # Get all trips ordered by date
-        trips = Trip.query.filter_by(vehicle_id=vehicle_id).order_by(Trip.date.asc()).all()
+        trips = family_query(Trip).filter_by(vehicle_id=vehicle_id).order_by(Trip.date.asc()).all()
         
         # Get all actual fuel records
-        fuel_records = FuelRecord.query.filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
+        fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
         fuel_dates = {f.date for f in fuel_records}
         
         consumption_data = {}
@@ -107,7 +108,7 @@ class FuelForecastingService:
         Predict when refills will be needed based on tank capacity.
         Returns list of predicted refill dates with costs.
         """
-        vehicle = Vehicle.query.get(vehicle_id)
+        vehicle = family_get(Vehicle, vehicle_id)
         if not vehicle or not vehicle.tank_size:
             return []
         
@@ -121,10 +122,10 @@ class FuelForecastingService:
         avg_price = FuelForecastingService.get_average_fuel_price(vehicle_id)
         
         # Get all trips ordered by date
-        trips = Trip.query.filter_by(vehicle_id=vehicle_id).order_by(Trip.date.asc()).all()
+        trips = family_query(Trip).filter_by(vehicle_id=vehicle_id).order_by(Trip.date.asc()).all()
         
         # Get all actual fuel records to know when tank was filled
-        fuel_records = FuelRecord.query.filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
+        fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
         fuel_dates = {f.date for f in fuel_records}
         
         predicted_refills = []
@@ -176,29 +177,29 @@ class FuelForecastingService:
     @staticmethod
     def create_forecasted_transaction(vehicle_id, refill_date, cost, description=None):
         """Create a forecasted transaction for a predicted refill"""
-        vehicle = Vehicle.query.get(vehicle_id)
+        vehicle = family_get(Vehicle, vehicle_id)
         if not vehicle:
             return None
         
         # Get fuel category
-        fuel_category = Category.query.filter_by(name='Transportation - Fuel').first()
+        fuel_category = family_query(Category).filter_by(name='Transportation - Fuel').first()
         if not fuel_category:
             return None
         
         # Get Fuel Station vendor
         from models.vendors import Vendor
-        fuel_vendor = Vendor.query.filter_by(name='Fuel Station').first()
+        fuel_vendor = family_query(Vendor).filter_by(name='Fuel Station').first()
         
         # Get default fuel account if vehicle doesn't have one set
         from models.accounts import Account
         account_id = vehicle.fuel_account_id
         if not account_id:
             # Default to Nationwide Current Account
-            current_account = Account.query.filter_by(name='Nationwide Current Account').first()
+            current_account = family_query(Account).filter_by(name='Nationwide Current Account').first()
             account_id = current_account.id if current_account else None
         
         # Check if forecasted transaction already exists for this date
-        existing = Transaction.query.filter_by(
+        existing = family_query(Transaction).filter_by(
             transaction_date=refill_date,
             is_forecasted=True,
             category_id=fuel_category.id
@@ -242,17 +243,17 @@ class FuelForecastingService:
         Creates forecasted transactions for predicted refills.
         """
         # Delete old forecasted transactions for this vehicle
-        vehicle = Vehicle.query.get(vehicle_id)
+        vehicle = family_get(Vehicle, vehicle_id)
         if not vehicle:
             return
         
-        fuel_category = Category.query.filter_by(name='Transportation - Fuel').first()
+        fuel_category = family_query(Category).filter_by(name='Transportation - Fuel').first()
         if not fuel_category:
             return
         
         # Delete future forecasted fuel transactions for this vehicle
         today = date.today()
-        Transaction.query.filter(
+        family_query(Transaction).filter(
             Transaction.transaction_date >= today,
             Transaction.is_forecasted == True,
             Transaction.category_id == fuel_category.id,
@@ -280,30 +281,30 @@ class FuelForecastingService:
         If a forecasted transaction exists for that date/vehicle, replace it.
         Otherwise, create a new transaction.
         """
-        fuel_record = FuelRecord.query.get(fuel_record_id)
+        fuel_record = family_get(FuelRecord, fuel_record_id)
         if not fuel_record:
             return None
         
         vehicle = fuel_record.vehicle
-        fuel_category = Category.query.filter_by(name='Transportation - Fuel').first()
+        fuel_category = family_query(Category).filter_by(name='Transportation - Fuel').first()
         
         if not fuel_category:
             return None
         
         # Get Fuel Station vendor
         from models.vendors import Vendor
-        fuel_vendor = Vendor.query.filter_by(name='Fuel Station').first()
+        fuel_vendor = family_query(Vendor).filter_by(name='Fuel Station').first()
         
         # Get default fuel account if vehicle doesn't have one set
         from models.accounts import Account
         account_id = vehicle.fuel_account_id
         if not account_id:
             # Default to Nationwide Current Account
-            current_account = Account.query.filter_by(name='Nationwide Current Account').first()
+            current_account = family_query(Account).filter_by(name='Nationwide Current Account').first()
             account_id = current_account.id if current_account else None
         
         # Look for forecasted transaction on or near this date
-        forecasted = Transaction.query.filter(
+        forecasted = family_query(Transaction).filter(
             Transaction.transaction_date >= fuel_record.date - timedelta(days=3),
             Transaction.transaction_date <= fuel_record.date + timedelta(days=3),
             Transaction.is_forecasted == True,

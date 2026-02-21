@@ -12,6 +12,7 @@ from models.transactions import Transaction
 from models.categories import Category
 from models.settings import Settings
 from services.payday_service import PaydayService
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class MortgageService:
@@ -36,12 +37,12 @@ class MortgageService:
                 {'name': 'aggressive', 'overpayment': Decimal('500')},
             ]
         
-        property_obj = Property.query.get(property_id)
+        property_obj = family_get(Property, property_id)
         if not property_obj:
             return False
         
         # Get all mortgage products for this property, ordered by start date
-        products = MortgageProduct.query.filter_by(
+        products = family_query(MortgageProduct).filter_by(
             property_id=property_id
         ).order_by(MortgageProduct.start_date).all()
         
@@ -51,7 +52,7 @@ class MortgageService:
         # Delete existing projections for this property
         for product in products:
             # Get all unpaid projection snapshots with transactions
-            unpaid_projections = MortgageSnapshot.query.filter_by(
+            unpaid_projections = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=product.id,
                 is_projection=True
             ).join(
@@ -66,7 +67,7 @@ class MortgageService:
             # Delete unpaid transactions and their snapshots
             for snapshot in unpaid_projections:
                 if snapshot.transaction_id:
-                    transaction = Transaction.query.get(snapshot.transaction_id)
+                    transaction = family_get(Transaction, snapshot.transaction_id)
                     if transaction and not transaction.is_paid:
                         db.session.delete(transaction)
                 db.session.delete(snapshot)
@@ -109,13 +110,13 @@ class MortgageService:
                 start_month = product.start_date.replace(day=1)
             else:
                 # Product already active - get latest confirmed snapshot (non-projection) or latest projection with transaction
-                latest_confirmed = MortgageSnapshot.query.filter_by(
+                latest_confirmed = family_query(MortgageSnapshot).filter_by(
                     mortgage_product_id=product.id,
                     is_projection=False
                 ).order_by(MortgageSnapshot.date.desc()).first()
                 
                 # Also check for projections that have been paid (have transactions)
-                latest_paid_projection = MortgageSnapshot.query.filter_by(
+                latest_paid_projection = family_query(MortgageSnapshot).filter_by(
                     mortgage_product_id=product.id,
                     is_projection=True,
                     scenario_name=scenario_name
@@ -155,7 +156,7 @@ class MortgageService:
                 )
                 
                 # Skip if a snapshot already exists for this date and product
-                existing_snapshot = MortgageSnapshot.query.filter_by(
+                existing_snapshot = family_query(MortgageSnapshot).filter_by(
                     mortgage_product_id=product.id,
                     date=payment_date
                 ).first()
@@ -242,7 +243,7 @@ class MortgageService:
             chronologically_last_product = max(products, key=lambda p: p.end_date)
             
             # Get the final balance from the chronologically last product
-            last_snapshots = MortgageSnapshot.query.filter_by(
+            last_snapshots = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=chronologically_last_product.id,
                 is_projection=True,
                 scenario_name=scenario_name
@@ -316,7 +317,7 @@ class MortgageService:
             )
             
             # Skip if a snapshot already exists for this date and product
-            existing_snapshot = MortgageSnapshot.query.filter_by(
+            existing_snapshot = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=last_product.id,
                 date=payment_date
             ).first()
@@ -400,11 +401,11 @@ class MortgageService:
         Get combined actual + projected timeline for a property (all products)
         Returns list of dictionaries with monthly data
         """
-        property_obj = Property.query.get(property_id)
+        property_obj = family_get(Property, property_id)
         if not property_obj:
             return []
         
-        products = MortgageProduct.query.filter_by(
+        products = family_query(MortgageProduct).filter_by(
             property_id=property_id
         ).order_by(MortgageProduct.start_date).all()
         
@@ -412,13 +413,13 @@ class MortgageService:
         
         for product in products:
             # Get actual snapshots
-            actuals = MortgageSnapshot.query.filter_by(
+            actuals = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=product.id,
                 is_projection=False
             ).order_by(MortgageSnapshot.date).all()
             
             # Get projected snapshots for this scenario
-            projections = MortgageSnapshot.query.filter_by(
+            projections = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=product.id,
                 is_projection=True,
                 scenario_name=scenario
@@ -475,14 +476,16 @@ class MortgageService:
     @staticmethod
     def get_scenario_comparison(property_id):
         """Get comparison data for all scenarios"""
-        property_obj = Property.query.get(property_id)
+        property_obj = family_get(Property, property_id)
         if not property_obj:
             return {}
         
         scenarios = {}
         
         # Get unique scenario names
-        scenario_names = db.session.query(MortgageSnapshot.scenario_name).join(
+        scenario_names = family_query(MortgageSnapshot).with_entities(
+            MortgageSnapshot.scenario_name
+        ).join(
             MortgageProduct
         ).filter(
             MortgageProduct.property_id == property_id,
@@ -491,14 +494,14 @@ class MortgageService:
         
         for (scenario_name,) in scenario_names:
             # Get all products for this property
-            products = MortgageProduct.query.filter_by(property_id=property_id).all()
+            products = family_query(MortgageProduct).filter_by(property_id=property_id).all()
             
             total_interest = Decimal('0')
             total_payments = Decimal('0')
             mortgage_free_date = None
             
             for product in products:
-                snapshots = MortgageSnapshot.query.filter_by(
+                snapshots = family_query(MortgageSnapshot).filter_by(
                     mortgage_product_id=product.id,
                     is_projection=True,
                     scenario_name=scenario_name
@@ -536,7 +539,7 @@ class MortgageService:
         Convert a projected snapshot to actual, optionally updating values
         Creates a transaction if the product has a linked account
         """
-        snapshot = MortgageSnapshot.query.get(snapshot_id)
+        snapshot = family_get(MortgageSnapshot, snapshot_id)
         if not snapshot or not snapshot.is_projection:
             return False
         
@@ -568,7 +571,7 @@ class MortgageService:
         # Create transaction if account is linked and no transaction exists yet
         if product.account_id and not snapshot.transaction_id:
             # Get or create mortgage category
-            mortgage_category = Category.query.filter_by(
+            mortgage_category = family_query(Category).filter_by(
                 name='Mortgage',
                 category_type='expense'
             ).first()
@@ -612,7 +615,7 @@ class MortgageService:
         Create a transaction for an existing snapshot
         Used when linking transactions to already confirmed snapshots
         """
-        snapshot = MortgageSnapshot.query.get(snapshot_id)
+        snapshot = family_get(MortgageSnapshot, snapshot_id)
         if not snapshot or snapshot.transaction_id:
             return False  # Already has transaction
         
@@ -624,9 +627,9 @@ class MortgageService:
         
         # Get or create mortgage category (use product category if set)
         if product.category_id:
-            category = Category.query.get(product.category_id)
+            category = family_get(Category, product.category_id)
         else:
-            category = Category.query.filter_by(
+            category = family_query(Category).filter_by(
                 name='Mortgage',
                 category_type='expense'
             ).first()
@@ -673,9 +676,9 @@ class MortgageService:
         """
         # Get or create mortgage category (use product category if set)
         if product.category_id:
-            category = Category.query.get(product.category_id)
+            category = family_get(Category, product.category_id)
         else:
-            category = Category.query.filter_by(
+            category = family_query(Category).filter_by(
                 name='Mortgage',
                 category_type='expense'
             ).first()
@@ -719,7 +722,7 @@ class MortgageService:
         """
         from models.transactions import Transaction
         
-        transaction = Transaction.query.get(transaction_id)
+        transaction = family_get(Transaction, transaction_id)
         if not transaction or not hasattr(transaction, 'mortgage_snapshot'):
             return False
         
@@ -745,12 +748,12 @@ class MortgageService:
     @staticmethod
     def get_mortgage_free_projection(property_id, scenario='base'):
         """Calculate when the property will be mortgage-free"""
-        products = MortgageProduct.query.filter_by(property_id=property_id).all()
+        products = family_query(MortgageProduct).filter_by(property_id=property_id).all()
         
         latest_date = None
         
         for product in products:
-            last_snapshot = MortgageSnapshot.query.filter_by(
+            last_snapshot = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=product.id,
                 is_projection=True,
                 scenario_name=scenario
@@ -767,7 +770,7 @@ class MortgageService:
     @staticmethod
     def calculate_ltv(property_id):
         """Calculate current Loan-to-Value ratio"""
-        property_obj = Property.query.get(property_id)
+        property_obj = family_get(Property, property_id)
         if not property_obj or not property_obj.current_valuation:
             return None
         

@@ -3,14 +3,15 @@ Authentication Routes
 Login, logout, and user management with security features
 """
 from flask import render_template, redirect, url_for, flash, request
-from flask_login import login_user, logout_user, current_user
+from flask_login import login_user, logout_user, current_user, login_required
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
 from . import auth_bp
-from .forms import LoginForm
+from .forms import LoginForm, RegisterForm
 from models.users import User
+from models.family import Family
 from extensions import db
 
 # Initialize rate limiter
@@ -78,6 +79,57 @@ def login():
             flash('Invalid email or password.', 'danger')
     
     return render_template('auth/login.html', form=form)
+
+
+@auth_bp.route('/register', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")
+def register():
+    """Public household registration — creates a new Family + admin User"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+
+    form = RegisterForm()
+
+    if form.validate_on_submit():
+        # Check email is not already taken
+        if User.query.filter_by(email=form.email.data.strip().lower()).first():
+            flash('An account with that email already exists. Please log in.', 'warning')
+            return render_template('auth/register.html', form=form)
+
+        # Validate password strength
+        from .forms import validate_password_strength
+        is_valid, error_msg = validate_password_strength(form.password.data)
+        if not is_valid:
+            flash(error_msg, 'danger')
+            return render_template('auth/register.html', form=form)
+
+        try:
+            # Create the family first
+            family = Family(name=form.household_name.data.strip())
+            db.session.add(family)
+            db.session.flush()  # Get the family ID without committing
+
+            # Create the admin user
+            user = User(
+                email=form.email.data.strip().lower(),
+                name=form.name.data.strip(),
+                family_id=family.id,
+                role='admin'
+            )
+            user.set_password(form.password.data)
+            db.session.add(user)
+            db.session.commit()
+
+            # Log the new user in
+            login_user(user)
+            flash(f'Welcome to {family.name}! Your household has been created.', 'success')
+            return redirect(url_for('dashboard.index'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while creating your account. Please try again.', 'danger')
+
+    return render_template('auth/register.html', form=form)
 
 
 @auth_bp.route('/logout')

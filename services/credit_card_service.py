@@ -10,6 +10,7 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.categories import Category
 from services.payday_service import PaydayService
 from extensions import db
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class CreditCardService:
@@ -26,7 +27,7 @@ class CreditCardService:
         
         Returns: dict with 'interest_txn', 'payment_txn', 'statement_balance'
         """
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card or not card.is_active:
             return {'interest_txn': None, 'payment_txn': None, 'statement_balance': 0}
         
@@ -40,7 +41,7 @@ class CreditCardService:
         # Interest should be charged on the projected balance, not just paid transactions
         from decimal import Decimal
         day_before_statement = statement_date - timedelta(days=1)
-        transactions_before_statement = CreditCardTransaction.query.filter(
+        transactions_before_statement = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.credit_card_id == card_id,
             CreditCardTransaction.date <= day_before_statement
         ).order_by(CreditCardTransaction.date).all()
@@ -68,7 +69,7 @@ class CreditCardService:
         
         # Get projected balance by summing ALL transactions up to statement date
         from decimal import Decimal
-        transactions_up_to_statement = CreditCardTransaction.query.filter(
+        transactions_up_to_statement = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.credit_card_id == card_id,
             CreditCardTransaction.date <= statement_date
         ).order_by(CreditCardTransaction.date).all()
@@ -115,7 +116,7 @@ class CreditCardService:
         
         Returns the interest amount (0 if in 0% period)
         """
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card:
             return 0.0
         
@@ -151,7 +152,7 @@ class CreditCardService:
         Returns the created transaction or None if no balance
         Note: This should only be called when opening balance > 0
         """
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card or not card.is_active:
             return None
         
@@ -167,7 +168,7 @@ class CreditCardService:
         interest_amount = -abs(interest_amount)
         
         # Get or create "Credit Cards > {CardName}" category
-        credit_card_category = Category.query.filter_by(
+        credit_card_category = family_query(Category).filter_by(
             head_budget='Credit Cards',
             sub_budget=card.card_name
         ).first()
@@ -228,7 +229,7 @@ class CreditCardService:
         
         Returns the created transaction
         """
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card or not card.is_active:
             return None
         
@@ -249,7 +250,7 @@ class CreditCardService:
             return None
         
         # Get or create "Credit Cards > {CardName}" category
-        credit_card_category = Category.query.filter_by(
+        credit_card_category = family_query(Category).filter_by(
             head_budget='Credit Cards',
             sub_budget=card.card_name
         ).first()
@@ -289,7 +290,7 @@ class CreditCardService:
             from models.vendors import Vendor
             
             # Find or create vendor for card provider
-            vendor = Vendor.query.filter_by(name=card.card_name).first()
+            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
             if not vendor:
                 vendor = Vendor(name=card.card_name)
                 db.session.add(vendor)
@@ -340,7 +341,7 @@ class CreditCardService:
         Generate all future statement interest transactions for a card
         between start_date and end_date
         """
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
             return []
         
@@ -353,7 +354,7 @@ class CreditCardService:
         
         while current_date <= end_date:
             # Check if transaction already exists
-            existing = CreditCardTransaction.query.filter_by(
+            existing = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card.id,
                 date=current_date,
                 transaction_type='Interest'
@@ -382,7 +383,7 @@ class CreditCardService:
         Generate all future payment transactions for a card
         Payments occur payment_day_offset days after statement date
         """
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
             return []
         
@@ -398,7 +399,7 @@ class CreditCardService:
             payment_date = statement_date + timedelta(days=payment_day_offset)
             
             # Check if transaction already exists
-            existing = CreditCardTransaction.query.filter_by(
+            existing = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card.id,
                 date=payment_date,
                 transaction_type='Payment'
@@ -436,7 +437,7 @@ class CreditCardService:
         if not end_date:
             end_date = start_date + relativedelta(years=10)
         
-        active_cards = CreditCard.query.filter_by(is_active=True).all()
+        active_cards = family_query(CreditCard).filter_by(is_active=True).all()
         
         results = {
             'cards_processed': 0,
@@ -468,7 +469,7 @@ class CreditCardService:
         """
         Generate monthly statements for a single card with intelligent payment logic
         """
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
             return {'statements_created': 0, 'payments_created': 0, 'zero_balance_statements': 0}
         
@@ -485,7 +486,7 @@ class CreditCardService:
         
         while current_date <= end_date:
             # Check if statement already exists
-            existing_statement = CreditCardTransaction.query.filter_by(
+            existing_statement = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card.id,
                 date=current_date,
                 transaction_type='Interest'
@@ -528,7 +529,7 @@ class CreditCardService:
         if not from_date:
             from_date = date.today()
         
-        query = CreditCardTransaction.query.filter(
+        query = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.date >= from_date,
             CreditCardTransaction.transaction_type.in_(['Interest', 'Payment']),
             CreditCardTransaction.is_fixed == False  # Only delete non-fixed
@@ -544,7 +545,7 @@ class CreditCardService:
         for txn in transactions_to_delete:
             # Delete linked bank transaction if it exists
             if txn.bank_transaction_id:
-                bank_txn = Transaction.query.get(txn.bank_transaction_id)
+                bank_txn = family_get(Transaction, txn.bank_transaction_id)
                 if bank_txn:
                     db.session.delete(bank_txn)
             
@@ -588,13 +589,13 @@ class CreditCardService:
         logger.debug(f"Looking for locked statements for card {card_id}")
         
         # Get the card object
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card:
             return {'deleted_count': deleted, 'statements_created': 0, 'payments_created': 0, 'zero_balance_statements': 0}
         
         # Find all locked interest transactions (regardless of date range)
         # We want to check all locked statements to ensure they have payments
-        locked_statements = CreditCardTransaction.query.filter(
+        locked_statements = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.credit_card_id == card_id,
             CreditCardTransaction.transaction_type == 'Interest',
             CreditCardTransaction.is_fixed == True
@@ -611,7 +612,7 @@ class CreditCardService:
             
             # Only generate payment if it's in our date range and doesn't exist
             if payment_date >= start_date:
-                existing_payment = CreditCardTransaction.query.filter_by(
+                existing_payment = family_query(CreditCardTransaction).filter_by(
                     credit_card_id=card_id,
                     date=payment_date,
                     transaction_type='Payment'
@@ -619,7 +620,7 @@ class CreditCardService:
                 
                 if not existing_payment:
                     # Calculate balance at the time of the locked statement
-                    transactions_up_to_statement = CreditCardTransaction.query.filter(
+                    transactions_up_to_statement = family_query(CreditCardTransaction).filter(
                         CreditCardTransaction.credit_card_id == card_id,
                         CreditCardTransaction.date <= locked_stmt.date
                     ).order_by(CreditCardTransaction.date).all()
@@ -657,7 +658,7 @@ class CreditCardService:
             'zero_balance_statements': 0
         }
         
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
             return results
         
@@ -667,7 +668,7 @@ class CreditCardService:
         
         while current_date <= end_date:
             # Check if statement already exists (locked interest transaction)
-            existing_interest = CreditCardTransaction.query.filter_by(
+            existing_interest = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card_id,
                 date=current_date,
                 transaction_type='Interest'
@@ -675,7 +676,7 @@ class CreditCardService:
             
             # Check if payment already exists for this statement date
             payment_date = current_date + relativedelta(days=payment_offset_days)
-            existing_payment = CreditCardTransaction.query.filter_by(
+            existing_payment = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card_id,
                 date=payment_date,
                 transaction_type='Payment'
@@ -698,7 +699,7 @@ class CreditCardService:
                 # Statement exists (locked) but payment doesn't - generate payment only
                 # Calculate balance at the time of the locked statement
                 # Get all transactions up to and including the statement date
-                transactions_up_to_statement = CreditCardTransaction.query.filter(
+                transactions_up_to_statement = family_query(CreditCardTransaction).filter(
                     CreditCardTransaction.credit_card_id == card_id,
                     CreditCardTransaction.date <= current_date
                 ).order_by(CreditCardTransaction.date).all()
@@ -739,7 +740,7 @@ class CreditCardService:
         if not end_date:
             end_date = start_date + relativedelta(years=10)
         
-        active_cards = CreditCard.query.filter_by(is_active=True).all()
+        active_cards = family_query(CreditCard).filter_by(is_active=True).all()
         
         overall_results = {
             'cards_processed': 0,
@@ -771,7 +772,7 @@ class CreditCardService:
         if not end_date:
             end_date = start_date + relativedelta(years=10)  # Default 10 years
         
-        active_cards = CreditCard.query.filter_by(is_active=True).all()
+        active_cards = family_query(CreditCard).filter_by(is_active=True).all()
         
         results = {
             'statements': 0,
@@ -805,7 +806,7 @@ class CreditCardService:
             return None
         
         # Find linked credit card payment
-        cc_payment = CreditCardTransaction.query.filter_by(
+        cc_payment = family_query(CreditCardTransaction).filter_by(
             credit_card_id=bank_txn.credit_card_id,
             bank_transaction_id=bank_txn.id
         ).first()
@@ -857,7 +858,7 @@ class CreditCardService:
             return None
         
         # Find linked bank transaction
-        bank_txn = Transaction.query.get(cc_payment.bank_transaction_id)
+        bank_txn = family_get(Transaction, cc_payment.bank_transaction_id)
         
         if not bank_txn:
             return None
@@ -903,17 +904,17 @@ class CreditCardService:
         from models.transactions import Transaction
         
         if cc_payment_id:
-            cc_payment = CreditCardTransaction.query.get(cc_payment_id)
+            cc_payment = family_get(CreditCardTransaction, cc_payment_id)
             if cc_payment and cc_payment.bank_transaction_id:
-                bank_txn = Transaction.query.get(cc_payment.bank_transaction_id)
+                bank_txn = family_get(Transaction, cc_payment.bank_transaction_id)
                 if bank_txn:
                     bank_txn.credit_card_id = None
                 cc_payment.bank_transaction_id = None
         
         if bank_txn_id:
-            bank_txn = Transaction.query.get(bank_txn_id)
+            bank_txn = family_get(Transaction, bank_txn_id)
             if bank_txn and bank_txn.credit_card_id:
-                cc_payment = CreditCardTransaction.query.filter_by(
+                cc_payment = family_query(CreditCardTransaction).filter_by(
                     bank_transaction_id=bank_txn_id
                 ).first()
                 if cc_payment:

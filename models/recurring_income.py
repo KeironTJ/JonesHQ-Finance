@@ -5,8 +5,9 @@ from datetime import datetime
 class RecurringIncome(db.Model):
     """Template for recurring income - generates Income records automatically"""
     __tablename__ = 'recurring_income'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     person = db.Column(db.String(50), nullable=False, default='Keiron')
     
     # Schedule

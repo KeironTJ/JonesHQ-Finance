@@ -4,8 +4,9 @@ from datetime import datetime
 
 class Vehicle(db.Model):
     __tablename__ = 'vehicles'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     name = db.Column(db.String(100))  # Vauxhall Zafira, Audi A6
     make = db.Column(db.String(50), nullable=False)
     model = db.Column(db.String(50), nullable=False)

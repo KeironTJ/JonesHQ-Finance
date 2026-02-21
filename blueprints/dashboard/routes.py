@@ -12,6 +12,7 @@ from services.pension_service import PensionService
 from models.settings import Settings
 from datetime import date
 from decimal import Decimal
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @dashboard_bp.route('/')
@@ -30,16 +31,16 @@ def index():
     
     if not selected_account_id:
         # Default to first Joint account
-        joint_account = Account.query.filter_by(account_type='Joint', is_active=True).first()
+        joint_account = family_query(Account).filter_by(account_type='Joint', is_active=True).first()
         if joint_account:
             selected_account_id = joint_account.id
     
     # Get all active accounts for selector
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
 
     # Calculate balances from PAID transactions for account cards
     for account in accounts:
-        paid_transactions = Transaction.query.filter_by(
+        paid_transactions = family_query(Transaction).filter_by(
             account_id=account.id,
             is_paid=True
         ).all()
@@ -53,7 +54,7 @@ def index():
     selected_account = None
     
     if selected_account_id:
-        selected_account = Account.query.get(selected_account_id)
+        selected_account = family_get(Account, selected_account_id)
         # Get 12 months of payday data for selected year (including unpaid transactions)
         # Start from January of selected year
         payday_data = PaydayService.get_payday_summary_for_year(selected_account_id, selected_year, include_unpaid=True)
@@ -62,7 +63,7 @@ def index():
     networth = NetWorthService.calculate_current_networth()
     
     # Get Credit Cards Summary
-    credit_cards = CreditCard.query.filter_by(is_active=True).all()
+    credit_cards = family_query(CreditCard).filter_by(is_active=True).all()
     credit_card_summary = {
         'count': len(credit_cards),
         'total_balance': sum(Decimal(str(cc.current_balance or 0)) for cc in credit_cards),
@@ -71,7 +72,7 @@ def index():
     }
     
     # Get Loans Summary
-    loans = Loan.query.filter_by(is_active=True).all()
+    loans = family_query(Loan).filter_by(is_active=True).all()
     loan_summary = {
         'count': len(loans),
         'total_balance': sum(Decimal(str(loan.current_balance or 0)) for loan in loans),
@@ -79,7 +80,7 @@ def index():
     }
     
     # Get Mortgage Summary
-    active_mortgage = MortgageProduct.query.filter_by(is_active=True, is_current=True).first()
+    active_mortgage = family_query(MortgageProduct).filter_by(is_active=True, is_current=True).first()
     mortgage_summary = None
     if active_mortgage:
         mortgage_summary = {
@@ -91,7 +92,7 @@ def index():
         }
     
     # Get Pensions Summary
-    pensions = Pension.query.filter_by(is_active=True).all()
+    pensions = family_query(Pension).filter_by(is_active=True).all()
     pension_summary = {
         'count': len(pensions),
         'total_current_value': sum(Decimal(str(p.current_value or 0)) for p in pensions),

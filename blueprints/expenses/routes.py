@@ -15,6 +15,7 @@ import io
 import base64
 from services.expense_sync_service import ExpenseSyncService
 from flask import current_app
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @expenses_bp.route('/expenses')
@@ -25,7 +26,7 @@ def index():
     reimbursed = request.args.get('reimbursed')
     highlight_id = request.args.get('id', type=int)
 
-    query = Expense.query
+    query = family_query(Expense)
     if expense_type:
         query = query.filter(Expense.expense_type == expense_type)
     if vehicle:
@@ -37,26 +38,26 @@ def index():
             query = query.filter(Expense.reimbursed == False)
 
     expenses = query.order_by(Expense.date.desc()).all()
-    credit_cards = CreditCard.query.order_by(CreditCard.card_name).all()
-    vehicles = Vehicle.query.order_by(Vehicle.registration).all()
-    accounts = Account.query.filter_by(is_active=True).order_by(Account.name).all()
+    credit_cards = family_query(CreditCard).order_by(CreditCard.card_name).all()
+    vehicles = family_query(Vehicle).order_by(Vehicle.registration).all()
+    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
     # Get linked trips for fuel expenses
     trips_dict = {}
     for exp in expenses:
         if exp.expense_type == 'Fuel' and exp.vehicle_registration:
-            vehicle_obj = Vehicle.query.filter_by(registration=exp.vehicle_registration).first()
+            vehicle_obj = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
             if vehicle_obj:
-                trip = Trip.query.filter_by(vehicle_id=vehicle_obj.id, date=exp.date).first()
+                trip = family_query(Trip).filter_by(vehicle_id=vehicle_obj.id, date=exp.date).first()
                 if trip:
                     trips_dict[exp.id] = trip
     
     # Get reimbursement transactions by month
-    reimbursement_txns = Transaction.query.filter_by(payment_type='Expense Reimbursement').all()
+    reimbursement_txns = family_query(Transaction).filter_by(payment_type='Expense Reimbursement').all()
     reimbursements_by_month = {txn.year_month: txn for txn in reimbursement_txns}
     
     # Get CC payment transactions by month (these are CreditCardTransaction, not Transaction)
-    cc_payment_txns = CreditCardTransaction.query.filter(
+    cc_payment_txns = family_query(CreditCardTransaction).filter(
         CreditCardTransaction.transaction_type == 'Payment',
         CreditCardTransaction.item.like('%Expense reimbursement payment%')
     ).all()
@@ -85,7 +86,7 @@ def index():
 @expenses_bp.route('/expenses/toggle/<int:expense_id>/<string:field>', methods=['POST'])
 def toggle_expense_flag(expense_id, field):
     """Toggle boolean flags: paid_for, submitted, reimbursed."""
-    expense = Expense.query.get_or_404(expense_id)
+    expense = family_get_or_404(Expense, expense_id)
     if field not in ('paid_for', 'submitted', 'reimbursed'):
         return jsonify({'error': 'invalid field'}), 400
     try:
@@ -96,12 +97,12 @@ def toggle_expense_flag(expense_id, field):
         # Two-way sync: If toggling paid_for, sync with linked transactions
         if field == 'paid_for':
             if expense.bank_transaction_id:
-                bank_txn = Transaction.query.get(expense.bank_transaction_id)
+                bank_txn = family_get(Transaction, expense.bank_transaction_id)
                 if bank_txn:
                     bank_txn.is_paid = new_value
             
             if expense.credit_card_transaction_id:
-                cc_txn = CreditCardTransaction.query.get(expense.credit_card_transaction_id)
+                cc_txn = family_get(CreditCardTransaction, expense.credit_card_transaction_id)
                 if cc_txn:
                     cc_txn.is_paid = new_value
         
@@ -165,7 +166,7 @@ def add_expense():
 @expenses_bp.route('/expenses/update/<int:expense_id>', methods=['POST'])
 def update_expense(expense_id):
     try:
-        expense = Expense.query.get_or_404(expense_id)
+        expense = family_get_or_404(Expense, expense_id)
         date_str = request.form.get('date')
         expense.date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else expense.date
         expense.description = request.form.get('description', expense.description)
@@ -203,7 +204,7 @@ def update_expense(expense_id):
 @expenses_bp.route('/expenses/delete/<int:expense_id>', methods=['POST'])
 def delete_expense(expense_id):
     try:
-        expense = Expense.query.get_or_404(expense_id)
+        expense = family_get_or_404(Expense, expense_id)
         db.session.delete(expense)
         db.session.commit()
         flash('Expense deleted', 'success')
@@ -253,7 +254,7 @@ def bulk_delete_expenses():
 
         deleted_count = 0
         for eid in expense_ids:
-            exp = Expense.query.get(eid)
+            exp = family_get(Expense, eid)
             if exp:
                 db.session.delete(exp)
                 deleted_count += 1

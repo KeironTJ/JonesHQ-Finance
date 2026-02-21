@@ -8,6 +8,7 @@ from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from sqlalchemy import func
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class VehicleService:
@@ -18,7 +19,7 @@ class VehicleService:
         Returns: (actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles)
         """
         # Get the most recent fuel record before this one
-        previous_fill = FuelRecord.query.filter(
+        previous_fill = family_query(FuelRecord).filter(
             FuelRecord.vehicle_id == vehicle_id,
             FuelRecord.date < fuel_date
         ).order_by(FuelRecord.date.desc()).first()
@@ -42,12 +43,12 @@ class VehicleService:
     @staticmethod
     def get_latest_fuel_record(vehicle_id):
         """Get the most recent fuel record for a vehicle"""
-        return FuelRecord.query.filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.desc()).first()
+        return family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.desc()).first()
     
     @staticmethod
     def calculate_fuel_efficiency(vehicle_id, num_records=10):
         """Calculate average fuel efficiency for a vehicle"""
-        records = FuelRecord.query.filter_by(vehicle_id=vehicle_id).order_by(
+        records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(
             FuelRecord.date.desc()
         ).limit(num_records).all()
         
@@ -60,14 +61,14 @@ class VehicleService:
     @staticmethod
     def get_total_fuel_cost(vehicle_id, start_date=None, end_date=None):
         """Calculate total fuel costs for a vehicle"""
-        query = FuelRecord.query.filter_by(vehicle_id=vehicle_id)
+        query = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id)
         
         if start_date:
             query = query.filter(FuelRecord.date >= start_date)
         if end_date:
             query = query.filter(FuelRecord.date <= end_date)
         
-        total = db.session.query(func.sum(FuelRecord.cost)).filter(
+        total = family_query(FuelRecord).with_entities(func.sum(FuelRecord.cost)).filter(
             FuelRecord.vehicle_id == vehicle_id
         )
         if start_date:
@@ -92,7 +93,7 @@ class VehicleService:
     @staticmethod
     def get_vehicle_stats(vehicle_id):
         """Get comprehensive stats for a vehicle"""
-        fuel_records = FuelRecord.query.filter_by(vehicle_id=vehicle_id).all()
+        fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).all()
         
         if not fuel_records:
             return {
@@ -125,7 +126,7 @@ class VehicleService:
     def calculate_trip_cost(vehicle_id, miles, trip_date):
         """Calculate estimated cost for a trip based on recent MPG and fuel prices"""
         # Get average MPG from last 10 fuel records before the trip date
-        recent_fuels = FuelRecord.query.filter(
+        recent_fuels = family_query(FuelRecord).filter(
             FuelRecord.vehicle_id == vehicle_id,
             FuelRecord.date <= trip_date,
             FuelRecord.mpg.isnot(None),
@@ -162,7 +163,7 @@ class VehicleService:
         from services.payday_service import PaydayService
         
         # Get or create Fuel category
-        category = Category.query.filter(
+        category = family_query(Category).filter(
             db.func.lower(Category.name) == 'fuel'
         ).first()
         
@@ -176,7 +177,7 @@ class VehicleService:
             db.session.add(category)
             db.session.commit()
         
-        vehicle = Vehicle.query.get(fuel_record.vehicle_id)
+        vehicle = family_get(Vehicle, fuel_record.vehicle_id)
         
         # Calculate year_month and payday_period
         trans_date = fuel_record.date

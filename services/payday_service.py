@@ -7,6 +7,7 @@ from decimal import Decimal
 from models.transactions import Transaction
 from models.settings import Settings
 from extensions import db
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class PaydayService:
@@ -237,7 +238,7 @@ class PaydayService:
         opening_balance = PaydayService.get_balance_at_date(account_id, start_date - timedelta(days=1), include_unpaid=True)
         
         # Get all transactions in the period (regardless of paid status - we want to see forecast)
-        query = Transaction.query.filter(
+        query = family_query(Transaction).filter(
             Transaction.account_id == account_id,
             Transaction.transaction_date >= start_date,
             Transaction.transaction_date <= end_date
@@ -293,7 +294,7 @@ class PaydayService:
         """
         # Get account
         from models.accounts import Account
-        account = Account.query.get(account_id)
+        account = family_get(Account, account_id)
         if not account:
             return Decimal('0.00')
         
@@ -301,7 +302,7 @@ class PaydayService:
         balance = Decimal('0.00')
         
         # Get all transactions up to target_date (including unpaid for forecasting)
-        query = Transaction.query.filter(
+        query = family_query(Transaction).filter(
             Transaction.account_id == account_id,
             Transaction.transaction_date <= target_date
         )
@@ -339,10 +340,10 @@ class PaydayService:
         from sqlalchemy import func
         
         # Load all relevant categories in one query and index by id — eliminates N+1
-        category_map = {c.id: c for c in Category.query.all()}
+        category_map = {c.id: c for c in family_query(Category).all()}
         
         # Get all transactions in the period with eager-loaded relationships
-        query = Transaction.query.filter(
+        query = family_query(Transaction).filter(
             Transaction.transaction_date >= start_date,
             Transaction.transaction_date <= end_date
         )
@@ -505,7 +506,7 @@ class PaydayService:
         )
 
         # ── Single query: full category map (no per-transaction DB hits) ──
-        category_map = {c.id: c for c in Category.query.all()}
+        category_map = {c.id: c for c in family_query(Category).all()}
 
         # Compute opening balance for the first period (cumulative up to history_cutoff)
         opening_balance = Decimal('0')

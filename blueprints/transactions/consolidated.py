@@ -12,6 +12,7 @@ from models.accounts import Account
 from models.credit_cards import CreditCard
 from models.loans import Loan
 from models.categories import Category
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @bp.route('/transactions/consolidated')
@@ -29,7 +30,7 @@ def consolidated():
     
     # 1. Bank Account Transactions
     if not source or source == 'all' or source == 'bank':
-        bank_txns = Transaction.query
+        bank_txns = family_query(Transaction)
         
         if start_date:
             bank_txns = bank_txns.filter(Transaction.transaction_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
@@ -55,7 +56,7 @@ def consolidated():
     
     # 2. Credit Card Transactions
     if not source or source == 'all' or source == 'credit_card':
-        cc_txns = CreditCardTransaction.query
+        cc_txns = family_query(CreditCardTransaction)
         
         if start_date:
             cc_txns = cc_txns.filter(CreditCardTransaction.date >= datetime.strptime(start_date, '%Y-%m-%d').date())
@@ -81,7 +82,7 @@ def consolidated():
     
     # 3. Loan Payments
     if not source or source == 'all' or source == 'loan':
-        loan_txns = LoanPayment.query
+        loan_txns = family_query(LoanPayment)
         
         if start_date:
             loan_txns = loan_txns.filter(LoanPayment.payment_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
@@ -112,10 +113,10 @@ def consolidated():
     net_position = total_inflows - total_outflows
     
     # Get filter options
-    accounts = Account.query.order_by(Account.name).all()
-    credit_cards = CreditCard.query.order_by(CreditCard.card_name).all()
-    loans = Loan.query.order_by(Loan.loan_name).all()
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    accounts = family_query(Account).order_by(Account.name).all()
+    credit_cards = family_query(CreditCard).order_by(CreditCard.card_name).all()
+    loans = family_query(Loan).order_by(Loan.loan_name).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
     return render_template('transactions/consolidated.html',
                          transactions=consolidated_transactions,

@@ -12,6 +12,7 @@ from models.settings import Settings
 from services.payday_service import PaydayService
 from flask import current_app
 from sqlalchemy import func
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 class ExpenseSyncService:
@@ -28,7 +29,7 @@ class ExpenseSyncService:
     @staticmethod
     def reconcile(expense_id):
         """Reconcile a single expense - create/update its payment transaction"""
-        exp = Expense.query.get(expense_id)
+        exp = family_get(Expense, expense_id)
         if not exp:
             return
 
@@ -74,7 +75,7 @@ class ExpenseSyncService:
             if year_month:
                 months_to_process = [year_month]
             else:
-                months_query = db.session.query(Expense.month).filter(
+                months_query = family_query(Expense).with_entities(Expense.month).filter(
                     Expense.month != None
                 ).distinct()
                 months_to_process = [m[0] for m in months_query.all()]
@@ -105,12 +106,12 @@ class ExpenseSyncService:
             # Get reimbursement transactions
             if year_month:
                 # Find reimbursement transaction for this month
-                reimburse_txns = Transaction.query.filter(
+                reimburse_txns = family_query(Transaction).filter(
                     Transaction.payment_type == 'Expense Reimbursement',
                     Transaction.year_month == year_month
                 ).all()
             else:
-                reimburse_txns = Transaction.query.filter(
+                reimburse_txns = family_query(Transaction).filter(
                     Transaction.payment_type == 'Expense Reimbursement'
                 ).all()
             
@@ -125,7 +126,7 @@ class ExpenseSyncService:
                     continue
                 
                 # Find all credit card expenses for this month (regardless of submitted status)
-                cc_expenses = Expense.query.filter(
+                cc_expenses = family_query(Expense).filter(
                     Expense.month == month,
                     Expense.credit_card_id != None
                 ).all()
@@ -160,7 +161,7 @@ class ExpenseSyncService:
         Returns a summary dict with counts and lists of affected ids.
         """
         # Collect target expenses
-        q = Expense.query
+        q = family_query(Expense)
         if expense_ids:
             q = q.filter(Expense.id.in_(expense_ids))
 
@@ -181,13 +182,13 @@ class ExpenseSyncService:
 
         # Inspect and collect affected accounts/cards
         if bank_txn_ids:
-            txns = Transaction.query.filter(Transaction.id.in_(list(bank_txn_ids))).all()
+            txns = family_query(Transaction).filter(Transaction.id.in_(list(bank_txn_ids))).all()
             for t in txns:
                 if t.account_id:
                     accounts_to_recalc.add(t.account_id)
 
         if cc_txn_ids:
-            ccs = CreditCardTransaction.query.filter(CreditCardTransaction.id.in_(list(cc_txn_ids))).all()
+            ccs = family_query(CreditCardTransaction).filter(CreditCardTransaction.id.in_(list(cc_txn_ids))).all()
             for c in ccs:
                 if c.credit_card_id:
                     cards_to_recalc.add(c.credit_card_id)
@@ -204,13 +205,13 @@ class ExpenseSyncService:
 
         # Delete credit card transactions
         if cc_txn_ids:
-            CreditCardTransaction.query.filter(CreditCardTransaction.id.in_(list(cc_txn_ids))).delete(synchronize_session=False)
+            family_query(CreditCardTransaction).filter(CreditCardTransaction.id.in_(list(cc_txn_ids))).delete(synchronize_session=False)
             db.session.commit()
             summary['deleted_cc_txns'] = len(cc_txn_ids)
 
         # Delete bank transactions
         if bank_txn_ids:
-            Transaction.query.filter(Transaction.id.in_(list(bank_txn_ids))).delete(synchronize_session=False)
+            family_query(Transaction).filter(Transaction.id.in_(list(bank_txn_ids))).delete(synchronize_session=False)
             db.session.commit()
             summary['deleted_bank_txns'] = len(bank_txn_ids)
 
@@ -241,7 +242,7 @@ class ExpenseSyncService:
     @staticmethod
     def _ensure_credit_card_payment(exp: Expense):
         """Create or update credit card transaction for expense payment (outgoing)"""
-        cc = CreditCard.query.get(exp.credit_card_id)
+        cc = family_get(CreditCard, exp.credit_card_id)
         if not cc:
             return
 
@@ -249,7 +250,7 @@ class ExpenseSyncService:
         target_amount = -abs(float(exp.total_cost))
 
         # Look for existing transaction
-        existing = CreditCardTransaction.query.filter_by(
+        existing = family_query(CreditCardTransaction).filter_by(
             credit_card_id=cc.id,
             date=exp.date,
             item=exp.description
@@ -304,31 +305,31 @@ class ExpenseSyncService:
         # Get expense account - use expense's account_id if set, otherwise fall back to settings
         account = None
         if exp.account_id:
-            account = Account.query.get(exp.account_id)
+            account = family_get(Account, exp.account_id)
         else:
             # Fallback to settings or first account
             acct_id = Settings.get_value('expenses.payment_account_id')
             if acct_id:
-                account = Account.query.get(int(acct_id))
+                account = family_get(Account, int(acct_id))
             if not account:
-                account = Account.query.order_by(Account.name).first()
+                account = family_query(Account).order_by(Account.name).first()
         
         if not account:
             return
 
         # Find expense category (Income > Expense for both credits and debits)
-        expense_cat = Category.query.filter_by(
+        expense_cat = family_query(Category).filter_by(
             head_budget='Income',
             sub_budget='Expense'
         ).first()
         if not expense_cat:
-            expense_cat = Category.query.filter_by(head_budget='Expenses').first()
+            expense_cat = family_query(Category).filter_by(head_budget='Expenses').first()
 
         # Bank payment = negative amount (money out)
         target_amount = -abs(float(exp.total_cost))
 
         # Look for existing transaction
-        existing = Transaction.query.filter_by(
+        existing = family_query(Transaction).filter_by(
             account_id=account.id,
             transaction_date=exp.date,
             description=exp.description,
@@ -382,7 +383,7 @@ class ExpenseSyncService:
         Returns transaction ID or None.
         """
         # Get all expenses for this month (regardless of submitted status)
-        expenses = Expense.query.filter(
+        expenses = family_query(Expense).filter(
             Expense.month == year_month
         ).all()
         
@@ -405,22 +406,22 @@ class ExpenseSyncService:
         acct_id = Settings.get_value('expenses.reimburse_account_id')
         account = None
         if acct_id:
-            account = Account.query.get(int(acct_id))
+            account = family_get(Account, int(acct_id))
         if not account:
-            account = Account.query.order_by(Account.name).first()
+            account = family_query(Account).order_by(Account.name).first()
         if not account:
             return None
         
         # Find reimbursement category
-        reimburse_cat = Category.query.filter_by(
+        reimburse_cat = family_query(Category).filter_by(
             head_budget='Income',
             sub_budget='Expense Reimbursement'
         ).first()
         if not reimburse_cat:
-            reimburse_cat = Category.query.filter_by(head_budget='Income').first()
+            reimburse_cat = family_query(Category).filter_by(head_budget='Income').first()
         
         # Check if reimbursement already exists
-        existing = Transaction.query.filter_by(
+        existing = family_query(Transaction).filter_by(
             account_id=account.id,
             transaction_date=reimbursement_date,
             payment_type='Expense Reimbursement',
@@ -470,7 +471,7 @@ class ExpenseSyncService:
         Returns transaction ID or None.
         """
         # Check if payment already exists
-        existing = CreditCardTransaction.query.filter_by(
+        existing = family_query(CreditCardTransaction).filter_by(
             credit_card_id=card_id,
             date=payment_date,
             transaction_type='Payment'
@@ -482,7 +483,7 @@ class ExpenseSyncService:
             return existing.id
         
         # Get the credit card to find default payment account
-        card = CreditCard.query.get(card_id)
+        card = family_get(CreditCard, card_id)
         if not card:
             return None
         
@@ -512,19 +513,19 @@ class ExpenseSyncService:
         # Create linked bank transaction if card has default payment account
         if card.default_payment_account_id:
             # Find Credit Cards category matching this specific card
-            credit_card_category = Category.query.filter_by(
+            credit_card_category = family_query(Category).filter_by(
                 head_budget='Credit Cards',
                 sub_budget=card.card_name
             ).first()
             
             # If not found, try to find any Credit Cards category as fallback
             if not credit_card_category:
-                credit_card_category = Category.query.filter_by(
+                credit_card_category = family_query(Category).filter_by(
                     head_budget='Credit Cards'
                 ).first()
             
             # Find or create vendor matching card name
-            vendor = Vendor.query.filter_by(name=card.card_name).first()
+            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
             if not vendor:
                 vendor = Vendor(name=card.card_name)
                 db.session.add(vendor)
@@ -602,13 +603,13 @@ class ExpenseSyncService:
             current_app.logger.warning(f"Fuel expense {exp.id} has no vehicle registration")
             return
         
-        vehicle = Vehicle.query.filter_by(registration=exp.vehicle_registration).first()
+        vehicle = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
         if not vehicle:
             current_app.logger.warning(f"Vehicle not found: {exp.vehicle_registration}")
             return
         
         # Find trip on same date for same vehicle
-        trip = Trip.query.filter_by(
+        trip = family_query(Trip).filter_by(
             vehicle_id=vehicle.id,
             date=exp.date
         ).first()

@@ -4,6 +4,7 @@ from models.networth import NetWorth
 from services.networth_service import NetWorthService
 from extensions import db
 from datetime import date
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @networth_bp.route('/networth')
@@ -38,7 +39,7 @@ def index():
     comparison = NetWorthService.get_comparison_data()
     
     # Get historical snapshots (if any exist)
-    records = NetWorth.query.order_by(NetWorth.date.desc()).limit(50).all()
+    records = family_query(NetWorth).order_by(NetWorth.date.desc()).limit(50).all()
     
     return render_template('networth/index.html', 
                          current_values=current_values,
@@ -77,7 +78,7 @@ def create_snapshot():
 def delete_snapshot(id):
     """Delete a net worth snapshot"""
     try:
-        snapshot = NetWorth.query.get_or_404(id)
+        snapshot = family_get_or_404(NetWorth, id)
         db.session.delete(snapshot)
         db.session.commit()
         flash('Snapshot deleted successfully', 'success')

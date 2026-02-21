@@ -7,6 +7,7 @@ from services.pension_service import PensionService
 from extensions import db
 from datetime import datetime
 from decimal import Decimal
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 @pensions_bp.route('/pensions')
@@ -15,14 +16,14 @@ def index():
     # Get filter parameter
     person = request.args.get('person', None)
     
-    query = Pension.query
+    query = family_query(Pension)
     if person:
         query = query.filter_by(person=person)
     
     pensions = query.order_by(Pension.person, Pension.provider).all()
     
     # Get unique people for filter
-    people = db.session.query(Pension.person).distinct().order_by(Pension.person).all()
+    people = family_query(Pension).with_entities(Pension.person).distinct().order_by(Pension.person).all()
     people = [p[0] for p in people] if people else ['Keiron']
     
     # Calculate totals
@@ -70,7 +71,7 @@ def add():
 @pensions_bp.route('/pensions/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
     """Edit a pension"""
-    pension = Pension.query.get_or_404(id)
+    pension = family_get_or_404(Pension, id)
     
     if request.method == 'POST':
         try:
@@ -103,7 +104,7 @@ def edit(id):
 @pensions_bp.route('/pensions/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete a pension"""
-    pension = Pension.query.get_or_404(id)
+    pension = family_get_or_404(Pension, id)
     
     try:
         db.session.delete(pension)
@@ -119,9 +120,9 @@ def delete(id):
 @pensions_bp.route('/pensions/<int:id>/snapshots')
 def snapshots(id):
     """View snapshots for a pension"""
-    pension = Pension.query.get_or_404(id)
+    pension = family_get_or_404(Pension, id)
     # Order by review_date ascending (oldest first), then by is_projection (actual before projected)
-    snapshots = PensionSnapshot.query.filter_by(pension_id=id).order_by(
+    snapshots = family_query(PensionSnapshot).filter_by(pension_id=id).order_by(
         PensionSnapshot.review_date.asc(),
         PensionSnapshot.is_projection.asc()
     ).all()
@@ -132,7 +133,7 @@ def snapshots(id):
 @pensions_bp.route('/pensions/<int:id>/snapshots/add', methods=['GET', 'POST'])
 def add_snapshot(id):
     """Add a snapshot for a pension"""
-    pension = Pension.query.get_or_404(id)
+    pension = family_get_or_404(Pension, id)
     
     if request.method == 'POST':
         try:
@@ -140,7 +141,7 @@ def add_snapshot(id):
             value = Decimal(request.form['value'])
             
             # Get previous snapshot
-            previous = PensionSnapshot.query.filter_by(pension_id=id)\
+            previous = family_query(PensionSnapshot).filter_by(pension_id=id)\
                 .filter(PensionSnapshot.review_date < review_date)\
                 .order_by(PensionSnapshot.review_date.desc())\
                 .first()
@@ -159,7 +160,7 @@ def add_snapshot(id):
             )
             
             # Remove any existing projection for this exact date (now superseded by actual)
-            PensionSnapshot.query.filter_by(
+            family_query(PensionSnapshot).filter_by(
                 pension_id=id,
                 review_date=review_date,
                 is_projection=True
@@ -190,8 +191,8 @@ def add_snapshot(id):
 @pensions_bp.route('/pensions/<int:pension_id>/snapshot/<int:snapshot_id>/confirm', methods=['POST'])
 def confirm_snapshot(pension_id, snapshot_id):
     """Convert a projection to an actual snapshot (firm it up)"""
-    pension = Pension.query.get_or_404(pension_id)
-    snapshot = PensionSnapshot.query.get_or_404(snapshot_id)
+    pension = family_get_or_404(Pension, pension_id)
+    snapshot = family_get_or_404(PensionSnapshot, snapshot_id)
     
     if snapshot.pension_id != pension_id:
         flash('Invalid snapshot for this pension.', 'danger')
@@ -208,7 +209,7 @@ def confirm_snapshot(pension_id, snapshot_id):
         snapshot.growth_rate_used = None
         
         # Recalculate growth percentage based on actual previous snapshot
-        previous = PensionSnapshot.query.filter(
+        previous = family_query(PensionSnapshot).filter(
             PensionSnapshot.pension_id == pension_id,
             PensionSnapshot.review_date < snapshot.review_date,
             PensionSnapshot.is_projection == False
@@ -239,8 +240,8 @@ def confirm_snapshot(pension_id, snapshot_id):
 @pensions_bp.route('/pensions/<int:pension_id>/snapshot/<int:snapshot_id>/delete', methods=['POST'])
 def delete_snapshot(pension_id, snapshot_id):
     """Delete a snapshot"""
-    pension = Pension.query.get_or_404(pension_id)
-    snapshot = PensionSnapshot.query.get_or_404(snapshot_id)
+    pension = family_get_or_404(Pension, pension_id)
+    snapshot = family_get_or_404(PensionSnapshot, snapshot_id)
     
     if snapshot.pension_id != pension_id:
         flash('Invalid snapshot for this pension.', 'danger')
@@ -264,7 +265,7 @@ def projections():
     scenario = request.args.get('scenario', 'default')
     
     # Get all active pensions
-    query = Pension.query.filter_by(is_active=True)
+    query = family_query(Pension).filter_by(is_active=True)
     if person:
         query = query.filter_by(person=person)
     pensions = query.order_by(Pension.person, Pension.provider).all()
@@ -276,7 +277,7 @@ def projections():
     retirement_summary = PensionService.get_retirement_summary(person=person)
     
     # Get unique people for filter
-    people = db.session.query(Pension.person).distinct().order_by(Pension.person).all()
+    people = family_query(Pension).with_entities(Pension.person).distinct().order_by(Pension.person).all()
     people = [p[0] for p in people] if people else []
     
     return render_template('pensions/projections.html',
@@ -305,7 +306,7 @@ def generate_projections():
 @pensions_bp.route('/pensions/<int:id>/generate-projection', methods=['POST'])
 def generate_pension_projection(id):
     """Generate projections for a single pension"""
-    pension = Pension.query.get_or_404(id)
+    pension = family_get_or_404(Pension, id)
     scenario = request.form.get('scenario', 'default')
     
     try:

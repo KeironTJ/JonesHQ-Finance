@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import json
 from sqlalchemy import func
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 DEFAULT_VENDOR_TYPES = [
     'Grocery', 'Fuel', 'Restaurant', 'Online Retailer',
@@ -27,7 +28,7 @@ def index():
     search = request.args.get('search')
     sort_by = request.args.get('sort', 'usage')  # Default sort by usage
     
-    query = Vendor.query
+    query = family_query(Vendor)
     
     if vendor_type:
         if vendor_type.lower() == 'uncategorized':
@@ -42,7 +43,7 @@ def index():
     
     # Add transaction count to each vendor
     for vendor in vendors:
-        vendor.transaction_count = Transaction.query.filter_by(vendor_id=vendor.id).count()
+        vendor.transaction_count = family_query(Transaction).filter_by(vendor_id=vendor.id).count()
     
     # Sort vendors
     if sort_by == 'usage':
@@ -51,7 +52,7 @@ def index():
         vendors = sorted(vendors, key=lambda v: v.name.lower())
     
     # Get vendor types for filter
-    vendor_types = VendorType.query.order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
+    vendor_types = family_query(VendorType).order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
 
     collapse_all_default = Settings.get_value('vendors.collapse_all_default', False)
     
@@ -67,9 +68,9 @@ def index():
 @bp.route('/types')
 def types_index():
     """Manage vendor types"""
-    vendor_types = VendorType.query.order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
+    vendor_types = family_query(VendorType).order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
     type_counts = {
-        vt.id: Vendor.query.filter_by(vendor_type_id=vt.id).count()
+        vt.id: family_query(Vendor).filter_by(vendor_type_id=vt.id).count()
         for vt in vendor_types
     }
     return render_template(
@@ -92,7 +93,7 @@ def add_type():
         flash('Vendor type name is required.', 'danger')
         return redirect(url_for('vendors.types_index'))
 
-    existing = VendorType.query.filter(func.lower(VendorType.name) == name.lower()).first()
+    existing = family_query(VendorType).filter(func.lower(VendorType.name) == name.lower()).first()
     if existing:
         flash(f'Vendor type "{name}" already exists.', 'warning')
         return redirect(url_for('vendors.types_index'))
@@ -112,7 +113,7 @@ def add_type():
 @bp.route('/types/<int:type_id>/update', methods=['POST'])
 def update_type(type_id):
     """Update a vendor type"""
-    vendor_type = VendorType.query.get_or_404(type_id)
+    vendor_type = family_get_or_404(VendorType, type_id)
     name = (request.form.get('name') or '').strip()
     sort_order = request.form.get('sort_order')
     is_active = request.form.get('is_active') == '1'
@@ -121,7 +122,7 @@ def update_type(type_id):
         flash('Vendor type name is required.', 'danger')
         return redirect(url_for('vendors.types_index'))
 
-    existing = VendorType.query.filter(func.lower(VendorType.name) == name.lower(), VendorType.id != type_id).first()
+    existing = family_query(VendorType).filter(func.lower(VendorType.name) == name.lower(), VendorType.id != type_id).first()
     if existing:
         flash(f'Vendor type "{name}" already exists.', 'warning')
         return redirect(url_for('vendors.types_index'))
@@ -138,8 +139,8 @@ def update_type(type_id):
 @bp.route('/types/<int:type_id>/delete', methods=['POST'])
 def delete_type(type_id):
     """Delete a vendor type if unused"""
-    vendor_type = VendorType.query.get_or_404(type_id)
-    usage_count = Vendor.query.filter_by(vendor_type_id=vendor_type.id).count()
+    vendor_type = family_get_or_404(VendorType, type_id)
+    usage_count = family_query(Vendor).filter_by(vendor_type_id=vendor_type.id).count()
     if usage_count > 0:
         flash('Cannot delete a vendor type that is in use.', 'warning')
         return redirect(url_for('vendors.types_index'))
@@ -153,7 +154,7 @@ def delete_type(type_id):
 @bp.route('/types/seed', methods=['POST'])
 def seed_types():
     """Seed default vendor types if none exist"""
-    if VendorType.query.count() > 0:
+    if family_query(VendorType).count() > 0:
         flash('Vendor types already exist.', 'info')
         return redirect(url_for('vendors.types_index'))
 
@@ -198,7 +199,7 @@ def analytics():
 
     filtered_labels = [label for label in period_labels if start_period and end_period and start_period <= label <= end_period]
 
-    query = Transaction.query.join(Vendor).filter(Transaction.payday_period.isnot(None))
+    query = family_query(Transaction).join(Vendor).filter(Transaction.payday_period.isnot(None))
 
     if paid_only:
         query = query.filter(Transaction.is_paid.is_(True))
@@ -372,7 +373,7 @@ def _analytics_monthly():
             'end': (month_date.replace(day=1) + relativedelta(months=1)) - timedelta(days=1)
         })
 
-    query = Transaction.query.join(Vendor).filter(Transaction.transaction_date.isnot(None))
+    query = family_query(Transaction).join(Vendor).filter(Transaction.transaction_date.isnot(None))
 
     if paid_only:
         query = query.filter(Transaction.is_paid.is_(True))
@@ -528,7 +529,7 @@ def add():
         vendor_type_id = int(vendor_type) if vendor_type else None
         
         # Check if vendor already exists
-        existing = Vendor.query.filter_by(name=name).first()
+        existing = family_query(Vendor).filter_by(name=name).first()
         
         if existing:
             flash(f'Vendor "{name}" already exists!', 'warning')
@@ -549,9 +550,9 @@ def add():
             return redirect(url_for('vendors.index'))
     
     # Get categories for dropdown
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
-    vendor_types = VendorType.query.filter_by(is_active=True).order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
+    vendor_types = family_query(VendorType).filter_by(is_active=True).order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
     
     return render_template('vendors/add.html', 
                          categories=categories,
@@ -560,7 +561,7 @@ def add():
 @bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit(id):
     """Edit an existing vendor"""
-    vendor = Vendor.query.get_or_404(id)
+    vendor = family_get_or_404(Vendor, id)
     
     if request.method == 'POST':
         name = request.form.get('name')
@@ -572,7 +573,7 @@ def edit(id):
         vendor_type_id = int(vendor_type) if vendor_type else None
         
         # Check if updated name conflicts
-        existing = Vendor.query.filter(Vendor.id != id, Vendor.name == name).first()
+        existing = family_query(Vendor).filter(Vendor.id != id, Vendor.name == name).first()
         
         if existing:
             flash(f'Vendor name "{name}" is already taken!', 'warning')
@@ -592,7 +593,7 @@ def edit(id):
             return redirect(url_for('vendors.index'))
     
     # Get categories for dropdown
-    categories = Category.query.order_by(Category.head_budget, Category.sub_budget).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
     # Predefined vendor types
     vendor_types = [
@@ -601,7 +602,7 @@ def edit(id):
         'Entertainment', 'Healthcare', 'Education', 'Other'
     ]
     
-    vendor_types = VendorType.query.order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
+    vendor_types = family_query(VendorType).order_by(VendorType.sort_order.nulls_last(), VendorType.name).all()
     return render_template('vendors/edit.html',
                          vendor=vendor,
                          categories=categories,
@@ -610,7 +611,7 @@ def edit(id):
 @bp.route('/delete/<int:id>', methods=['POST'])
 def delete(id):
     """Delete a vendor"""
-    vendor = Vendor.query.get_or_404(id)
+    vendor = family_get_or_404(Vendor, id)
     
     # Check if vendor is being used
     transaction_count = vendor.transactions.count()
@@ -633,7 +634,7 @@ def api_search():
     if not query:
         return jsonify([])
     
-    vendors = Vendor.query.filter(
+    vendors = family_query(Vendor).filter(
         Vendor.name.ilike(f'%{query}%'),
         Vendor.is_active == True
     ).limit(10).all()
@@ -653,6 +654,6 @@ def api_stats():
     if not vendor_id:
         return jsonify({'error': 'vendor_id required'}), 400
     
-    vendor = Vendor.query.get_or_404(vendor_id)
+    vendor = family_get_or_404(Vendor, vendor_id)
     
     return jsonify(vendor.to_dict())

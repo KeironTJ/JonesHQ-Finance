@@ -1,0 +1,389 @@
+{% extends 'base.html' %}
+
+{% block title %}Family Management - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-people-fill"></i> Family Management</h1>
+        <span class="badge bg-secondary fs-6">{{ family.name }}</span>
+    </div>
+
+    <!-- ── Members ───────────────────────────────────────────────── -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Members</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Display Name</th>
+                        <th>Sections</th>
+                        <th>Joined</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for member in members %}
+                    <tr>
+                        <td>
+                            {{ member.name }}
+                            {% if member.id == current_user.id %}
+                            <span class="badge bg-primary ms-1">You</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted small">{{ member.email }}</td>
+                        <td>
+                            {% if member.is_admin %}
+                            <span class="badge bg-danger">Admin</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Member</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ member.member_name or '—' }}</td>
+                        <td>
+                            {% if member.is_admin %}
+                            <span class="text-muted fst-italic">All sections</span>
+                            {% else %}
+                                {% set sections = member.get_allowed_sections() %}
+                                {% if sections %}
+                                    {% for s in sections | sort %}
+                                    <span class="badge bg-info text-dark me-1">{{ section_labels.get(s, s) }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                <span class="text-danger fst-italic">No sections</span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="text-muted small">{{ member.created_at.strftime('%d %b %Y') }}</td>
+                        <td>
+                            {% if member.id != current_user.id %}
+                            <!-- Edit sections button -->
+                            <button class="btn btn-sm btn-outline-primary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#editMemberModal"
+                                    data-member-id="{{ member.id }}"
+                                    data-member-name="{{ member.name }}"
+                                    data-member-display="{{ member.member_name or '' }}"
+                                    data-member-role="{{ member.role }}"
+                                    data-member-sections="{{ member.allowed_sections or '' }}">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <!-- Remove button -->
+                            <form method="POST"
+                                  action="{{ url_for('family.remove_member', member_id=member.id) }}"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Remove {{ member.name }} from the family?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-person-dash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Active invites ────────────────────────────────────────── -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Active Invite Links</h5>
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createInviteModal">
+                <i class="bi bi-plus-circle"></i> Create Invite
+            </button>
+        </div>
+        <div class="card-body">
+            {% if active_invites %}
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>For</th>
+                            <th>Role</th>
+                            <th>Sections</th>
+                            <th>Expires</th>
+                            <th>Link</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for invite in active_invites %}
+                        <tr>
+                            <td>{{ invite.member_name }}</td>
+                            <td>
+                                {% if invite.role == 'admin' %}
+                                <span class="badge bg-danger">Admin</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Member</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if invite.role == 'admin' %}
+                                <span class="text-muted fst-italic">All</span>
+                                {% elif invite.allowed_sections %}
+                                    {% for s in invite.allowed_sections | from_json | sort %}
+                                    <span class="badge bg-info text-dark me-1">{{ section_labels.get(s, s) }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                <span class="text-danger">None</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small">{{ invite.expires_at.strftime('%d %b %Y') }}</td>
+                            <td>
+                                <div class="input-group input-group-sm" style="max-width:360px;">
+                                    <input type="text" class="form-control form-control-sm font-monospace"
+                                           value="{{ request.host_url.rstrip('/') }}{{ url_for('family.join', token=invite.token) }}"
+                                           id="invite-link-{{ invite.id }}" readonly>
+                                    <button class="btn btn-outline-secondary btn-sm"
+                                            onclick="copyInviteLink('invite-link-{{ invite.id }}')">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+                            </td>
+                            <td>
+                                <form method="POST"
+                                      action="{{ url_for('family.revoke_invite', invite_id=invite.id) }}"
+                                      class="d-inline"
+                                      onsubmit="return confirm('Revoke this invite?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No active invite links. Click <strong>Create Invite</strong> to generate one.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Past invites ───────────────────────────────────────────── -->
+    {% if expired_invites %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0 text-muted"><i class="bi bi-clock-history"></i> Recent Used / Expired Invites</h6>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-striped mb-0">
+                <thead>
+                    <tr><th>For</th><th>Role</th><th>Created</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    {% for invite in expired_invites %}
+                    <tr class="text-muted">
+                        <td>{{ invite.member_name }}</td>
+                        <td>{{ invite.role }}</td>
+                        <td>{{ invite.created_at.strftime('%d %b %Y') }}</td>
+                        <td>
+                            {% if invite.used_at %}
+                            <span class="badge bg-success">Used {{ invite.used_at.strftime('%d %b') }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Expired</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ── Create Invite Modal ──────────────────────────────────────────── -->
+<div class="modal fade" id="createInviteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('family.create_invite') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-person-plus"></i> Create Invite Link</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Display Name <span class="text-danger">*</span></label>
+                            <input type="text" name="member_name" class="form-control"
+                                   placeholder="e.g. Emma" required>
+                            <div class="form-text">How this person appears in transaction data.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Role</label>
+                            <select name="role" class="form-select" id="inviteRoleSelect">
+                                <option value="member" selected>Member (restricted)</option>
+                                <option value="admin">Admin (full access)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="sectionCheckboxes">
+                        <label class="form-label fw-semibold">Allowed Sections</label>
+                        <div class="row g-2">
+                            {% for group_name, keys in section_groups.items() %}
+                            <div class="col-md-3">
+                                <div class="card h-100">
+                                    <div class="card-header py-1 px-2 small fw-bold">{{ group_name }}</div>
+                                    <div class="card-body py-2 px-2">
+                                        {% for key in keys %}
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="sections" value="{{ key }}"
+                                                   id="inv-sec-{{ key }}" checked>
+                                            <label class="form-check-label small" for="inv-sec-{{ key }}">
+                                                {{ section_labels.get(key, key) }}
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-link-45deg"></i> Generate Link</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ── Edit Member Modal ─────────────────────────────────────────────── -->
+<div class="modal fade" id="editMemberModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" id="editMemberForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editMemberTitle"><i class="bi bi-pencil"></i> Edit Member</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Display Name</label>
+                            <input type="text" name="member_name" id="editMemberDisplayName" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Role</label>
+                            <select name="role" class="form-select" id="editMemberRole">
+                                <option value="member">Member (restricted)</option>
+                                <option value="admin">Admin (full access)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="editSectionCheckboxes">
+                        <label class="form-label fw-semibold">Allowed Sections</label>
+                        <div class="row g-2">
+                            {% for group_name, keys in section_groups.items() %}
+                            <div class="col-md-3">
+                                <div class="card h-100">
+                                    <div class="card-header py-1 px-2 small fw-bold">{{ group_name }}</div>
+                                    <div class="card-body py-2 px-2">
+                                        {% for key in keys %}
+                                        <div class="form-check">
+                                            <input class="form-check-input edit-section-cb" type="checkbox"
+                                                   name="sections" value="{{ key }}"
+                                                   id="edit-sec-{{ key }}">
+                                            <label class="form-check-label small" for="edit-sec-{{ key }}">
+                                                {{ section_labels.get(key, key) }}
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Invite modal: hide section checkboxes when role = admin
+document.getElementById('inviteRoleSelect').addEventListener('change', function () {
+    document.getElementById('sectionCheckboxes').style.display =
+        this.value === 'admin' ? 'none' : '';
+});
+
+// ── Edit member modal population
+const editModal = document.getElementById('editMemberModal');
+editModal.addEventListener('show.bs.modal', function (event) {
+    const btn = event.relatedTarget;
+    const memberId   = btn.dataset.memberId;
+    const memberName = btn.dataset.memberName;
+    const displayName = btn.dataset.memberDisplay;
+    const role       = btn.dataset.memberRole;
+    const sectionsJson = btn.dataset.memberSections;
+
+    document.getElementById('editMemberTitle').textContent = 'Edit Member – ' + memberName;
+    document.getElementById('editMemberDisplayName').value = displayName;
+    document.getElementById('editMemberRole').value = role;
+    document.getElementById('editMemberForm').action =
+        '/family/members/' + memberId + '/update';
+
+    // Uncheck all first
+    document.querySelectorAll('.edit-section-cb').forEach(cb => cb.checked = false);
+
+    // Show/hide section boxes based on role
+    const sectionDiv = document.getElementById('editSectionCheckboxes');
+    if (role === 'admin') {
+        sectionDiv.style.display = 'none';
+    } else {
+        sectionDiv.style.display = '';
+        if (sectionsJson) {
+            try {
+                const allowed = JSON.parse(sectionsJson);
+                allowed.forEach(key => {
+                    const cb = document.getElementById('edit-sec-' + key);
+                    if (cb) cb.checked = true;
+                });
+            } catch (e) {}
+        }
+    }
+});
+
+document.getElementById('editMemberRole').addEventListener('change', function () {
+    document.getElementById('editSectionCheckboxes').style.display =
+        this.value === 'admin' ? 'none' : '';
+});
+
+// ── Copy invite link
+function copyInviteLink(inputId) {
+    const input = document.getElementById(inputId);
+    input.select();
+    document.execCommand('copy');
+    // Brief visual feedback
+    const btn = input.nextElementSibling;
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    setTimeout(() => btn.innerHTML = origHtml, 1500);
+}
+</script>
+{% endblock %}

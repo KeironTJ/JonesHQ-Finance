@@ -5,9 +5,10 @@ from datetime import datetime
 class MortgageSnapshot(db.Model):
     """Monthly mortgage balance snapshot (actual or projected)"""
     __tablename__ = 'mortgage_snapshots'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    mortgage_product_id = db.Column(db.Integer, db.ForeignKey('mortgage_products.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    mortgage_product_id= db.Column(db.Integer, db.ForeignKey('mortgage_products.id'), nullable=False)
     transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'))  # Linked payment transaction
     
     date = db.Column(db.Date, nullable=False)
@@ -59,6 +60,7 @@ class MortgagePayment(db.Model):
     __tablename__ = 'mortgage_payments'
     
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     mortgage_id = db.Column(db.Integer, db.ForeignKey('mortgages.id'), nullable=False)
     
     date = db.Column(db.Date, nullable=False)

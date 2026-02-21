@@ -5,9 +5,10 @@ from datetime import datetime
 class MonthlyAccountBalance(db.Model):
     """Cache table for monthly account balances (actual and projected)"""
     __tablename__ = 'monthly_account_balances'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    account_id= db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False)
     year_month = db.Column(db.String(7), nullable=False)  # Format: YYYY-MM
     
     # Actual balance (only paid transactions)

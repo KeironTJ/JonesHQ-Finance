@@ -7,7 +7,8 @@ class VendorType(db.Model):
     __tablename__ = 'vendor_types'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    name = db.Column(db.String(50), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
     sort_order = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -27,7 +28,8 @@ class Vendor(db.Model):
     __tablename__ = 'vendors'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    name = db.Column(db.String(100), nullable=False, index=True)
     vendor_type_id = db.Column(db.Integer, db.ForeignKey('vendor_types.id'), nullable=True)
     vendor_type = db.Column(db.String(50))  # Deprecated: kept for backward compatibility
     default_category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))

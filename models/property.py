@@ -5,9 +5,10 @@ from datetime import datetime
 class Property(db.Model):
     """Represents a property (can have multiple mortgage products over time)"""
     __tablename__ = 'properties'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    address = db.Column(db.String(255), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    address= db.Column(db.String(255), nullable=False)
     purchase_date = db.Column(db.Date)
     purchase_price = db.Column(db.Numeric(10, 2))
     current_valuation = db.Column(db.Numeric(10, 2))

@@ -4,9 +4,10 @@ from datetime import datetime
 
 class CreditCard(db.Model):
     __tablename__ = 'credit_cards'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    card_name = db.Column(db.String(100), nullable=False)  # Barclaycard, M&S, Natwest, etc.
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    card_name= db.Column(db.String(100), nullable=False)  # Barclaycard, M&S, Natwest, etc.
     
     # APR and Interest
     annual_apr = db.Column(db.Numeric(5, 2), nullable=False)

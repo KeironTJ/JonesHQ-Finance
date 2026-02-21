@@ -4,9 +4,10 @@ from datetime import datetime
 
 class PensionSnapshot(db.Model):
     __tablename__ = 'pension_snapshots'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    pension_id = db.Column(db.Integer, db.ForeignKey('pensions.id'), nullable=False)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    pension_id= db.Column(db.Integer, db.ForeignKey('pensions.id'), nullable=False)
     
     review_date = db.Column(db.Date, nullable=False)
     value = db.Column(db.Numeric(10, 2), nullable=False)
