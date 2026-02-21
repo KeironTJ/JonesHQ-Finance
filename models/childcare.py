@@ -35,6 +35,7 @@ class ChildActivityType(db.Model):
     __tablename__ = 'child_activity_types'
     
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     child_id = db.Column(db.Integer, db.ForeignKey('children.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)  # "AM Session", "PM1", "Breakfast Club"
     cost = db.Column(db.Numeric(10, 2), nullable=False)
@@ -78,6 +79,7 @@ class DailyChildcareActivity(db.Model):
     __tablename__ = 'daily_childcare_activities'
     
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     date = db.Column(db.Date, nullable=False, index=True)
     child_id = db.Column(db.Integer, db.ForeignKey('children.id'), nullable=False)
     activity_type_id = db.Column(db.Integer, db.ForeignKey('child_activity_types.id'), nullable=False)
@@ -112,6 +114,7 @@ class MonthlyChildcareSummary(db.Model):
     __tablename__ = 'monthly_childcare_summaries'
     
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     year_month = db.Column(db.String(7), nullable=False, index=True)  # 2025-05
     child_id = db.Column(db.Integer, db.ForeignKey('children.id'), nullable=False)
     total_cost = db.Column(db.Numeric(10, 2), nullable=False)
@@ -139,6 +142,7 @@ class ChildcareRecord(db.Model):
     __tablename__ = 'childcare_records'
     
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     date = db.Column(db.Date, nullable=False)
     day_name = db.Column(db.String(10))
     year_month = db.Column(db.String(7))

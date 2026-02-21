@@ -81,6 +81,7 @@ class CreditCardPromotion(db.Model):
     __tablename__ = 'credit_card_promotions'
     
     id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     credit_card_id = db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=False)
     
     promotion_type = db.Column(db.String(50), nullable=False)  # 'purchase', 'balance_transfer'

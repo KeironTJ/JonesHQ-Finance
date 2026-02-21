@@ -44,6 +44,12 @@ def family_query(model):
         family_query(Transaction).filter_by(is_paid=True).order_by(...).all()
         family_query(Category).count()
     """
+    # Guard: if the model has no family_id column, raise early with a clear message
+    if not hasattr(model, 'family_id'):
+        raise AttributeError(
+            f"family_query() called on {model.__name__} but it has no family_id column. "
+            "Add family_id to the model and run the migration script."
+        )
     fid = get_family_id()
     if fid is None:
         # Return a query that always yields zero rows rather than leaking data
