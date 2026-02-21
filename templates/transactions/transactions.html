@@ -620,12 +620,18 @@
                     
                     <div class="mb-3">
                         <label for="edit_vendor_id" class="form-label">Vendor</label>
-                        <select class="form-select" name="vendor_id" id="edit_vendor_id">
-                            <option value="">-- No Vendor --</option>
-                            {% for vendor in vendors %}
-                            <option value="{{ vendor.id }}">{{ vendor.name }}</option>
-                            {% endfor %}
-                        </select>
+                        <div class="input-group">
+                            <select class="form-select" name="vendor_id" id="edit_vendor_id">
+                                <option value="">-- No Vendor --</option>
+                                {% for vendor in vendors %}
+                                <option value="{{ vendor.id }}">{{ vendor.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" title="Quick-add a new vendor"
+                                    onclick="openQuickAddVendor('edit_vendor_id')">
+                                <i class="bi bi-plus"></i> New
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -873,16 +879,11 @@ function confirmBulkDelete() {
 window.addEventListener('load', function() {
     const targetRow = document.getElementById('txn-{{ highlight_transaction_id }}');
     if (targetRow) {
-        // Add highlight styling
         targetRow.style.backgroundColor = '#fff3cd';
         targetRow.style.border = '2px solid #ffc107';
-        
-        // Scroll to transaction with smooth behavior
         setTimeout(function() {
             targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 300);
-        
-        // Remove highlight after 5 seconds
         setTimeout(function() {
             targetRow.style.transition = 'all 2s ease';
             targetRow.style.backgroundColor = '';
@@ -891,6 +892,75 @@ window.addEventListener('load', function() {
     }
 });
 {% endif %}
+</script>
+
+<!-- Quick-Add Vendor Modal -->
+<div class="modal fade" id="quickAddVendorModal" tabindex="-1" aria-labelledby="quickAddVendorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="quickAddVendorModalLabel"><i class="bi bi-shop"></i> Quick-Add Vendor</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label for="quickVendorName" class="form-label">Vendor Name</label>
+                <input type="text" id="quickVendorName" class="form-control" placeholder="e.g. Tesco">
+                <div id="quickVendorError" class="text-danger small mt-1" style="display:none;"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitQuickAddVendor()">
+                    <i class="bi bi-plus-circle"></i> Add Vendor
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+let _quickAddTargetSelectId = null;
+function openQuickAddVendor(selectId) {
+    _quickAddTargetSelectId = selectId;
+    document.getElementById('quickVendorName').value = '';
+    document.getElementById('quickVendorError').style.display = 'none';
+    // Keep edit modal open behind quick-add modal
+    const quickModal = new bootstrap.Modal(document.getElementById('quickAddVendorModal'), { backdrop: 'static' });
+    quickModal.show();
+    document.getElementById('quickAddVendorModal').addEventListener('shown.bs.modal', function() {
+        document.getElementById('quickVendorName').focus();
+    }, { once: true });
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.getElementById('quickAddVendorModal').classList.contains('show')) {
+        e.preventDefault();
+        submitQuickAddVendor();
+    }
+});
+function submitQuickAddVendor() {
+    const name = document.getElementById('quickVendorName').value.trim();
+    const errEl = document.getElementById('quickVendorError');
+    if (!name) { errEl.textContent = 'Please enter a name.'; errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+    fetch('{{ url_for("vendors.quick_add") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+        body: JSON.stringify({name})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { errEl.textContent = data.error; errEl.style.display = ''; return; }
+        // Add to every vendor dropdown on the page that doesn't already have this option
+        document.querySelectorAll('select[name="vendor_id"], #edit_vendor_id, #bulk_vendor_id').forEach(sel => {
+            if (!sel.querySelector(`option[value="${data.id}"]`)) {
+                sel.add(new Option(data.name, data.id));
+            }
+        });
+        if (_quickAddTargetSelectId) {
+            document.getElementById(_quickAddTargetSelectId).value = data.id;
+        }
+        bootstrap.Modal.getInstance(document.getElementById('quickAddVendorModal')).hide();
+    })
+    .catch(() => { errEl.textContent = 'Request failed. Try again.'; errEl.style.display = ''; });
+}
 </script>
 
 <style>

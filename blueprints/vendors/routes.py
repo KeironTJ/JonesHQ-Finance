@@ -626,6 +626,24 @@ def delete(id):
     
     return redirect(url_for('vendors.index'))
 
+@bp.route('/quick-add', methods=['POST'])
+def quick_add():
+    """JSON endpoint: create a vendor with just a name. Returns {id, name}."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+
+    existing = family_query(Vendor).filter_by(name=name).first()
+    if existing:
+        return jsonify({'id': existing.id, 'name': existing.name, 'existing': True})
+
+    vendor = Vendor(name=name)
+    db.session.add(vendor)
+    db.session.commit()
+    return jsonify({'id': vendor.id, 'name': vendor.name, 'existing': False}), 201
+
+
 @bp.route('/api/search')
 def api_search():
     """API endpoint for vendor autocomplete"""

@@ -61,15 +61,21 @@
                             <!-- Vendor -->
                             <div class="col-md-6 mb-3">
                                 <label for="vendor_id" class="form-label">Vendor</label>
-                                <select class="form-select" id="vendor_id" name="vendor_id">
-                                    <option value="">Select Vendor...</option>
-                                    {% for vendor in vendors %}
-                                    <option value="{{ vendor.id }}"
-                                        {% if transaction and transaction.vendor_id == vendor.id %}selected{% endif %}>
-                                        {{ vendor.name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
+                                <div class="input-group">
+                                    <select class="form-select" id="vendor_id" name="vendor_id">
+                                        <option value="">Select Vendor...</option>
+                                        {% for vendor in vendors %}
+                                        <option value="{{ vendor.id }}"
+                                            {% if transaction and transaction.vendor_id == vendor.id %}selected{% endif %}>
+                                            {{ vendor.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-outline-secondary" title="Quick-add a new vendor"
+                                            onclick="openQuickAddVendor('vendor_id')">
+                                        <i class="bi bi-plus"></i> New
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Amount -->
@@ -355,5 +361,69 @@
             }
         }
     }
+</script>
+
+<!-- Quick-Add Vendor Modal -->
+<div class="modal fade" id="quickAddVendorModal" tabindex="-1" aria-labelledby="quickAddVendorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="quickAddVendorModalLabel"><i class="bi bi-shop"></i> Quick-Add Vendor</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label for="quickVendorName" class="form-label">Vendor Name</label>
+                <input type="text" id="quickVendorName" class="form-control" placeholder="e.g. Tesco">
+                <div id="quickVendorError" class="text-danger small mt-1" style="display:none;"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitQuickAddVendor()">
+                    <i class="bi bi-plus-circle"></i> Add Vendor
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+let _quickAddTargetSelectId = null;
+function openQuickAddVendor(selectId) {
+    _quickAddTargetSelectId = selectId;
+    document.getElementById('quickVendorName').value = '';
+    document.getElementById('quickVendorError').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('quickAddVendorModal')).show();
+    document.getElementById('quickAddVendorModal').addEventListener('shown.bs.modal', function() {
+        document.getElementById('quickVendorName').focus();
+    }, { once: true });
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.getElementById('quickAddVendorModal').classList.contains('show')) {
+        e.preventDefault();
+        submitQuickAddVendor();
+    }
+});
+function submitQuickAddVendor() {
+    const name = document.getElementById('quickVendorName').value.trim();
+    const errEl = document.getElementById('quickVendorError');
+    if (!name) { errEl.textContent = 'Please enter a name.'; errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+    fetch('{{ url_for("vendors.quick_add") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+        body: JSON.stringify({name})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { errEl.textContent = data.error; errEl.style.display = ''; return; }
+        const sel = document.getElementById(_quickAddTargetSelectId);
+        if (!sel.querySelector(`option[value="${data.id}"]`)) {
+            const opt = new Option(data.name, data.id);
+            sel.add(opt);
+        }
+        sel.value = data.id;
+        bootstrap.Modal.getInstance(document.getElementById('quickAddVendorModal')).hide();
+    })
+    .catch(() => { errEl.textContent = 'Request failed. Try again.'; errEl.style.display = ''; });
+}
 </script>
 {% endblock %}
