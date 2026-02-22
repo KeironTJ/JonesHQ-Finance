@@ -765,10 +765,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Populate amount with sign toggle
             const amt = parseFloat(txnAmount);
             const editBtn = document.getElementById('editAmountSignBtn');
-            if (amt < 0) {
+            if (amt >= 0) {
+                // positive = Income
                 editBtn.classList.remove('btn-danger'); editBtn.classList.add('btn-success');
                 editBtn.textContent = 'Income';
             } else {
+                // negative = Expense
                 editBtn.classList.remove('btn-success'); editBtn.classList.add('btn-danger');
                 editBtn.textContent = 'Expense';
             }
@@ -952,8 +954,8 @@ function toggleEditAmountSign() {
 function syncEditAmountHidden() {
     const display = document.getElementById('edit_amount_display').value.replace(/[^0-9.]/g, '');
     const btn = document.getElementById('editAmountSignBtn');
-    const isIncome = btn.classList.contains('btn-success');
-    document.getElementById('edit_amount').value = display ? (isIncome ? '-' + display : display) : '';
+    const isExpense = btn.classList.contains('btn-danger');
+    document.getElementById('edit_amount').value = display ? (isExpense ? '-' + display : display) : '';
 }
 document.getElementById('edit_amount_display').addEventListener('input', syncEditAmountHidden);
 document.getElementById('editTransactionForm').addEventListener('submit', syncEditAmountHidden);

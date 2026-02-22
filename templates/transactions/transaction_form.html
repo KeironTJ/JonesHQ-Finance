@@ -90,7 +90,7 @@
                                            placeholder="0.00" required autocomplete="off">
                                 </div>
                                 <input type="hidden" id="amount" name="amount">
-                                <small class="form-text text-muted" id="amountHint">Expense = positive debit from account</small>
+                                <small class="form-text text-muted" id="amountHint">Expense = debit from account (stored as negative)</small>
                             </div>
 
                             <!-- Transaction Date -->
@@ -285,11 +285,11 @@
         if (btn.classList.contains('btn-danger')) {
             btn.classList.replace('btn-danger', 'btn-success');
             btn.textContent = 'Income';
-            hint.textContent = 'Income = credit into account';
+            hint.textContent = 'Income = credit into account (stored as positive)';
         } else {
             btn.classList.replace('btn-success', 'btn-danger');
             btn.textContent = 'Expense';
-            hint.textContent = 'Expense = positive debit from account';
+            hint.textContent = 'Expense = debit from account (stored as negative)';
         }
         syncAmountHidden();
     }
@@ -297,8 +297,8 @@
     function syncAmountHidden() {
         const display = document.getElementById('amountDisplay').value.replace(/[^0-9.]/g, '');
         const btn = document.getElementById('amountSignBtn');
-        const isIncome = btn.classList.contains('btn-success');
-        document.getElementById('amount').value = display ? (isIncome ? '-' + display : display) : '';
+        const isExpense = btn.classList.contains('btn-danger');
+        document.getElementById('amount').value = display ? (isExpense ? '-' + display : display) : '';
     }
 
     document.getElementById('amountDisplay').addEventListener('input', syncAmountHidden);
@@ -315,7 +315,8 @@
             const num = parseFloat(rawVal);
             const btn = document.getElementById('amountSignBtn');
             const hint = document.getElementById('amountHint');
-            if (num < 0) {
+            if (num >= 0) {
+                // positive stored value = Income
                 btn.classList.replace('btn-danger', 'btn-success');
                 btn.textContent = 'Income';
                 hint.textContent = 'Income = credit into account';
