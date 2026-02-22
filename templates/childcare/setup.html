@@ -122,6 +122,7 @@
 
             <!-- List of Activity Types -->
             {% if item.activity_types %}
+            <div class="table-responsive">
             <table class="table table-sm table-hover">
                 <thead>
                     <tr>
@@ -228,6 +229,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             {% else %}
             <p class="text-muted">No activity types added yet. Add one using the form above.</p>
             {% endif %}

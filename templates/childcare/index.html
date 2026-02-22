@@ -91,7 +91,7 @@
     <!-- Calendar View -->
     <div class="table-responsive shadow-sm">
         <table class="table table-bordered table-sm mb-0">
-            <thead style="background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); color: white;">
+            <thead style="background: linear-gradient(135deg, var(--nav-bg) 0%, var(--brand) 100%); color: var(--text-inverse);">
                 <tr>
                     <th rowspan="2" class="align-middle border-end border-secondary" style="width: 100px; font-size: 0.9rem; font-weight: 600;">Date</th>
                     <th rowspan="2" class="align-middle border-end border-secondary" style="width: 70px; font-size: 0.9rem; font-weight: 600;">Day</th>
@@ -103,7 +103,7 @@
                     {% endfor %}
                     <th rowspan="2" class="text-end align-middle" style="width: 100px; font-size: 0.9rem; font-weight: 600;">Daily Total</th>
                 </tr>
-                <tr style="background: linear-gradient(135deg, #34495e 0%, #2980b9 100%);">
+                <tr style="background: linear-gradient(135deg, var(--nav-bg) 0%, var(--brand-hover) 100%);">
                     {% for child in children %}
                         {% for activity_type in child.activity_types if activity_type.is_active %}
                         <th class="text-center" style="font-size: 0.72rem; padding: 6px; min-width: 70px; font-weight: 500;">
@@ -111,7 +111,7 @@
                             <div style="font-size: 0.68rem; opacity: 0.85;">£{{ activity_type.cost }}</div>
                         </th>
                         {% endfor %}
-                        <th class="text-center border-start border-secondary" style="font-size: 0.7rem; padding: 6px; width: 75px; font-weight: 600; background: rgba(0,0,0,0.2);">Total</th>
+                        <th class="text-center border-start border-secondary" style="font-size: 0.7rem; padding: 6px; width: 75px; font-weight: 600; background: rgba(255,255,255,0.15);">Total</th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -151,8 +151,8 @@
                         {% endfor %}
                         
                         <!-- Child daily total -->
-                        <td class="text-center align-middle border-start" style="padding: 5px; background: linear-gradient(to right, #f8f9fa, #e9ecef);">
-                            <strong class="child-daily-total" data-child-id="{{ child.id }}" data-date="{{ date }}" style="font-size: 0.9rem; color: #2c3e50; font-weight: 600;">
+                        <td class="text-center align-middle border-start" style="padding: 5px; background: var(--bg-surface-2);">
+                            <strong class="child-daily-total" data-child-id="{{ child.id }}" data-date="{{ date }}" style="font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">
                                 {% if child_data %}£{{ "%.2f"|format(child_data.total) }}{% else %}£0.00{% endif %}
                             </strong>
                         </td>
@@ -171,7 +171,7 @@
 
     <!-- Monthly Totals & Transaction Creation -->
     <div class="card mt-4 shadow">
-        <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Monthly Totals - {{ year_month }}</h5>
             {% set has_untransacted = namespace(value=false) %}
             {% for child_id, data in monthly_totals.items() %}
@@ -193,7 +193,7 @@
                     <div class="card border-0 shadow-sm">
                         <div class="card-body">
                             <h6 class="mb-2">{{ data.child.name }}</h6>
-                            <h3 class="monthly-total" data-child-id="{{ child_id }}" style="color: #2c3e50; font-weight: 700; margin-bottom: 8px;">£{{ "%.2f"|format(data.total) }}</h3>
+                            <h3 class="monthly-total" data-child-id="{{ child_id }}" style="color: var(--text-primary); font-weight: 700; margin-bottom: 8px;">£{{ "%.2f"|format(data.total) }}</h3>
                             
                             {% set summary = summaries|selectattr('child_id', 'equalto', child_id)|first %}
                             
@@ -458,13 +458,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (monthlyTotalElement) {
             monthlyTotalElement.textContent = '£' + monthlyTotal.toFixed(2);
             
-            // Add pulse animation
-            monthlyTotalElement.style.color = '#27ae60';
+            // Add pulse animation using Bootstrap color tokens
+            monthlyTotalElement.style.color = 'var(--bs-success)';
             monthlyTotalElement.style.transform = 'scale(1.1)';
             monthlyTotalElement.style.transition = 'all 0.3s ease';
             
             setTimeout(() => {
-                monthlyTotalElement.style.color = '#2c3e50';
+                monthlyTotalElement.style.color = 'var(--bs-body-color)';
                 monthlyTotalElement.style.transform = 'scale(1)';
             }, 500);
         }

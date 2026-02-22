@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}Pensions - JonesHQ Finance{% endblock %}
 
@@ -121,7 +121,7 @@
             </div>
             {% else %}
             <div class="text-center py-5">
-                <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                <i class="bi bi-inbox empty-state-icon"></i>
                 <p class="text-muted mt-3">No pension accounts found. Click "Add Pension" to get started.</p>
             </div>
             {% endif %}
@@ -129,3 +129,4 @@
     </div>
 </div>
 {% endblock %}
+

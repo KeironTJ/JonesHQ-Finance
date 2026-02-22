@@ -172,12 +172,24 @@ def trips():
                     forecasted_transactions[vehicle.id][trans.transaction_date] = trans
                     break
     
-    # Get fuel expenses to show linked entries
-    fuel_expenses = family_query(Expense).filter_by(expense_type='Fuel').all()
-    fuel_expenses_dict = {}
-    for vehicle in vehicles:
-        vehicle_expenses = [e for e in fuel_expenses if e.vehicle_registration == vehicle.registration]
-        fuel_expenses_dict[vehicle.id] = {e.date: e for e in vehicle_expenses}
+    # Get fuel expenses keyed by trip ID via sentinel description match
+    # (avoids showing the same expense on every trip sharing the same vehicle+date)
+    fuel_expenses_all = family_query(Expense).filter_by(expense_type='Fuel').all()
+    fuel_expenses_by_trip = {}
+    for exp in fuel_expenses_all:
+        sentinel = f"Expense #{exp.id}: {exp.description}"
+        for trip in trips:
+            if trip.journey_description == sentinel:
+                fuel_expenses_by_trip[trip.id] = exp
+                break
+
+    # Only the last trip of each (vehicle, date) shows the refuel indicator
+    _last_per_day = {}
+    for trip in trips:
+        key = (trip.vehicle_id, trip.date)
+        if key not in _last_per_day or trip.id > _last_per_day[key]:
+            _last_per_day[key] = trip.id
+    last_trip_ids = set(_last_per_day.values())
 
     return render_template(
         'vehicles/trip_log.html',
@@ -188,7 +200,8 @@ def trips():
         selected_vehicle_id_trip=selected_vehicle_id_trip,
         fuel_records_dict=fuel_records_dict,
         forecasted_transactions=forecasted_transactions,
-        fuel_expenses_dict=fuel_expenses_dict,
+        fuel_expenses_by_trip=fuel_expenses_by_trip,
+        last_trip_ids=last_trip_ids,
         today=date.today()
     )
 
@@ -221,6 +234,7 @@ def add_vehicle():
         year = request.form.get('year')
         starting_mileage = request.form.get('starting_mileage')
         fuel_account_id = request.form.get('fuel_account_id')
+        refuel_threshold_pct = request.form.get('refuel_threshold_pct', '95')
         
         vehicle = Vehicle(
             name=name,
@@ -232,6 +246,7 @@ def add_vehicle():
             year=int(year) if year else None,
             starting_mileage=int(starting_mileage) if starting_mileage else None,
             fuel_account_id=int(fuel_account_id) if fuel_account_id else None,
+            refuel_threshold_pct=Decimal(refuel_threshold_pct) if refuel_threshold_pct else Decimal('95'),
             is_active=True
         )
         db.session.add(vehicle)
@@ -262,6 +277,10 @@ def update_vehicle(vehicle_id):
         if tank_size:
             vehicle.tank_size = Decimal(tank_size)
         
+        refuel_threshold_pct = request.form.get('refuel_threshold_pct')
+        if refuel_threshold_pct:
+            vehicle.refuel_threshold_pct = Decimal(refuel_threshold_pct)
+        
         year = request.form.get('year')
         if year:
             vehicle.year = int(year)
@@ -288,9 +307,9 @@ def refresh_forecasts(vehicle_id):
         # Update monthly balance cache for fuel account
         from services.monthly_balance_service import MonthlyBalanceService
         from datetime import date
-        if vehicle.default_fuel_account_id:
+        if vehicle.fuel_account_id:
             MonthlyBalanceService.handle_transaction_change(
-                vehicle.default_fuel_account_id,
+                vehicle.fuel_account_id,
                 date.today()
             )
         
@@ -315,8 +334,6 @@ def refresh_all_forecasts():
         for vehicle_id, vehicle_name in vehicle_data:
             try:
                 FuelForecastingService.sync_forecasted_transactions(vehicle_id)
-                # Clear the session after each commit to avoid 'committed' state errors
-                db.session.remove()
                 refreshed_count += 1
             except Exception as e:
                 db.session.rollback()
@@ -526,7 +543,7 @@ def add_trip():
         db.session.rollback()
         flash(f'Error adding trip: {str(e)}', 'danger')
     
-    return redirect(url_for('vehicles.index'))
+    return redirect(request.referrer or url_for('vehicles.trips'))
 
 
 @vehicles_bp.route('/vehicles/trip/update/<int:trip_id>', methods=['POST'])
@@ -558,7 +575,7 @@ def update_trip(trip_id):
         db.session.rollback()
         flash(f'Error updating trip: {str(e)}', 'danger')
     
-    return redirect(url_for('vehicles.index'))
+    return redirect(request.referrer or url_for('vehicles.trips'))
 
 
 @vehicles_bp.route('/vehicles/trip/delete/<int:trip_id>', methods=['POST'])
@@ -574,7 +591,7 @@ def delete_trip(trip_id):
         db.session.rollback()
         flash(f'Error deleting trip: {str(e)}', 'danger')
     
-    return redirect(url_for('vehicles.index'))
+    return redirect(request.referrer or url_for('vehicles.trips'))
 
 
 @vehicles_bp.route('/vehicles/trips/bulk-delete', methods=['POST'])
@@ -587,7 +604,7 @@ def bulk_delete_trips():
         
         if not trip_ids:
             flash('No trips selected for deletion', 'warning')
-            return redirect(url_for('vehicles.trips'))
+            return redirect(request.referrer or url_for('vehicles.trips'))
         
         # Delete all selected trips
         deleted_count = 0
@@ -603,7 +620,7 @@ def bulk_delete_trips():
         db.session.rollback()
         flash(f'Error deleting trips: {str(e)}', 'danger')
     
-    return redirect(url_for('vehicles.trips'))
+    return redirect(request.referrer or url_for('vehicles.trips'))
 
 
 @vehicles_bp.route('/vehicles/trips/bulk-add', methods=['POST'])
@@ -621,7 +638,7 @@ def bulk_add_trips():
         # Validate inputs
         if not vehicle_id or not start_date_str or not end_date_str or not selected_days:
             flash('Please fill in all required fields and select at least one day', 'danger')
-            return redirect(url_for('vehicles.trips'))
+            return redirect(request.referrer or url_for('vehicles.trips'))
         
         # Convert to integers
         selected_days = [int(day) for day in selected_days]
@@ -632,7 +649,7 @@ def bulk_add_trips():
         
         if start_date > end_date:
             flash('Start date must be before or equal to end date', 'danger')
-            return redirect(url_for('vehicles.trips'))
+            return redirect(request.referrer or url_for('vehicles.trips'))
         
         # Create trips for selected days in the date range
         created_count = 0
@@ -673,4 +690,4 @@ def bulk_add_trips():
         db.session.rollback()
         flash(f'Error creating trips: {str(e)}', 'danger')
     
-    return redirect(url_for('vehicles.trips'))
+    return redirect(request.referrer or url_for('vehicles.trips'))

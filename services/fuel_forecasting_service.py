@@ -113,7 +113,7 @@ class FuelForecastingService:
             return []
         
         tank_capacity = float(vehicle.tank_size)
-        refill_threshold = tank_capacity * 0.95  # 95% of tank
+        refill_threshold = tank_capacity * (float(vehicle.refuel_threshold_pct or 95) / 100)
         
         # Get average MPG and price
         avg_mpg = FuelForecastingService.get_average_mpg(vehicle_id)

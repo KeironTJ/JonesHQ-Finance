@@ -156,6 +156,7 @@ class ExpenseSyncService:
     @staticmethod
     def bulk_delete_linked_transactions(expense_ids=None):
         """Delete linked bank and credit-card transactions for the given expenses.
+        Also deletes auto-created trip rows for Fuel expenses.
 
         If `expense_ids` is None, operate on all expenses that currently have links.
         Returns a summary dict with counts and lists of affected ids.
@@ -165,9 +166,22 @@ class ExpenseSyncService:
         if expense_ids:
             q = q.filter(Expense.id.in_(expense_ids))
 
-        linked_expenses = q.filter(
-            (Expense.bank_transaction_id != None) | (Expense.credit_card_transaction_id != None)
-        ).all()
+        all_expenses = q.all()
+
+        linked_expenses = [
+            e for e in all_expenses
+            if e.bank_transaction_id or e.credit_card_transaction_id
+        ]
+
+        # Delete auto-created trip rows for fuel expenses
+        fuel_trips_deleted = 0
+        for exp in all_expenses:
+            if exp.expense_type == 'Fuel':
+                try:
+                    ExpenseSyncService.delete_fuel_trip_for_expense(exp)
+                    fuel_trips_deleted += 1
+                except Exception:
+                    current_app.logger.exception(f"Error deleting fuel trip for expense {exp.id}")
 
         bank_txn_ids = set()
         cc_txn_ids = set()
@@ -199,6 +213,7 @@ class ExpenseSyncService:
             'cc_txn_ids': list(cc_txn_ids),
             'deleted_bank_txns': 0,
             'deleted_cc_txns': 0,
+            'deleted_fuel_trips': fuel_trips_deleted,
             'accounts_recalced': list(accounts_to_recalc),
             'cards_recalced': list(cards_to_recalc)
         }
@@ -590,43 +605,122 @@ class ExpenseSyncService:
         return next_day
     
     @staticmethod
-    def _link_fuel_expense_to_trip(exp: Expense):
+    def _link_fuel_expense_to_trip(exp: 'Expense'):
         """
-        Link fuel expense to corresponding trip entry and update trip with expense details.
-        Fuel expenses do NOT create transactions - they update the trip log.
+        Create (or update) a dedicated Trip row owned by this fuel expense.
+
+        Rather than patching an existing trip that was entered manually, we create
+        our own row keyed by a sentinel in journey_description:
+            "Expense #<id>: <description>"
+        This makes the operation idempotent and keeps expense trips clearly
+        separated from regular daily driving trips, giving full control over
+        which transactions are linked to which expense.
         """
         from models.trips import Trip
         from models.vehicles import Vehicle
-        
-        # Find vehicle by registration
+        from services.vehicle_service import VehicleService
+
         if not exp.vehicle_registration:
             current_app.logger.warning(f"Fuel expense {exp.id} has no vehicle registration")
             return
-        
+
         vehicle = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
         if not vehicle:
-            current_app.logger.warning(f"Vehicle not found: {exp.vehicle_registration}")
+            current_app.logger.warning(f"Vehicle not found for registration: {exp.vehicle_registration}")
             return
-        
-        # Find trip on same date for same vehicle
-        trip = family_query(Trip).filter_by(
-            vehicle_id=vehicle.id,
-            date=exp.date
+
+        trip_date = exp.date
+        business_miles = int(exp.covered_miles or 0)
+        sentinel_desc = f"Expense #{exp.id}: {exp.description}"
+
+        # Calculate fuel cost, gallons, and MPG using the same logic as add_trip
+        trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(
+            vehicle.id, business_miles, trip_date
+        )
+
+        # Get the most recent fill date for reference
+        latest_fuel = VehicleService.get_latest_fuel_record(vehicle.id)
+        vehicle_last_fill = latest_fuel.date if latest_fuel else None
+
+        # Idempotent look-up: find the trip we already created for this expense
+        existing = family_query(Trip).filter(
+            Trip.vehicle_id == vehicle.id,
+            Trip.journey_description == sentinel_desc
         ).first()
-        
+
+        if existing:
+            # Expense was edited — keep the trip in sync
+            existing.date              = trip_date
+            existing.month             = f"{trip_date.year}-{trip_date.month:02d}"
+            existing.week              = f"{trip_date.isocalendar()[1]:02d}-{trip_date.year}"
+            existing.day_name          = trip_date.strftime('%A')
+            existing.business_miles    = business_miles
+            existing.total_miles       = (existing.personal_miles or 0) + business_miles
+            existing.approx_mpg        = approx_mpg
+            existing.gallons_used      = gallons_used
+            existing.trip_cost         = trip_cost
+            existing.vehicle_last_fill = vehicle_last_fill
+            db.session.add(existing)
+            current_app.logger.info(f"Updated expense-trip {existing.id} for fuel expense {exp.id}")
+            return
+
+        # Determine cumulative totals from the last trip for this vehicle
+        prev_trip = (
+            family_query(Trip)
+            .filter(Trip.vehicle_id == vehicle.id, Trip.date <= trip_date)
+            .order_by(Trip.date.desc(), Trip.id.desc())
+            .first()
+        )
+        prev_cumulative_miles   = int(prev_trip.cumulative_total_miles or 0) if prev_trip else 0
+        prev_cumulative_gallons = Decimal(prev_trip.cumulative_gallons or '0') if prev_trip else Decimal('0')
+
+        trip = Trip(
+            family_id=vehicle.family_id,
+            vehicle_id=vehicle.id,
+            date=trip_date,
+            month=f"{trip_date.year}-{trip_date.month:02d}",
+            week=f"{trip_date.isocalendar()[1]:02d}-{trip_date.year}",
+            day_name=trip_date.strftime('%A'),
+            personal_miles=0,
+            business_miles=business_miles,
+            total_miles=business_miles,
+            cumulative_total_miles=prev_cumulative_miles + business_miles,
+            journey_description=sentinel_desc,
+            approx_mpg=approx_mpg,
+            gallons_used=gallons_used,
+            cumulative_gallons=prev_cumulative_gallons + gallons_used,
+            trip_cost=trip_cost,
+            fuel_cost=Decimal('0'),
+            vehicle_last_fill=vehicle_last_fill,
+        )
+        db.session.add(trip)
+        current_app.logger.info(
+            f"Created expense-trip for fuel expense {exp.id} "
+            f"({business_miles} miles, {gallons_used:.3f} gal, "
+            f"£{trip_cost:.2f}, {approx_mpg:.1f} mpg on {trip_date})"
+        )
+
+    @staticmethod
+    def delete_fuel_trip_for_expense(exp: 'Expense'):
+        """Delete the Trip row that was auto-created for a fuel expense (if any)."""
+        from models.trips import Trip
+        from models.vehicles import Vehicle
+
+        if not exp.vehicle_registration:
+            return
+
+        vehicle = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
+        if not vehicle:
+            return
+
+        sentinel_desc = f"Expense #{exp.id}: {exp.description}"
+        trip = family_query(Trip).filter(
+            Trip.vehicle_id == vehicle.id,
+            Trip.journey_description == sentinel_desc
+        ).first()
+
         if trip:
-            # Update trip with expense details if provided
-            if exp.covered_miles and not trip.business_miles:
-                trip.business_miles = exp.covered_miles
-                trip.total_miles = (trip.personal_miles or 0) + exp.covered_miles
-            
-            # Store link to expense (you may need to add this field to Trip model)
-            # trip.expense_id = exp.id
-            
-            db.session.add(trip)
-            current_app.logger.info(f"Linked fuel expense {exp.id} to trip {trip.id}")
-        else:
-            # Optionally create new trip entry
-            current_app.logger.warning(f"No trip found for fuel expense {exp.id} on {exp.date}")
+            db.session.delete(trip)
+            current_app.logger.info(f"Deleted expense-trip {trip.id} for fuel expense {exp.id}")
 
 

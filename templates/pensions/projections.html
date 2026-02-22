@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}Pension Projections - JonesHQ Finance{% endblock %}
 
@@ -101,9 +101,8 @@
                 <span class="badge bg-primary">Projected</span>
             </div>
         </div>
-        <div class="card-body">
             {% if combined_data %}
-            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+            <div class="table-responsive table-responsive-sm-text" style="max-height: 600px; overflow-y: auto;">
                 <table class="table table-sm table-hover table-bordered">
                     <thead class="sticky-top bg-light">
                         <tr>
@@ -163,11 +162,10 @@
             </div>
             {% else %}
             <div class="text-center py-5">
-                <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                <i class="bi bi-inbox empty-state-icon"></i>
                 <p class="text-muted mt-3">No pension data available. Add snapshots and generate projections.</p>
             </div>
             {% endif %}
-        </div>
     </div>
 
     <!-- Instructions -->
@@ -184,14 +182,4 @@
 {% endblock %}
 
 {% block extra_css %}
-<style>
-.table-responsive {
-    font-size: 0.85rem;
-}
-.sticky-top {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-</style>
 {% endblock %}

@@ -42,13 +42,18 @@ def index():
     vehicles = family_query(Vehicle).order_by(Vehicle.registration).all()
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
-    # Get linked trips for fuel expenses
+    # Get linked trips for fuel expenses (trips created by the sync service are
+    # identified by the sentinel "Expense #<id>: " in journey_description)
     trips_dict = {}
     for exp in expenses:
         if exp.expense_type == 'Fuel' and exp.vehicle_registration:
             vehicle_obj = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
             if vehicle_obj:
-                trip = family_query(Trip).filter_by(vehicle_id=vehicle_obj.id, date=exp.date).first()
+                sentinel = f"Expense #{exp.id}: "
+                trip = family_query(Trip).filter(
+                    Trip.vehicle_id == vehicle_obj.id,
+                    Trip.journey_description.like(sentinel + '%')
+                ).first()
                 if trip:
                     trips_dict[exp.id] = trip
     
@@ -205,6 +210,9 @@ def update_expense(expense_id):
 def delete_expense(expense_id):
     try:
         expense = family_get_or_404(Expense, expense_id)
+        # Delete the auto-created trip row for fuel expenses
+        if expense.expense_type == 'Fuel':
+            ExpenseSyncService.delete_fuel_trip_for_expense(expense)
         db.session.delete(expense)
         db.session.commit()
         flash('Expense deleted', 'success')

@@ -143,7 +143,7 @@
                             <td class="{% if txn.amount > 0 %}text-danger{% else %}text-success{% endif %}">
                                 £{{ "%.2f"|format(txn.amount|abs) }}
                             </td>
-                            <td {% if not txn.is_paid %}class="text-muted" style="font-style: italic;"{% endif %}>
+                            <td {% if not txn.is_paid %}class="text-muted fst-italic"{% endif %}>
                                 £{{ "%.2f"|format(txn.balance or 0) }}
                                 {% if not txn.is_paid %}
                                 <i class="bi bi-clock-history text-muted" title="Future/Unpaid - not included in actual balance"></i>
@@ -164,7 +164,6 @@
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" 
                                             class="badge bg-{% if txn.is_paid %}success{% else %}secondary{% endif %} status-toggle" 
-                                            style="border: none; cursor: pointer; padding: 0.5em 0.75em;"
                                             title="Click to toggle paid status">
                                         {% if txn.is_paid %}✓ Paid{% else %}⏳ Pending{% endif %}
                                     </button>
@@ -288,7 +287,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="add_txn_type" class="form-label">Type</label>
-                        <select class="form-control" id="add_txn_type" name="txn_type" required onchange="toggleAddAccountField()">
+                        <select class="form-select" id="add_txn_type" name="txn_type" required onchange="toggleAddAccountField()">
                             <option value="Purchase">Purchase</option>
                             <option value="Payment">Payment</option>
                             <option value="Interest">Interest</option>
@@ -409,7 +408,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="txn_type" class="form-label">Type</label>
-                        <select class="form-control" id="txn_type" name="txn_type" required>
+                        <select class="form-select" id="txn_type" name="txn_type" required>
                             <option value="Purchase">Purchase</option>
                             <option value="Payment">Payment</option>
                             <option value="Interest">Interest</option>
@@ -599,8 +598,7 @@ window.addEventListener('load', function() {
     const targetRow = document.getElementById('cc-txn-{{ highlight_transaction_id }}');
     if (targetRow) {
         // Add highlight styling
-        targetRow.style.backgroundColor = '#fff3cd';
-        targetRow.style.border = '2px solid #ffc107';
+        targetRow.classList.add('editing-highlight');
         
         // Scroll to transaction with smooth behavior
         setTimeout(function() {
@@ -610,8 +608,7 @@ window.addEventListener('load', function() {
         // Remove highlight after 5 seconds
         setTimeout(function() {
             targetRow.style.transition = 'all 2s ease';
-            targetRow.style.backgroundColor = '';
-            targetRow.style.border = '';
+            targetRow.classList.remove('editing-highlight');
         }, 5000);
     }
 });
@@ -645,10 +642,4 @@ function updateRecurringPreviewCC() {
 }
 </script>
 
-<style>
-.status-toggle:hover {
-    opacity: 0.8;
-    transform: scale(1.05);
-}
-</style>
 {% endblock %}

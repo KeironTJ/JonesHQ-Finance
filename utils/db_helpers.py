@@ -31,7 +31,15 @@ from flask_login import current_user
 def get_family_id():
     """Return ``current_user.family_id``, or ``None`` if not authenticated."""
     if current_user.is_authenticated:
-        return current_user.family_id
+        try:
+            return current_user.family_id
+        except Exception:
+            # current_user instance may have been detached from the session
+            # (e.g. after db.session.remove()). Re-query to re-attach it.
+            from extensions import db
+            from models.users import User
+            user = db.session.get(User, current_user.get_id())
+            return user.family_id if user else None
     return None
 
 

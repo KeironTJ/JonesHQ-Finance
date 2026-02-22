@@ -374,7 +374,6 @@
                 </div>
             </div>
         </div>
-        <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover table-sm">
                     <thead class="table-light">
@@ -468,7 +467,6 @@
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <button type="submit" 
                                                 class="badge bg-{% if transaction.is_paid %}success{% else %}warning{% endif %} status-toggle" 
-                                                style="border: none; cursor: pointer; padding: 0.5em 0.75em;"
                                                 title="Click to toggle paid status">
                                             {% if transaction.is_paid %}✓ Paid{% else %}⏳ Pending{% endif %}
                                         </button>
@@ -580,7 +578,6 @@
                 </nav>
             </div>
             {% endif %}
-        </div>
     </div>
 </div>
 
@@ -901,15 +898,13 @@ function confirmBulkDelete() {
 window.addEventListener('load', function() {
     const targetRow = document.getElementById('txn-{{ highlight_transaction_id }}');
     if (targetRow) {
-        targetRow.style.backgroundColor = '#fff3cd';
-        targetRow.style.border = '2px solid #ffc107';
+        targetRow.classList.add('editing-highlight');
         setTimeout(function() {
             targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 300);
         setTimeout(function() {
             targetRow.style.transition = 'all 2s ease';
-            targetRow.style.backgroundColor = '';
-            targetRow.style.border = '';
+            targetRow.classList.remove('editing-highlight');
         }, 5000);
     }
 });
@@ -1004,23 +999,4 @@ function submitQuickAddVendor() {
 }
 </script>
 
-<style>
-    .table-sm th, .table-sm td {
-        padding: 0.5rem;
-        vertical-align: middle;
-    }
-    
-    .card {
-        box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
-    }
-    
-    .form-select, .form-control {
-        font-size: 0.875rem;
-    }
-    
-    .status-toggle:hover {
-        opacity: 0.8;
-        transform: scale(1.05);
-    }
-</style>
 {% endblock %}

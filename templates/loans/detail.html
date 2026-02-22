@@ -152,7 +152,7 @@
         <div class="card-body">
             <h6>Loan Progress</h6>
             {% set progress = ((loan.loan_value - loan.current_balance) / loan.loan_value * 100) if loan.loan_value > 0 else 0 %}
-            <div class="progress" style="height: 30px;">
+            <div class="progress progress-lg">
                 <div class="progress-bar bg-success" role="progressbar" 
                      style="width: {{ progress }}%;" 
                      aria-valuenow="{{ progress }}" 
@@ -327,7 +327,7 @@
             </div>
             {% else %}
             <div class="text-center py-5 text-muted">
-                <i class="bi bi-calendar-x" style="font-size: 3rem;"></i>
+                <i class="bi bi-calendar-x empty-state-icon"></i>
                 <p class="mt-3">No payment schedule generated yet</p>
                 <p>Click "Generate Schedule" above to create the payment schedule</p>
             </div>

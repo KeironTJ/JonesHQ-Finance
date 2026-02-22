@@ -187,6 +187,68 @@
                     </button>
                 </div>
             </form>
+
+            <!-- Appearance (client-side only, no server submit) -->
+            <div class="card form-card mt-4" id="appearance-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-palette"></i> Appearance</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3" style="font-size:0.875rem;">
+                        Choose your preferred colour theme. Your selection is saved in your browser.
+                    </p>
+                    <div class="row g-3">
+                        <!-- Light -->
+                        <div class="col-4">
+                            <label class="theme-option-card" for="themeRadioLight">
+                                <input class="visually-hidden" type="radio" name="jhq-theme-radio" id="themeRadioLight" value="light">
+                                <div class="theme-preview theme-preview-light">
+                                    <div class="preview-nav"></div>
+                                    <div class="preview-body">
+                                        <div class="preview-card"></div>
+                                        <div class="preview-card"></div>
+                                        <div class="preview-card"></div>
+                                    </div>
+                                </div>
+                                <span class="theme-option-label"><i class="bi bi-sun-fill me-1"></i>Light</span>
+                            </label>
+                        </div>
+                        <!-- Dark -->
+                        <div class="col-4">
+                            <label class="theme-option-card" for="themeRadioDark">
+                                <input class="visually-hidden" type="radio" name="jhq-theme-radio" id="themeRadioDark" value="dark">
+                                <div class="theme-preview theme-preview-dark">
+                                    <div class="preview-nav"></div>
+                                    <div class="preview-body">
+                                        <div class="preview-card"></div>
+                                        <div class="preview-card"></div>
+                                        <div class="preview-card"></div>
+                                    </div>
+                                </div>
+                                <span class="theme-option-label"><i class="bi bi-moon-stars-fill me-1"></i>Dark</span>
+                            </label>
+                        </div>
+                        <!-- Auto -->
+                        <div class="col-4">
+                            <label class="theme-option-card" for="themeRadioAuto">
+                                <input class="visually-hidden" type="radio" name="jhq-theme-radio" id="themeRadioAuto" value="auto">
+                                <div class="theme-preview theme-preview-auto">
+                                    <div class="preview-nav"></div>
+                                    <div class="preview-body">
+                                        <div class="preview-card"></div>
+                                        <div class="preview-card"></div>
+                                    </div>
+                                </div>
+                                <span class="theme-option-label"><i class="bi bi-circle-half me-1"></i>Auto</span>
+                            </label>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Auto</strong> follows your device's system preference. The quick toggle (sun/moon icon in the navbar) cycles between all three modes.
+                    </small>
+                </div>
+            </div>
         </div>
 
         <!-- Help/Info Sidebar -->

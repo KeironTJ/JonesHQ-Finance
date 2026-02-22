@@ -6,7 +6,7 @@
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-12">
-            <h2 class="mb-4">Vehicle Tracking</h2>
+            <h1 class="mb-4"><i class="bi bi-car-front"></i> Vehicle Tracking</h1>
             
             <!-- Navigation -->
             <ul class="nav nav-tabs mb-4">
@@ -34,7 +34,7 @@
 
             <!-- Trip Log Content -->
 <div id="trip-log-panel"><div class="card shadow">
-    <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #27ae60 0%, #229954 100%);">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bi bi-map"></i> Trip Log</h5>
         <div>
             {% if selected_vehicle_id_trip %}
@@ -120,7 +120,6 @@
                         <th>Personal</th>
                         <th>Business</th>
                         <th>Total</th>
-                        <th>Cum. Miles</th>
                         <th>Journey</th>
                         <th>MPG</th>
                         <th>Gallons</th>
@@ -132,13 +131,23 @@
                 </thead>
                 <tbody>
                     {% for trip in trips %}
+                    {% set _next_fuel = fuel_records_dict.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
+                    {% set _next_forecasted = forecasted_transactions.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
+                    {% set _is_last_trip = trip.id in last_trip_ids %}
                     {% if trip.date == today %}
-                    <tr id="trip-{{ trip.id }}" class="trip-row-today">
+                    {% set _row_cls = 'trip-row-today' %}
                     {% elif trip.date < today %}
-                    <tr id="trip-{{ trip.id }}" class="trip-row-past">
+                    {% set _row_cls = 'trip-row-past' %}
                     {% else %}
-                    <tr id="trip-{{ trip.id }}">
+                    {% set _row_cls = '' %}
                     {% endif %}
+                    {% if trip.business_miles %}
+                    {% set _row_cls = _row_cls ~ ' trip-row-business' %}
+                    {% endif %}
+                    {% if _is_last_trip and (_next_fuel or _next_forecasted) %}
+                    {% set _row_cls = _row_cls ~ ' trip-row-refuel' %}
+                    {% endif %}
+                    <tr id="trip-{{ trip.id }}" class="{{ _row_cls }}">
                         <td>
                             <input type="checkbox" class="trip-checkbox" value="{{ trip.id }}" onchange="updateBulkDeleteButton()">
                         </td>
@@ -148,14 +157,13 @@
                         <td>{{ trip.personal_miles }}</td>
                         <td>{{ trip.business_miles }}</td>
                         <td class="fw-bold">{{ trip.total_miles }}</td>
-                        <td>{{ "{:,}".format(trip.cumulative_total_miles or 0) }}</td>
                         <td><small>{{ trip.journey_description[:40] if trip.journey_description else '-' }}</small></td>
                         <td>{{ "%.1f"|format(trip.approx_mpg or 0) }}</td>
                         <td>{{ "%.2f"|format(trip.gallons_used or 0) }}</td>
                         <td class="text-danger">£{{ "%.2f"|format(trip.trip_cost or 0) }}</td>
                         <td>
-                            {% set next_day_fuel = fuel_records_dict.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
-                            {% set next_day_forecasted = forecasted_transactions.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
+                            {% set next_day_fuel = _next_fuel if _is_last_trip else none %}
+                            {% set next_day_forecasted = _next_forecasted if _is_last_trip else none %}
                             
                             {% if next_day_fuel %}
                                 {# Actual fuel record next day - this trip triggered it #}
@@ -182,7 +190,7 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% set linked_expense = fuel_expenses_dict.get(trip.vehicle_id, {}).get(trip.date) %}
+                            {% set linked_expense = fuel_expenses_by_trip.get(trip.id) %}
                             {% if linked_expense %}
                                 <a href="{{ url_for('expenses.index') }}?id={{ linked_expense.id }}" 
                                    class="btn btn-sm btn-info" 
@@ -519,8 +527,7 @@ window.addEventListener('load', function() {
         const targetRow = document.getElementById(tripId);
         if (targetRow) {
             // Add highlight styling
-            targetRow.style.backgroundColor = '#fff3cd';
-            targetRow.style.border = '2px solid #ffc107';
+            targetRow.classList.add('editing-highlight');
             
             // Scroll to trip with smooth behavior
             setTimeout(function() {
@@ -530,8 +537,7 @@ window.addEventListener('load', function() {
             // Remove highlight after 5 seconds
             setTimeout(function() {
                 targetRow.style.transition = 'all 2s ease';
-                targetRow.style.backgroundColor = '';
-                targetRow.style.border = '';
+                targetRow.classList.remove('editing-highlight');
             }, 5000);
         }
     }

@@ -3,14 +3,19 @@
 {% block title %}Create Household - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-6">
-        <div class="card shadow">
-            <div class="card-body p-5">
-                <h2 class="text-center mb-2">
-                    <i class="bi bi-house-heart-fill"></i> Create Your Household
-                </h2>
-                <p class="text-center text-muted mb-4">Set up your family finance account</p>
+<div class="row justify-content-center" style="min-height:calc(100vh - 120px);align-items:center;">
+    <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+        <div class="auth-card my-4">
+            <!-- Brand header -->
+            <div class="auth-card-brand">
+                <div class="brand-icon mb-2">
+                    <i class="bi bi-house-heart-fill"></i>
+                </div>
+                <h2>Create Your Household</h2>
+                <p>Set up your family finance account</p>
+            </div>
+            <!-- Form body -->
+            <div class="auth-card-body">
 
                 <form method="POST" action="{{ url_for('auth.register') }}">
                     {{ form.hidden_tag() }}
@@ -77,9 +82,9 @@
                     {{ form.submit(class="btn btn-success w-100 btn-lg") }}
                 </form>
 
-                <hr class="my-4">
+                <hr class="my-3">
 
-                <p class="text-center mb-0">
+                <p class="text-center mb-0" style="font-size:0.875rem;">
                     Already have an account?
                     <a href="{{ url_for('auth.login') }}">Sign in</a>
                 </p>

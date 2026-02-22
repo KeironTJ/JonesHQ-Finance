@@ -38,7 +38,7 @@
                             <p class="mb-2"><strong>Months Remaining:</strong> {{ person_info.months_remaining }} months</p>
                         </div>
                     </div>
-                    <div class="progress mt-3" style="height: 25px;">
+                    <div class="progress progress-md mt-3">
                         {% set progress_pct = ((person_info.retirement_age - person_info.years_remaining - 20) / (person_info.retirement_age - 20)) * 100 if person_info.retirement_age > 20 else 0 %}
                         <div class="progress-bar bg-success" role="progressbar" style="width: {{ progress_pct }}%">
                             {{ "{:.0f}".format(progress_pct) }}% to retirement

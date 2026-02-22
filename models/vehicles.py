@@ -14,6 +14,7 @@ class Vehicle(db.Model):
     registration = db.Column(db.String(20), nullable=False, unique=True)  # VRN
     tank_size = db.Column(db.Numeric(5, 2))  # Gallons
     fuel_type = db.Column(db.String(20))  # Diesel, Petrol
+    refuel_threshold_pct = db.Column(db.Numeric(4, 1), default=95.0)  # % tank capacity that triggers refuel forecast
     starting_mileage = db.Column(db.Integer)  # Initial odometer reading
     fuel_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'))  # Default account for fuel transactions
     purchase_date = db.Column(db.Date)

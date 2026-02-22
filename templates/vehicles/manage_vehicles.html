@@ -6,7 +6,7 @@
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-12">
-            <h2 class="mb-4">Vehicle Tracking</h2>
+            <h1 class="mb-4"><i class="bi bi-car-front"></i> Vehicle Tracking</h1>
             
             <!-- Navigation -->
             <ul class="nav nav-tabs mb-4">
@@ -34,7 +34,7 @@
 
             <!-- Manage Vehicles Content -->
             <div class="card shadow">
-                <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-car-front-fill"></i> Manage Vehicles</h5>
                     <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addVehicleModal">
                         <i class="bi bi-plus-circle"></i> Add Vehicle
@@ -74,7 +74,7 @@
                             {% endif %}
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }})">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;" onsubmit="return confirm('Delete {{ vehicle.name }}? This will delete all fuel and trip records!');">
@@ -139,7 +139,10 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Starting Mileage</label>
+                        <label class="form-label">Refuel Forecast Threshold (%)</label>
+                        <input type="number" step="1" min="50" max="100" name="refuel_threshold_pct" class="form-control" value="95" placeholder="95">
+                        <small class="text-muted">Forecast a refuel when this % of tank capacity is consumed (default 95%)</small>
+                    </div>
                         <input type="number" name="starting_mileage" class="form-control" placeholder="64050">
                         <small class="text-muted">Initial odometer reading when you started tracking this vehicle</small>
                     </div>
@@ -212,6 +215,11 @@
                         </div>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Refuel Forecast Threshold (%)</label>
+                        <input type="number" step="1" min="50" max="100" name="refuel_threshold_pct" id="edit_vehicle_refuel_threshold_pct" class="form-control">
+                        <small class="text-muted">Forecast a refuel when this % of tank capacity is consumed (default 95%)</small>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Default Fuel Account</label>
                         <select name="fuel_account_id" id="edit_vehicle_fuel_account_id" class="form-select">
                             <option value="">Select account...</option>
@@ -236,7 +244,7 @@
 </div>
 
 <script>
-function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id) {
+function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct) {
     document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
     document.getElementById('edit_vehicle_name').value = name;
     document.getElementById('edit_vehicle_registration').value = registration;
@@ -247,6 +255,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
     document.getElementById('edit_vehicle_fuel_type').value = fuel_type;
     document.getElementById('edit_vehicle_is_active').checked = is_active;
     document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
+    document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
     new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
 }
 </script>
@@ -257,7 +266,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
 
 {% block extra_js %}
 <script>
-function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id) {
+function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct) {
     document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
     document.getElementById('edit_vehicle_name').value = name;
     document.getElementById('edit_vehicle_registration').value = registration;
@@ -268,6 +277,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
     document.getElementById('edit_vehicle_fuel_type').value = fuel_type;
     document.getElementById('edit_vehicle_is_active').checked = is_active;
     document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
+    document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
     new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
 }
 </script>

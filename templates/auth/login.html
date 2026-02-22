@@ -3,22 +3,26 @@
 {% block title %}Login - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5">
-        <div class="card shadow">
-            <div class="card-body p-5">
-                <h2 class="text-center mb-4">
-                    <i class="bi bi-lock-fill"></i> JonesHQ Finance
-                </h2>
-                <p class="text-center text-muted mb-4">Sign in to your account</p>
-                
+<div class="row justify-content-center" style="min-height:calc(100vh - 120px);align-items:center;">
+    <div class="col-12 col-sm-10 col-md-7 col-lg-5 col-xl-4">
+        <div class="auth-card">
+            <!-- Brand header -->
+            <div class="auth-card-brand">
+                <div class="brand-icon mb-2">
+                    <i class="bi bi-cash-stack"></i>
+                </div>
+                <h2>JonesHQ Finance</h2>
+                <p>Sign in to your account</p>
+            </div>
+            <!-- Form body -->
+            <div class="auth-card-body">
                 <form method="POST" action="{{ url_for('auth.login') }}">
                     {{ form.hidden_tag() }}
-                    
+
                     <div class="mb-3">
                         {{ form.email.label(class="form-label") }}
-                        {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), 
-                                      placeholder="your.email@example.com", 
+                        {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""),
+                                      placeholder="your.email@example.com",
                                       autofocus=True) }}
                         {% if form.email.errors %}
                             <div class="invalid-feedback">
@@ -26,7 +30,7 @@
                             </div>
                         {% endif %}
                     </div>
-                    
+
                     <div class="mb-3">
                         {{ form.password.label(class="form-label") }}
                         {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
@@ -37,23 +41,23 @@
                             </div>
                         {% endif %}
                     </div>
-                    
-                    <div class="mb-3 form-check">
+
+                    <div class="mb-4 form-check">
                         {{ form.remember(class="form-check-input") }}
                         {{ form.remember.label(class="form-check-label") }}
                     </div>
-                    
+
                     {{ form.submit(class="btn btn-primary w-100") }}
                 </form>
-                
-                <hr class="my-4">
-                
-                <p class="text-center text-muted small mb-2">
-                    <i class="bi bi-shield-lock"></i> Secure access for authorized users only
+
+                <hr class="my-3">
+
+                <p class="text-center mb-1" style="font-size:0.8rem;color:var(--text-muted);">
+                    <i class="bi bi-shield-lock me-1"></i> Secure access for authorised users only
                 </p>
-                <p class="text-center mb-0">
-                    <a href="{{ url_for('auth.register') }}" class="text-decoration-none small">
-                        <i class="bi bi-house-heart"></i> Create your household
+                <p class="text-center mb-0" style="font-size:0.85rem;">
+                    <a href="{{ url_for('auth.register') }}" class="text-decoration-none">
+                        <i class="bi bi-house-heart me-1"></i> Create your household
                     </a>
                 </p>
             </div>
