@@ -391,12 +391,12 @@ def generate_all():
         if reimb_count or cc_count:
             parts = []
             if reimb_count:
-                parts.append(f'{reimb_count} reimbursement(s) for {" ".join(reimb_results.keys())}')
+                parts.append(f'{reimb_count} reimbursement(s) created/updated for {" ".join(reimb_results.keys())}')
             if cc_count:
-                parts.append(f'{cc_count} CC payment(s)')
+                parts.append(f'{cc_count} CC payment(s) created/updated')
             flash('Sync complete: ' + ', '.join(parts) + '.', 'success')
         else:
-            flash('Sync complete — no new transactions needed.', 'info')
+            flash('Sync complete — everything already up to date.', 'info')
     except Exception:
         db.session.rollback()
         current_app.logger.exception('Error during generate-all sync')

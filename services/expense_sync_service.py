@@ -113,9 +113,11 @@ class ExpenseSyncService:
 
             results = {}
             for period_key in periods_to_process:
-                txn_id = ExpenseSyncService._create_period_reimbursement(period_key)
-                if txn_id:
-                    results[period_key] = txn_id
+                result = ExpenseSyncService._create_period_reimbursement(period_key)
+                if result:
+                    txn_id, changed = result
+                    if changed:
+                        results[period_key] = txn_id
 
             db.session.commit()
             return results
@@ -200,12 +202,14 @@ class ExpenseSyncService:
                         current_app.logger.info(
                             f'  creating CC payment: card_id={card_id}  total={total}'
                         )
-                        payment_txn_id = ExpenseSyncService._create_cc_payment_from_reimbursement(
+                        result = ExpenseSyncService._create_cc_payment_from_reimbursement(
                             card_id, total, payment_date, period_key
                         )
-                        current_app.logger.info(f'  → payment_txn_id={payment_txn_id}')
-                        if payment_txn_id:
-                            results[card_id] = payment_txn_id
+                        if result:
+                            payment_txn_id, changed = result
+                            current_app.logger.info(f'  → payment_txn_id={payment_txn_id} changed={changed}')
+                            if changed:
+                                results[card_id] = payment_txn_id
 
             db.session.commit()
             current_app.logger.info(f'reconcile_credit_card_payments: done  results={results}')
@@ -327,12 +331,18 @@ class ExpenseSyncService:
         # Credit card purchase = negative amount
         target_amount = -abs(float(exp.total_cost))
 
-        # Look for existing transaction
-        existing = family_query(CreditCardTransaction).filter_by(
-            credit_card_id=cc.id,
-            date=exp.date,
-            item=exp.description
-        ).first()
+        # Look for existing transaction — prefer the stored link, fall back to description match
+        existing = None
+        if exp.credit_card_transaction_id:
+            existing = family_query(CreditCardTransaction).filter_by(
+                id=exp.credit_card_transaction_id
+            ).first()
+        if not existing:
+            existing = family_query(CreditCardTransaction).filter_by(
+                credit_card_id=cc.id,
+                date=exp.date,
+                item=exp.description
+            ).first()
 
         if existing:
             # Update if amount or type changed
@@ -414,13 +424,19 @@ class ExpenseSyncService:
         # Bank payment = negative amount (money out)
         target_amount = -abs(float(exp.total_cost))
 
-        # Look for existing transaction
-        existing = family_query(Transaction).filter_by(
-            account_id=account.id,
-            transaction_date=exp.date,
-            description=exp.description,
-            payment_type='Work Expense'
-        ).first()
+        # Look for existing transaction — prefer the stored link, fall back to description match
+        existing = None
+        if exp.bank_transaction_id:
+            existing = family_query(Transaction).filter_by(
+                id=exp.bank_transaction_id
+            ).first()
+        if not existing:
+            existing = family_query(Transaction).filter_by(
+                account_id=account.id,
+                transaction_date=exp.date,
+                description=exp.description,
+                payment_type='Work Expense'
+            ).first()
 
         if existing:
             # Update if amount changed
@@ -528,12 +544,16 @@ class ExpenseSyncService:
         ).first()
 
         if existing:
+            if existing.is_paid:
+                # Locked — do not modify a paid/reconciled reimbursement
+                return existing.id, False
             if abs(existing.amount - total_reimbursement) > Decimal('0.01'):
                 existing.amount = total_reimbursement
                 existing.transaction_date = reimbursement_date
                 existing.updated_at = datetime.utcnow()
                 db.session.add(existing)
-            return existing.id
+                return existing.id, True
+            return existing.id, False
 
         # Find reimbursement account
         acct_id = Settings.get_value('expenses.payment_account_id')
@@ -579,7 +599,7 @@ class ExpenseSyncService:
         db.session.add(reimburse_txn)
         db.session.flush()
         Transaction.recalculate_account_balance(account.id)
-        return reimburse_txn.id
+        return reimburse_txn.id, True
 
     @staticmethod
     def _create_monthly_reimbursement(period_key):
@@ -606,7 +626,8 @@ class ExpenseSyncService:
 
     @staticmethod
     def _create_cc_payment_from_reimbursement(card_id, total, payment_date, period_key):
-        """Create or update a credit card Payment transaction from expense reimbursement funds."""
+        """Create or update a credit card Payment transaction from expense reimbursement funds.
+        Also creates/updates the matching bank account debit transaction and links the two."""
         cc = family_get(CreditCard, card_id)
         if not cc:
             return None
@@ -619,16 +640,87 @@ class ExpenseSyncService:
         ).first()
 
         if existing:
+            if existing.is_paid:
+                # Locked — do not modify a paid/reconciled CC payment
+                return existing.id, False
             if abs(existing.amount - total) > Decimal('0.01'):
                 existing.amount = total
                 existing.date = payment_date
                 existing.updated_at = datetime.utcnow()
                 db.session.add(existing)
-            return existing.id
+                # Also update the linked bank transaction amount/date if present
+                if existing.bank_transaction_id:
+                    bank_txn = family_query(Transaction).filter_by(
+                        id=existing.bank_transaction_id
+                    ).first()
+                    if bank_txn and not bank_txn.is_paid:
+                        bank_txn.amount = -abs(total)
+                        bank_txn.transaction_date = payment_date
+                        bank_txn.updated_at = datetime.utcnow()
+                        db.session.add(bank_txn)
+                return existing.id, True
+            return existing.id, False
+
+        # --- Resolve category (used by both CC txn and bank txn) ---
+        cat = family_query(Category).filter_by(
+            head_budget='Credit Cards',
+            sub_budget=cc.card_name
+        ).first()
+        if not cat:
+            cat = Category(
+                family_id=get_family_id(),
+                head_budget='Credit Cards',
+                sub_budget=cc.card_name,
+                category_type='expense'
+            )
+            db.session.add(cat)
+            db.session.flush()
+
+        # --- Build the linked bank account transaction ---
+        bank_txn = None
+        payment_account_id = cc.default_payment_account_id if cc.default_payment_account_id else None
+        if not payment_account_id:
+            # Fall back to the configured expense payment account
+            acct_id = Settings.get_value('expenses.payment_account_id')
+            payment_account_id = int(acct_id) if acct_id else None
+
+        if payment_account_id:
+            # Vendor: use the card's own name (create if missing)
+            vendor = family_query(Vendor).filter_by(name=cc.card_name).first()
+            if not vendor:
+                vendor = Vendor(name=cc.card_name, family_id=get_family_id())
+                db.session.add(vendor)
+                db.session.flush()
+
+            year_month = payment_date.strftime('%Y-%m')
+            week_year  = f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}"
+            day_name   = payment_date.strftime('%A')
+
+            bank_txn = Transaction(
+                family_id=get_family_id(),
+                account_id=payment_account_id,
+                category_id=cat.id,
+                vendor_id=vendor.id,
+                amount=-abs(total),  # Negative — money leaving the account
+                transaction_date=payment_date,
+                description=description,
+                item='Credit Card Payment',
+                payment_type='Transfer',
+                is_paid=False,
+                credit_card_id=card_id,
+                year_month=year_month,
+                week_year=week_year,
+                day_name=day_name,
+                payday_period=PaydayService.get_period_for_date(payment_date)
+            )
+            db.session.add(bank_txn)
+            db.session.flush()
+            Transaction.recalculate_account_balance(payment_account_id)
 
         payment_txn = CreditCardTransaction(
             family_id=get_family_id(),
             credit_card_id=card_id,
+            category_id=cat.id,
             date=payment_date,
             day_name=payment_date.strftime('%A'),
             week=f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}",
@@ -636,12 +728,13 @@ class ExpenseSyncService:
             transaction_type='Payment',
             item=description,
             amount=total,
-            is_paid=False
+            is_paid=False,
+            bank_transaction_id=bank_txn.id if bank_txn else None
         )
         db.session.add(payment_txn)
         db.session.flush()
         CreditCardTransaction.recalculate_card_balance(card_id)
-        return payment_txn.id
+        return payment_txn.id, True
 
     @staticmethod
     def _link_fuel_expense_to_trip(exp):
