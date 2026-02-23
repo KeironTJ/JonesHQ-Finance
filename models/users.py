@@ -25,9 +25,13 @@ class User(UserMixin, db.Model):
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime)
 
+    # Site-level superuser flag - controls access to Flask-Admin (/admin)
+    # Completely separate from 'role' which is a family-level concept.
+    is_site_admin = db.Column(db.Boolean, default=False, server_default='0', nullable=False)
+
     # Family / multi-user fields
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
-    # 'admin' = full access; 'member' = restricted to allowed_sections
+    # 'admin' = full access within the family app; 'member' = restricted to allowed_sections
     role = db.Column(db.String(20), nullable=False, default='admin')
     # Display name that maps to 'assigned_to' values in transaction data
     member_name = db.Column(db.String(100), nullable=True)

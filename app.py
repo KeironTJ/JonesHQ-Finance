@@ -1,5 +1,6 @@
 import os
 import logging
+import click
 from logging.handlers import RotatingFileHandler
 from flask import Flask
 from flask_wtf.csrf import CSRFError
@@ -166,10 +167,20 @@ def create_app(config_name=None):
     # Create database tables
     with app.app_context():
         db.create_all()
-    
+
+    # Register Flask-Admin (must come after db.init_app and all models are loaded)
+    from admin_panel import init_admin
+    init_admin(app, db)
+    # Flask-Admin generates its own form tokens; exempt its blueprint from
+    # Flask-WTF's global CSRF so the two don't conflict.
+    csrf.exempt(app.blueprints['admin'])
+
     # Register error handlers
     register_error_handlers(app)
-    
+
+    # Register CLI commands
+    register_commands(app)
+
     return app
 
 
@@ -199,6 +210,60 @@ def register_error_handlers(app):
         from flask_wtf.csrf import CSRFError
         flash('CSRF token validation failed. Please try again.', 'danger')
         return render_template('errors/csrf.html', reason=error.description), 400
+
+
+def register_commands(app):
+    """Register Flask CLI commands."""
+
+    @app.cli.group()
+    def site_admin():
+        """Manage site-level admin access to /admin panel."""
+        pass
+
+    @site_admin.command('grant')
+    @click.argument('email')
+    def grant_site_admin(email):
+        """Grant /admin panel access to a user by EMAIL."""
+        from models.users import User
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            click.echo(f'ERROR: No user found with email "{email}"', err=True)
+            return
+        if user.is_site_admin:
+            click.echo(f'"{user.name}" ({email}) already has site admin access.')
+            return
+        user.is_site_admin = True
+        db.session.commit()
+        click.echo(f'SUCCESS: "{user.name}" ({email}) granted site admin access.')
+
+    @site_admin.command('revoke')
+    @click.argument('email')
+    def revoke_site_admin(email):
+        """Revoke /admin panel access from a user by EMAIL."""
+        from models.users import User
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            click.echo(f'ERROR: No user found with email "{email}"', err=True)
+            return
+        if not user.is_site_admin:
+            click.echo(f'"{user.name}" ({email}) does not have site admin access.')
+            return
+        user.is_site_admin = False
+        db.session.commit()
+        click.echo(f'SUCCESS: Site admin access revoked from "{user.name}" ({email}).')
+
+    @site_admin.command('list')
+    def list_site_admins():
+        """List all users with site admin access."""
+        from models.users import User
+        admins = User.query.filter_by(is_site_admin=True).all()
+        if not admins:
+            click.echo('No site admins found.')
+            return
+        click.echo(f'{"ID":<5} {"Name":<25} {"Email":<40} {"Active":<8}')
+        click.echo('-' * 80)
+        for u in admins:
+            click.echo(f'{u.id:<5} {u.name:<25} {u.email:<40} {str(u.is_active):<8}')
 
 
 if __name__ == '__main__':
