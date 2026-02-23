@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
-{% block title %}Login - JonesHQ Finance{% endblock %}
+{% block title %}Sign In - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center" style="min-height:calc(100vh - 120px);align-items:center;">
-    <div class="col-12 col-sm-10 col-md-7 col-lg-5 col-xl-4">
+<div class="jhq-hero jhq-auth-hero">
+    <div style="width:100%;max-width:420px;">
         <div class="auth-card">
             <!-- Brand header -->
             <div class="auth-card-brand">
@@ -61,6 +61,13 @@
                     </a>
                 </p>
             </div>
+        </div>
+
+        <!-- Sub-card links -->
+        <div class="jhq-auth-links">
+            <a href="{{ url_for('auth.intro') }}"><i class="bi bi-house me-1"></i>Introduction</a>
+            <span class="sep">&middot;</span>
+            <a href="{{ url_for('auth.help') }}"><i class="bi bi-question-circle me-1"></i>Help &amp; Support</a>
         </div>
     </div>
 </div>

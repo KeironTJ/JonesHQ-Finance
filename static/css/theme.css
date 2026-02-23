@@ -2103,3 +2103,365 @@ tr.editing-highlight {
 
 /* ── Chart canvas default sizing ───────────────────────── */
 .chart-canvas { max-height: 400px; }
+
+/* ══════════════════════════════════════════════════════════
+   PUBLIC PAGES  —  intro · help · login · register
+   Shared hero, button, card, dev-notice, and CTA styles.
+   Each template keeps only page-specific overrides.
+   ══════════════════════════════════════════════════════════ */
+
+/* Striped development warning banner */
+.jhq-dev-banner {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--clr-warning-bg),
+    var(--clr-warning-bg) 12px,
+    #fde68a 12px,
+    #fde68a 24px
+  );
+  border-bottom: 2px solid var(--clr-warning);
+  color: #92400e;
+  text-align: center;
+  padding: 0.6rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.jhq-dev-banner a { color: #92400e; font-weight: 700; text-decoration: underline; }
+
+/* Dark-indigo gradient hero */
+.jhq-hero {
+  background: linear-gradient(135deg, #1e293b 0%, #312e81 60%, #1e293b 100%);
+  color: #fff;
+  padding: 4.5rem 1.5rem 3.5rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.jhq-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* Pill badge */
+.jhq-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(99,102,241,0.35);
+  border: 1px solid rgba(165,180,252,0.4);
+  border-radius: 2rem;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #c7d2fe;
+  margin-bottom: 1.5rem;
+}
+
+/* Large lead icon with glow */
+.jhq-hero-icon {
+  font-size: 3.75rem;
+  line-height: 1;
+  margin-bottom: 1rem;
+  display: block;
+  filter: drop-shadow(0 0 20px rgba(99,102,241,.6));
+}
+
+/* Hero heading */
+.jhq-hero h1 {
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+.jhq-hero h1 span {
+  background: linear-gradient(90deg, #a5b4fc, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Subtext */
+.jhq-hero-sub {
+  font-size: 1.05rem;
+  color: #94a3b8;
+  max-width: 520px;
+  margin: 0 auto 2.5rem;
+  line-height: 1.65;
+}
+
+/* Button row */
+.jhq-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  justify-content: center;
+}
+
+/* Filled indigo CTA button */
+.btn-hero-primary {
+  background: #6366f1;
+  border: none;
+  color: #fff;
+  padding: 0.8rem 2rem;
+  border-radius: 0.6rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.45);
+}
+.btn-hero-primary:hover {
+  background: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99,102,241,0.55);
+  color: #fff;
+}
+
+/* Ghost/outline button on dark background */
+.btn-hero-ghost {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #e2e8f0;
+  padding: 0.8rem 1.75rem;
+  border-radius: 0.6rem;
+  font-size: 1rem;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: background 0.2s, border-color 0.2s;
+  backdrop-filter: blur(4px);
+}
+.btn-hero-ghost:hover {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.35);
+  color: #fff;
+}
+
+/* Auth form vertically centred on the hero gradient */
+.jhq-auth-hero {
+  min-height: calc(100vh - var(--nav-height));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 3rem 1.5rem;
+}
+.jhq-auth-hero .auth-card-brand {
+  background: transparent;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Small links below the auth card */
+.jhq-auth-links {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.45);
+}
+.jhq-auth-links a {
+  color: rgba(255,255,255,0.55);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.jhq-auth-links a:hover { color: #fff; text-decoration: underline; }
+.jhq-auth-links .sep { margin: 0 0.5rem; opacity: 0.4; }
+
+/* Content section (feature/tip grids) */
+.jhq-section {
+  padding: 4rem 1.5rem;
+  background: var(--bg-page);
+}
+.jhq-section-inner { max-width: 960px; margin: 0 auto; }
+.jhq-section-label {
+  color: var(--brand);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+.jhq-section h2 {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.01em;
+}
+.jhq-section-sub {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+/* Feature / info card */
+.jhq-feature-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0.875rem;
+  padding: 1.5rem;
+  height: 100%;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+.jhq-feature-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--brand-border);
+  transform: translateY(-2px);
+}
+/* Row variant: icon + text side-by-side */
+.jhq-feature-card.jhq-card-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.4rem 1.5rem;
+}
+.jhq-card-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.625rem;
+  background: var(--brand-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: var(--brand);
+  flex-shrink: 0;
+}
+.jhq-feature-card h5,
+.jhq-feature-card h6 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.3rem;
+}
+.jhq-feature-card p {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* Email contact card */
+.jhq-email-card {
+  background: var(--bg-surface);
+  border: 2px solid var(--brand-border);
+  border-radius: 0.875rem;
+  padding: 2rem;
+  text-align: center;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-sm);
+}
+.jhq-email-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: var(--brand);
+  margin: 0 auto 1rem;
+}
+.jhq-email-card h5 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.jhq-email-address {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--brand);
+  text-decoration: none;
+  word-break: break-all;
+}
+.jhq-email-address:hover { text-decoration: underline; }
+.jhq-email-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+}
+
+/* Amber dev notice box */
+.jhq-dev-notice {
+  background: var(--clr-warning-bg, #fef3c7);
+  border: 1.5px solid var(--clr-warning, #d97706);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+}
+.jhq-dev-notice-icon {
+  font-size: 1.5rem;
+  color: var(--clr-warning);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.jhq-dev-notice h6 {
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 0.25rem;
+  font-size: 0.95rem;
+}
+.jhq-dev-notice p {
+  font-size: 0.87rem;
+  color: #92400e;
+  margin: 0;
+  line-height: 1.55;
+}
+.jhq-dev-notice a { color: #92400e; font-weight: 700; }
+
+/* About / prose section */
+.jhq-about-section {
+  padding: 3.5rem 1.5rem;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-color);
+}
+.jhq-about-section-inner { max-width: 720px; margin: 0 auto; }
+.jhq-about-section h4 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+.jhq-about-section p {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 0.75rem;
+}
+
+/* Footer CTA strip */
+.jhq-cta {
+  padding: 3rem 1.5rem;
+  background: linear-gradient(135deg, #1e293b 0%, #312e81 100%);
+  text-align: center;
+  color: #fff;
+}
+.jhq-cta h3 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+.jhq-cta p {
+  color: #94a3b8;
+  margin-bottom: 1.75rem;
+  font-size: 0.95rem;
+}
+

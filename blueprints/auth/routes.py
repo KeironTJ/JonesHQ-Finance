@@ -138,3 +138,15 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/intro')
+def intro():
+    """Public introduction / landing page"""
+    return render_template('public/intro.html')
+
+
+@auth_bp.route('/help')
+def help():
+    """Public help / support page"""
+    return render_template('public/help.html')

@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}Help &amp; Support - JonesHQ Finance{% endblock %}
+
+{% block extra_css %}{% endblock %}
+
+{% block content %}
+<div>
+
+    <!-- ── Dev Banner ──────────────────────────────────────── -->
+    <div class="jhq-dev-banner">
+        <i class="bi bi-tools me-1"></i>
+        This is an independent project currently in active development &mdash; features may change.
+        Experiencing an issue? <a href="mailto:keirontj@gmail.com">Email us</a>.
+    </div>
+
+    <!-- ── Hero ───────────────────────────────────────────── -->
+    <div class="jhq-hero">
+        <div class="jhq-hero-badge">
+            <i class="bi bi-question-circle"></i> Support
+        </div>
+        <i class="bi bi-headset jhq-hero-icon"></i>
+        <h1>Help &amp; <span>Support</span></h1>
+        <p class="jhq-hero-sub">
+            Experiencing an issue with JonesHQ Finance? Send us an email and we&rsquo;ll get it sorted.
+        </p>
+        <div class="jhq-hero-actions">
+            <a href="mailto:keirontj@gmail.com" class="btn-hero-primary">
+                <i class="bi bi-envelope"></i> Send an Email
+            </a>
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('dashboard.index') }}" class="btn-hero-ghost">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+            {% else %}
+            <a href="{{ url_for('auth.intro') }}" class="btn-hero-ghost">
+                <i class="bi bi-arrow-left"></i> Back to Intro
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Contact & Tips ─────────────────────────────────── -->
+    <div class="jhq-section">
+        <div class="jhq-section-inner">
+            <div class="text-center mb-1">
+                <span class="jhq-section-label">Get in touch</span>
+                <h2>How to reach us</h2>
+                <p class="jhq-section-sub">All support is handled via email &mdash; we aim to respond within 24&ndash;48 hours.</p>
+            </div>
+
+            <!-- Email -->
+            <div class="jhq-email-card">
+                <div class="jhq-email-icon"><i class="bi bi-envelope-at"></i></div>
+                <h5>Email Support</h5>
+                <a href="mailto:keirontj@gmail.com" class="jhq-email-address">keirontj@gmail.com</a>
+                <p class="jhq-email-note">Responses typically within 24&ndash;48 hours.</p>
+            </div>
+
+            <!-- Tips -->
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <div class="jhq-feature-card jhq-card-row">
+                        <div class="jhq-card-icon"><i class="bi bi-chat-left-text"></i></div>
+                        <div>
+                            <h5>Describe the issue</h5>
+                            <p>Include a brief description of what went wrong and the page or section where it occurred.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="jhq-feature-card jhq-card-row">
+                        <div class="jhq-card-icon"><i class="bi bi-camera"></i></div>
+                        <div>
+                            <h5>Attach a screenshot</h5>
+                            <p>A screenshot of the problem is always helpful and can significantly speed up resolution.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="jhq-feature-card jhq-card-row">
+                        <div class="jhq-card-icon"><i class="bi bi-list-ol"></i></div>
+                        <div>
+                            <h5>Steps to reproduce</h5>
+                            <p>If you can reliably reproduce the issue, note down the steps &mdash; it helps narrow things down quickly.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="jhq-feature-card jhq-card-row">
+                        <div class="jhq-card-icon"><i class="bi bi-clock"></i></div>
+                        <div>
+                            <h5>Response times</h5>
+                            <p>All reported issues are reviewed as soon as possible. Complex bugs may take a little longer to fix.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Dev Notice ─────────────────────────────────────── -->
+    <div class="jhq-about-section">
+        <div class="jhq-about-section-inner">
+            <div class="jhq-dev-notice">
+                <span class="jhq-dev-notice-icon"><i class="bi bi-tools"></i></span>
+                <div>
+                    <h6>Independent Project &mdash; Currently In Development</h6>
+                    <p>
+                        JonesHQ Finance is a personal, independent project actively being worked on.
+                        Some features may be incomplete or subject to change. Your reports genuinely help
+                        improve the platform &mdash; every issue raised is taken seriously and addressed as soon as possible.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Footer CTA ─────────────────────────────────────── -->
+    <div class="jhq-cta">
+        <h3>Ready to get in touch?</h3>
+        <p>Drop us an email and we&rsquo;ll get back to you as soon as possible.</p>
+        <div class="jhq-hero-actions">
+            <a href="mailto:keirontj@gmail.com" class="btn-hero-primary">
+                <i class="bi bi-envelope"></i> Email Support
+            </a>
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('dashboard.index') }}" class="btn-hero-ghost">
+                <i class="bi bi-speedometer2"></i> Go to Dashboard
+            </a>
+            {% else %}
+            <a href="{{ url_for('auth.intro') }}" class="btn-hero-ghost">
+                <i class="bi bi-house"></i> Back to Intro
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

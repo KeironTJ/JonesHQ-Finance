@@ -1,4 +1,5 @@
-from flask import render_template, request
+from flask import render_template, request, redirect, url_for
+from flask_login import current_user
 from . import dashboard_bp
 from models.accounts import Account
 from models.transactions import Transaction
@@ -19,6 +20,9 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 @dashboard_bp.route('/dashboard')
 def index():
     """Main dashboard view with payday tracking"""
+    if not current_user.is_authenticated:
+        return redirect(url_for('auth.intro'))
+
     # Get settings
     payday_day = Settings.get_value('payday_day', 15)
     

@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+
+{% block title %}Welcome - JonesHQ Finance{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Intro-specific: taller hero padding */
+.jhq-hero.intro-hero-tall { padding: 5rem 1.5rem 4rem; }
+/* Intro: larger feature card icon margin */.jhq-feature-card .jhq-card-icon { margin-bottom: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div>
+
+    <!-- ── Dev Banner ──────────────────────────────────────── -->
+    <div class="jhq-dev-banner">
+        <i class="bi bi-tools me-1"></i>
+        This is an independent project currently in active development &mdash; features may change.
+        Experiencing an issue? <a href="{{ url_for('auth.help') }}">Get help</a>.
+    </div>
+
+    <!-- ── Hero ───────────────────────────────────────────── -->
+    <div class="jhq-hero intro-hero-tall">
+        <div class="jhq-hero-badge">
+            <i class="bi bi-shield-check"></i> Private Household Finance
+        </div>
+        <i class="bi bi-cash-stack jhq-hero-icon"></i>
+        <h1>JonesHQ <span>Finance</span></h1>
+        <p class="jhq-hero-sub">
+            A personal finance platform built for the Jones household &mdash;
+            track every account, expense, debt, and investment in one secure place.
+        </p>
+        <div class="jhq-hero-actions">
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('dashboard.index') }}" class="btn-hero-primary">
+                <i class="bi bi-speedometer2"></i> Go to Dashboard
+            </a>
+            {% else %}
+            <a href="{{ url_for('auth.login', next=request.args.get('next', '')) }}" class="btn-hero-primary">
+                <i class="bi bi-box-arrow-in-right"></i> Sign In
+            </a>
+            {% endif %}
+            <a href="{{ url_for('auth.help') }}" class="btn-hero-ghost">
+                <i class="bi bi-question-circle"></i> Help &amp; Support
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Features Grid ──────────────────────────────────── -->
+    <div class="jhq-section">
+        <div class="jhq-section-inner">
+            <div class="text-center mb-1">
+                <span class="jhq-section-label">What&rsquo;s inside</span>
+                <h2>Everything your household needs</h2>
+                <p class="jhq-section-sub">From day-to-day spending to long-term wealth planning.</p>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-wallet2"></i></div>
+                        <h5>Accounts &amp; Transactions</h5>
+                        <p>Track all bank accounts and get a clear picture of every transaction across your household.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-receipt"></i></div>
+                        <h5>Budgets &amp; Expenses</h5>
+                        <p>Log work expenses and monitor spending trends with category breakdowns.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-credit-card-2-front"></i></div>
+                        <h5>Credit Cards</h5>
+                        <p>Manage credit card balances, track statement cycles, and stay ahead of due dates.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-cash-stack"></i></div>
+                        <h5>Loans &amp; Mortgage</h5>
+                        <p>Keep tabs on outstanding loans and track your mortgage payments and balance.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-graph-up-arrow"></i></div>
+                        <h5>Income &amp; Pensions</h5>
+                        <p>Record earnings, monitor pension growth, and project your retirement readiness.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-trophy"></i></div>
+                        <h5>Net Worth Tracking</h5>
+                        <p>Visualise the growth of your total assets versus liabilities over time.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-car-front"></i></div>
+                        <h5>Vehicles</h5>
+                        <p>Log fuel fill-ups, track trip mileage, and monitor running costs per vehicle.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-people"></i></div>
+                        <h5>Childcare</h5>
+                        <p>Track childcare sessions, costs, and payments in one organised place.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="jhq-feature-card">
+                        <div class="jhq-card-icon mb-3"><i class="bi bi-shield-lock"></i></div>
+                        <h5>Family Access Control</h5>
+                        <p>Invite household members with per-section permissions. Admins control everything.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── About / Dev Notice ─────────────────────────────── -->
+    <div class="jhq-about-section">
+        <div class="jhq-about-section-inner">
+
+            <div class="jhq-dev-notice mb-4">
+                <span class="jhq-dev-notice-icon"><i class="bi bi-tools"></i></span>
+                <div>
+                    <h6>Independent Project &mdash; Currently In Development</h6>
+                    <p>
+                        JonesHQ Finance is a <strong>personal, independent project</strong> built from scratch and
+                        actively being developed. It is not a commercial product. New features are being added
+                        regularly and some areas may be incomplete or subject to change without notice.<br><br>
+                        If you encounter any bugs, broken pages, or unexpected behaviour, please
+                        <a href="{{ url_for('auth.help') }}">visit the Help page</a> and send an email —
+                        all issues are reviewed and addressed as soon as possible.
+                    </p>
+                </div>
+            </div>
+
+            <h4>About This Project</h4>
+                <p>
+                    JonesHQ Finance started as a way to replace scattered spreadsheets with a single,
+                    well-organised application tailored specifically to our household's needs. Rather than
+                    fitting into a generic budgeting tool, every feature here has been designed around
+                    real day-to-day requirements.
+                </p>
+                <p>
+                    The platform is self-hosted and private — no third-party data sharing, no subscriptions,
+                    no ads. It runs entirely within our own infrastructure and is accessible only to
+                    invited household members.
+                </p>
+                <p>
+                    Development is ongoing. If something isn&rsquo;t working as expected or you have a
+                    suggestion, don&rsquo;t hesitate to reach out via the <a href="{{ url_for('auth.help') }}">Help page</a>.
+                </p>
+        </div>
+    </div>
+
+    <!-- ── Footer CTA ─────────────────────────────────────── -->
+    <div class="jhq-cta">
+        <h3>Ready to get started?</h3>
+        <p>Sign in to your household account or visit Help if you need assistance.</p>
+        <div class="jhq-hero-actions">
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('dashboard.index') }}" class="btn-hero-primary">
+                <i class="bi bi-speedometer2"></i> Go to Dashboard
+            </a>
+            {% else %}
+            <a href="{{ url_for('auth.login', next=request.args.get('next', '')) }}" class="btn-hero-primary">
+                <i class="bi bi-box-arrow-in-right"></i> Sign In
+            </a>
+            {% endif %}
+            <a href="{{ url_for('auth.help') }}" class="btn-hero-ghost">
+                <i class="bi bi-envelope"></i> Contact Support
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
