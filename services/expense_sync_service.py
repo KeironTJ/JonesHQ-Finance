@@ -101,13 +101,11 @@ class ExpenseSyncService:
             if year_month:
                 periods_to_process = [year_month]
             else:
-                # Build the set of period keys from all submitted expenses.
+                # Build the set of period keys from all expenses (submitted or not).
                 # Always derive from expense.date (Expense.month can be NULL on older records).
                 periods_set = set()
-                submitted_expenses = family_query(Expense).filter(
-                    Expense.submitted == True  # noqa: E712
-                ).all()
-                for exp in submitted_expenses:
+                all_expenses = family_query(Expense).all()
+                for exp in all_expenses:
                     key = ExpenseSyncService.get_period_key_for_expense(exp)
                     if key:
                         periods_set.add(key)
@@ -500,8 +498,9 @@ class ExpenseSyncService:
     @staticmethod
     def _create_period_reimbursement(period_key):
         """
-        Create (or update) a single reimbursement transaction for all *submitted* expenses
+        Create (or update) a single reimbursement transaction for all expenses
         in the given period (calendar month or payday period, depending on setting).
+        Transaction is created as is_paid=False regardless of expense submission status.
         Returns transaction ID or None.
         """
         try:
@@ -510,11 +509,10 @@ class ExpenseSyncService:
         except (ValueError, AttributeError):
             return None
 
-        # Only include submitted expenses — non-submitted ones haven\'t been claimed yet.
+        # Include all expenses in the period (submitted or not); created as is_paid=False.
         expenses = family_query(Expense).filter(
             Expense.date >= period_start,
-            Expense.date <= period_end,
-            Expense.submitted == True  # noqa: E712
+            Expense.date <= period_end
         ).all()
 
         if not expenses:
