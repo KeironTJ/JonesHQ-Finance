@@ -345,13 +345,16 @@ class ExpenseSyncService:
             ).first()
 
         if existing:
-            # Update if amount or type changed
+            # Update if amount or type changed; always ensure is_fixed=True
             updated = False
             if abs(existing.amount - Decimal(str(target_amount))) > Decimal('0.01'):
                 existing.amount = Decimal(str(target_amount))
                 updated = True
             if existing.transaction_type != 'Purchase':
                 existing.transaction_type = 'Purchase'
+                updated = True
+            if not existing.is_fixed:
+                existing.is_fixed = True  # Lock existing records that weren't previously locked
                 updated = True
             if updated:
                 existing.updated_at = datetime.utcnow()
@@ -376,7 +379,8 @@ class ExpenseSyncService:
                 item=exp.description,
                 transaction_type='Purchase',
                 amount=Decimal(str(target_amount)),
-                is_paid=False
+                is_paid=False,
+                is_fixed=True  # Expense-linked purchases must never be deleted by regeneration
             )
             db.session.add(cc_txn)
             db.session.flush()
@@ -643,11 +647,12 @@ class ExpenseSyncService:
             if existing.is_paid:
                 # Locked — do not modify a paid/reconciled CC payment
                 return existing.id, False
+            updated = False
             if abs(existing.amount - total) > Decimal('0.01'):
                 existing.amount = total
                 existing.date = payment_date
                 existing.updated_at = datetime.utcnow()
-                db.session.add(existing)
+                updated = True
                 # Also update the linked bank transaction amount/date if present
                 if existing.bank_transaction_id:
                     bank_txn = family_query(Transaction).filter_by(
@@ -658,6 +663,11 @@ class ExpenseSyncService:
                         bank_txn.transaction_date = payment_date
                         bank_txn.updated_at = datetime.utcnow()
                         db.session.add(bank_txn)
+            if not existing.is_fixed:
+                existing.is_fixed = True  # Lock existing records that weren't previously locked
+                updated = True
+            if updated:
+                db.session.add(existing)
                 return existing.id, True
             return existing.id, False
 
@@ -729,6 +739,7 @@ class ExpenseSyncService:
             item=description,
             amount=total,
             is_paid=False,
+            is_fixed=True,  # Expense-linked payments must never be deleted by regeneration
             bank_transaction_id=bank_txn.id if bank_txn else None
         )
         db.session.add(payment_txn)
