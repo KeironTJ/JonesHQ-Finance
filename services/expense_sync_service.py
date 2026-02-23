@@ -133,12 +133,17 @@ class ExpenseSyncService:
         """
         auto_sync = Settings.get_value('expenses.auto_sync', True)
         if not auto_sync:
+            current_app.logger.info('reconcile_credit_card_payments: auto_sync disabled, skipping')
             return {}
-        
+
         try:
+            fid = get_family_id()
+            current_app.logger.info(
+                f'reconcile_credit_card_payments: start  year_month={year_month!r}  family_id={fid}'
+            )
+
             # Get reimbursement transactions
             if year_month:
-                # Find reimbursement transaction for this month
                 reimburse_txns = family_query(Transaction).filter(
                     Transaction.payment_type == 'Expense Reimbursement',
                     Transaction.year_month == year_month
@@ -147,48 +152,65 @@ class ExpenseSyncService:
                 reimburse_txns = family_query(Transaction).filter(
                     Transaction.payment_type == 'Expense Reimbursement'
                 ).all()
-            
+
+            current_app.logger.info(
+                f'reconcile_credit_card_payments: found {len(reimburse_txns)} reimbursement txn(s): '
+                f'{[t.id for t in reimburse_txns]}'
+            )
+
             results = {}
             for reimburse_txn in reimburse_txns:
-                # Calculate payment date (1 working day after reimbursement)
                 payment_date = ExpenseSyncService._next_working_day(reimburse_txn.transaction_date)
-
-                # period_key stored in year_month field of the reimbursement transaction
                 period_key = reimburse_txn.year_month
+                current_app.logger.info(
+                    f'  reimburse_txn #{reimburse_txn.id}  period_key={period_key!r}'
+                    f'  payment_date={payment_date}'
+                )
                 if not period_key:
+                    current_app.logger.warning(f'  skipping: period_key is empty')
                     continue
 
-                # Resolve the date range for this period key (calendar or payday depending on mode)
                 try:
                     p_start, p_end = ExpenseSyncService._get_period_date_range(period_key)
-                except (ValueError, AttributeError):
+                except (ValueError, AttributeError) as exc:
+                    current_app.logger.warning(f'  skipping: _get_period_date_range failed: {exc}')
                     continue
 
-                # Find all submitted credit card expenses within the period's date range
+                current_app.logger.info(f'  period range: {p_start} … {p_end}')
+
                 cc_expenses = family_query(Expense).filter(
                     Expense.date >= p_start,
                     Expense.date <= p_end,
-                    Expense.credit_card_id != None,
-                    Expense.submitted == True  # noqa: E712
+                    Expense.credit_card_id != None,  # noqa: E711
                 ).all()
 
-                # Group by credit card
+                current_app.logger.info(
+                    f'  cc_expenses found: {len(cc_expenses)}  '
+                    f'ids={[e.id for e in cc_expenses]}'
+                )
+
                 card_totals = {}
                 for exp in cc_expenses:
                     if exp.credit_card_id not in card_totals:
                         card_totals[exp.credit_card_id] = Decimal('0')
-                    card_totals[exp.credit_card_id] += exp.total_cost
+                    card_totals[exp.credit_card_id] += (exp.total_cost or Decimal('0'))
 
-                # Create payment transaction for each card
+                current_app.logger.info(f'  card_totals: {dict(card_totals)}')
+
                 for card_id, total in card_totals.items():
                     if total > 0:
+                        current_app.logger.info(
+                            f'  creating CC payment: card_id={card_id}  total={total}'
+                        )
                         payment_txn_id = ExpenseSyncService._create_cc_payment_from_reimbursement(
                             card_id, total, payment_date, period_key
                         )
+                        current_app.logger.info(f'  → payment_txn_id={payment_txn_id}')
                         if payment_txn_id:
                             results[card_id] = payment_txn_id
-            
+
             db.session.commit()
+            current_app.logger.info(f'reconcile_credit_card_payments: done  results={results}')
             return results
         except Exception:
             db.session.rollback()
@@ -334,6 +356,7 @@ class ExpenseSyncService:
         else:
             # Create new credit card purchase
             cc_txn = CreditCardTransaction(
+                family_id=get_family_id(),
                 credit_card_id=cc.id,
                 category_id=None,
                 date=exp.date,
@@ -377,13 +400,18 @@ class ExpenseSyncService:
         if not account:
             return
 
-        # Find expense category (Income > Expense for both credits and debits)
-        expense_cat = family_query(Category).filter_by(
-            head_budget='Income',
-            sub_budget='Expense'
-        ).first()
+        # Category: prefer the configured reimburse category, then name-based fallback
+        cat_id = Settings.get_value('expenses.reimburse_category_id')
+        expense_cat = family_get(Category, int(cat_id)) if cat_id else None
+        if not expense_cat:
+            expense_cat = family_query(Category).filter_by(
+                head_budget='Income', sub_budget='Expense').first()
         if not expense_cat:
             expense_cat = family_query(Category).filter_by(head_budget='Expenses').first()
+
+        # Vendor: prefer the configured reimburse vendor
+        vendor_id_setting = Settings.get_value('expenses.reimburse_vendor_id')
+        expense_vendor_id = int(vendor_id_setting) if vendor_id_setting else None
 
         # Bank payment = negative amount (money out)
         target_amount = -abs(float(exp.total_cost))
@@ -412,9 +440,10 @@ class ExpenseSyncService:
             # Always derive date-related fields from exp.date directly — Expense.month/week/day_name
             # can be NULL on older or freshly-created records before the route populates them.
             txn = Transaction(
+                family_id=get_family_id(),
                 account_id=account.id,
                 category_id=expense_cat.id if expense_cat else None,
-                vendor_id=None,
+                vendor_id=expense_vendor_id,
                 amount=Decimal(str(target_amount)),
                 transaction_date=exp.date,
                 description=exp.description,
@@ -516,11 +545,12 @@ class ExpenseSyncService:
         if not account:
             return None
 
-        # Find a suitable category (same lookup as _ensure_bank_payment)
-        reimburse_cat = family_query(Category).filter_by(
-            head_budget='Income',
-            sub_budget='Expense'
-        ).first()
+        # Category: prefer configured, then name-based fallback
+        cat_id = Settings.get_value('expenses.reimburse_category_id')
+        reimburse_cat = family_get(Category, int(cat_id)) if cat_id else None
+        if not reimburse_cat:
+            reimburse_cat = family_query(Category).filter_by(
+                head_budget='Income', sub_budget='Expense').first()
         if not reimburse_cat:
             reimburse_cat = family_query(Category).filter_by(head_budget='Expenses').first()
         if not reimburse_cat:
@@ -528,9 +558,15 @@ class ExpenseSyncService:
         if not reimburse_cat:
             raise ValueError('No category found — please create at least one category before generating reimbursements.')
 
+        # Vendor: prefer configured
+        vendor_id_setting = Settings.get_value('expenses.reimburse_vendor_id')
+        reimburse_vendor_id = int(vendor_id_setting) if vendor_id_setting else None
+
         reimburse_txn = Transaction(
+            family_id=get_family_id(),
             account_id=account.id,
             category_id=reimburse_cat.id,
+            vendor_id=reimburse_vendor_id,
             amount=total_reimbursement,
             transaction_date=reimbursement_date,
             description=f'Expense Reimbursement {period_key}',
@@ -593,6 +629,7 @@ class ExpenseSyncService:
             return existing.id
 
         payment_txn = CreditCardTransaction(
+            family_id=get_family_id(),
             credit_card_id=card_id,
             date=payment_date,
             day_name=payment_date.strftime('%A'),

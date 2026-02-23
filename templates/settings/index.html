@@ -113,6 +113,33 @@
                             </small>
                         </div>
 
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-6">
+                                <label for="expense_reimburse_category" class="form-label">Reimbursement Category</label>
+                                <select class="form-select" id="expense_reimburse_category" name="expense_reimburse_category">
+                                    <option value="">-- Select Category --</option>
+                                    {% for cat in categories %}
+                                    <option value="{{ cat.id }}" {% if cat.id == expense_reimburse_category_id %}selected{% endif %}>
+                                        {{ cat.head_budget }}{% if cat.sub_budget %} › {{ cat.sub_budget }}{% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Used on reimbursement bank transactions.</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="expense_reimburse_vendor" class="form-label">Reimbursement Vendor</label>
+                                <select class="form-select" id="expense_reimburse_vendor" name="expense_reimburse_vendor">
+                                    <option value="">-- Select Vendor --</option>
+                                    {% for v in vendors %}
+                                    <option value="{{ v.id }}" {% if v.id == expense_reimburse_vendor_id %}selected{% endif %}>
+                                        {{ v.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Used on reimbursement bank transactions (e.g. your employer).</small>
+                            </div>
+                        </div>
+
                         <div class="mb-3 mt-3">
                             <label class="form-label fw-semibold">Expense Accumulation Period</label>
                             <div class="form-check">

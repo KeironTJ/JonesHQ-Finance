@@ -261,6 +261,11 @@ def update_expense(expense_id):
 def delete_expense(expense_id):
     try:
         expense = family_get_or_404(Expense, expense_id)
+        # Delete linked bank/CC transactions first
+        try:
+            ExpenseSyncService.bulk_delete_linked_transactions(expense_ids=[expense.id])
+        except Exception:
+            current_app.logger.exception(f'Error deleting linked transactions for expense {expense_id}')
         # Delete the auto-created trip row for fuel expenses
         if expense.expense_type == 'Fuel':
             ExpenseSyncService.delete_fuel_trip_for_expense(expense)

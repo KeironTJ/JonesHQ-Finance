@@ -3,6 +3,8 @@ from flask import jsonify
 from . import settings_bp
 from models.settings import Settings
 from models.accounts import Account
+from models.categories import Category
+from models.vendors import Vendor
 from models.tax_settings import TaxSettings
 from extensions import db
 from decimal import Decimal
@@ -22,6 +24,8 @@ def index():
     expense_payment_account = Settings.get_value('expenses.payment_account_id')
     expense_auto_sync = Settings.get_value('expenses.auto_sync', True)
     expense_period_mode = Settings.get_value('expenses.period_mode', 'calendar_month')
+    expense_reimburse_category_id = Settings.get_value('expenses.reimburse_category_id')
+    expense_reimburse_vendor_id   = Settings.get_value('expenses.reimburse_vendor_id')
 
     # Dashboard preferences
     networth_expanded = Settings.get_value('dashboard.networth_expanded', True)
@@ -33,6 +37,8 @@ def index():
     
     # Get all active accounts
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+    vendors    = family_query(Vendor).order_by(Vendor.name).all()
     
     return render_template('settings/index.html',
                          default_generation_years=default_generation_years,
@@ -41,7 +47,11 @@ def index():
                          expense_payment_account=int(expense_payment_account) if expense_payment_account else None,
                          expense_auto_sync=expense_auto_sync,
                          expense_period_mode=expense_period_mode,
+                         expense_reimburse_category_id=int(expense_reimburse_category_id) if expense_reimburse_category_id else None,
+                         expense_reimburse_vendor_id=int(expense_reimburse_vendor_id) if expense_reimburse_vendor_id else None,
                          accounts=accounts,
+                         categories=categories,
+                         vendors=vendors,
                          networth_expanded=networth_expanded,
                          account_selection_expanded=account_selection_expanded,
                          payday_expanded=payday_expanded,
@@ -110,6 +120,15 @@ def update():
             'Automatically sync expense transactions',
             'bool'
         )
+
+        expense_reimburse_category = request.form.get('expense_reimburse_category')
+        if expense_reimburse_category:
+            Settings.set_value('expenses.reimburse_category_id', int(expense_reimburse_category),
+                               'Category for reimbursement/bank-expense transactions', 'int')
+        expense_reimburse_vendor = request.form.get('expense_reimburse_vendor')
+        if expense_reimburse_vendor:
+            Settings.set_value('expenses.reimburse_vendor_id', int(expense_reimburse_vendor),
+                               'Vendor for reimbursement/bank-expense transactions', 'int')
 
         expense_period_mode = request.form.get('expense_period_mode', 'calendar_month')
         if expense_period_mode not in ('calendar_month', 'payday_period'):
