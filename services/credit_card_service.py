@@ -526,60 +526,79 @@ class CreditCardService:
         return results
     
     @staticmethod
-    def delete_non_fixed_future_transactions(card_id=None, from_date=None):
+    def _delete_statement_chain(stmt, card_id):
         """
-        Delete all non-fixed future transactions (Interest and Payment types).
-        Deleting a Payment also deletes its linked bank transaction.
-        Preserves any transactions marked as is_fixed=True.
+        Delete a single statement (Interest CCT) and everything linked to it:
+          statement → linked CC payment → linked bank transaction
+        Returns the number of records deleted.
         """
         from models.transactions import Transaction
+        count = 0
 
-        if not from_date:
-            from_date = date.today()
-        
-        query = family_query(CreditCardTransaction).filter(
-            CreditCardTransaction.date >= from_date,
-            CreditCardTransaction.transaction_type.in_(['Interest', 'Payment']),
-            CreditCardTransaction.is_fixed == False
-        )
-        
-        if card_id:
-            query = query.filter(CreditCardTransaction.credit_card_id == card_id)
-        
-        transactions_to_delete = query.all()
-        
-        for txn in transactions_to_delete:
-            # For Payment transactions, also delete the linked bank transaction
-            if txn.transaction_type == 'Payment' and txn.bank_transaction_id:
-                bank_txn = family_get(Transaction, txn.bank_transaction_id)
+        # Find the CC payment linked to this statement
+        cc_payment = family_query(CreditCardTransaction).filter_by(
+            credit_card_id=card_id,
+            statement_id=stmt.id,
+            transaction_type='Payment'
+        ).first()
+
+        if cc_payment:
+            # Delete the bank transaction linked to the CC payment
+            if cc_payment.bank_transaction_id:
+                bank_txn = family_get(Transaction, cc_payment.bank_transaction_id)
                 if bank_txn:
                     db.session.delete(bank_txn)
-            db.session.delete(txn)
-        
-        deleted_count = len(transactions_to_delete)
+                    count += 1
+            db.session.delete(cc_payment)
+            count += 1
+
+        db.session.delete(stmt)
+        count += 1
+        return count
+
+    @staticmethod
+    def delete_non_fixed_future_transactions(card_id=None, from_date=None):
+        """
+        Delete all future unlocked statement chains for a card (or all cards).
+        Each chain: Interest (statement) → CC Payment → bank transaction.
+        Skips statements marked is_fixed=True.
+        """
+        if not from_date:
+            from_date = date.today()
+
+        query = family_query(CreditCardTransaction).filter(
+            CreditCardTransaction.date >= from_date,
+            CreditCardTransaction.transaction_type == 'Interest',
+            CreditCardTransaction.is_fixed == False
+        )
+        if card_id:
+            query = query.filter(CreditCardTransaction.credit_card_id == card_id)
+
+        statements = query.all()
+        deleted = 0
+        for stmt in statements:
+            deleted += CreditCardService._delete_statement_chain(stmt, stmt.credit_card_id)
+
         db.session.commit()
-        
-        return deleted_count
-    
+        return deleted
+
     @staticmethod
     def regenerate_future_transactions(card_id, start_date=None, end_date=None, payment_offset_days=14):
         """
-        Regenerate future transactions for a card.
+        Regenerate future statement chains for a card.
 
-        Step 1 – Delete all unlocked Interest (statement) transactions from start_date onwards.
-                 Each deletion also removes the associated Payment (via statement_id link or
-                 date-window fallback). Locked (is_fixed=True) statements are untouched.
-        Step 2 – Delete any remaining orphan unlocked Payment transactions in the range
-                 (payments whose statement was already locked/skipped or had no link).
-        Step 3 – Regenerate month by month:
-                 • Locked statement, no payment → create payment only.
-                 • No statement → create full statement + payment.
-                 • Stops early once the projected balance clears.
+        DELETE PHASE:
+          Find every future unlocked Interest (statement) CC transaction.
+          For each: delete the linked CC Payment, then delete the linked bank transaction,
+          then delete the statement itself.
+
+        GENERATE PHASE:
+          Walk month by month from start_date → end_date on the card's statement day.
+          For each month: create Interest transaction → create linked CC Payment →
+          create linked bank transaction (if card has a default payment account).
+          Stop early once the projected balance reaches zero (card paid off).
         """
         logger = logging.getLogger(__name__)
-        logger.info(f"Regenerating future transactions for card_id={card_id}")
-
-        from decimal import Decimal
 
         if not start_date:
             start_date = date.today()
@@ -588,14 +607,10 @@ class CreditCardService:
 
         card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
-            return {'deleted_count': 0, 'statements_created': 0, 'payments_created': 0, 'zero_balance_statements': 0}
+            return {'deleted_count': 0, 'statements_created': 0, 'payments_created': 0}
 
-        deleted_count = 0
-
-        from models.transactions import Transaction
-
-        # ── Step 1: delete unlocked statements and their linked payments ──────────
-        unlocked_statements = family_query(CreditCardTransaction).filter(
+        # ── DELETE PHASE ──────────────────────────────────────────────────────────
+        statements_to_delete = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.credit_card_id == card_id,
             CreditCardTransaction.transaction_type == 'Interest',
             CreditCardTransaction.is_fixed == False,
@@ -603,132 +618,60 @@ class CreditCardService:
             CreditCardTransaction.date <= end_date
         ).all()
 
-        def _delete_payment(pmt):
-            """Delete a CC payment and its linked bank transaction."""
-            if pmt.bank_transaction_id:
-                bank_txn = family_get(Transaction, pmt.bank_transaction_id)
-                if bank_txn:
-                    db.session.delete(bank_txn)
-            db.session.delete(pmt)
-
-        for stmt in unlocked_statements:
-            # Delete the linked payment first (by statement_id link, then date fallback)
-            linked_payment = family_query(CreditCardTransaction).filter_by(
-                credit_card_id=card_id,
-                statement_id=stmt.id,
-                transaction_type='Payment'
-            ).first()
-            if not linked_payment:
-                # Fallback for pre-migration data: payment on expected date
-                expected_payment_date = stmt.date + timedelta(days=payment_offset_days)
-                linked_payment = family_query(CreditCardTransaction).filter_by(
-                    credit_card_id=card_id,
-                    date=expected_payment_date,
-                    transaction_type='Payment',
-                    is_fixed=False
-                ).first()
-            if linked_payment and not linked_payment.is_fixed:
-                _delete_payment(linked_payment)
-                deleted_count += 1
-            db.session.delete(stmt)
-            deleted_count += 1
+        deleted_count = 0
+        for stmt in statements_to_delete:
+            deleted_count += CreditCardService._delete_statement_chain(stmt, card_id)
 
         db.session.flush()
+        logger.info(f"card {card_id}: deleted {deleted_count} records (statements + payments + bank txns)")
 
-        # ── Step 2: delete any remaining orphan unlocked payments in the range ────
-        orphan_payments = family_query(CreditCardTransaction).filter(
-            CreditCardTransaction.credit_card_id == card_id,
-            CreditCardTransaction.transaction_type == 'Payment',
-            CreditCardTransaction.is_fixed == False,
-            CreditCardTransaction.date >= start_date,
-            CreditCardTransaction.date <= end_date
-        ).all()
-        for pmt in orphan_payments:
-            _delete_payment(pmt)
-            deleted_count += 1
-
-        db.session.flush()
-
-        # ── Step 3: regenerate ────────────────────────────────────────────────────
-        results = {
-            'deleted_count': deleted_count,
-            'statements_created': 0,
-            'payments_created': 0,
-            'zero_balance_statements': 0,
-        }
+        # ── GENERATE PHASE ────────────────────────────────────────────────────────
+        statements_created = 0
+        payments_created = 0
 
         current_date = start_date.replace(day=card.statement_date)
         if current_date < start_date:
-            current_date = current_date + relativedelta(months=1)
+            current_date += relativedelta(months=1)
 
         while current_date <= end_date:
-            payment_date = current_date + timedelta(days=payment_offset_days)
-
-            existing_interest = family_query(CreditCardTransaction).filter_by(
+            # Skip months that have a locked statement (is_fixed=True) — leave them alone
+            existing_locked = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card_id,
                 date=current_date,
-                transaction_type='Interest'
-            ).first()
+                transaction_type='Interest',
+            ).filter(CreditCardTransaction.is_fixed == True).first()
 
-            # Locked statement, no payment → create payment only
-            if existing_interest and existing_interest.is_fixed:
-                existing_payment = family_query(CreditCardTransaction).filter_by(
-                    credit_card_id=card_id,
-                    statement_id=existing_interest.id,
-                    transaction_type='Payment'
-                ).first() or family_query(CreditCardTransaction).filter_by(
-                    credit_card_id=card_id,
-                    date=payment_date,
-                    transaction_type='Payment'
-                ).first()
-
-                if not existing_payment:
-                    transactions_up_to = family_query(CreditCardTransaction).filter(
-                        CreditCardTransaction.credit_card_id == card_id,
-                        CreditCardTransaction.date <= current_date
-                    ).order_by(CreditCardTransaction.date).all()
-
-                    balance = Decimal('0.0')
-                    for t in transactions_up_to:
-                        balance += Decimal(str(t.amount))
-
-                    if balance < 0:
-                        payment_txn = CreditCardService.generate_payment_transaction(
-                            card_id, payment_date,
-                            balance_override=float(balance),
-                            statement_id=existing_interest.id,
-                            commit=False
-                        )
-                        if payment_txn:
-                            results['payments_created'] += 1
-                            db.session.flush()
-
-                current_date = current_date + relativedelta(months=1)
+            if existing_locked:
+                current_date += relativedelta(months=1)
                 continue
 
-            # No statement → create full statement + payment
-            stmt_result = CreditCardService.generate_monthly_statement(
+            result = CreditCardService.generate_monthly_statement(
                 card_id, current_date, payment_offset_days, commit=False
             )
 
-            if stmt_result['interest_txn'] or stmt_result['payment_txn']:
-                results['statements_created'] += 1
-                if stmt_result['payment_txn']:
-                    results['payments_created'] += 1
-                else:
-                    results['zero_balance_statements'] += 1
+            if result['interest_txn']:
+                statements_created += 1
+            if result['payment_txn']:
+                payments_created += 1
 
-            # Stop early once balance is cleared
-            if stmt_result['statement_balance'] >= 0:
-                logger.debug(f"Balance cleared at {current_date} – stopping generation")
+            db.session.flush()
+
+            # Stop once the card is paid off (balance >= 0 means no more debt)
+            if result['statement_balance'] >= 0:
+                logger.info(f"card {card_id}: balance cleared at {current_date}, stopping")
                 break
 
-            current_date = current_date + relativedelta(months=1)
+            current_date += relativedelta(months=1)
 
         db.session.commit()
         CreditCardTransaction.recalculate_card_balance(card_id)
 
-        return results
+        logger.info(f"card {card_id}: created {statements_created} statements, {payments_created} payments")
+        return {
+            'deleted_count': deleted_count,
+            'statements_created': statements_created,
+            'payments_created': payments_created,
+        }
     
     @staticmethod
     def regenerate_all_future_transactions(start_date=None, end_date=None, payment_offset_days=14):
