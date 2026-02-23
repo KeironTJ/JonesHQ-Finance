@@ -112,10 +112,38 @@
                                 Automatically create bank/credit card transactions when expenses are added or updated.
                             </small>
                         </div>
+
+                        <div class="mb-3 mt-3">
+                            <label class="form-label fw-semibold">Expense Accumulation Period</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="expense_period_mode" id="period_mode_calendar" value="calendar_month"
+                                    {% if expense_period_mode == 'calendar_month' %}checked{% endif %}>
+                                <label class="form-check-label" for="period_mode_calendar">
+                                    <strong>Calendar Month</strong>
+                                </label>
+                                <small class="form-text text-muted d-block ms-4">
+                                    Expenses are grouped by the calendar month they occur in (e.g. Jan 1–31).
+                                    Reimbursement is created on the last working day of that calendar month.
+                                </small>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="radio" name="expense_period_mode" id="period_mode_payday" value="payday_period"
+                                    {% if expense_period_mode == 'payday_period' %}checked{% endif %}>
+                                <label class="form-check-label" for="period_mode_payday">
+                                    <strong>Payday Period</strong>
+                                </label>
+                                <small class="form-text text-muted d-block ms-4">
+                                    Expenses are grouped by your payday period (e.g. Jan 15–Feb 14 when payday is the 15th).
+                                    Reimbursement is created on the last working day of that payday period.<br>
+                                    <em>Note: individual linked bank/credit card transactions always use their transaction date's payday period regardless of this setting.</em>
+                                </small>
+                            </div>
+                        </div>
                         
                         <div class="alert alert-info mt-3 mb-0">
-                            <i class="bi bi-info-circle"></i> <strong>Expense Workflow:</strong> 
-                            Payment → Monthly Reimbursement (last working day) → CC Payment (1 working day after reimbursement)
+                            <i class="bi bi-info-circle"></i> <strong>Expense Workflow:</strong>
+                            Payment → Period Reimbursement (last working day of period) → CC Payment (1 working day after reimbursement).
+                            Individual bank/credit card transactions always carry the <em>payday period</em> of their transaction date.
                         </div>
                     </div>
                 </div>

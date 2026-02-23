@@ -21,6 +21,7 @@ def index():
     expense_reimburse_account = Settings.get_value('expenses.reimburse_account_id')
     expense_payment_account = Settings.get_value('expenses.payment_account_id')
     expense_auto_sync = Settings.get_value('expenses.auto_sync', True)
+    expense_period_mode = Settings.get_value('expenses.period_mode', 'calendar_month')
 
     # Dashboard preferences
     networth_expanded = Settings.get_value('dashboard.networth_expanded', True)
@@ -39,6 +40,7 @@ def index():
                          expense_reimburse_account=int(expense_reimburse_account) if expense_reimburse_account else None,
                          expense_payment_account=int(expense_payment_account) if expense_payment_account else None,
                          expense_auto_sync=expense_auto_sync,
+                         expense_period_mode=expense_period_mode,
                          accounts=accounts,
                          networth_expanded=networth_expanded,
                          account_selection_expanded=account_selection_expanded,
@@ -107,6 +109,16 @@ def update():
             expense_auto_sync,
             'Automatically sync expense transactions',
             'bool'
+        )
+
+        expense_period_mode = request.form.get('expense_period_mode', 'calendar_month')
+        if expense_period_mode not in ('calendar_month', 'payday_period'):
+            expense_period_mode = 'calendar_month'
+        Settings.set_value(
+            'expenses.period_mode',
+            expense_period_mode,
+            'Expense accumulation period: calendar_month or payday_period',
+            'string'
         )
 
         # Dashboard Preferences

@@ -1,6 +1,7 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from . import expenses_bp
 from extensions import db
+from extensions import limiter
 from models.expenses import Expense
 from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
@@ -68,9 +69,17 @@ def index():
     ).all()
     cc_payments_by_month = {}
     for txn in cc_payment_txns:
-        if txn.month not in cc_payments_by_month:
-            cc_payments_by_month[txn.month] = []
-        cc_payments_by_month[txn.month].append(txn)
+        # Item format: "Expense reimbursement payment YYYY-MM"
+        # Key by the expense period (last 7 chars of item), NOT txn.month,
+        # because the payment date is 1 working day after end-of-period so
+        # txn.month is typically one calendar month ahead of the expense period.
+        if txn.item and len(txn.item) >= 7:
+            period_key = txn.item[-7:]
+        else:
+            period_key = txn.month
+        if period_key not in cc_payments_by_month:
+            cc_payments_by_month[period_key] = []
+        cc_payments_by_month[period_key].append(txn)
 
     return render_template(
         'expenses/index.html',
@@ -89,6 +98,7 @@ def index():
 
 
 @expenses_bp.route('/expenses/toggle/<int:expense_id>/<string:field>', methods=['POST'])
+@limiter.exempt
 def toggle_expense_flag(expense_id, field):
     """Toggle boolean flags: paid_for, submitted, reimbursed."""
     expense = family_get_or_404(Expense, expense_id)
@@ -110,13 +120,27 @@ def toggle_expense_flag(expense_id, field):
                 cc_txn = family_get(CreditCardTransaction, expense.credit_card_transaction_id)
                 if cc_txn:
                     cc_txn.is_paid = new_value
+
+        # When reimbursed is toggled, mark the CC payment transaction for this period as paid/unpaid
+        if field == 'reimbursed' and expense.credit_card_id:
+            from services.expense_sync_service import ExpenseSyncService as _ESS
+            period_key = _ESS.get_period_key_for_expense(expense)
+            if period_key:
+                cc_payment_txn = family_query(CreditCardTransaction).filter(
+                    CreditCardTransaction.credit_card_id == expense.credit_card_id,
+                    CreditCardTransaction.transaction_type == 'Payment',
+                    CreditCardTransaction.item.like(f'%{period_key}%')
+                ).first()
+                if cc_payment_txn:
+                    cc_payment_txn.is_paid = new_value
         
         db.session.commit()
         # Reconcile after toggle (non-blocking)
         try:
             ExpenseSyncService.reconcile(expense.id)
-        except Exception:
-            flash('Warning: syncing linked transactions failed after toggle', 'warning')
+        except Exception as sync_err:
+            current_app.logger.exception(f'Sync failed after toggle for expense {expense.id}')
+            flash('Warning: syncing linked transactions failed after toggle — check the server log.', 'warning')
         return jsonify({'id': expense.id, 'field': field, 'value': getattr(expense, field)})
     except Exception as e:
         db.session.rollback()
@@ -140,6 +164,13 @@ def add_expense():
 
         expense = Expense(
             date=date_val,
+            month=date_val.strftime('%Y-%m') if date_val else None,
+            week=f"{date_val.isocalendar()[1]:02d}-{date_val.year}" if date_val else None,
+            day_name=date_val.strftime('%A') if date_val else None,
+            finance_year=(
+                f"{date_val.year}-{date_val.year + 1}" if date_val and date_val.month >= 4
+                else (f"{date_val.year - 1}-{date_val.year}" if date_val else None)
+            ),
             description=description,
             expense_type=expense_type,
             credit_card_id=int(credit_card_id) if credit_card_id else None,
@@ -156,15 +187,20 @@ def add_expense():
         )
         db.session.add(expense)
         db.session.commit()
-        # Reconcile linked transactions (non-blocking)
+        # Reconcile linked transaction, then run full period sync for this month
         try:
             ExpenseSyncService.reconcile(expense.id)
-        except Exception:
-            flash('Expense saved but syncing linked transactions failed', 'warning')
+            _month = expense.date.strftime('%Y-%m') if expense.date else None
+            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_month)
+            ExpenseSyncService.reconcile_credit_card_payments(year_month=_month)
+        except Exception as sync_err:
+            current_app.logger.exception(f'Sync failed after add for expense {expense.id}')
+            flash('Expense saved but syncing linked transactions failed — check the server log.', 'warning')
         flash('Expense added', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error adding expense: {str(e)}', 'danger')
+        current_app.logger.exception('Error adding expense')
+        flash('Error adding expense \u2014 check the server log for details.', 'danger')
     return redirect(url_for('expenses.index'))
 
 
@@ -174,6 +210,16 @@ def update_expense(expense_id):
         expense = family_get_or_404(Expense, expense_id)
         date_str = request.form.get('date')
         expense.date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else expense.date
+        # Re-derive date-based fields whenever the date may have changed
+        d = expense.date
+        if d:
+            expense.month        = d.strftime('%Y-%m')
+            expense.week         = f"{d.isocalendar()[1]:02d}-{d.year}"
+            expense.day_name     = d.strftime('%A')
+            expense.finance_year = (
+                f"{d.year}-{d.year + 1}" if d.month >= 4
+                else f"{d.year - 1}-{d.year}"
+            )
         expense.description = request.form.get('description', expense.description)
         expense.expense_type = request.form.get('expense_type', expense.expense_type)
         credit_card_id = request.form.get('credit_card_id') or None
@@ -194,15 +240,20 @@ def update_expense(expense_id):
         expense.reimbursed = request.form.get('reimbursed') == 'on'
 
         db.session.commit()
-        # Reconcile linked transactions after update
+        # Reconcile linked transaction, then run full period sync for this month
         try:
             ExpenseSyncService.reconcile(expense.id)
-        except Exception:
-            flash('Expense updated but syncing linked transactions failed', 'warning')
+            _month = expense.date.strftime('%Y-%m') if expense.date else None
+            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_month)
+            ExpenseSyncService.reconcile_credit_card_payments(year_month=_month)
+        except Exception as sync_err:
+            current_app.logger.exception(f'Sync failed after update for expense {expense.id}')
+            flash('Expense updated but syncing linked transactions failed — check the server log.', 'warning')
         flash('Expense updated', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error updating expense: {str(e)}', 'danger')
+        current_app.logger.exception('Error updating expense')
+        flash('Error updating expense — check the server log for details.', 'danger')
     return redirect(url_for('expenses.index'))
 
 
@@ -218,7 +269,8 @@ def delete_expense(expense_id):
         flash('Expense deleted', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error deleting expense: {str(e)}', 'danger')
+        current_app.logger.exception('Error deleting expense')
+        flash('Error deleting expense — check the server log for details.', 'danger')
     return redirect(url_for('expenses.index'))
 
 
@@ -238,7 +290,8 @@ def bulk_delete_linked():
         flash(f'Removed linked transactions for {len(summary.get("expenses_found", []))} expense(s). Deleted {deleted} linked transaction(s).', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error deleting linked transactions: {str(e)}', 'danger')
+        current_app.logger.exception('Error deleting linked transactions')
+        flash('Error deleting linked transactions — check the server log for details.', 'danger')
     return redirect(request.form.get('return_url') or url_for('expenses.index'))
 
 
@@ -271,7 +324,8 @@ def bulk_delete_expenses():
         flash(f'Deleted {deleted_count} expense(s).', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error deleting expenses: {str(e)}', 'danger')
+        current_app.logger.exception('Error deleting expenses')
+        flash('Error deleting expenses — check the server log for details.', 'danger')
     return redirect(request.form.get('return_url') or url_for('expenses.index'))
 
 @expenses_bp.route('/expenses/generate-reimbursements', methods=['POST'])
@@ -290,7 +344,8 @@ def generate_reimbursements():
             flash('No reimbursement transactions created (no submitted expenses found)', 'info')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error generating reimbursements: {str(e)}', 'danger')
+        current_app.logger.exception('Error generating reimbursements')
+        flash('Error generating reimbursements — check the server log for details.', 'danger')
     
     return redirect(url_for('expenses.index'))
 
@@ -310,6 +365,36 @@ def generate_cc_payments():
             flash('No credit card payment transactions created', 'info')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error generating credit card payments: {str(e)}', 'danger')
+        current_app.logger.exception('Error generating CC payments')
+        flash('Error generating credit card payments — check the server log for details.', 'danger')
     
+    return redirect(url_for('expenses.index'))
+
+
+@expenses_bp.route('/expenses/generate-all', methods=['POST'])
+def generate_all():
+    """Run full sync in correct order: reimbursements first, then CC payments."""
+    try:
+        year_month = request.form.get('year_month') or None
+
+        reimb_results = ExpenseSyncService.reconcile_monthly_reimbursements(year_month=year_month)
+        cc_results    = ExpenseSyncService.reconcile_credit_card_payments(year_month=year_month)
+
+        reimb_count = len(reimb_results)
+        cc_count    = len(cc_results)
+
+        if reimb_count or cc_count:
+            parts = []
+            if reimb_count:
+                parts.append(f'{reimb_count} reimbursement(s) for {" ".join(reimb_results.keys())}')
+            if cc_count:
+                parts.append(f'{cc_count} CC payment(s)')
+            flash('Sync complete: ' + ', '.join(parts) + '.', 'success')
+        else:
+            flash('Sync complete — no new transactions needed.', 'info')
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error during generate-all sync')
+        flash('Sync failed — check the server log for details.', 'danger')
+
     return redirect(url_for('expenses.index'))

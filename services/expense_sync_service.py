@@ -8,6 +8,8 @@ from models.accounts import Account
 from models.categories import Category
 from models.credit_cards import CreditCard
 from models.vendors import Vendor
+from models.trips import Trip
+from models.vehicles import Vehicle
 from models.settings import Settings
 from services.payday_service import PaydayService
 from flask import current_app
@@ -58,34 +60,65 @@ class ExpenseSyncService:
             raise
     
     @staticmethod
+    def get_period_mode():
+        """
+        Return the current expense period grouping mode.
+        'calendar_month'  – group by calendar month, reimburse end of that month  (default)
+        'payday_period'   – group by payday period, reimburse at end of payday period
+        """
+        return Settings.get_value('expenses.period_mode', 'calendar_month')
+
+    @staticmethod
+    def get_period_key_for_expense(exp):
+        """
+        Return the period key (YYYY-MM) that this expense belongs to under the current mode.
+        Always derived from exp.date so it is resilient to NULL Expense.month fields.
+        """
+        if not exp.date:
+            return None
+        mode = ExpenseSyncService.get_period_mode()
+        if mode == 'payday_period':
+            return PaydayService.get_period_for_date(exp.date)
+        # Default: calendar month
+        return exp.date.strftime('%Y-%m')
+
+    @staticmethod
     def reconcile_monthly_reimbursements(year_month=None):
         """
-        Create monthly reimbursement transactions for all expenses.
-        If year_month is provided (format: "2026-01"), only process that month.
-        Otherwise, process all months with expenses.
-        
-        Returns dict with created reimbursement transaction IDs by month.
+        Create reimbursement transactions for all submitted expenses.
+        Respects the 'expenses.period_mode' setting:
+          - 'calendar_month': group by calendar YYYY-MM, reimburse last working day of that month
+          - 'payday_period':  group by payday-period YYYY-MM, reimburse last day of the payday period
+
+        If year_month is provided (format "2026-01") only that period is processed.
+        Returns dict with created/updated reimbursement transaction IDs by period key.
         """
         auto_sync = Settings.get_value('expenses.auto_sync', True)
         if not auto_sync:
             return {}
-        
+
         try:
-            # Get all months with expenses (regardless of submitted status)
             if year_month:
-                months_to_process = [year_month]
+                periods_to_process = [year_month]
             else:
-                months_query = family_query(Expense).with_entities(Expense.month).filter(
-                    Expense.month != None
-                ).distinct()
-                months_to_process = [m[0] for m in months_query.all()]
-            
+                # Build the set of period keys from all submitted expenses.
+                # Always derive from expense.date (Expense.month can be NULL on older records).
+                periods_set = set()
+                submitted_expenses = family_query(Expense).filter(
+                    Expense.submitted == True  # noqa: E712
+                ).all()
+                for exp in submitted_expenses:
+                    key = ExpenseSyncService.get_period_key_for_expense(exp)
+                    if key:
+                        periods_set.add(key)
+                periods_to_process = sorted(periods_set)
+
             results = {}
-            for month in months_to_process:
-                txn_id = ExpenseSyncService._create_monthly_reimbursement(month)
+            for period_key in periods_to_process:
+                txn_id = ExpenseSyncService._create_period_reimbursement(period_key)
                 if txn_id:
-                    results[month] = txn_id
-            
+                    results[period_key] = txn_id
+
             db.session.commit()
             return results
         except Exception:
@@ -119,30 +152,38 @@ class ExpenseSyncService:
             for reimburse_txn in reimburse_txns:
                 # Calculate payment date (1 working day after reimbursement)
                 payment_date = ExpenseSyncService._next_working_day(reimburse_txn.transaction_date)
-                
-                # Get month from reimbursement
-                month = reimburse_txn.year_month
-                if not month:
+
+                # period_key stored in year_month field of the reimbursement transaction
+                period_key = reimburse_txn.year_month
+                if not period_key:
                     continue
-                
-                # Find all credit card expenses for this month (regardless of submitted status)
+
+                # Resolve the date range for this period key (calendar or payday depending on mode)
+                try:
+                    p_start, p_end = ExpenseSyncService._get_period_date_range(period_key)
+                except (ValueError, AttributeError):
+                    continue
+
+                # Find all submitted credit card expenses within the period's date range
                 cc_expenses = family_query(Expense).filter(
-                    Expense.month == month,
-                    Expense.credit_card_id != None
+                    Expense.date >= p_start,
+                    Expense.date <= p_end,
+                    Expense.credit_card_id != None,
+                    Expense.submitted == True  # noqa: E712
                 ).all()
-                
+
                 # Group by credit card
                 card_totals = {}
                 for exp in cc_expenses:
                     if exp.credit_card_id not in card_totals:
                         card_totals[exp.credit_card_id] = Decimal('0')
                     card_totals[exp.credit_card_id] += exp.total_cost
-                
+
                 # Create payment transaction for each card
                 for card_id, total in card_totals.items():
                     if total > 0:
                         payment_txn_id = ExpenseSyncService._create_cc_payment_from_reimbursement(
-                            card_id, total, payment_date, month
+                            card_id, total, payment_date, period_key
                         )
                         if payment_txn_id:
                             results[card_id] = payment_txn_id
@@ -257,6 +298,8 @@ class ExpenseSyncService:
     @staticmethod
     def _ensure_credit_card_payment(exp: Expense):
         """Create or update credit card transaction for expense payment (outgoing)"""
+        if not exp.total_cost:
+            return
         cc = family_get(CreditCard, exp.credit_card_id)
         if not cc:
             return
@@ -294,9 +337,9 @@ class ExpenseSyncService:
                 credit_card_id=cc.id,
                 category_id=None,
                 date=exp.date,
-                day_name=exp.day_name,
-                week=exp.week,
-                month=exp.month,
+                day_name=exp.date.strftime('%A'),
+                week=f"{exp.date.isocalendar()[1]:02d}-{exp.date.year}",
+                month=exp.date.strftime('%Y-%m'),
                 head_budget='Work Expenses',
                 sub_budget=exp.expense_type,
                 item=exp.description,
@@ -317,6 +360,8 @@ class ExpenseSyncService:
     @staticmethod
     def _ensure_bank_payment(exp: Expense):
         """Create or update bank transaction for direct expense payment (outgoing)"""
+        if not exp.total_cost:
+            return
         # Get expense account - use expense's account_id if set, otherwise fall back to settings
         account = None
         if exp.account_id:
@@ -364,6 +409,8 @@ class ExpenseSyncService:
                 db.session.add(exp)
         else:
             # Create bank transaction for expense payment
+            # Always derive date-related fields from exp.date directly — Expense.month/week/day_name
+            # can be NULL on older or freshly-created records before the route populates them.
             txn = Transaction(
                 account_id=account.id,
                 category_id=expense_cat.id if expense_cat else None,
@@ -374,11 +421,11 @@ class ExpenseSyncService:
                 item=exp.description,
                 assigned_to=None,
                 payment_type='Work Expense',
-                is_paid=True,
-                year_month=exp.month,
-                week_year=exp.week,
-                day_name=exp.day_name,
-                payday_period=exp.month
+                is_paid=bool(exp.paid_for),
+                year_month=exp.date.strftime('%Y-%m'),
+                week_year=f"{exp.date.isocalendar()[1]:02d}-{exp.date.year}",
+                day_name=exp.date.strftime('%A'),
+                payday_period=PaydayService.get_period_for_date(exp.date)
             )
             db.session.add(txn)
             db.session.flush()
@@ -391,321 +438,233 @@ class ExpenseSyncService:
             Transaction.recalculate_account_balance(account.id)
     
     @staticmethod
-    def _create_monthly_reimbursement(year_month):
+    def _get_period_date_range(period_key):
         """
-        Create a single reimbursement transaction for all expenses in a calendar month.
-        Scheduled for last working day of the month.
+        Return (start_date, end_date) for the given period key, respecting the current mode:
+          'calendar_month' → first day … last day of that calendar month
+          'payday_period'  → PaydayService start/end for that payday period
+        Raises ValueError if period_key is malformed.
+        """
+        import calendar as _cal
+        year, month = map(int, period_key.split('-'))
+        mode = ExpenseSyncService.get_period_mode()
+        if mode == 'payday_period':
+            start_date, end_date, _ = PaydayService.get_payday_period(year, month)
+            return start_date, end_date
+        # Default: calendar month
+        return date(year, month, 1), date(year, month, _cal.monthrange(year, month)[1])
+
+    @staticmethod
+    def _get_reimbursement_date(period_key):
+        """
+        Return the date on which the reimbursement transaction should be placed:
+          'calendar_month' → last working day of that calendar month
+          'payday_period'  → last working day on or before the payday period's end date
+        """
+        year, month = map(int, period_key.split('-'))
+        mode = ExpenseSyncService.get_period_mode()
+        if mode == 'payday_period':
+            _, end_date, _ = PaydayService.get_payday_period(year, month)
+            return PaydayService.get_previous_working_day(end_date)
+        return ExpenseSyncService._last_working_day_of_month(year, month)
+
+    @staticmethod
+    def _create_period_reimbursement(period_key):
+        """
+        Create (or update) a single reimbursement transaction for all *submitted* expenses
+        in the given period (calendar month or payday period, depending on setting).
         Returns transaction ID or None.
         """
-        # Get all expenses for this month (regardless of submitted status)
+        try:
+            period_start, period_end = ExpenseSyncService._get_period_date_range(period_key)
+            reimbursement_date       = ExpenseSyncService._get_reimbursement_date(period_key)
+        except (ValueError, AttributeError):
+            return None
+
+        # Only include submitted expenses — non-submitted ones haven\'t been claimed yet.
         expenses = family_query(Expense).filter(
-            Expense.month == year_month
+            Expense.date >= period_start,
+            Expense.date <= period_end,
+            Expense.submitted == True  # noqa: E712
         ).all()
-        
+
         if not expenses:
             return None
-        
-        # Calculate total reimbursement
+
         total_reimbursement = sum(exp.total_cost for exp in expenses if exp.total_cost)
         if total_reimbursement <= 0:
             return None
-        
-        # Parse year_month to get last working day
-        try:
-            year, month = map(int, year_month.split('-'))
-            reimbursement_date = ExpenseSyncService._last_working_day_of_month(year, month)
-        except:
-            return None
-        
-        # Get reimbursement account
-        acct_id = Settings.get_value('expenses.reimburse_account_id')
-        account = None
-        if acct_id:
-            account = family_get(Account, int(acct_id))
+        # Look for existing reimbursement transaction for this period
+        existing = family_query(Transaction).filter(
+            Transaction.payment_type == 'Expense Reimbursement',
+            Transaction.year_month == period_key
+        ).first()
+
+        if existing:
+            if abs(existing.amount - total_reimbursement) > Decimal('0.01'):
+                existing.amount = total_reimbursement
+                existing.transaction_date = reimbursement_date
+                existing.updated_at = datetime.utcnow()
+                db.session.add(existing)
+            return existing.id
+
+        # Find reimbursement account
+        acct_id = Settings.get_value('expenses.payment_account_id')
+        account = family_get(Account, int(acct_id)) if acct_id else None
         if not account:
             account = family_query(Account).order_by(Account.name).first()
         if not account:
             return None
-        
-        # Find reimbursement category
+
+        # Find a suitable category (same lookup as _ensure_bank_payment)
         reimburse_cat = family_query(Category).filter_by(
             head_budget='Income',
-            sub_budget='Expense Reimbursement'
+            sub_budget='Expense'
         ).first()
         if not reimburse_cat:
-            reimburse_cat = family_query(Category).filter_by(head_budget='Income').first()
-        
-        # Check if reimbursement already exists
-        existing = family_query(Transaction).filter_by(
+            reimburse_cat = family_query(Category).filter_by(head_budget='Expenses').first()
+        if not reimburse_cat:
+            reimburse_cat = family_query(Category).first()
+        if not reimburse_cat:
+            raise ValueError('No category found — please create at least one category before generating reimbursements.')
+
+        reimburse_txn = Transaction(
             account_id=account.id,
+            category_id=reimburse_cat.id,
+            amount=total_reimbursement,
             transaction_date=reimbursement_date,
+            description=f'Expense Reimbursement {period_key}',
+            item=f'Expense Reimbursement {period_key}',
             payment_type='Expense Reimbursement',
-            year_month=year_month
+            is_paid=False,
+            year_month=period_key,
+            week_year=f"{reimbursement_date.isocalendar()[1]:02d}-{reimbursement_date.year}",
+            day_name=reimbursement_date.strftime('%A'),
+            payday_period=PaydayService.get_period_for_date(reimbursement_date)
+        )
+        db.session.add(reimburse_txn)
+        db.session.flush()
+        Transaction.recalculate_account_balance(account.id)
+        return reimburse_txn.id
+
+    @staticmethod
+    def _create_monthly_reimbursement(period_key):
+        """Backward-compatible alias for _create_period_reimbursement."""
+        return ExpenseSyncService._create_period_reimbursement(period_key)
+
+    @staticmethod
+    def _last_working_day_of_month(year, month):
+        """Return the last Monday-Friday of the given month."""
+        import calendar as _cal
+        last_day = date(year, month, _cal.monthrange(year, month)[1])
+        # Walk backwards until we hit a weekday (Mon=0 … Fri=4)
+        while last_day.weekday() > 4:
+            last_day -= timedelta(days=1)
+        return last_day
+
+    @staticmethod
+    def _next_working_day(d):
+        """Return the next Monday-Friday on or after the day after d."""
+        next_day = d + timedelta(days=1)
+        while next_day.weekday() > 4:
+            next_day += timedelta(days=1)
+        return next_day
+
+    @staticmethod
+    def _create_cc_payment_from_reimbursement(card_id, total, payment_date, period_key):
+        """Create or update a credit card Payment transaction from expense reimbursement funds."""
+        cc = family_get(CreditCard, card_id)
+        if not cc:
+            return None
+
+        description = f'Expense reimbursement payment {period_key}'
+        existing = family_query(CreditCardTransaction).filter(
+            CreditCardTransaction.credit_card_id == card_id,
+            CreditCardTransaction.transaction_type == 'Payment',
+            CreditCardTransaction.item.like(f'%{period_key}%')
         ).first()
-        
+
         if existing:
-            # Update amount if changed
-            if abs(existing.amount - total_reimbursement) > Decimal('0.01'):
-                existing.amount = total_reimbursement
+            if abs(existing.amount - total) > Decimal('0.01'):
+                existing.amount = total
+                existing.date = payment_date
                 existing.updated_at = datetime.utcnow()
                 db.session.add(existing)
-                Transaction.recalculate_account_balance(account.id)
             return existing.id
-        else:
-            # Create reimbursement transaction (positive = money in)
-            # Only set is_paid=True if transaction date is today or in the past
-            from datetime import date as date_class
-            is_paid = reimbursement_date <= date_class.today()
-            
-            txn = Transaction(
-                account_id=account.id,
-                category_id=reimburse_cat.id if reimburse_cat else None,
-                vendor_id=None,
-                amount=total_reimbursement,
-                transaction_date=reimbursement_date,
-                description=f'Work Expense Reimbursement - {year_month}',
-                item=f'Monthly reimbursement for {year_month}',
-                assigned_to=None,
-                payment_type='Expense Reimbursement',
-                is_paid=is_paid,
-                year_month=year_month,
-                week_year=f"{reimbursement_date.isocalendar()[1]:02d}-{year}",
-                day_name=reimbursement_date.strftime('%A'),
-                payday_period=year_month
-            )
-            db.session.add(txn)
-            db.session.flush()
-            Transaction.recalculate_account_balance(account.id)
-            return txn.id
-    
-    @staticmethod
-    def _create_cc_payment_from_reimbursement(card_id, amount, payment_date, year_month):
-        """
-        Create credit card payment transaction from reimbursement.
-        Also creates linked bank transaction from the card's default payment account.
-        Returns transaction ID or None.
-        """
-        # Check if payment already exists
-        existing = family_query(CreditCardTransaction).filter_by(
-            credit_card_id=card_id,
-            date=payment_date,
-            transaction_type='Payment'
-        ).filter(
-            func.abs(CreditCardTransaction.amount - amount) < 0.01
-        ).first()
-        
-        if existing:
-            return existing.id
-        
-        # Get the credit card to find default payment account
-        card = family_get(CreditCard, card_id)
-        if not card:
-            return None
-        
-        # Create payment transaction (positive = payment to card)
-        # Only set is_paid=True if payment date is today or in the past
-        from datetime import date as date_class
-        is_paid = payment_date <= date_class.today()
-        
+
         payment_txn = CreditCardTransaction(
             credit_card_id=card_id,
-            category_id=None,
             date=payment_date,
             day_name=payment_date.strftime('%A'),
             week=f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}",
-            month=year_month,
-            head_budget='Transfer',
-            sub_budget='Credit Card Payment',
-            item=f'Expense reimbursement payment - {year_month}',
+            month=payment_date.strftime('%Y-%m'),
             transaction_type='Payment',
-            amount=amount,  # Positive amount
-            is_paid=is_paid,
-            is_fixed=True  # Lock to prevent regeneration
+            item=description,
+            amount=total,
+            is_paid=False
         )
         db.session.add(payment_txn)
         db.session.flush()
-        
-        # Create linked bank transaction if card has default payment account
-        if card.default_payment_account_id:
-            # Find Credit Cards category matching this specific card
-            credit_card_category = family_query(Category).filter_by(
-                head_budget='Credit Cards',
-                sub_budget=card.card_name
-            ).first()
-            
-            # If not found, try to find any Credit Cards category as fallback
-            if not credit_card_category:
-                credit_card_category = family_query(Category).filter_by(
-                    head_budget='Credit Cards'
-                ).first()
-            
-            # Find or create vendor matching card name
-            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
-            if not vendor:
-                vendor = Vendor(name=card.card_name)
-                db.session.add(vendor)
-                db.session.flush()
-            
-            # Create bank transaction (negative = money out)
-            bank_txn = Transaction(
-                account_id=card.default_payment_account_id,
-                category_id=credit_card_category.id if credit_card_category else None,
-                vendor_id=vendor.id,
-                amount=Decimal(str(-abs(float(amount)))),  # Negative = expense from bank account
-                transaction_date=payment_date,
-                description=f'Payment to {card.card_name}',
-                item='Credit Card Payment',
-                payment_type='Card Payment',
-                is_paid=is_paid,
-                is_fixed=True,  # Lock to prevent deletion
-                credit_card_id=card.id,
-                year_month=year_month,
-                week_year=f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}",
-                day_name=payment_date.strftime('%A'),
-                payday_period=PaydayService.get_period_for_date(payment_date)
-            )
-            db.session.add(bank_txn)
-            db.session.flush()
-            
-            # Link back to credit card transaction
-            payment_txn.bank_transaction_id = bank_txn.id
-            
-            # Recalculate bank account balance
-            Transaction.recalculate_account_balance(card.default_payment_account_id)
-        
-        # Recalculate card balance
         CreditCardTransaction.recalculate_card_balance(card_id)
         return payment_txn.id
-    
-    @staticmethod
-    def _last_working_day_of_month(year, month):
-        """Get the last working day of a given month (skip weekends)"""
-        # Get last day of month
-        if month == 12:
-            next_month = date(year + 1, 1, 1)
-        else:
-            next_month = date(year, month + 1, 1)
-        last_day = next_month - timedelta(days=1)
-        
-        # Move back to Friday if weekend
-        while last_day.weekday() >= 5:  # 5=Saturday, 6=Sunday
-            last_day -= timedelta(days=1)
-        
-        return last_day
-    
-    @staticmethod
-    def _next_working_day(from_date):
-        """Get next working day after given date (skip weekends)"""
-        next_day = from_date + timedelta(days=1)
-        
-        # Skip weekends
-        while next_day.weekday() >= 5:
-            next_day += timedelta(days=1)
-        
-        return next_day
-    
-    @staticmethod
-    def _link_fuel_expense_to_trip(exp: 'Expense'):
-        """
-        Create (or update) a dedicated Trip row owned by this fuel expense.
 
-        Rather than patching an existing trip that was entered manually, we create
-        our own row keyed by a sentinel in journey_description:
-            "Expense #<id>: <description>"
-        This makes the operation idempotent and keeps expense trips clearly
-        separated from regular daily driving trips, giving full control over
-        which transactions are linked to which expense.
+    @staticmethod
+    def _link_fuel_expense_to_trip(exp):
         """
-        from models.trips import Trip
-        from models.vehicles import Vehicle
-        from services.vehicle_service import VehicleService
-
+        Create or update a Trip row for a Fuel expense.
+        Trips created here are identified by a sentinel prefix in journey_description:
+          "Expense #<id>: <description>"
+        """
         if not exp.vehicle_registration:
-            current_app.logger.warning(f"Fuel expense {exp.id} has no vehicle registration")
             return
 
         vehicle = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
         if not vehicle:
-            current_app.logger.warning(f"Vehicle not found for registration: {exp.vehicle_registration}")
             return
 
-        trip_date = exp.date
-        business_miles = int(exp.covered_miles or 0)
-        sentinel_desc = f"Expense #{exp.id}: {exp.description}"
+        sentinel = f"Expense #{exp.id}: "
+        journey_desc = f"{sentinel}{exp.description or 'Fuel'}"
 
-        # Calculate fuel cost, gallons, and MPG using the same logic as add_trip
-        trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(
-            vehicle.id, business_miles, trip_date
-        )
-
-        # Get the most recent fill date for reference
-        latest_fuel = VehicleService.get_latest_fuel_record(vehicle.id)
-        vehicle_last_fill = latest_fuel.date if latest_fuel else None
-
-        # Idempotent look-up: find the trip we already created for this expense
         existing = family_query(Trip).filter(
             Trip.vehicle_id == vehicle.id,
-            Trip.journey_description == sentinel_desc
+            Trip.journey_description.like(sentinel + '%')
         ).first()
 
+        miles = int(exp.covered_miles) if exp.covered_miles else 0
+
         if existing:
-            # Expense was edited — keep the trip in sync
-            existing.date              = trip_date
-            existing.month             = f"{trip_date.year}-{trip_date.month:02d}"
-            existing.week              = f"{trip_date.isocalendar()[1]:02d}-{trip_date.year}"
-            existing.day_name          = trip_date.strftime('%A')
-            existing.business_miles    = business_miles
-            existing.total_miles       = (existing.personal_miles or 0) + business_miles
-            existing.approx_mpg        = approx_mpg
-            existing.gallons_used      = gallons_used
-            existing.trip_cost         = trip_cost
-            existing.vehicle_last_fill = vehicle_last_fill
+            existing.date = exp.date
+            existing.month = exp.date.strftime('%Y-%m')
+            existing.week = f"{exp.date.isocalendar()[1]:02d}-{exp.date.year}"
+            existing.day_name = exp.date.strftime('%A')
+            existing.total_miles = miles
+            existing.business_miles = miles
+            existing.journey_description = journey_desc
+            existing.fuel_cost = exp.total_cost
+            existing.trip_cost = exp.total_cost
             db.session.add(existing)
-            current_app.logger.info(f"Updated expense-trip {existing.id} for fuel expense {exp.id}")
-            return
-
-        # Determine cumulative totals from the last trip for this vehicle
-        prev_trip = (
-            family_query(Trip)
-            .filter(Trip.vehicle_id == vehicle.id, Trip.date <= trip_date)
-            .order_by(Trip.date.desc(), Trip.id.desc())
-            .first()
-        )
-        prev_cumulative_miles   = int(prev_trip.cumulative_total_miles or 0) if prev_trip else 0
-        prev_cumulative_gallons = Decimal(prev_trip.cumulative_gallons or '0') if prev_trip else Decimal('0')
-
-        trip = Trip(
-            family_id=vehicle.family_id,
-            vehicle_id=vehicle.id,
-            date=trip_date,
-            month=f"{trip_date.year}-{trip_date.month:02d}",
-            week=f"{trip_date.isocalendar()[1]:02d}-{trip_date.year}",
-            day_name=trip_date.strftime('%A'),
-            personal_miles=0,
-            business_miles=business_miles,
-            total_miles=business_miles,
-            cumulative_total_miles=prev_cumulative_miles + business_miles,
-            journey_description=sentinel_desc,
-            approx_mpg=approx_mpg,
-            gallons_used=gallons_used,
-            cumulative_gallons=prev_cumulative_gallons + gallons_used,
-            trip_cost=trip_cost,
-            fuel_cost=Decimal('0'),
-            vehicle_last_fill=vehicle_last_fill,
-        )
-        db.session.add(trip)
-        current_app.logger.info(
-            f"Created expense-trip for fuel expense {exp.id} "
-            f"({business_miles} miles, {gallons_used:.3f} gal, "
-            f"£{trip_cost:.2f}, {approx_mpg:.1f} mpg on {trip_date})"
-        )
+        else:
+            trip = Trip(
+                vehicle_id=vehicle.id,
+                family_id=exp.family_id if hasattr(exp, 'family_id') else None,
+                date=exp.date,
+                month=exp.date.strftime('%Y-%m'),
+                week=f"{exp.date.isocalendar()[1]:02d}-{exp.date.year}",
+                day_name=exp.date.strftime('%A'),
+                total_miles=miles,
+                business_miles=miles,
+                personal_miles=0,
+                journey_description=journey_desc,
+                fuel_cost=exp.total_cost,
+                trip_cost=exp.total_cost
+            )
+            db.session.add(trip)
 
     @staticmethod
-    def delete_fuel_trip_for_expense(exp: 'Expense'):
-        """Delete the Trip row that was auto-created for a fuel expense (if any)."""
-        from models.trips import Trip
-        from models.vehicles import Vehicle
-
+    def delete_fuel_trip_for_expense(exp):
+        """
+        Delete the auto-created Trip row for a Fuel expense (identified by sentinel prefix).
+        """
         if not exp.vehicle_registration:
             return
 
@@ -713,14 +672,11 @@ class ExpenseSyncService:
         if not vehicle:
             return
 
-        sentinel_desc = f"Expense #{exp.id}: {exp.description}"
+        sentinel = f"Expense #{exp.id}: "
         trip = family_query(Trip).filter(
             Trip.vehicle_id == vehicle.id,
-            Trip.journey_description == sentinel_desc
+            Trip.journey_description.like(sentinel + '%')
         ).first()
 
         if trip:
             db.session.delete(trip)
-            current_app.logger.info(f"Deleted expense-trip {trip.id} for fuel expense {exp.id}")
-
-
