@@ -328,8 +328,9 @@ class CreditCardService:
             db.session.add(bank_txn)
             db.session.flush()  # Get the bank transaction ID
             
-            # Link them together
+            # Link them together and lock the CC payment so regeneration won't delete it
             transaction.bank_transaction_id = bank_txn.id
+            transaction.is_fixed = True  # Has a real bank expense attached — protect from regen
         
         # Recalculate balances
         if commit:
@@ -526,19 +527,19 @@ class CreditCardService:
     @staticmethod
     def delete_non_fixed_future_transactions(card_id=None, from_date=None):
         """
-        Delete all non-fixed future transactions (Interest and Payment types)
-        If card_id is specified, only delete for that card
-        If from_date is specified, only delete transactions on or after that date
-        This preserves any transactions marked as is_fixed=True
-        Bank/expense transactions are never touched here - managed by the expense service
+        Delete all non-fixed future transactions (Interest and Payment types).
+        Deleting a Payment also deletes its linked bank transaction.
+        Preserves any transactions marked as is_fixed=True.
         """
+        from models.transactions import Transaction
+
         if not from_date:
             from_date = date.today()
         
         query = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.date >= from_date,
             CreditCardTransaction.transaction_type.in_(['Interest', 'Payment']),
-            CreditCardTransaction.is_fixed == False  # Only delete non-fixed
+            CreditCardTransaction.is_fixed == False
         )
         
         if card_id:
@@ -547,7 +548,11 @@ class CreditCardService:
         transactions_to_delete = query.all()
         
         for txn in transactions_to_delete:
-            # Delete the credit card transaction only - bank/expense transactions are never touched here
+            # For Payment transactions, also delete the linked bank transaction
+            if txn.transaction_type == 'Payment' and txn.bank_transaction_id:
+                bank_txn = family_get(Transaction, txn.bank_transaction_id)
+                if bank_txn:
+                    db.session.delete(bank_txn)
             db.session.delete(txn)
         
         deleted_count = len(transactions_to_delete)
@@ -586,6 +591,8 @@ class CreditCardService:
 
         deleted_count = 0
 
+        from models.transactions import Transaction
+
         # ── Step 1: delete unlocked statements and their linked payments ──────────
         unlocked_statements = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.credit_card_id == card_id,
@@ -594,6 +601,14 @@ class CreditCardService:
             CreditCardTransaction.date >= start_date,
             CreditCardTransaction.date <= end_date
         ).all()
+
+        def _delete_payment(pmt):
+            """Delete a CC payment and its linked bank transaction."""
+            if pmt.bank_transaction_id:
+                bank_txn = family_get(Transaction, pmt.bank_transaction_id)
+                if bank_txn:
+                    db.session.delete(bank_txn)
+            db.session.delete(pmt)
 
         for stmt in unlocked_statements:
             # Delete the linked payment first (by statement_id link, then date fallback)
@@ -612,7 +627,7 @@ class CreditCardService:
                     is_fixed=False
                 ).first()
             if linked_payment and not linked_payment.is_fixed:
-                db.session.delete(linked_payment)
+                _delete_payment(linked_payment)
                 deleted_count += 1
             db.session.delete(stmt)
             deleted_count += 1
@@ -628,7 +643,7 @@ class CreditCardService:
             CreditCardTransaction.date <= end_date
         ).all()
         for pmt in orphan_payments:
-            db.session.delete(pmt)
+            _delete_payment(pmt)
             deleted_count += 1
 
         db.session.flush()
@@ -814,9 +829,9 @@ class CreditCardService:
         if bank_txn.amount != cc_payment.amount:
             cc_payment.amount = abs(float(bank_txn.amount))
         
-        # Sync paid status
+        # Sync paid status; always lock the CC payment since it has a real bank transaction
         cc_payment.is_paid = bank_txn.is_paid
-        cc_payment.is_fixed = bank_txn.is_fixed
+        cc_payment.is_fixed = True  # Bank transaction is linked — protect from regen
         
         db.session.flush()
         
