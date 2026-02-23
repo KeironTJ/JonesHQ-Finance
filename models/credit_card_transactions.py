@@ -44,6 +44,10 @@ class CreditCardTransaction(db.Model):
     # Link to Bank Account Transaction (for payments)
     bank_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
     
+    # Link to the Statement (Interest) transaction that generated this Payment.
+    # SET NULL on delete so removing a statement NULLs the FK without cascading.
+    statement_id = db.Column(db.Integer, db.ForeignKey('credit_card_transactions.id', ondelete='SET NULL'), nullable=True)
+    
     # Audit Fields
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
