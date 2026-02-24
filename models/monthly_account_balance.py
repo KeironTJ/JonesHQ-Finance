@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class MonthlyAccountBalance(db.Model):
@@ -18,7 +18,7 @@ class MonthlyAccountBalance(db.Model):
     projected_balance = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
     
     # Metadata
-    last_calculated = db.Column(db.DateTime, default=datetime.utcnow)
+    last_calculated = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     account = db.relationship('Account', backref='monthly_balances')

@@ -4,10 +4,13 @@ Handles interest calculations, statement generation, and payment automation
 """
 import logging
 from datetime import datetime, date, timedelta
+from decimal import Decimal
 from dateutil.relativedelta import relativedelta
 from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
 from models.categories import Category
+from models.transactions import Transaction
+from models.vendors import Vendor
 from services.payday_service import PaydayService
 from extensions import db
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
@@ -39,7 +42,6 @@ class CreditCardService:
         
         # Get balance BEFORE statement (including ALL transactions up to day before statement)
         # Interest should be charged on the projected balance, not just paid transactions
-        from decimal import Decimal
         day_before_statement = statement_date - timedelta(days=1)
         transactions_before_statement = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.credit_card_id == card_id,
@@ -68,7 +70,6 @@ class CreditCardService:
         CreditCardTransaction.recalculate_card_balance(card_id)
         
         # Get projected balance by summing ALL transactions up to statement date
-        from decimal import Decimal
         transactions_up_to_statement = family_query(CreditCardTransaction).filter(
             CreditCardTransaction.credit_card_id == card_id,
             CreditCardTransaction.date <= statement_date
@@ -169,7 +170,7 @@ class CreditCardService:
         
         # Make interest negative (increases debt)
         interest_amount = -abs(interest_amount)
-        
+
         # Get or create "Credit Cards > {CardName}" category
         credit_card_category = family_query(Category).filter_by(
             head_budget='Credit Cards',
@@ -178,6 +179,8 @@ class CreditCardService:
         
         if not credit_card_category:
             credit_card_category = Category(
+                family_id=get_family_id(),
+                name=card.card_name,
                 head_budget='Credit Cards',
                 sub_budget=card.card_name,
                 category_type='expense'
@@ -195,7 +198,7 @@ class CreditCardService:
             category_id=credit_card_category.id,
             date=statement_date,
             day_name=statement_date.strftime('%A'),
-            week=statement_date.strftime('%Y-W%U'),
+            week=f"{statement_date.isocalendar()[1]:02d}-{statement_date.year}",
             month=statement_date.strftime('%Y-%m'),
             head_budget='Credit Cards',
             sub_budget=card.card_name,
@@ -262,6 +265,8 @@ class CreditCardService:
         
         if not credit_card_category:
             credit_card_category = Category(
+                family_id=get_family_id(),
+                name=card.card_name,
                 head_budget='Credit Cards',
                 sub_budget=card.card_name,
                 category_type='expense'
@@ -275,7 +280,7 @@ class CreditCardService:
             category_id=credit_card_category.id,
             date=payment_date,
             day_name=payment_date.strftime('%a'),
-            week=payment_date.strftime('%U-%Y'),
+            week=f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}",
             month=payment_date.strftime('%Y-%m'),
             head_budget='Credit Cards',
             sub_budget=card.card_name,
@@ -292,9 +297,6 @@ class CreditCardService:
         
         # Create linked bank transaction if default payment account is set
         if card.default_payment_account_id:
-            from models.transactions import Transaction
-            from models.vendors import Vendor
-            
             # Find or create vendor for card provider
             vendor = family_query(Vendor).filter_by(name=card.card_name).first()
             if not vendor:
@@ -338,7 +340,6 @@ class CreditCardService:
             db.session.commit()
             CreditCardTransaction.recalculate_card_balance(card.id)
             if card.default_payment_account_id:
-                from models.transactions import Transaction
                 Transaction.recalculate_account_balance(card.default_payment_account_id)
         
         return transaction
@@ -532,7 +533,6 @@ class CreditCardService:
           statement → linked CC payment → linked bank transaction
         Returns the number of records deleted.
         """
-        from models.transactions import Transaction
         count = 0
 
         # Find the CC payment linked to this statement
@@ -744,8 +744,6 @@ class CreditCardService:
         Returns:
             CreditCardTransaction if updated, None otherwise
         """
-        from models.transactions import Transaction
-        
         if not bank_txn.credit_card_id:
             return None
         
@@ -766,7 +764,7 @@ class CreditCardService:
         if bank_txn.transaction_date != cc_payment.date:
             cc_payment.date = bank_txn.transaction_date
             cc_payment.day_name = bank_txn.transaction_date.strftime('%A')
-            cc_payment.week = int(bank_txn.transaction_date.strftime('%U'))
+            cc_payment.week = f"{bank_txn.transaction_date.isocalendar()[1]:02d}-{bank_txn.transaction_date.year}"
             cc_payment.month = bank_txn.transaction_date.strftime('%Y-%m')
         
         # Sync amount (bank expense = credit card payment)
@@ -796,8 +794,6 @@ class CreditCardService:
         Returns:
             Transaction if updated, None otherwise
         """
-        from models.transactions import Transaction
-        
         if not cc_payment.bank_transaction_id:
             return None
         
@@ -845,8 +841,6 @@ class CreditCardService:
             cc_payment_id: ID of credit card payment
             bank_txn_id: ID of bank transaction
         """
-        from models.transactions import Transaction
-        
         if cc_payment_id:
             cc_payment = family_get(CreditCardTransaction, cc_payment_id)
             if cc_payment and cc_payment.bank_transaction_id:

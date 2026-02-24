@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class NetWorth(db.Model):
@@ -29,7 +29,7 @@ class NetWorth(db.Model):
     one_month_track = db.Column(db.Numeric(10, 2))  # % change from previous month
     three_month_track = db.Column(db.Numeric(10, 2))  # % change from 3 months ago
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self):
         return f'<NetWorth {self.date}: £{self.net_worth}>'

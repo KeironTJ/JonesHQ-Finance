@@ -1,4 +1,4 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from extensions import db
 from models.expenses import Expense
@@ -357,7 +357,7 @@ class ExpenseSyncService:
                 existing.is_fixed = True  # Lock existing records that weren't previously locked
                 updated = True
             if updated:
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 db.session.add(existing)
             
             # Link expense to transaction
@@ -446,7 +446,7 @@ class ExpenseSyncService:
             # Update if amount changed
             if abs(existing.amount - Decimal(str(target_amount))) > Decimal('0.01'):
                 existing.amount = Decimal(str(target_amount))
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 db.session.add(existing)
             
             # Link expense to transaction
@@ -554,7 +554,7 @@ class ExpenseSyncService:
             if abs(existing.amount - total_reimbursement) > Decimal('0.01'):
                 existing.amount = total_reimbursement
                 existing.transaction_date = reimbursement_date
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 db.session.add(existing)
                 return existing.id, True
             return existing.id, False
@@ -651,7 +651,7 @@ class ExpenseSyncService:
             if abs(existing.amount - total) > Decimal('0.01'):
                 existing.amount = total
                 existing.date = payment_date
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 updated = True
                 # Also update the linked bank transaction amount/date if present
                 if existing.bank_transaction_id:
@@ -661,7 +661,7 @@ class ExpenseSyncService:
                     if bank_txn and not bank_txn.is_paid:
                         bank_txn.amount = -abs(total)
                         bank_txn.transaction_date = payment_date
-                        bank_txn.updated_at = datetime.utcnow()
+                        bank_txn.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                         db.session.add(bank_txn)
             if not existing.is_fixed:
                 existing.is_fixed = True  # Lock existing records that weren't previously locked

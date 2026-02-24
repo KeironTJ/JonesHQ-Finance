@@ -4,7 +4,11 @@ from datetime import timedelta
 
 class Config:
     """Base configuration"""
-    
+
+    @classmethod
+    def init_app(cls, app):
+        pass
+
     # Secret key for session management
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     
@@ -95,10 +99,6 @@ class ProductionConfig(Config):
         if 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', ''):
             import warnings
             warnings.warn("Using SQLite in production is not recommended. Use PostgreSQL or MySQL.")
-
-
-# Add init_app to base config
-Config.init_app = classmethod(lambda cls, app: None)
 
 
 class TestingConfig(Config):

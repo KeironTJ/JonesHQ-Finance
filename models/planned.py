@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class PlannedTransaction(db.Model):
@@ -13,8 +13,8 @@ class PlannedTransaction(db.Model):
     description = db.Column(db.String(255))
     is_recurring = db.Column(db.Boolean, default=False)
     frequency = db.Column(db.String(50))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self):
         return f'<PlannedTransaction {self.id}: {self.amount}>'

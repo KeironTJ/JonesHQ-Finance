@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Child(db.Model):
@@ -16,8 +16,8 @@ class Child(db.Model):
     transaction_day = db.Column(db.Integer, default=28)  # Day of month for transaction (1-28)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)  # Category for transactions
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'), nullable=True)  # Vendor for transactions
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     activity_types = db.relationship('ChildActivityType', back_populates='child', cascade='all, delete-orphan')
@@ -52,7 +52,7 @@ class ChildActivityType(db.Model):
     occurs_saturday = db.Column(db.Boolean, default=False)
     occurs_sunday = db.Column(db.Boolean, default=False)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     child = db.relationship('Child', back_populates='activity_types')
@@ -86,8 +86,8 @@ class DailyChildcareActivity(db.Model):
     occurred = db.Column(db.Boolean, default=False)  # Did this activity happen?
     cost_override = db.Column(db.Numeric(10, 2))  # Optional: override default cost
     notes = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     child = db.relationship('Child', back_populates='daily_activities')
@@ -120,8 +120,8 @@ class MonthlyChildcareSummary(db.Model):
     total_cost = db.Column(db.Numeric(10, 2), nullable=False)
     transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'))  # Linked transaction
     account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'))  # Which account to charge
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     child = db.relationship('Child')
@@ -152,8 +152,8 @@ class ChildcareRecord(db.Model):
     year_group = db.Column(db.String(50))
     provider = db.Column(db.String(100))
     description = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self):
         return f'<ChildcareRecord {self.date}: {self.child_name} - £{self.cost}>'

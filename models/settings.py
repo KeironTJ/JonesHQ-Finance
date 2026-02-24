@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Settings(db.Model):
@@ -12,8 +12,8 @@ class Settings(db.Model):
     value = db.Column(db.String(500))
     description = db.Column(db.String(255))
     setting_type = db.Column(db.String(50))  # 'int', 'float', 'string', 'boolean', 'date'
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     @staticmethod
     def get_value(key, default=None):
@@ -38,7 +38,7 @@ class Settings(db.Model):
         setting = Settings.query.filter_by(key=key).first()
         if setting:
             setting.value = str(value)
-            setting.updated_at = datetime.utcnow()
+            setting.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             setting = Settings(
                 key=key,

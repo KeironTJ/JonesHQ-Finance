@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Balance(db.Model):
@@ -10,7 +10,7 @@ class Balance(db.Model):
     account_id= db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False)
     balance = db.Column(db.Numeric(10, 2), nullable=False)
     balance_date = db.Column(db.Date, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self):
         return f'<Balance {self.account_id}: {self.balance}>'

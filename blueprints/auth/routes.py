@@ -7,7 +7,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from urllib.parse import urlparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from . import auth_bp
 from .forms import LoginForm, RegisterForm
 from models.users import User
@@ -42,7 +42,7 @@ def login():
         if user:
             # Check if account is locked
             if user.is_locked():
-                minutes_left = int((user.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
+                minutes_left = int((user.locked_until - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 60) + 1
                 flash(f'Account temporarily locked due to multiple failed login attempts. Try again in {minutes_left} minutes.', 'danger')
                 return render_template('auth/login.html', form=form)
             

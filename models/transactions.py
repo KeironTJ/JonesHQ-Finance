@@ -1,5 +1,6 @@
+from decimal import Decimal
+from datetime import datetime, timezone
 from extensions import db
-from datetime import datetime
 
 
 class Transaction(db.Model):
@@ -38,8 +39,8 @@ class Transaction(db.Model):
     
     is_forecasted = db.Column(db.Boolean, default=False)  # True for predicted/forecasted transactions
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     vendor = db.relationship('Vendor', back_populates='transactions')
@@ -50,59 +51,26 @@ class Transaction(db.Model):
     
     @staticmethod
     def recalculate_account_balance(account_id):
-        """Recalculate and update account balance from all transactions"""
+        """Recalculate and update account balance from all transactions.
+
+        Scopes to the current family when called within a request context;
+        falls back to unscoped for CLI commands and tests.
+        """
         from models.accounts import Account
-        from decimal import Decimal
-        
-        account = Account.query.get(account_id)
+
+        account = db.session.get(Account, account_id)
         if not account:
             return
-        
-        transactions = Transaction.query.filter_by(account_id=account_id).all()
-        # Balance = sum of amounts (positive=income adds, negative=expense subtracts)
-        # Keep as Decimal throughout
-        balance = sum([Decimal(str(t.amount)) for t in transactions], Decimal('0'))
+
+        q = Transaction.query.filter(Transaction.account_id == account_id)
+        try:
+            from utils.db_helpers import get_family_id
+            fid = get_family_id()
+            if fid is not None:
+                q = q.filter(Transaction.family_id == fid)
+        except RuntimeError:
+            pass  # Outside request context (CLI, tests) — run unscoped
+
+        balance = sum((Decimal(str(t.amount)) for t in q.all()), Decimal('0'))
         account.balance = balance
-        account.updated_at = datetime.now()
-
-
-# Event listeners to update monthly balance cache when transactions change
-# DISABLED: Causes session state errors with after_commit events
-# Cache updates are now handled manually in routes after transactions are committed
-"""
-from sqlalchemy import event
-
-@event.listens_for(Transaction, 'after_insert')
-def after_transaction_insert(mapper, connection, target):
-    \"\"\"Update monthly balance cache when a transaction is added\"\"\"
-    if target.account_id:
-        # Use after_commit to ensure transaction is completed
-        @event.listens_for(db.session, 'after_commit', once=True)
-        def update_cache(session):
-            from services.monthly_balance_service import MonthlyBalanceService
-            MonthlyBalanceService.handle_transaction_change(
-                target.account_id, 
-                target.transaction_date
-            )
-
-
-@event.listens_for(Transaction, 'after_update')
-def after_transaction_update(mapper, connection, target):
-    \"\"\"Update monthly balance cache when a transaction is edited\"\"\"
-    # Cache update will be handled by the route after commit
-    # This avoids session state issues with after_commit events
-    pass
-
-
-@event.listens_for(Transaction, 'after_delete')
-def after_transaction_delete(mapper, connection, target):
-    \"\"\"Update monthly balance cache when a transaction is deleted\"\"\"
-    if target.account_id:
-        @event.listens_for(db.session, 'after_commit', once=True)
-        def update_cache(session):
-            from services.monthly_balance_service import MonthlyBalanceService
-            MonthlyBalanceService.handle_transaction_change(
-                target.account_id, 
-                target.transaction_date
-            )
-"""
+        account.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)

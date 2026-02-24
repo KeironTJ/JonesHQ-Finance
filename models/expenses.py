@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Expense(db.Model):
@@ -37,8 +37,8 @@ class Expense(db.Model):
     submitted = db.Column(db.Boolean, default=False)
     reimbursed = db.Column(db.Boolean, default=False)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self):
         return f'<Expense {self.date}: {self.description} - £{self.total_cost}>'

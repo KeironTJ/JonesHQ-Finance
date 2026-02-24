@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class CreditCardTransaction(db.Model):
@@ -49,8 +49,8 @@ class CreditCardTransaction(db.Model):
     statement_id = db.Column(db.Integer, db.ForeignKey('credit_card_transactions.id', ondelete='SET NULL'), nullable=True)
     
     # Audit Fields
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     bank_transaction = db.relationship('Transaction', foreign_keys=[bank_transaction_id])
@@ -61,7 +61,7 @@ class CreditCardTransaction(db.Model):
         from models.credit_cards import CreditCard
         from sqlalchemy.orm import Session
         
-        card = CreditCard.query.get(credit_card_id)
+        card = db.session.get(CreditCard, credit_card_id)
         if not card:
             return
         

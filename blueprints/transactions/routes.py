@@ -1,6 +1,8 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify
-from sqlalchemy import func
-from datetime import datetime, timedelta
+from flask import render_template, request, redirect, url_for, flash, jsonify, current_app
+from sqlalchemy import func, case
+from datetime import datetime, timedelta, date, timezone
+from decimal import Decimal
+from collections import defaultdict
 from . import transactions_bp
 from models.transactions import Transaction
 from models.accounts import Account
@@ -13,7 +15,6 @@ from models.loans import Loan
 from models.settings import Settings
 from services.payday_service import PaydayService
 from extensions import db
-from flask import current_app
 from models.expenses import Expense
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
@@ -48,7 +49,6 @@ def index():
     
     # Default to current payday period and pending ONLY on first visit (no query params at all)
     if not request.args:
-        from datetime import date
         today = date.today()
         # Use get_period_for_date to get the correct period that today falls into
         payday_period = PaydayService.get_period_for_date(today)
@@ -60,8 +60,12 @@ def index():
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
     if head_budget:
-        # Filter by head_budget (all categories under this head)
-        query = query.join(Category).filter(Category.head_budget == head_budget)
+        # Use a subquery so query never joins Category directly — keeps it safe
+        # to join Category separately for the GROUP BY summary below.
+        matching_cat_ids = family_query(Category).with_entities(Category.id).filter(
+            Category.head_budget == head_budget
+        )
+        query = query.filter(Transaction.category_id.in_(matching_cat_ids))
     if category_id:
         # Explicitly specify Transaction.category_id to avoid ambiguity after join
         query = query.filter(Transaction.category_id == category_id)
@@ -93,63 +97,63 @@ def index():
     # Get paginated results
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     transactions = pagination.items
-    
-    # Calculate summary statistics from ALL filtered transactions (not just current page)
-    all_filtered_transactions = query.all()
-    total_income = sum([t.amount for t in all_filtered_transactions if t.amount > 0])
-    total_expenses = sum([abs(t.amount) for t in all_filtered_transactions if t.amount < 0])
+
+    # --- Summary stats via a single aggregation query (no full row scan) ---
+    stats = query.with_entities(
+        func.count(Transaction.id).label('total'),
+        func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)).label('income'),
+        func.sum(case((Transaction.amount < 0, Transaction.amount), else_=0)).label('expenses'),
+    ).one()
+    total_count = stats.total or 0
+    total_income = float(stats.income or 0)
+    total_expenses = abs(float(stats.expenses or 0))
     net_balance = total_income - total_expenses
-    total_count = len(all_filtered_transactions)
-    
-    # Calculate running balance for current page transactions
-    # Running balance is calculated per account (not globally)
-    from decimal import Decimal
-    running_balances = []
-    
-    for txn in transactions:
-        # Get ALL transactions from the SAME ACCOUNT up to and including this transaction's date
-        # Order by date ascending, then by ID to ensure consistent ordering
-        all_txns_up_to_date = family_query(Transaction).filter(
-            Transaction.account_id == txn.account_id,
-            db.or_(
-                Transaction.transaction_date < txn.transaction_date,
-                db.and_(
-                    Transaction.transaction_date == txn.transaction_date,
-                    Transaction.id <= txn.id
-                )
-            )
-        ).order_by(Transaction.transaction_date.asc(), Transaction.id.asc()).all()
-        
-        # Calculate running balance from all transactions in this account up to this point
-        running_balance = Decimal('0')
-        for t in all_txns_up_to_date:
-            if t.amount > 0:  # Income
-                running_balance += Decimal(str(t.amount))
-            else:  # Expense
-                running_balance -= abs(Decimal(str(t.amount)))
-        
-        running_balances.append(running_balance)
-    
-    # Calculate category summary for all filtered transactions (not just current page)
-    from collections import defaultdict
+
+    # --- Category summary via GROUP BY (one SQL query, no full row scan) ---
+    cat_rows = (
+        query.order_by(None)
+        .outerjoin(Category, Transaction.category_id == Category.id)
+        .with_entities(
+            Category.head_budget,
+            Category.sub_budget,
+            func.count(Transaction.id).label('cnt'),
+            func.sum(Transaction.amount).label('total'),
+        )
+        .group_by(Category.head_budget, Category.sub_budget)
+        .all()
+    )
     summary = defaultdict(lambda: {'categories': defaultdict(lambda: {'count': 0, 'total': 0})})
-    
-    for t in all_filtered_transactions:
-        if t.category:
-            head = t.category.head_budget
-            sub = t.category.sub_budget
-            summary[head]['categories'][sub]['count'] += 1
-            summary[head]['categories'][sub]['total'] += t.amount
-            
-    # Calculate totals for each head budget
+    for row in cat_rows:
+        if row.head_budget:
+            summary[row.head_budget]['categories'][row.sub_budget or '']['count'] += row.cnt
+            summary[row.head_budget]['categories'][row.sub_budget or '']['total'] += float(row.total or 0)
     for head in summary:
         summary[head]['total_count'] = sum(cat['count'] for cat in summary[head]['categories'].values())
         summary[head]['total_amount'] = sum(cat['total'] for cat in summary[head]['categories'].values())
-    
-    # Sort by total amount (descending)
-    category_summary = dict(sorted(summary.items(), 
-                                  key=lambda x: abs(x[1]['total_amount']), 
-                                  reverse=True))
+    category_summary = dict(sorted(summary.items(), key=lambda x: abs(x[1]['total_amount']), reverse=True))
+
+    # --- Running balance — one query per unique account on the page, not one per row ---
+    # Collect the latest transaction date per account visible on this page
+    account_max_date = {}
+    for txn in transactions:
+        if txn.account_id:
+            if txn.account_id not in account_max_date or txn.transaction_date > account_max_date[txn.account_id]:
+                account_max_date[txn.account_id] = txn.transaction_date
+
+    # For each account, fetch all its transactions up to that date in one query
+    # and accumulate running balances into a lookup dict keyed by transaction id.
+    balance_map = {}
+    for acct_id, max_date in account_max_date.items():
+        acct_txns = family_query(Transaction).filter(
+            Transaction.account_id == acct_id,
+            Transaction.transaction_date <= max_date,
+        ).order_by(Transaction.transaction_date.asc(), Transaction.id.asc()).all()
+        running = Decimal('0')
+        for t in acct_txns:
+            running += Decimal(str(t.amount))
+            balance_map[t.id] = running
+
+    running_balances = [balance_map.get(txn.id, Decimal('0')) for txn in transactions]
     
     # Get filter options
     accounts = family_query(Account).order_by(Account.name).all()

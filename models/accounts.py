@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Account(db.Model):
@@ -11,8 +11,8 @@ class Account(db.Model):
     account_type = db.Column(db.String(50), nullable=False)  # Joint, Personal, Savings, etc.
     balance = db.Column(db.Numeric(10, 2), default=0.00)
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     transactions = db.relationship('Transaction', backref='account', lazy=True)

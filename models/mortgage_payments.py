@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class MortgageSnapshot(db.Model):
@@ -35,7 +35,7 @@ class MortgageSnapshot(db.Model):
     
     notes = db.Column(db.Text)  # Any notes about this snapshot
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     transaction = db.relationship('Transaction', backref='mortgage_snapshot', lazy=True, foreign_keys=[transaction_id])
@@ -77,7 +77,7 @@ class MortgagePayment(db.Model):
     equity_amount = db.Column(db.Numeric(10, 2))
     equity_percent = db.Column(db.Numeric(5, 2))
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self):
         return f'<MortgagePayment {self.date}: £{self.fixed_payment}>'

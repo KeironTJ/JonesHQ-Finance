@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Pension(db.Model):
@@ -20,8 +20,8 @@ class Pension(db.Model):
     monthly_contribution = db.Column(db.Numeric(10, 2), default=0)  # Expected monthly contribution
     projected_value_at_retirement = db.Column(db.Numeric(10, 2))  # Calculated projection
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     snapshots = db.relationship('PensionSnapshot', backref='pension', lazy=True, cascade='all, delete-orphan')

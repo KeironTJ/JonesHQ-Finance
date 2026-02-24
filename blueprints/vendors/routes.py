@@ -7,7 +7,7 @@ from extensions import db
 from models import Vendor, Category, VendorType
 from models.settings import Settings
 from services.payday_service import PaydayService
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json
 from sqlalchemy import func
@@ -585,7 +585,7 @@ def edit(id):
             vendor.website = website if website else None
             vendor.notes = notes if notes else None
             vendor.is_active = is_active
-            vendor.updated_at = datetime.utcnow()
+            vendor.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             
             db.session.commit()
             

@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class LoanPayment(db.Model):
@@ -22,7 +22,7 @@ class LoanPayment(db.Model):
     is_paid = db.Column(db.Boolean, default=False)
     bank_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     bank_transaction = db.relationship('Transaction', foreign_keys=[bank_transaction_id])

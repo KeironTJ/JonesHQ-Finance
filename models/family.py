@@ -4,7 +4,7 @@ A Family groups users together into a shared data pool.
 FamilyInvites are token-based links that allow new members to join.
 """
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from extensions import db
 
 
@@ -14,7 +14,7 @@ class Family(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, default='My Family')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Relationships
     members = db.relationship('User', back_populates='family', lazy='dynamic')
@@ -46,9 +46,9 @@ class FamilyInvite(db.Model):
 
     # Audit
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False,
-                           default=lambda: datetime.utcnow() + timedelta(days=7))
+                           default=lambda: datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=7))
     used_at = db.Column(db.DateTime, nullable=True)
     used_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
@@ -60,11 +60,11 @@ class FamilyInvite(db.Model):
     @property
     def is_valid(self):
         """True if the invite has not been used and has not expired."""
-        return self.used_at is None and datetime.utcnow() <= self.expires_at
+        return self.used_at is None and datetime.now(timezone.utc).replace(tzinfo=None) <= self.expires_at
 
     def mark_used(self, user):
         """Mark this invite as consumed by *user*."""
-        self.used_at = datetime.utcnow()
+        self.used_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self.used_by_id = user.id
         db.session.commit()
 

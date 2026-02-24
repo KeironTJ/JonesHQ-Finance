@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ExpenseCalendarEntry(db.Model):
@@ -13,8 +13,8 @@ class ExpenseCalendarEntry(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=True)
     description = db.Column(db.String(255), nullable=True)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     expense = db.relationship('Expense', backref='calendar_entries', lazy=True)
 

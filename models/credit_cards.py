@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class CreditCard(db.Model):
@@ -33,8 +33,8 @@ class CreditCard(db.Model):
     # Account Management
     start_date = db.Column(db.Date)
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     transactions = db.relationship('CreditCardTransaction', backref='credit_card', lazy=True, cascade='all, delete-orphan')
@@ -90,7 +90,7 @@ class CreditCardPromotion(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     
     notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self):
         return f'<CreditCardPromotion {self.promotion_type}: {self.apr_rate}% until {self.end_date}>'

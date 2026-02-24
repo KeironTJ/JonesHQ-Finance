@@ -1,5 +1,5 @@
 from flask import render_template, request, redirect, url_for, flash
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 from . import credit_cards_bp
@@ -461,9 +461,9 @@ def edit_transaction(id, txn_id):
         if txn_date_str:
             txn.date = datetime.strptime(txn_date_str, '%Y-%m-%d').date()
             txn.day_name = txn.date.strftime('%A')
-            txn.week = int(txn.date.strftime('%U'))
+            txn.week = f"{txn.date.isocalendar()[1]:02d}-{txn.date.year}"
             txn.month = txn.date.strftime('%Y-%m')
-        
+
         txn.transaction_type = txn_type
         txn.item = txn_item
         txn.amount = txn_amount
@@ -562,7 +562,7 @@ def edit_payment(id, txn_id):
             txn.date = datetime.strptime(payment_date_str, '%Y-%m-%d').date()
             # Update day/week/month for date
             txn.day_name = txn.date.strftime('%A')
-            txn.week = int(txn.date.strftime('%U'))
+            txn.week = f"{txn.date.isocalendar()[1]:02d}-{txn.date.year}"
             txn.month = txn.date.strftime('%Y-%m')
         
         # Store as positive amount (reduces debt)

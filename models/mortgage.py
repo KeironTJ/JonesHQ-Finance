@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class MortgageProduct(db.Model):
@@ -36,8 +36,8 @@ class MortgageProduct(db.Model):
     # LTV information
     ltv_ratio = db.Column(db.Numeric(5, 2))  # Loan to value ratio at start
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     snapshots = db.relationship('MortgageSnapshot', backref='mortgage_product', lazy=True, cascade='all, delete-orphan')
@@ -72,8 +72,8 @@ class Mortgage(db.Model):
     equity_amount = db.Column(db.Numeric(10, 2))
     equity_percent = db.Column(db.Numeric(5, 2))
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     payments = db.relationship('MortgagePayment', backref='mortgage', lazy=True)
     

@@ -2,7 +2,7 @@
 Monthly Account Balance Cache Service
 Manages the cache of monthly account balances for performance
 """
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 from models.monthly_account_balance import MonthlyAccountBalance
@@ -89,14 +89,14 @@ class MonthlyBalanceService:
         if cache_entry:
             cache_entry.actual_balance = actual
             cache_entry.projected_balance = projected
-            cache_entry.last_calculated = datetime.utcnow()
+            cache_entry.last_calculated = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             cache_entry = MonthlyAccountBalance(
                 account_id=account_id,
                 year_month=year_month,
                 actual_balance=actual,
                 projected_balance=projected,
-                last_calculated=datetime.utcnow()
+                last_calculated=datetime.now(timezone.utc).replace(tzinfo=None)
             )
             db.session.add(cache_entry)
         

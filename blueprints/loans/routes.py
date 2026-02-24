@@ -6,7 +6,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
 from services.loan_service import LoanService
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from dateutil.relativedelta import relativedelta
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
@@ -171,7 +171,7 @@ def edit(id):
             loan.term_months = term_months
             loan.default_payment_account_id = default_payment_account_id
             loan.is_active = request.form.get('is_active') == 'on'
-            loan.updated_at = datetime.utcnow()
+            loan.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             
             db.session.commit()
             
@@ -346,7 +346,7 @@ def edit_payment(id, payment_id):
                 bank_txn.year_month = payment.date.strftime('%Y-%m')
                 bank_txn.week_year = f"{payment.date.isocalendar()[1]:02d}-{payment.date.year}"
                 bank_txn.day_name = payment.date.strftime('%a')
-                bank_txn.updated_at = datetime.utcnow()
+                bank_txn.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 
                 db.session.commit()
                 # Recalculate bank account balance

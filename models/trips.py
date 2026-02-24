@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Trip(db.Model):
@@ -34,7 +34,7 @@ class Trip(db.Model):
     fuel_log_entry_id = db.Column(db.Integer, db.ForeignKey('fuel_records.id'), nullable=True)
     vehicle_last_fill = db.Column(db.Date)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     fuel_record = db.relationship('FuelRecord', foreign_keys=[fuel_log_entry_id], back_populates='trips')

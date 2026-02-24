@@ -6,7 +6,7 @@ import json
 from extensions import db
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class User(UserMixin, db.Model):
@@ -18,7 +18,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
     last_login = db.Column(db.DateTime)
 
     # Login security fields
@@ -52,12 +52,12 @@ class User(UserMixin, db.Model):
     
     def update_last_login(self):
         """Update the last login timestamp"""
-        self.last_login = datetime.utcnow()
+        self.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
         db.session.commit()
     
     def is_locked(self):
         """Check if account is locked due to failed login attempts"""
-        if self.locked_until and self.locked_until > datetime.utcnow():
+        if self.locked_until and self.locked_until > datetime.now(timezone.utc).replace(tzinfo=None):
             return True
         return False
     
@@ -70,7 +70,7 @@ class User(UserMixin, db.Model):
         lockout_duration = current_app.config.get('LOCKOUT_DURATION')
         
         if self.failed_login_attempts >= max_attempts and lockout_duration:
-            self.locked_until = datetime.utcnow() + lockout_duration
+            self.locked_until = datetime.now(timezone.utc).replace(tzinfo=None) + lockout_duration
         
         db.session.commit()
     

@@ -8,7 +8,7 @@ from models import Category
 from models.settings import Settings
 from models.transactions import Transaction
 from services.payday_service import PaydayService
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 import json
 from sqlalchemy import func
@@ -116,7 +116,7 @@ def edit(id):
             category.sub_budget = sub_budget if sub_budget else None
             category.category_type = category_type
             category.name = f"{head_budget}" + (f" - {sub_budget}" if sub_budget else "")
-            category.updated_at = datetime.utcnow()
+            category.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             
             db.session.commit()
             

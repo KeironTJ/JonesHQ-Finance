@@ -1,5 +1,5 @@
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Category(db.Model):
@@ -12,8 +12,8 @@ class Category(db.Model):
     category_type = db.Column(db.String(50), nullable=False)  # Income, Expense, Transfer, etc.
     head_budget = db.Column(db.String(100))  # Main category (Family, General, Home, etc.)
     sub_budget = db.Column(db.String(100))   # Sub category
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Self-referential relationship for hierarchy
     children = db.relationship('Category', backref=db.backref('parent', remote_side=[id]))

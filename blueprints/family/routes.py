@@ -13,7 +13,7 @@ Public route (no login required):
   POST /family/join/<token>  – complete registration and join
 """
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import render_template, redirect, url_for, flash, request, abort
 from flask_login import login_required, current_user, login_user
@@ -54,7 +54,7 @@ def index():
         FamilyInvite.query
         .filter_by(family_id=family.id)
         .filter(FamilyInvite.used_at.is_(None),
-                FamilyInvite.expires_at >= datetime.utcnow())
+                FamilyInvite.expires_at >= datetime.now(timezone.utc).replace(tzinfo=None))
         .order_by(FamilyInvite.created_at.desc())
         .all()
     )
@@ -62,7 +62,7 @@ def index():
         FamilyInvite.query
         .filter_by(family_id=family.id)
         .filter(
-            (FamilyInvite.expires_at < datetime.utcnow()) |
+            (FamilyInvite.expires_at < datetime.now(timezone.utc).replace(tzinfo=None)) |
             FamilyInvite.used_at.isnot(None)
         )
         .order_by(FamilyInvite.created_at.desc())
