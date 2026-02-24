@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Consolidated Transactions{% endblock %}
 
@@ -66,6 +66,47 @@
         <div class="card-body">
             <form method="GET" id="filterForm">
                 <div class="row g-3">
+                    <!-- Pay Period -->
+                    <div class="col-md-3">
+                        <label class="form-label">Pay Period</label>
+                        <select name="payday_period" id="paydayPeriodFilter" class="form-select">
+                            <option value="">All Periods</option>
+                            {% set ns = namespace(current_year=None) %}
+                            {% for period in payday_periods %}
+                                {% if ns.current_year != period['year'] %}
+                                    {% if ns.current_year is not none %}</optgroup>{% endif %}
+                                    <optgroup label="{{ period['year'] }}">
+                                    {% set ns.current_year = period['year'] %}
+                                {% endif %}
+                                <option value="{{ period['label'] }}" {% if selected_payday_period == period['label'] %}selected{% endif %}>
+                                    {{ period['display_name'] }}
+                                </option>
+                            {% endfor %}
+                            {% if ns.current_year is not none %}</optgroup>{% endif %}
+                        </select>
+                        <div class="mt-2 d-flex gap-2">
+                            {% if prev_payday_period %}
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="{{ url_for('transactions.consolidated', payday_period=prev_payday_period, source=selected_source or '', category_id=selected_category or '') }}">&larr; Prev</a>
+                            {% endif %}
+                            {% if next_payday_period %}
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="{{ url_for('transactions.consolidated', payday_period=next_payday_period, source=selected_source or '', category_id=selected_category or '') }}">Next &rarr;</a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Paid Status -->
+                    <div class="col-md-2">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" name="is_paid" id="isPaidFilter">
+                            <option value="" {% if not selected_is_paid %}selected{% endif %}>All</option>
+                            <option value="paid" {% if selected_is_paid == 'paid' %}selected{% endif %}>Paid</option>
+                            <option value="pending" {% if selected_is_paid == 'pending' %}selected{% endif %}>Pending</option>
+                        </select>
+                    </div>
+
+                    <!-- Source -->
                     <div class="col-md-2">
                         <label class="form-label">Source</label>
                         <select class="form-select" name="source" id="sourceFilter">
@@ -75,7 +116,8 @@
                             <option value="loan" {% if selected_source == 'loan' %}selected{% endif %}>Loans</option>
                         </select>
                     </div>
-                    
+
+                    <!-- Category -->
                     <div class="col-md-3">
                         <label class="form-label">Category</label>
                         <select class="form-select" name="category_id" id="categoryFilter">
@@ -87,19 +129,22 @@
                             {% endfor %}
                         </select>
                     </div>
-                    
+
+                    <!-- Date Range (applies when no pay period is selected) -->
                     <div class="col-md-2">
                         <label class="form-label">Start Date</label>
-                        <input type="date" class="form-control" name="start_date" value="{{ start_date or '' }}">
+                        <input type="date" class="form-control" name="start_date" value="{{ start_date or '' }}" {% if selected_payday_period %}disabled{% endif %}>
                     </div>
-                    
+
                     <div class="col-md-2">
                         <label class="form-label">End Date</label>
-                        <input type="date" class="form-control" name="end_date" value="{{ end_date or '' }}">
+                        <input type="date" class="form-control" name="end_date" value="{{ end_date or '' }}" {% if selected_payday_period %}disabled{% endif %}>
                     </div>
-                    
-                    <div class="col-md-3 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary me-2">
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-12 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
                             <i class="bi bi-search"></i> Filter
                         </button>
                         <a href="{{ url_for('transactions.consolidated') }}" class="btn btn-secondary">
@@ -129,6 +174,7 @@
                             <th>Description</th>
                             <th>Category</th>
                             <th>Type</th>
+                            <th>Status</th>
                             <th class="text-end">Amount</th>
                             <th class="text-end">Balance</th>
                         </tr>
@@ -152,7 +198,26 @@
                                     </span>
                                 {% endif %}
                             </td>
-                            <td>{{ txn.source_name }}</td>
+                            <td>
+                                {% if txn.source_type == 'bank' %}
+                                    <a href="{{ url_for('transactions.index', account_id=txn.source_id, payday_period=selected_payday_period) if selected_payday_period else url_for('transactions.index', account_id=txn.source_id) }}"
+                                       class="text-decoration-none" title="View {{ txn.source_name }} transactions">
+                                        {{ txn.source_name }} <i class="bi bi-arrow-right-short"></i>
+                                    </a>
+                                {% elif txn.source_type == 'credit_card' %}
+                                    <a href="{{ url_for('credit_cards.detail', id=txn.source_id) }}"
+                                       class="text-decoration-none" title="View {{ txn.source_name }} transactions">
+                                        {{ txn.source_name }} <i class="bi bi-arrow-right-short"></i>
+                                    </a>
+                                {% elif txn.source_type == 'loan' %}
+                                    <a href="{{ url_for('loans.detail', id=txn.source_id) }}"
+                                       class="text-decoration-none" title="View {{ txn.source_name }} payments">
+                                        {{ txn.source_name }} <i class="bi bi-arrow-right-short"></i>
+                                    </a>
+                                {% else %}
+                                    {{ txn.source_name }}
+                                {% endif %}
+                            </td>
                             <td>{{ txn.description }}</td>
                             <td>
                                 <small class="text-muted">{{ txn.category }}</small>
@@ -172,6 +237,13 @@
                                     <span class="badge bg-info text-dark">{{ txn.type }}</span>
                                 {% else %}
                                     <span class="badge bg-secondary">{{ txn.type }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if txn.is_paid %}
+                                    <span class="badge bg-success">Paid</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Pending</span>
                                 {% endif %}
                             </td>
                             <td class="text-end">
@@ -215,7 +287,20 @@
 </div>
 
 <script>
-// Auto-submit on filter change
+// Auto-submit when pay period, source, or category changes
+document.getElementById('paydayPeriodFilter').addEventListener('change', function() {
+    // Clear date range fields when a period is selected (they don't apply)
+    if (this.value) {
+        document.querySelector('[name="start_date"]').value = '';
+        document.querySelector('[name="end_date"]').value = '';
+    }
+    document.getElementById('filterForm').submit();
+});
+
+document.getElementById('isPaidFilter').addEventListener('change', function() {
+    document.getElementById('filterForm').submit();
+});
+
 document.getElementById('sourceFilter').addEventListener('change', function() {
     document.getElementById('filterForm').submit();
 });
@@ -224,10 +309,26 @@ document.getElementById('categoryFilter').addEventListener('change', function() 
     document.getElementById('filterForm').submit();
 });
 
+// Disable date inputs when a pay period is selected
+(function() {
+    var period = document.getElementById('paydayPeriodFilter');
+    var startDate = document.querySelector('[name="start_date"]');
+    var endDate = document.querySelector('[name="end_date"]');
+
+    function syncDateState() {
+        var hasPeriod = period.value !== '';
+        startDate.disabled = hasPeriod;
+        endDate.disabled = hasPeriod;
+    }
+
+    period.addEventListener('change', syncDateState);
+    syncDateState();
+})();
+
 // CSV Export
 document.getElementById('exportCSV').addEventListener('click', function() {
     let csv = 'Date,Source,Account/Card,Description,Category,Type,Amount,Balance\n';
-    
+
     {% for txn in transactions %}
     csv += '"{{ txn.date.strftime('%d/%m/%Y') }}",';
     csv += '"{{ txn.source }}",';
@@ -238,24 +339,22 @@ document.getElementById('exportCSV').addEventListener('click', function() {
     csv += '"{{ txn.amount }}",';
     csv += '"{{ txn.balance if txn.balance is not none else '' }}"\n';
     {% endfor %}
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.setAttribute('hidden', '');
     a.setAttribute('href', url);
-    
-    // Generate filename with current date
+
     const today = new Date();
-    const dateStr = today.getFullYear() + 
-                   String(today.getMonth() + 1).padStart(2, '0') + 
+    const dateStr = today.getFullYear() +
+                   String(today.getMonth() + 1).padStart(2, '0') +
                    String(today.getDate()).padStart(2, '0');
     a.setAttribute('download', 'consolidated_transactions_' + dateStr + '.csv');
-    
+
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 });
 </script>
 {% endblock %}
-

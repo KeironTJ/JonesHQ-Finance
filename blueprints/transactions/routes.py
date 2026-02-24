@@ -1061,32 +1061,59 @@ def create_transfer():
 @transactions_bp.route('/transactions/consolidated')
 def consolidated():
     """Consolidated view of all transactions across all sources"""
-    
+
     # Get filter parameters
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     category_id = request.args.get('category_id', type=int)
     source = request.args.get('source')  # 'bank', 'credit_card', 'loan', 'all'
-    
+    payday_period = request.args.get('payday_period')
+    is_paid_filter = request.args.get('is_paid')  # 'paid', 'pending', or ''
+
+    # Default to current payday period on first visit (no query params at all)
+    if not request.args:
+        payday_period = PaydayService.get_period_for_date(date.today())
+
+    # Resolve the payday period to a concrete date range for models that lack
+    # the payday_period column (CreditCardTransaction, LoanPayment).
+    period_start_date = None
+    period_end_date = None
+    if payday_period:
+        try:
+            p_year, p_month = map(int, payday_period.split('-'))
+            period_start_date, period_end_date, _ = PaydayService.get_payday_period(p_year, p_month)
+        except (ValueError, AttributeError):
+            payday_period = None
+
     # Build unified transaction list
     consolidated_transactions = []
-    
+
     # 1. Bank Account Transactions
     if not source or source == 'all' or source == 'bank':
         bank_txns = family_query(Transaction)
-        
-        if start_date:
-            bank_txns = bank_txns.filter(Transaction.transaction_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
-        if end_date:
-            bank_txns = bank_txns.filter(Transaction.transaction_date <= datetime.strptime(end_date, '%Y-%m-%d').date())
+
+        if payday_period:
+            bank_txns = bank_txns.filter(Transaction.payday_period == payday_period)
+        else:
+            if start_date:
+                bank_txns = bank_txns.filter(Transaction.transaction_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
+            if end_date:
+                bank_txns = bank_txns.filter(Transaction.transaction_date <= datetime.strptime(end_date, '%Y-%m-%d').date())
+
         if category_id:
             bank_txns = bank_txns.filter(Transaction.category_id == category_id)
-        
+        if is_paid_filter == 'paid':
+            bank_txns = bank_txns.filter(Transaction.is_paid == True)
+        elif is_paid_filter == 'pending':
+            bank_txns = bank_txns.filter(Transaction.is_paid == False)
+
         for txn in bank_txns.all():
             consolidated_transactions.append({
                 'id': f'bank_{txn.id}',
+                'raw_id': txn.id,
                 'source': 'Bank Account',
                 'source_type': 'bank',
+                'source_id': txn.account_id,
                 'source_name': txn.account.name if txn.account else 'Unknown',
                 'date': txn.transaction_date,
                 'description': txn.description,
@@ -1094,25 +1121,36 @@ def consolidated():
                 'amount': float(txn.amount),
                 'balance': float(txn.running_balance) if txn.running_balance else None,
                 'vendor': txn.vendor.name if txn.vendor else '',
-                'type': 'Income' if txn.amount > 0 else 'Expense'
+                'type': 'Income' if txn.amount > 0 else 'Expense',
+                'is_paid': txn.is_paid
             })
-    
+
     # 2. Credit Card Transactions
     if not source or source == 'all' or source == 'credit_card':
         cc_txns = family_query(CreditCardTransaction)
-        
-        if start_date:
-            cc_txns = cc_txns.filter(CreditCardTransaction.date >= datetime.strptime(start_date, '%Y-%m-%d').date())
-        if end_date:
-            cc_txns = cc_txns.filter(CreditCardTransaction.date <= datetime.strptime(end_date, '%Y-%m-%d').date())
+
+        # CreditCardTransaction has no payday_period column; use resolved dates.
+        cc_start = period_start_date if payday_period else (datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None)
+        cc_end = period_end_date if payday_period else (datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None)
+
+        if cc_start:
+            cc_txns = cc_txns.filter(CreditCardTransaction.date >= cc_start)
+        if cc_end:
+            cc_txns = cc_txns.filter(CreditCardTransaction.date <= cc_end)
         if category_id:
             cc_txns = cc_txns.filter(CreditCardTransaction.category_id == category_id)
-        
+        if is_paid_filter == 'paid':
+            cc_txns = cc_txns.filter(CreditCardTransaction.is_paid == True)
+        elif is_paid_filter == 'pending':
+            cc_txns = cc_txns.filter(CreditCardTransaction.is_paid == False)
+
         for txn in cc_txns.all():
             consolidated_transactions.append({
                 'id': f'cc_{txn.id}',
+                'raw_id': txn.id,
                 'source': 'Credit Card',
                 'source_type': 'credit_card',
+                'source_id': txn.credit_card_id,
                 'source_name': txn.credit_card.card_name if txn.credit_card else 'Unknown',
                 'date': txn.date,
                 'description': txn.item,
@@ -1120,23 +1158,33 @@ def consolidated():
                 'amount': float(txn.amount),
                 'balance': float(txn.balance) if txn.balance else None,
                 'vendor': '',
-                'type': txn.transaction_type
+                'type': txn.transaction_type,
+                'is_paid': txn.is_paid
             })
-    
+
     # 3. Loan Payments
     if not source or source == 'all' or source == 'loan':
         loan_txns = family_query(LoanPayment)
-        
-        if start_date:
-            loan_txns = loan_txns.filter(LoanPayment.payment_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
-        if end_date:
-            loan_txns = loan_txns.filter(LoanPayment.payment_date <= datetime.strptime(end_date, '%Y-%m-%d').date())
-        
+
+        loan_start = period_start_date if payday_period else (datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None)
+        loan_end = period_end_date if payday_period else (datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None)
+
+        if loan_start:
+            loan_txns = loan_txns.filter(LoanPayment.date >= loan_start)
+        if loan_end:
+            loan_txns = loan_txns.filter(LoanPayment.date <= loan_end)
+        if is_paid_filter == 'paid':
+            loan_txns = loan_txns.filter(LoanPayment.is_paid == True)
+        elif is_paid_filter == 'pending':
+            loan_txns = loan_txns.filter(LoanPayment.is_paid == False)
+
         for txn in loan_txns.all():
             consolidated_transactions.append({
                 'id': f'loan_{txn.id}',
+                'raw_id': txn.id,
                 'source': 'Loan',
                 'source_type': 'loan',
+                'source_id': txn.loan_id,
                 'source_name': txn.loan.name if txn.loan else 'Unknown',
                 'date': txn.date,
                 'description': f"Payment (Principal: £{txn.amount_paid_off:.2f}, Interest: £{txn.interest_charge:.2f})",
@@ -1144,33 +1192,77 @@ def consolidated():
                 'amount': float(txn.payment_amount),
                 'balance': float(txn.closing_balance) if txn.closing_balance else None,
                 'vendor': '',
-                'type': 'Loan Payment'
+                'type': 'Loan Payment',
+                'is_paid': txn.is_paid
             })
-    
+
     # Sort by date descending
     consolidated_transactions.sort(key=lambda x: x['date'], reverse=True)
-    
+
     # Calculate totals
     total_inflows = sum([t['amount'] for t in consolidated_transactions if t['amount'] > 0])
     total_outflows = sum([abs(t['amount']) for t in consolidated_transactions if t['amount'] < 0])
     net_position = total_inflows - total_outflows
-    
+
+    # Build payday period list for the dropdown, spanning the full data range.
+    min_txn_date = family_query(Transaction).with_entities(func.min(Transaction.transaction_date)).scalar()
+    max_txn_date = family_query(Transaction).with_entities(func.max(Transaction.transaction_date)).scalar()
+
+    if min_txn_date and max_txn_date:
+        months_diff = (max_txn_date.year - min_txn_date.year) * 12 + (max_txn_date.month - min_txn_date.month) + 2
+        payday_periods = PaydayService.get_recent_periods(
+            num_periods=months_diff,
+            include_future=False,
+            start_year=min_txn_date.year,
+            start_month=min_txn_date.month
+        )
+    else:
+        payday_periods = PaydayService.get_recent_periods(num_periods=24, include_future=True)
+
+    # Calculate prev/next period labels for navigation arrows.
+    prev_payday_period = None
+    next_payday_period = None
+    if payday_period:
+        try:
+            p_year, p_month = map(int, payday_period.split('-'))
+
+            prev_month = p_month - 1
+            prev_year = p_year
+            if prev_month < 1:
+                prev_month = 12
+                prev_year -= 1
+            _, _, prev_payday_period = PaydayService.get_payday_period(prev_year, prev_month)
+
+            next_month = p_month + 1
+            next_year = p_year
+            if next_month > 12:
+                next_month = 1
+                next_year += 1
+            _, _, next_payday_period = PaydayService.get_payday_period(next_year, next_month)
+        except (ValueError, AttributeError):
+            pass
+
     # Get filter options
     accounts = family_query(Account).order_by(Account.name).all()
     credit_cards = family_query(CreditCard).order_by(CreditCard.card_name).all()
     loans = family_query(Loan).order_by(Loan.name).all()
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
-    
+
     return render_template('transactions/consolidated.html',
-                         transactions=consolidated_transactions,
-                         total_inflows=total_inflows,
-                         total_outflows=total_outflows,
-                         net_position=net_position,
-                         accounts=accounts,
-                         credit_cards=credit_cards,
-                         loans=loans,
-                         categories=categories,
-                         selected_source=source,
-                         selected_category=category_id,
-                         start_date=start_date,
-                         end_date=end_date)
+                           transactions=consolidated_transactions,
+                           total_inflows=total_inflows,
+                           total_outflows=total_outflows,
+                           net_position=net_position,
+                           accounts=accounts,
+                           credit_cards=credit_cards,
+                           loans=loans,
+                           categories=categories,
+                           selected_source=source,
+                           selected_category=category_id,
+                           selected_is_paid=is_paid_filter,
+                           start_date=start_date,
+                           end_date=end_date,
+                           payday_periods=payday_periods,
+                           selected_payday_period=payday_period,
+                           prev_payday_period=prev_payday_period,
+                           next_payday_period=next_payday_period)
