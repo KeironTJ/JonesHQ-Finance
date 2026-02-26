@@ -23,9 +23,9 @@
     </div>
 
     <!-- Card Summary -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-danger text-white">
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <div class="card bg-danger text-white h-100">
                 <div class="card-body">
                     <h6>Current Balance</h6>
                     <h3>£{{ "%.2f"|format(card.current_balance) }}</h3>
@@ -33,8 +33,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
+        <div class="col">
+            <div class="card bg-info text-white h-100">
                 <div class="card-body">
                     <h6>Credit Limit</h6>
                     <h3>£{{ "%.2f"|format(card.credit_limit) }}</h3>
@@ -42,8 +42,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark">
+        <div class="col">
+            <div class="card bg-warning text-dark h-100">
                 <div class="card-body">
                     <h6>Monthly Payment</h6>
                     <h3>£{{ "%.2f"|format(card.set_payment or 0) }}</h3>
@@ -51,8 +51,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card {% if card.is_active %}bg-success{% else %}bg-secondary{% endif %} text-white">
+        <div class="col">
+            <div class="card {% if card.is_active %}bg-success{% else %}bg-secondary{% endif %} text-white h-100">
                 <div class="card-body">
                     <h6>Status</h6>
                     <h3>{% if card.is_active %}Active{% else %}Inactive{% endif %}</h3>
@@ -119,7 +119,7 @@
                     </thead>
                     <tbody>
                         {% for txn in transactions %}
-                        <tr id="cc-txn-{{ txn.id }}" {% if txn.bank_transaction_id %}class="table-info"{% endif %}>
+                        <tr id="cc-txn-{{ txn.id }}" class="{% if txn.is_paid %}table-secondary{% elif txn.bank_transaction_id %}table-info{% endif %}" {% if txn.is_paid %}style="opacity: 0.65;"{% endif %}>
                             <td>{{ txn.date.strftime('%d/%m/%Y') }}</td>
                             <td>
                                 {% if txn.transaction_type == 'Purchase' %}
@@ -140,7 +140,7 @@
                                 <small>{{ txn.head_budget }} > {{ txn.sub_budget }}</small>
                                 {% endif %}
                             </td>
-                            <td class="{% if txn.amount > 0 %}text-danger{% else %}text-success{% endif %}">
+                            <td class="{% if txn.amount < 0 %}text-danger{% else %}text-success{% endif %}">
                                 £{{ "%.2f"|format(txn.amount|abs) }}
                             </td>
                             <td {% if not txn.is_paid %}class="text-muted fst-italic"{% endif %}>

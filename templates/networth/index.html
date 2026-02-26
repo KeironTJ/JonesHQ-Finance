@@ -3,17 +3,17 @@
 {% block title %}Net Worth Timeline - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Net Worth Timeline</h1>
-        <div class="btn-group">
-            <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#periodModal">
+        <h1><i class="bi bi-graph-up"></i> Net Worth Timeline</h1>
+        <div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#periodModal">
                 <i class="bi bi-calendar-range"></i> Projection Period
             </button>
-            <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#refreshCacheModal">
+            <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#refreshCacheModal">
                 <i class="bi bi-arrow-clockwise"></i> Refresh Cache
             </button>
-            <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#snapshotModal">
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#snapshotModal">
                 <i class="bi bi-camera"></i> Save Snapshot
             </button>
         </div>
@@ -35,48 +35,40 @@
     </div>
     
     <!-- Current Summary -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-center">
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <div class="card {% if current_values.net_worth >= 0 %}bg-success{% else %}bg-danger{% endif %} text-white h-100">
                 <div class="card-body">
-                    <h6 class="text-muted">Total Net Worth</h6>
-                    <h3 class="{% if current_values.net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
-                        £{{ "{:,.2f}".format(current_values.net_worth) }}
-                    </h3>
-                    <small class="text-muted">Including pensions</small>
+                    <h6 class="card-title">Total Net Worth</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(current_values.net_worth) }}</h3>
+                    <small>Including pensions</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-center">
+        <div class="col">
+            <div class="card {% if current_values.liquid_net_worth >= 0 %}bg-success{% else %}bg-danger{% endif %} text-white h-100">
                 <div class="card-body">
-                    <h6 class="text-muted">Liquid Net Worth</h6>
-                    <h3 class="{% if current_values.liquid_net_worth >= 0 %}text-success{% else %}text-danger{% endif %}">
-                        £{{ "{:,.2f}".format(current_values.liquid_net_worth) }}
-                    </h3>
-                    <small class="text-muted">Cash & Savings - Debts</small>
+                    <h6 class="card-title">Liquid Net Worth</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(current_values.liquid_net_worth) }}</h3>
+                    <small>Cash &amp; Savings - Debts</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-center">
+        <div class="col">
+            <div class="card {% if comparison.month_comparison.change >= 0 %}bg-success{% else %}bg-danger{% endif %} text-white h-100">
                 <div class="card-body">
-                    <h6 class="text-muted">Month Change</h6>
-                    <h3 class="{% if comparison.month_comparison.change >= 0 %}text-success{% else %}text-danger{% endif %}">
-                        {{ "{:+,.2f}".format(comparison.month_comparison.change) }}
-                    </h3>
-                    <small class="text-muted">{{ "{:+.1f}".format(comparison.month_comparison.pct_change) }}%</small>
+                    <h6 class="card-title">Month Change</h6>
+                    <h3 class="mb-0">{{ "{:+,.2f}".format(comparison.month_comparison.change) }}</h3>
+                    <small>{{ "{:+.1f}".format(comparison.month_comparison.pct_change) }}%</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-center">
+        <div class="col">
+            <div class="card {% if comparison.year_comparison.change >= 0 %}bg-success{% else %}bg-danger{% endif %} text-white h-100">
                 <div class="card-body">
-                    <h6 class="text-muted">Year Change</h6>
-                    <h3 class="{% if comparison.year_comparison.change >= 0 %}text-success{% else %}text-danger{% endif %}">
-                        {{ "{:+,.2f}".format(comparison.year_comparison.change) }}
-                    </h3>
-                    <small class="text-muted">{{ "{:+.1f}".format(comparison.year_comparison.pct_change) }}%</small>
+                    <h6 class="card-title">Year Change</h6>
+                    <h3 class="mb-0">{{ "{:+,.2f}".format(comparison.year_comparison.change) }}</h3>
+                    <small>{{ "{:+.1f}".format(comparison.year_comparison.pct_change) }}%</small>
                 </div>
             </div>
         </div>
@@ -84,8 +76,8 @@
     
     <!-- Timeline Chart -->
     <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">Net Worth Timeline</h5>
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-graph-up"></i> Net Worth Timeline</h5>
         </div>
         <div class="card-body">
             <canvas id="networthChart" class="chart-canvas"></canvas>
@@ -94,12 +86,12 @@
     
     <!-- Monthly Breakdown Table -->
     <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">Monthly Breakdown</h5>
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="bi bi-table"></i> Monthly Breakdown</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover table-sm">
+                <table class="table table-hover table-sm mb-0">
                     <thead>
                         <tr>
                             <th>Month</th>
@@ -164,12 +156,15 @@
     <!-- Current Breakdown Detail -->
     <div class="row mb-4">
         <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Current Assets Detail</h5>
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-arrow-up-circle"></i> Current Assets Detail</h5>
                 </div>
                 <div class="card-body">
-                    <h6>Accounts (Cash: £{{ "{:,.2f}".format(current_values.cash) }})</h6>
+                    <div class="d-flex justify-content-between align-items-center bg-light rounded px-2 py-1 mb-2">
+                        <span class="fw-bold"><i class="bi bi-bank2 me-1"></i> Accounts</span>
+                        <span class="fw-bold text-success">£{{ "{:,.2f}".format(current_values.cash) }}</span>
+                    </div>
                     <ul class="list-group list-group-flush mb-3">
                         {% for acc in current_values.account_details %}
                         {% if acc.type in ['Joint', 'Personal'] %}
@@ -180,8 +175,11 @@
                         {% endif %}
                         {% endfor %}
                     </ul>
-                    
-                    <h6>Savings Accounts (£{{ "{:,.2f}".format(current_values.savings) }})</h6>
+
+                    <div class="d-flex justify-content-between align-items-center bg-light rounded px-2 py-1 mb-2">
+                        <span class="fw-bold"><i class="bi bi-piggy-bank me-1"></i> Savings Accounts</span>
+                        <span class="fw-bold text-success">£{{ "{:,.2f}".format(current_values.savings) }}</span>
+                    </div>
                     <ul class="list-group list-group-flush mb-3">
                         {% for acc in current_values.account_details %}
                         {% if acc.type == 'Savings' %}
@@ -192,8 +190,11 @@
                         {% endif %}
                         {% endfor %}
                     </ul>
-                    
-                    <h6>Pensions (£{{ "{:,.2f}".format(current_values.pensions_value) }})</h6>
+
+                    <div class="d-flex justify-content-between align-items-center bg-light rounded px-2 py-1 mb-2">
+                        <span class="fw-bold"><i class="bi bi-briefcase me-1"></i> Pensions</span>
+                        <span class="fw-bold text-success">£{{ "{:,.2f}".format(current_values.pensions_value) }}</span>
+                    </div>
                     <ul class="list-group list-group-flush">
                         {% for pension in current_values.pension_details %}
                         <li class="list-group-item d-flex justify-content-between">
@@ -207,12 +208,15 @@
         </div>
         
         <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Current Liabilities Detail</h5>
+            <div class="card h-100">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-arrow-down-circle"></i> Current Liabilities Detail</h5>
                 </div>
                 <div class="card-body">
-                    <h6>Credit Cards (£{{ "{:,.2f}".format(current_values.credit_cards) }})</h6>
+                    <div class="d-flex justify-content-between align-items-center bg-light rounded px-2 py-1 mb-2">
+                        <span class="fw-bold"><i class="bi bi-credit-card me-1"></i> Credit Cards</span>
+                        <span class="fw-bold text-danger">£{{ "{:,.2f}".format(current_values.credit_cards) }}</span>
+                    </div>
                     <ul class="list-group list-group-flush mb-3">
                         {% for cc in current_values.cc_details %}
                         <li class="list-group-item d-flex justify-content-between">
@@ -224,8 +228,11 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    
-                    <h6>Loans (£{{ "{:,.2f}".format(current_values.loans) }})</h6>
+
+                    <div class="d-flex justify-content-between align-items-center bg-light rounded px-2 py-1 mb-2">
+                        <span class="fw-bold"><i class="bi bi-cash-stack me-1"></i> Loans</span>
+                        <span class="fw-bold text-danger">£{{ "{:,.2f}".format(current_values.loans) }}</span>
+                    </div>
                     <ul class="list-group list-group-flush mb-3">
                         {% for loan in current_values.loan_details %}
                         <li class="list-group-item d-flex justify-content-between">
@@ -234,8 +241,11 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    
-                    <h6>Mortgage (£{{ "{:,.2f}".format(current_values.mortgage) }})</h6>
+
+                    <div class="d-flex justify-content-between align-items-center bg-light rounded px-2 py-1 mb-2">
+                        <span class="fw-bold"><i class="bi bi-house me-1"></i> Mortgage</span>
+                        <span class="fw-bold text-danger">£{{ "{:,.2f}".format(current_values.mortgage) }}</span>
+                    </div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between">
                             <span>Remaining Balance</span>

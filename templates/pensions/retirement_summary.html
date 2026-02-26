@@ -3,13 +3,10 @@
 {% block title %}Retirement Summary - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <h1><i class="bi bi-clipboard-data"></i> Retirement Planning Summary</h1>
-            <p class="text-muted">Comprehensive overview of retirement readiness</p>
-        </div>
-        <div class="col-auto">
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-clipboard-data"></i> Retirement Planning Summary</h1>
+        <div>
             <a href="{{ url_for('pensions.projections') }}" class="btn btn-primary">
                 <i class="bi bi-graph-up"></i> View Projections
             </a>
@@ -19,13 +16,53 @@
         </div>
     </div>
 
+    <!-- Financial Summary Cards -->
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body text-center">
+                    <h6 class="card-title opacity-75">Current Total</h6>
+                    <h3 class="mb-0">£{{ "{:,.0f}".format(summary.total_current_value) }}</h3>
+                    <small>Across all pensions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body text-center">
+                    <h6 class="card-title opacity-75">Projected @ 65</h6>
+                    <h3 class="mb-0">£{{ "{:,.0f}".format(summary.total_projected_value) }}</h3>
+                    <small>At retirement age</small>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card bg-info text-white h-100">
+                <div class="card-body text-center">
+                    <h6 class="card-title opacity-75">Pension Annuity</h6>
+                    <h3 class="mb-0">£{{ "{:,.0f}".format(summary.total_annuity) }}</h3>
+                    <small>Per year</small>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card bg-warning text-dark h-100">
+                <div class="card-body text-center">
+                    <h6 class="card-title opacity-75">Government Pension</h6>
+                    <h3 class="mb-0">£{{ "{:,.0f}".format(summary.government_pension) }}</h3>
+                    <small>Per year</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- People Information -->
     <div class="row mb-4">
         {% for person_info in people_info %}
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 mb-3 mb-md-0">
+            <div class="card h-100">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">{{ person_info.name }}'s Retirement Plan</h5>
+                    <h5 class="mb-0"><i class="bi bi-person"></i> {{ person_info.name }}'s Retirement Plan</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -38,7 +75,7 @@
                             <p class="mb-2"><strong>Months Remaining:</strong> {{ person_info.months_remaining }} months</p>
                         </div>
                     </div>
-                    <div class="progress progress-md mt-3">
+                    <div class="progress mt-3" style="height: 20px;">
                         {% set progress_pct = ((person_info.retirement_age - person_info.years_remaining - 20) / (person_info.retirement_age - 20)) * 100 if person_info.retirement_age > 20 else 0 %}
                         <div class="progress-bar bg-success" role="progressbar" style="width: {{ progress_pct }}%">
                             {{ "{:.0f}".format(progress_pct) }}% to retirement
@@ -50,52 +87,12 @@
         {% endfor %}
     </div>
 
-    <!-- Financial Summary -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-white bg-primary">
-                <div class="card-body text-center">
-                    <h6 class="card-subtitle mb-2 opacity-75">Current Total</h6>
-                    <h2 class="card-title">£{{ "{:,.0f}".format(summary.total_current_value) }}</h2>
-                    <p class="card-text small">Across all pensions</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-success">
-                <div class="card-body text-center">
-                    <h6 class="card-subtitle mb-2 opacity-75">Projected @ 65</h6>
-                    <h2 class="card-title">£{{ "{:,.0f}".format(summary.total_projected_value) }}</h2>
-                    <p class="card-text small">At retirement age</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-info">
-                <div class="card-body text-center">
-                    <h6 class="card-subtitle mb-2 opacity-75">Pension Annuity</h6>
-                    <h2 class="card-title">£{{ "{:,.0f}".format(summary.total_annuity) }}</h2>
-                    <p class="card-text small">Per year</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-warning">
-                <div class="card-body text-center">
-                    <h6 class="card-subtitle mb-2 opacity-75">Government Pension</h6>
-                    <h2 class="card-title">£{{ "{:,.0f}".format(summary.government_pension) }}</h2>
-                    <p class="card-text small">Per year</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Total Income -->
     <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card border-success">
+        <div class="col-md-6 mb-3 mb-md-0">
+            <div class="card h-100">
                 <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">Total Annual Retirement Income</h5>
+                    <h5 class="mb-0"><i class="bi bi-calendar-year"></i> Total Annual Retirement Income</h5>
                 </div>
                 <div class="card-body text-center">
                     <h1 class="display-4 text-success">£{{ "{:,.2f}".format(summary.total_annual_income) }}</h1>
@@ -107,9 +104,9 @@
             </div>
         </div>
         <div class="col-md-6">
-            <div class="card border-info">
+            <div class="card h-100">
                 <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">Total Monthly Retirement Income</h5>
+                    <h5 class="mb-0"><i class="bi bi-calendar-month"></i> Total Monthly Retirement Income</h5>
                 </div>
                 <div class="card-body text-center">
                     <h1 class="display-4 text-info">£{{ "{:,.2f}".format(summary.total_monthly_income) }}</h1>
@@ -123,12 +120,12 @@
 
     <!-- Pension Breakdown -->
     <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">Individual Pension Breakdown</h5>
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-table"></i> Individual Pension Breakdown</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover mb-0">
                     <thead>
                         <tr>
                             <th>Person</th>
@@ -181,27 +178,32 @@
 
     <!-- Key Assumptions -->
     <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-gear"></i> Key Assumptions & Settings</h5>
+        <div class="card-header bg-secondary text-white" style="cursor: pointer;"
+             data-bs-toggle="collapse" data-bs-target="#assumptionsBody" aria-expanded="false">
+            <h5 class="mb-0">
+                <i class="bi bi-chevron-down me-2"></i><i class="bi bi-gear"></i> Key Assumptions &amp; Settings
+            </h5>
         </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><i class="bi bi-check-circle text-success"></i> <strong>Monthly Growth Rate:</strong> 0.12% (default scenario)</li>
-                        <li class="mb-2"><i class="bi bi-check-circle text-success"></i> <strong>Annuity Conversion Rate:</strong> 5% of pot value</li>
-                        <li class="mb-2"><i class="bi bi-check-circle text-success"></i> <strong>Projections auto-regenerate</strong> when snapshots are added</li>
-                    </ul>
-                </div>
-                <div class="col-md-6">
-                    <p class="text-muted">
-                        <i class="bi bi-info-circle"></i> Update these assumptions in 
-                        <a href="{{ url_for('settings.index') }}">Settings</a>
-                    </p>
-                    <p class="text-muted">
-                        Projections assume continued monthly contributions and compound growth 
-                        through retirement age.
-                    </p>
+        <div class="collapse" id="assumptionsBody">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul class="list-unstyled">
+                            <li class="mb-2"><i class="bi bi-check-circle text-success"></i> <strong>Monthly Growth Rate:</strong> 0.12% (default scenario)</li>
+                            <li class="mb-2"><i class="bi bi-check-circle text-success"></i> <strong>Annuity Conversion Rate:</strong> 5% of pot value</li>
+                            <li class="mb-2"><i class="bi bi-check-circle text-success"></i> <strong>Projections auto-regenerate</strong> when snapshots are added</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="text-muted">
+                            <i class="bi bi-info-circle"></i> Update these assumptions in
+                            <a href="{{ url_for('settings.index') }}">Settings</a>
+                        </p>
+                        <p class="text-muted">
+                            Projections assume continued monthly contributions and compound growth
+                            through retirement age.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

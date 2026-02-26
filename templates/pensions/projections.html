@@ -1,15 +1,12 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Pension Projections - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <h1><i class="bi bi-graph-up-arrow"></i> Pension Projections</h1>
-            <p class="text-muted">Historical values and future projections through retirement</p>
-        </div>
-        <div class="col-auto">
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-graph-up-arrow"></i> Pension Projections</h1>
+        <div>
             <form method="post" action="{{ url_for('pensions.generate_projections') }}" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="scenario" value="{{ current_scenario }}">
@@ -20,43 +17,43 @@
             <a href="{{ url_for('pensions.retirement_summary') }}" class="btn btn-info">
                 <i class="bi bi-clipboard-data"></i> Retirement Summary
             </a>
-            <a href="{{ url_for('pensions.index') }}" class="btn btn-primary">
+            <a href="{{ url_for('pensions.index') }}" class="btn btn-secondary">
                 <i class="bi bi-arrow-left"></i> Back to Pensions
             </a>
         </div>
     </div>
 
-    <!-- Retirement Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white">
+    <!-- Summary Cards -->
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <div class="card bg-primary text-white h-100">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Current Total Value</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_current_value) }}</h3>
+                    <h6 class="card-title">Current Total Value</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(retirement_summary.total_current_value) }}</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
+        <div class="col">
+            <div class="card bg-success text-white h-100">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Projected @ Retirement</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_projected_value) }}</h3>
+                    <h6 class="card-title">Projected @ Retirement</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(retirement_summary.total_projected_value) }}</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
+        <div class="col">
+            <div class="card bg-info text-white h-100">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Estimated Annual Income</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_annual_income) }}</h3>
+                    <h6 class="card-title">Estimated Annual Income</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(retirement_summary.total_annual_income) }}</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark">
+        <div class="col">
+            <div class="card bg-warning text-dark h-100">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Monthly Income</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(retirement_summary.total_monthly_income) }}</h3>
+                    <h6 class="card-title">Monthly Income</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(retirement_summary.total_monthly_income) }}</h3>
                 </div>
             </div>
         </div>
@@ -93,93 +90,104 @@
     </div>
 
     <!-- Projections Table -->
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Combined Pension Projections (Excel-style)</h5>
-            <div>
-                <span class="badge bg-secondary">Historical</span>
-                <span class="badge bg-primary">Projected</span>
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-table"></i> Combined Pension Projections</h5>
+                <div>
+                    <span class="badge bg-light text-secondary">Historical</span>
+                    <span class="badge bg-info">Projected</span>
+                </div>
             </div>
         </div>
-            {% if combined_data %}
-            <div class="table-responsive table-responsive-sm-text" style="max-height: 600px; overflow-y: auto;">
-                <table class="table table-sm table-hover table-bordered">
-                    <thead class="sticky-top bg-light">
-                        <tr>
-                            <th>Review Date</th>
-                            {% for pension in pensions %}
-                            <th class="text-end">{{ pension.provider }}<br><small class="text-muted">{{ pension.person }}</small></th>
-                            <th class="text-end">Growth %</th>
-                            {% endfor %}
-                            <th class="text-end bg-info text-white">Total</th>
-                            <th class="text-end bg-info text-white">Total Growth %</th>
-                            <th class="text-end">Rolling Growth</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in combined_data %}
-                        <tr {% if row.is_projection %}class="table-primary"{% endif %}>
-                            <td>
-                                {{ row.review_date.strftime('%d/%m/%Y') }}
-                                {% if row.is_projection %}
-                                <span class="badge badge-sm bg-primary">Proj</span>
-                                {% endif %}
-                            </td>
-                            {% for pension in pensions %}
-                                {% if pension.provider in row.pensions %}
-                                <td class="text-end">£{{ "{:,.2f}".format(row.pensions[pension.provider].value) }}</td>
-                                <td class="text-end">
-                                    {% if row.pensions[pension.provider].growth_percent %}
-                                    {{ "{:.2f}".format(row.pensions[pension.provider].growth_percent) }}%
-                                    {% else %}
-                                    -
-                                    {% endif %}
-                                </td>
-                                {% else %}
-                                <td class="text-end text-muted">-</td>
-                                <td class="text-end text-muted">-</td>
-                                {% endif %}
-                            {% endfor %}
-                            <td class="text-end fw-bold bg-light">£{{ "{:,.2f}".format(row.total_value) }}</td>
-                            <td class="text-end fw-bold bg-light">
-                                {% if row.total_growth_percent %}
-                                {{ "{:.2f}".format(row.total_growth_percent) }}%
-                                {% else %}
-                                -
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                {% if row.total_growth_percent %}
-                                {{ "{:.2f}".format(row.total_growth_percent) }}%
-                                {% else %}
-                                -
-                                {% endif %}
-                            </td>
-                        </tr>
+        {% if combined_data %}
+        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+            <table class="table table-sm table-hover table-bordered mb-0">
+                <thead class="sticky-top bg-light">
+                    <tr>
+                        <th>Review Date</th>
+                        {% for pension in pensions %}
+                        <th class="text-end">{{ pension.provider }}<br><small class="text-muted">{{ pension.person }}</small></th>
+                        <th class="text-end">Growth %</th>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5">
+                        <th class="text-end bg-info text-white">Total</th>
+                        <th class="text-end bg-info text-white">Total Growth %</th>
+                        <th class="text-end">Rolling Growth</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in combined_data %}
+                    <tr {% if row.is_projection %}class="table-primary"{% endif %}>
+                        <td>
+                            {{ row.review_date.strftime('%d/%m/%Y') }}
+                            {% if row.is_projection %}
+                            <span class="badge badge-sm bg-primary">Proj</span>
+                            {% endif %}
+                        </td>
+                        {% for pension in pensions %}
+                            {% if pension.provider in row.pensions %}
+                            <td class="text-end">£{{ "{:,.2f}".format(row.pensions[pension.provider].value) }}</td>
+                            <td class="text-end">
+                                {% if row.pensions[pension.provider].growth_percent %}
+                                {{ "{:.2f}".format(row.pensions[pension.provider].growth_percent) }}%
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            {% else %}
+                            <td class="text-end text-muted">-</td>
+                            <td class="text-end text-muted">-</td>
+                            {% endif %}
+                        {% endfor %}
+                        <td class="text-end fw-bold bg-light">£{{ "{:,.2f}".format(row.total_value) }}</td>
+                        <td class="text-end fw-bold bg-light">
+                            {% if row.total_growth_percent %}
+                            {{ "{:.2f}".format(row.total_growth_percent) }}%
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if row.total_growth_percent %}
+                            {{ "{:.2f}".format(row.total_growth_percent) }}%
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body">
+            <div class="text-center py-5 text-muted">
                 <i class="bi bi-inbox empty-state-icon"></i>
-                <p class="text-muted mt-3">No pension data available. Add snapshots and generate projections.</p>
+                <p class="mt-3">No pension data available</p>
+                <p>Add snapshots to each pension and click "Regenerate Projections" to get started.</p>
             </div>
-            {% endif %}
+        </div>
+        {% endif %}
     </div>
 
-    <!-- Instructions -->
-    <div class="alert alert-info mt-4">
-        <h5><i class="bi bi-info-circle"></i> How to Use</h5>
-        <ul class="mb-0">
-            <li><strong>Add Monthly Snapshots:</strong> Go to each pension and add your actual monthly values as they come in</li>
-            <li><strong>Auto-Projection:</strong> Projections automatically regenerate when you add a new snapshot</li>
-            <li><strong>Scenarios:</strong> Switch between Default, Optimistic, and Pessimistic growth scenarios</li>
-            <li><strong>Excel Export:</strong> Copy the table to Excel for further analysis if needed</li>
-        </ul>
+    <!-- How to Use -->
+    <div class="card">
+        <div class="card-header bg-secondary text-white" style="cursor: pointer;"
+             data-bs-toggle="collapse" data-bs-target="#howToUseBody" aria-expanded="false">
+            <h5 class="mb-0">
+                <i class="bi bi-chevron-down me-2"></i><i class="bi bi-info-circle"></i> How to Use
+            </h5>
+        </div>
+        <div class="collapse" id="howToUseBody">
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li class="mb-2"><strong>Add Monthly Snapshots:</strong> Go to each pension and add your actual monthly values as they come in</li>
+                    <li class="mb-2"><strong>Auto-Projection:</strong> Projections automatically regenerate when you add a new snapshot</li>
+                    <li class="mb-2"><strong>Scenarios:</strong> Switch between Default, Optimistic, and Pessimistic growth scenarios using the filter above</li>
+                    <li><strong>Excel Export:</strong> Copy the table to Excel for further analysis if needed</li>
+                </ul>
+            </div>
+        </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_css %}
 {% endblock %}

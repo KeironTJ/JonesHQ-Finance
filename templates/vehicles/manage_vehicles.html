@@ -41,6 +41,7 @@
                     </button>
                 </div>
     <div class="card-body">
+        <!-- Active Vehicles -->
         <div class="table-responsive">
             <table class="table table-hover">
                 <thead class="table-dark">
@@ -52,12 +53,11 @@
                         <th>Year</th>
                         <th>Tank Size</th>
                         <th>Fuel Type</th>
-                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for vehicle in vehicles %}
+                    {% for vehicle in vehicles if vehicle.is_active %}
                     <tr>
                         <td class="fw-bold">{{ vehicle.name }}</td>
                         <td><span class="badge bg-primary">{{ vehicle.registration }}</span></td>
@@ -66,13 +66,6 @@
                         <td>{{ vehicle.year or '-' }}</td>
                         <td>{{ vehicle.tank_size }} gal</td>
                         <td>{{ vehicle.fuel_type }}</td>
-                        <td>
-                            {% if vehicle.is_active %}
-                            <span class="badge bg-success">Active</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Inactive</span>
-                            {% endif %}
-                        </td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
                                 <i class="bi bi-pencil"></i>
@@ -85,10 +78,66 @@
                             </form>
                         </td>
                     </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-3">No active vehicles.</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        <!-- Inactive Vehicles (collapsible) -->
+        {% set inactive_vehicles = vehicles | selectattr('is_active', 'equalto', false) | list %}
+        {% if inactive_vehicles %}
+        <div class="mt-2">
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#inactiveVehicles" aria-expanded="false">
+                <i class="bi bi-chevron-down"></i> Inactive Vehicles ({{ inactive_vehicles | length }})
+            </button>
+            <div class="collapse" id="inactiveVehicles">
+                <div class="table-responsive mt-2">
+                    <table class="table table-hover table-sm">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th>Name</th>
+                                <th>Registration</th>
+                                <th>Make</th>
+                                <th>Model</th>
+                                <th>Year</th>
+                                <th>Tank Size</th>
+                                <th>Fuel Type</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-muted">
+                            {% for vehicle in inactive_vehicles %}
+                            <tr>
+                                <td class="fw-bold">{{ vehicle.name }}</td>
+                                <td><span class="badge bg-secondary">{{ vehicle.registration }}</span></td>
+                                <td>{{ vehicle.make }}</td>
+                                <td>{{ vehicle.model }}</td>
+                                <td>{{ vehicle.year or '-' }}</td>
+                                <td>{{ vehicle.tank_size }} gal</td>
+                                <td>{{ vehicle.fuel_type }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;" onsubmit="return confirm('Delete {{ vehicle.name }}? This will delete all fuel and trip records!');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 

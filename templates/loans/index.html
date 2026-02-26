@@ -22,9 +22,9 @@
     </div>
 
     <!-- Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-md-2">
-            <div class="card bg-primary text-white">
+    <div class="row mb-4 row-cols-2 row-cols-md-6 g-3">
+        <div class="col">
+            <div class="card bg-primary text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Total Balance</h6>
                     <h3 class="mb-0">£{{ "%.2f"|format(total_balance) }}</h3>
@@ -32,8 +32,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
-            <div class="card bg-danger text-white">
+        <div class="col">
+            <div class="card bg-danger text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Monthly Commitment</h6>
                     <h3 class="mb-0">£{{ "%.2f"|format(total_monthly_payment) }}</h3>
@@ -41,8 +41,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
-            <div class="card bg-info text-white">
+        <div class="col">
+            <div class="card bg-info text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Original Amount</h6>
                     <h3 class="mb-0">£{{ "%.2f"|format(total_original) }}</h3>
@@ -50,8 +50,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
-            <div class="card bg-success text-white">
+        <div class="col">
+            <div class="card bg-success text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Total Paid</h6>
                     <h3 class="mb-0">£{{ "%.2f"|format(total_paid) }}</h3>
@@ -59,8 +59,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
-            <div class="card bg-warning text-dark">
+        <div class="col">
+            <div class="card bg-warning text-dark h-100">
                 <div class="card-body">
                     <h6 class="card-title">Interest Paid</h6>
                     <h3 class="mb-0">£{{ "%.2f"|format(total_interest_paid) }}</h3>
@@ -68,8 +68,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
-            <div class="card bg-secondary text-white">
+        <div class="col">
+            <div class="card bg-secondary text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Progress</h6>
                     <h3 class="mb-0">{{ "%.1f"|format((total_principal_paid / total_original * 100) if total_original > 0 else 0) }}%</h3>
@@ -157,9 +157,14 @@
     <!-- Inactive Loans -->
     {% if inactive_count > 0 %}
     <div class="card">
-        <div class="card-header bg-secondary text-white">
-            <h5 class="mb-0"><i class="bi bi-x-circle"></i> Inactive Loans ({{ inactive_count }})</h5>
+        <div class="card-header bg-secondary text-white" style="cursor: pointer;"
+             data-bs-toggle="collapse" data-bs-target="#inactiveLoansTable" aria-expanded="false">
+            <h5 class="mb-0">
+                <i class="bi bi-chevron-down me-2"></i>Inactive Loans
+                <span class="badge bg-light text-secondary ms-2">{{ inactive_count }}</span>
+            </h5>
         </div>
+        <div class="collapse" id="inactiveLoansTable">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
@@ -200,6 +205,7 @@
                     </tbody>
                 </table>
             </div>
+        </div>
         </div>
     </div>
     {% endif %}

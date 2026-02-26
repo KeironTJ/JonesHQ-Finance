@@ -1,14 +1,12 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Pensions - JonesHQ Finance{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <h1><i class="bi bi-piggy-bank"></i> Pensions</h1>
-        </div>
-        <div class="col-auto">
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-piggy-bank"></i> Pensions</h1>
+        <div>
             <a href="{{ url_for('pensions.retirement_summary') }}" class="btn btn-info">
                 <i class="bi bi-clipboard-data"></i> Retirement Summary
             </a>
@@ -20,20 +18,20 @@
             </a>
         </div>
     </div>
-    
+
     <!-- Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white">
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <div class="card bg-primary text-white h-100">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2">Total Pension Value</h6>
-                    <h3 class="card-title">£{{ "{:,.2f}".format(total_value) }}</h3>
+                    <h6 class="card-title">Total Pension Value</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(total_value) }}</h3>
                     <small>{{ active_count }} active pension{{ 's' if active_count != 1 else '' }}</small>
                 </div>
             </div>
         </div>
     </div>
-    
+
     <!-- Filter -->
     <div class="card mb-4">
         <div class="card-body">
@@ -58,16 +56,16 @@
             </form>
         </div>
     </div>
-    
+
     <!-- Pensions Table -->
     <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">Pension Accounts</h5>
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-piggy-bank"></i> Pension Accounts ({{ pensions|length }})</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             {% if pensions %}
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover mb-0">
                     <thead>
                         <tr>
                             <th>Person</th>
@@ -97,16 +95,16 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('pensions.snapshots', id=pension.id) }}" 
+                                <a href="{{ url_for('pensions.snapshots', id=pension.id) }}"
                                    class="btn btn-sm btn-outline-info" title="View Snapshots">
                                     <i class="bi bi-graph-up"></i>
                                 </a>
-                                <a href="{{ url_for('pensions.edit', id=pension.id) }}" 
+                                <a href="{{ url_for('pensions.edit', id=pension.id) }}"
                                    class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form method="post" action="{{ url_for('pensions.delete', id=pension.id) }}" 
-                                      class="d-inline" 
+                                <form method="post" action="{{ url_for('pensions.delete', id=pension.id) }}"
+                                      class="d-inline"
                                       onsubmit="return confirm('Are you sure you want to delete this pension?');">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -120,13 +118,15 @@
                 </table>
             </div>
             {% else %}
-            <div class="text-center py-5">
-                <i class="bi bi-inbox empty-state-icon"></i>
-                <p class="text-muted mt-3">No pension accounts found. Click "Add Pension" to get started.</p>
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-piggy-bank empty-state-icon"></i>
+                <p class="mt-3">No pension accounts found</p>
+                <a href="{{ url_for('pensions.add') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle"></i> Add Pension
+                </a>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
 {% endblock %}
-

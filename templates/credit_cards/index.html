@@ -17,9 +17,9 @@
     </div>
 
     <!-- Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
+    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+        <div class="col">
+            <div class="card bg-info text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Total Credit Limit</h6>
                     <h3>£{{ "%.2f"|format(total_limit) }}</h3>
@@ -27,8 +27,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-danger text-white">
+        <div class="col">
+            <div class="card bg-danger text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Total Balance</h6>
                     <h3>£{{ "%.2f"|format(total_balance) }}</h3>
@@ -36,8 +36,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
+        <div class="col">
+            <div class="card bg-success text-white h-100">
                 <div class="card-body">
                     <h6 class="card-title">Available Credit</h6>
                     <h3>£{{ "%.2f"|format(total_available) }}</h3>
@@ -45,8 +45,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark">
+        <div class="col">
+            <div class="card bg-warning text-dark h-100">
                 <div class="card-body">
                     <h6 class="card-title">Monthly Payments</h6>
                     <h3>£{{ "%.2f"|format(total_payments) }}</h3>
@@ -56,10 +56,13 @@
         </div>
     </div>
 
-    <!-- Credit Cards Table -->
-    <div class="card">
+    <!-- Active Credit Cards -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-credit-card"></i> Active Cards</h5>
+        </div>
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover mb-0">
                 <thead>
                     <tr>
                         <th>Card Name</th>
@@ -70,67 +73,133 @@
                         <th>Payment</th>
                         <th>Statement</th>
                         <th>0% Offers</th>
-                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for card in cards %}
-                    <tr class="{% if not card.is_active %}table-secondary{% endif %}">
-                        <td>
-                            <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="text-decoration-none">
-                                <i class="bi bi-credit-card"></i> {{ card.card_name }}
-                            </a>
-                        </td>
-                        <td>{{ "%.2f"|format(card.monthly_apr) }}%</td>
-                        <td class="{% if card.current_balance > 0 %}text-danger{% endif %}">
-                            £{{ "%.2f"|format(card.current_balance) }}
-                        </td>
-                        <td>£{{ "%.2f"|format(card.credit_limit) }}</td>
-                        <td class="text-success">£{{ "%.2f"|format(card.available_credit or 0) }}</td>
-                        <td>£{{ "%.2f"|format(card.set_payment or 0) }}</td>
-                        <td>{{ card.statement_date }}{% if card.statement_date %}th{% endif %}</td>
-                        <td>
-                            {% if card.purchase_0_percent_until and card.purchase_0_percent_until >= today %}
-                            <span class="badge bg-success" title="0% Purchases until {{ card.purchase_0_percent_until }}">
-                                <i class="bi bi-cart"></i> 0%
-                            </span>
-                            {% endif %}
-                            {% if card.balance_transfer_0_percent_until and card.balance_transfer_0_percent_until >= today %}
-                            <span class="badge bg-info" title="0% Balance Transfer until {{ card.balance_transfer_0_percent_until }}">
-                                <i class="bi bi-arrow-left-right"></i> 0%
-                            </span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if card.is_active %}
-                            <span class="badge bg-success">Active</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Inactive</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="btn-group btn-group-sm">
-                                <a href="{{ url_for('credit_cards.detail', id=card.id) }}" 
-                                   class="btn btn-outline-info" title="View Details">
-                                    <i class="bi bi-eye"></i>
+                    {% set active_cards = cards|selectattr('is_active')|list %}
+                    {% if active_cards %}
+                        {% for card in active_cards %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="text-decoration-none">
+                                    <i class="bi bi-credit-card"></i> {{ card.card_name }}
                                 </a>
-                                <a href="{{ url_for('credit_cards.edit', id=card.id) }}" 
-                                   class="btn btn-outline-primary" title="Edit">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <button type="button" class="btn btn-outline-danger" 
-                                        onclick="confirmDelete({{ card.id }}, '{{ card.card_name }}')" title="Delete">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
+                            </td>
+                            <td>{{ "%.2f"|format(card.monthly_apr) }}%</td>
+                            <td class="{% if card.current_balance > 0 %}text-danger{% endif %}">
+                                £{{ "%.2f"|format(card.current_balance) }}
+                            </td>
+                            <td>£{{ "%.2f"|format(card.credit_limit) }}</td>
+                            <td class="text-success">£{{ "%.2f"|format(card.available_credit or 0) }}</td>
+                            <td>£{{ "%.2f"|format(card.set_payment or 0) }}</td>
+                            <td>{{ card.statement_date }}{% if card.statement_date %}th{% endif %}</td>
+                            <td>
+                                {% if card.purchase_0_percent_until and card.purchase_0_percent_until >= today %}
+                                <span class="badge bg-success" title="0% Purchases until {{ card.purchase_0_percent_until }}">
+                                    <i class="bi bi-cart"></i> 0%
+                                </span>
+                                {% endif %}
+                                {% if card.balance_transfer_0_percent_until and card.balance_transfer_0_percent_until >= today %}
+                                <span class="badge bg-info" title="0% Balance Transfer until {{ card.balance_transfer_0_percent_until }}">
+                                    <i class="bi bi-arrow-left-right"></i> 0%
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('credit_cards.detail', id=card.id) }}"
+                                       class="btn btn-outline-info" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('credit_cards.edit', id=card.id) }}"
+                                       class="btn btn-outline-primary" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-danger"
+                                            onclick="confirmDelete({{ card.id }}, '{{ card.card_name }}')" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-3">No active credit cards.</td>
+                        </tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>
     </div>
+
+    <!-- Inactive Credit Cards -->
+    {% set inactive_cards = cards|rejectattr('is_active')|list %}
+    {% if inactive_cards %}
+    <div class="card">
+        <div class="card-header bg-secondary text-white" style="cursor: pointer;"
+             data-bs-toggle="collapse" data-bs-target="#inactiveCardsTable" aria-expanded="false">
+            <h5 class="mb-0">
+                <i class="bi bi-chevron-down me-2"></i>Inactive Cards
+                <span class="badge bg-light text-secondary ms-2">{{ inactive_cards|length }}</span>
+            </h5>
+        </div>
+        <div class="collapse" id="inactiveCardsTable">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Card Name</th>
+                            <th>APR</th>
+                            <th>Balance</th>
+                            <th>Limit</th>
+                            <th>Available</th>
+                            <th>Payment</th>
+                            <th>Statement</th>
+                            <th>0% Offers</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for card in inactive_cards %}
+                        <tr class="table-secondary" style="opacity: 0.75;">
+                            <td>
+                                <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="text-decoration-none text-muted">
+                                    <i class="bi bi-credit-card"></i> {{ card.card_name }}
+                                </a>
+                            </td>
+                            <td>{{ "%.2f"|format(card.monthly_apr) }}%</td>
+                            <td>£{{ "%.2f"|format(card.current_balance) }}</td>
+                            <td>£{{ "%.2f"|format(card.credit_limit) }}</td>
+                            <td>£{{ "%.2f"|format(card.available_credit or 0) }}</td>
+                            <td>£{{ "%.2f"|format(card.set_payment or 0) }}</td>
+                            <td>{{ card.statement_date }}{% if card.statement_date %}th{% endif %}</td>
+                            <td>-</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('credit_cards.detail', id=card.id) }}"
+                                       class="btn btn-outline-secondary" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('credit_cards.edit', id=card.id) }}"
+                                       class="btn btn-outline-secondary" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-danger"
+                                            onclick="confirmDelete({{ card.id }}, '{{ card.card_name }}')" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Delete Confirmation Modal -->
