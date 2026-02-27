@@ -1,3 +1,41 @@
+"""
+Net Worth Service
+=================
+Calculates and tracks household net worth across all asset and liability categories.
+
+Asset categories
+----------------
+  Cash      — Joint + Personal bank account balances
+  Savings   — Savings account balances
+  Property  — current_valuation of active properties (projected forward for future dates)
+  Pensions  — sum of current_value / projected PensionSnapshots
+
+Liability categories
+--------------------
+  Credit cards — sum of negative balances (paid transactions for past; all for future)
+  Loans        — closing_balance of latest LoanPayment (paid for past; all for future)
+  Mortgage     — MortgageSnapshot balance (actual for past; 'base' projection for future)
+
+Past vs future
+--------------
+For dates <= today the service uses only is_paid=True / is_projection=False records.
+For future dates it includes unpaid/projected records and applies property appreciation
+using the property's annual_appreciation_rate.
+
+Balance cache
+-------------
+Bank account balances are read from MonthlyAccountBalance (the cache managed by
+MonthlyBalanceService) rather than summing transactions on the fly.
+
+Primary entry points
+--------------------
+  calculate_current_networth()      — snapshot of today's position
+  calculate_networth_at_date()      — point-in-time calculation for any date
+  get_monthly_timeline()            — list of monthly snapshots over a date range
+  save_networth_snapshot()          — persist a NetWorth record for today
+  get_networth_trend()              — trend label + average monthly change
+  get_comparison_data()             — month-over-month and year-over-year comparisons
+"""
 from models.networth import NetWorth
 from models.accounts import Account
 from models.loans import Loan
@@ -15,9 +53,26 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class NetWorthService:
+    """
+    Calculates net worth from all asset and liability categories.
+
+    Uses the MonthlyAccountBalance cache for bank account balances.  Falls back to
+    account.balance on cache miss.
+    """
+
     @staticmethod
     def calculate_current_networth():
-        """Calculate current net worth from all accounts and liabilities"""
+        """
+        Calculate today's net worth across all asset and liability categories.
+
+        Returns a dict with keys:
+          cash, savings, house_value, pensions_value, total_assets, liquid_assets,
+          credit_cards, loans, mortgage, total_liabilities, net_worth,
+          liquid_net_worth, account_details, pension_details, cc_details,
+          loan_details, property_details.
+
+        Uses is_paid=True CC/loan records (current position, not forecast).
+        """
         from services.monthly_balance_service import MonthlyBalanceService
         
         today = date.today()
@@ -170,7 +225,15 @@ class NetWorthService:
     
     @staticmethod
     def calculate_networth_at_date(target_date):
-        """Calculate net worth as of a specific date (based on all data up to that date)"""
+        """
+        Calculate net worth as of a specific date (past, present, or future).
+
+        For past/present dates: uses only is_paid=True / is_projection=False records.
+        For future dates: includes unpaid/projected records and applies property
+        appreciation forward from current_valuation using annual_appreciation_rate.
+
+        Returns the same dict structure as calculate_current_networth() plus 'date'.
+        """
         # ASSETS - Accounts
         # Use monthly balance cache for efficient lookups
         from services.monthly_balance_service import MonthlyBalanceService

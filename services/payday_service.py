@@ -1,6 +1,28 @@
 """
-Payday Period Service
-Handles calculations for payday-to-payday tracking periods
+Payday Service
+==============
+Period and balance calculations for the payday-period budgeting model.
+
+Payday period
+-------------
+A "payday period" runs from one payday to the day before the next.  The period
+label is YYYY-MM (the year and month of the *start* payday, not the end date).
+For example, if payday is the 15th, the January 2026 period runs 15 Jan → 14 Feb
+and is labelled "2026-01".
+
+Weekend adjustment conventions
+-------------------------------
+  get_payday_for_month()        — shifts to the *previous* working day
+  get_payment_date_for_month()  — shifts to the *next* working day
+
+Primary entry points
+--------------------
+  get_period_for_date()         — map any date → YYYY-MM period label
+  get_payday_period()           — start/end/label for a given year+month
+  get_recent_periods()          — list of periods for a filter dropdown
+  calculate_period_balances()   — rolling balance and minimum for one period
+  get_payday_summary()          — balance + category breakdown, multiple periods
+  get_payday_summary_for_year() — same, optimised (single DB query for the year)
 """
 from datetime import date, timedelta
 from decimal import Decimal
@@ -11,7 +33,13 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class PaydayService:
-    """Service for managing payday period calculations"""
+    """
+    Calculations for payday-period budgeting.
+
+    The payday day is read from Settings ('payday_day', default 15).  All date
+    arithmetic handles month-length edge cases (e.g. payday=31 in a 28-day month
+    clamps to the last day of that month).
+    """
     
     @staticmethod
     def get_payday_setting():

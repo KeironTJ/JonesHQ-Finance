@@ -1,6 +1,34 @@
 """
 Income Service
-Handles income record management, tax/NI calculations, and transaction creation
+==============
+Income record management: tax/NI estimation, payslip-override entry, transaction
+creation, and recurring-income generation.
+
+Two entry modes
+---------------
+  Calculated  — provide gross salary + percentages; the service estimates tax, NI,
+                and pension deductions using UK tax-band settings (TaxSettings model).
+  Manual      — provide actual payslip figures; stored verbatim with is_manual_override=True.
+
+Transaction link
+----------------
+Each Income record can be linked to one bank Transaction (the take-home deposit).
+When a RecurringIncome template has a category_id, it is used for that transaction;
+otherwise a 'Salary' category is created automatically.
+
+Tax year convention
+-------------------
+UK tax year: 6 Apr year N → 5 Apr year N+1.  Stored as "YYYY-YYYY" (e.g. "2025-2026").
+
+Primary entry points
+--------------------
+  create_income_record()       — estimated deductions from % settings
+  create_income_record_manual()— actual deductions from payslip
+  generate_missing_income()    — fill gaps for one RecurringIncome template
+  generate_all_missing_income()— same for all active templates
+  sync_income_to_transaction() — propagate income edits to the linked transaction
+  delete_income_range()        — remove income records in a date window
+  regenerate_income_range()    — delete then recreate records in a date window
 """
 from models.income import Income
 from models.recurring_income import RecurringIncome
@@ -18,6 +46,13 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class IncomeService:
+    """
+    Income record management: tax/NI estimation, manual payslip entry,
+    transaction creation, and recurring-income generation.
+
+    All monetary values use Decimal throughout; results are quantized to 2dp
+    before being stored.
+    """
     
     @staticmethod
     def get_tax_settings_for_date(target_date):
@@ -299,7 +334,17 @@ class IncomeService:
     
     @staticmethod
     def create_income_transaction(income):
-        """Create a linked transaction for income record"""
+        """
+        Create a bank Transaction for the take-home amount of an Income record.
+
+        Category: uses the RecurringIncome template's category_id if present;
+        otherwise finds or creates a 'Salary' income category.
+
+        Future income (pay_date > today) is created with is_paid=False,
+        is_forecasted=True; past/present income is is_paid=True, is_forecasted=False.
+
+        Returns the created Transaction.  Calls recalculate_account_balance() after flush.
+        """
         # Determine category to use
         category_id = None
         
@@ -400,7 +445,20 @@ class IncomeService:
     
     @staticmethod
     def generate_income_for_month(recurring_income, target_date):
-        """Generate an income record for a specific month from a recurring template"""
+        """
+        Generate one Income record from a RecurringIncome template for the given month.
+
+        Pay date is derived from recurring_income.pay_day, capped at the last day of the
+        month, then shifted to the previous working day if it falls on a weekend.
+
+        Skips (returns existing) if an Income already exists for the same person + pay_date.
+
+        Dispatches to create_income_record_manual() if the template has
+        use_manual_deductions=True and a manual_take_home value; otherwise uses
+        create_income_record() (estimated deductions).
+
+        Returns the Income record (new or existing).
+        """
         # Calculate pay date for this month
         year = target_date.year
         month = target_date.month
@@ -467,7 +525,22 @@ class IncomeService:
     
     @staticmethod
     def generate_missing_income(recurring_income_id, end_date=None):
-        """Generate all missing income records for a recurring income template"""
+        """
+        Fill in missing Income records for a RecurringIncome template from its last
+        generated date up to end_date (or 20 years ahead if the template has no end_date).
+
+        Updates recurring_income.last_generated_date after each month so progress is
+        tracked and the method is safe to call repeatedly (idempotent).
+
+        Args:
+            recurring_income_id: ID of the RecurringIncome template.
+            end_date:            Last month to generate (inclusive, first-of-month
+                                 comparison).  Defaults to template end_date or +20 years.
+
+        Returns:
+            list[Income] — records created (may include records the method found already
+            existed and returned unchanged).  Commits if any records were created.
+        """
         recurring = family_get(RecurringIncome, recurring_income_id)
         if not recurring or not recurring.is_active:
             return []
@@ -526,7 +599,19 @@ class IncomeService:
 
     @staticmethod
     def sync_income_to_transaction(income):
-        """Update linked transaction to match income changes"""
+        """
+        Propagate edits from an Income record to its linked bank Transaction.
+
+        Called from the income-edit blueprint after an income record is saved.
+        Syncs amount (take_home), date, account, description, and computed date fields.
+
+        Does nothing (returns None) if income has no transaction_id or the
+        transaction no longer exists.
+
+        Side effects:
+            Flushes the session.  Calls recalculate_account_balance() if account_id is set.
+            Does NOT commit — the caller's transaction boundary handles that.
+        """
         if not income.transaction_id:
             return None
         

@@ -1,6 +1,30 @@
 """
-Monthly Account Balance Cache Service
-Manages the cache of monthly account balances for performance
+Monthly Balance Service
+=======================
+Write-through cache of end-of-month account balances stored in the
+MonthlyAccountBalance table.  Avoids full transaction-history scans
+when rendering dashboards, net-worth timelines, and payday summaries.
+
+Cache model
+-----------
+Each row stores (account_id, year_month) → (actual_balance, projected_balance).
+
+  actual_balance    — sum of is_paid=True transactions up to month-end.
+  projected_balance — sum of all transactions (paid + unpaid); for future months
+                      also includes is_forecasted=True transactions.
+
+The cache is updated incrementally: whenever a transaction is added, edited, or
+deleted, call handle_transaction_change() to refresh from that month forward.
+A full rebuild is available via rebuild_all_cache() (for migrations or corruption).
+
+Primary entry points
+--------------------
+  handle_transaction_change()         — invalidate and refresh from a month forward
+  get_balance_for_month()             — read cached balance (returns None on miss)
+  update_month_cache()                — recalculate and save one month
+  update_account_from_month()         — recalculate all months forward for one account
+  update_all_accounts_from_month()    — same for all active accounts
+  rebuild_all_cache()                 — full rebuild from earliest transaction
 """
 from datetime import date, datetime, timezone
 from dateutil.relativedelta import relativedelta
@@ -14,6 +38,12 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class MonthlyBalanceService:
+    """
+    Write-through cache for end-of-month account balances.
+
+    Call handle_transaction_change() whenever a transaction is created, edited, or
+    deleted to keep the cache current.  Read via get_balance_for_month().
+    """
     
     @staticmethod
     def get_year_month_string(year, month):
@@ -207,8 +237,15 @@ class MonthlyBalanceService:
     @staticmethod
     def handle_transaction_change(account_id, transaction_date):
         """
-        Called when a transaction is added/edited/deleted
-        Updates cache from the transaction's month forward
+        Invalidate and refresh the cache from transaction_date's month forward.
+
+        Call this whenever a Transaction for the given account is created, edited,
+        or deleted.  Recalculates from that month through 24 future months so
+        downstream balance forecasts stay accurate.
+
+        Args:
+            account_id:       ID of the bank account whose cache needs updating.
+            transaction_date: Date of the changed transaction (determines start month).
         """
         year = transaction_date.year
         month = transaction_date.month

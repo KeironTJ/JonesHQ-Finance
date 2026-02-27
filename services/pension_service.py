@@ -1,3 +1,43 @@
+"""
+Pension Service
+===============
+Pension projection generation and retirement income estimates.
+
+Projection model
+----------------
+Starting from the most recent actual PensionSnapshot (or pension.current_value if none
+exists), the service compounds forward month by month:
+
+    projected_value = prev_value × (1 + monthly_growth_rate) + monthly_contribution
+
+Three named scenarios are supported (growth rates read from Settings):
+  'default'     — moderate growth (pension_default_monthly_growth_rate, default 0.12%/mo)
+  'optimistic'  — higher growth  (pension_optimistic_monthly_growth_rate, default 0.5%/mo)
+  'pessimistic' — lower growth   (pension_pessimistic_monthly_growth_rate, default 0.05%/mo)
+
+Inactive pensions still receive growth; contributions are set to £0.
+
+PensionSnapshot rows
+--------------------
+  is_projection=False  → confirmed actual values (entered via review).
+  is_projection=True   → computed projection; deleted and recreated on each regen.
+
+Past projection rows (review_date < today) are intentionally preserved so the
+historic projection chart doesn't lose data when a regen runs.
+
+Retirement income estimate
+--------------------------
+Projected pot at retirement × annuity_conversion_rate (default 5%) + government
+pension (from Settings) = estimated annual retirement income.
+
+Primary entry points
+--------------------
+  generate_projections()        — compute projection list (in-memory, not saved)
+  save_projections()            — compute and persist projections to DB
+  regenerate_all_projections()  — save_projections() for all active pensions
+  get_retirement_summary()      — current/projected values + income estimate
+  get_combined_snapshots()      — merged actual + projection history for charts
+"""
 from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
 from models.settings import Settings
@@ -10,6 +50,13 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class PensionService:
+    """
+    Pension projection generation and retirement income estimation.
+
+    Growth rates and retirement ages are read from the Settings model, allowing
+    them to be updated without code changes.  All monetary values use Decimal.
+    """
+
     @staticmethod
     def get_person_age(person):
         """Get current age of person from their date of birth"""
@@ -49,12 +96,24 @@ class PensionService:
     @staticmethod
     def generate_projections(pension, scenario='default', months_to_project=None):
         """
-        Generate monthly projections from now until retirement
-        
+        Compute a list of monthly projection dicts from the last actual snapshot
+        (or pension.current_value) forward to retirement.
+
+        This is a pure calculation — no DB writes.  Call save_projections() to persist.
+
+        Growth is applied whether the pension is active or not; monthly contributions
+        are included only when pension.is_active=True.
+
         Args:
-            pension: Pension object
-            scenario: 'default', 'optimistic', or 'pessimistic'
-            months_to_project: Override automatic calculation
+            pension:           Pension instance to project.
+            scenario:          'default', 'optimistic', or 'pessimistic'.
+            months_to_project: Override the automatic retirement-distance calculation.
+                               Pass a positive integer to force a specific horizon.
+
+        Returns:
+            list[dict] — one dict per month with keys: pension_id, review_date, value,
+            growth_percent, is_projection, scenario_name, growth_rate_used.
+            Empty list if months_to_project is 0 or cannot be calculated.
         """
         # Get growth rate for scenario
         if scenario == 'optimistic':
@@ -128,7 +187,19 @@ class PensionService:
     
     @staticmethod
     def save_projections(pension, scenario='default', replace_existing=True):
-        """Save projections to database"""
+        """
+        Compute projections and persist them as PensionSnapshot rows.
+
+        If replace_existing=True (default), deletes future projection rows for this
+        scenario (review_date >= today) before saving.  Past projection rows are
+        intentionally preserved (see module docstring).
+
+        Also updates pension.projected_value_at_retirement to the last projected value.
+
+        Returns:
+            int — total number of projections computed (saved count may be lower if
+            some fall before today).
+        """
         if replace_existing:
             # Only delete FUTURE projections for this scenario - preserve past projection
             # records for months where no actual snapshot was ever confirmed, so historic
@@ -179,8 +250,22 @@ class PensionService:
     @staticmethod
     def get_retirement_summary(person=None):
         """
-        Get comprehensive retirement summary
-        Returns projected values at retirement for all pensions
+        Aggregate retirement income projection across all active pensions.
+
+        Reads stored projected_value_at_retirement (not recomputed on the fly), so
+        save_projections() must have been run recently for results to be accurate.
+
+        Args:
+            person: 'keiron', 'emma', or None (to sum both).
+
+        Returns:
+            dict with keys:
+              total_current_value, total_projected_value,
+              total_annuity          — projected_value × annuity_conversion_rate,
+              government_pension     — annual state pension from Settings,
+              total_annual_income    — annuity + government_pension,
+              total_monthly_income   — total_annual_income / 12,
+              pension_details        — list of per-pension dicts.
         """
         query = family_query(Pension).filter_by(is_active=True)
         if person:

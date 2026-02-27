@@ -1,3 +1,40 @@
+"""
+Childcare Service
+=================
+Daily activity tracking and monthly cost aggregation for childcare expenses.
+
+Data model
+----------
+  Child              — a child with configured activity types and a transaction day.
+  ChildActivityType  — a recurring activity (e.g. "After-school club") with a per-day cost
+                       and a weekly schedule (which days it occurs).
+  DailyChildcareActivity — one row per (date, child, activity_type), recording whether
+                            the activity occurred and the actual cost (defaulting to the
+                            activity type's base cost).
+  MonthlyChildcareSummary — aggregate for (year_month, child_id) linked to a transaction.
+
+Month population strategies
+---------------------------
+  apply_templates_to_month() — apply each ChildActivityType's weekly schedule to every
+                                day in the month (fast bulk setup).
+  copy_previous_month()      — copy the previous month's occurred activities by day offset.
+  bulk_update_week()         — set activities for a specific week from a config dict.
+
+Transaction creation
+--------------------
+``create_monthly_transaction()`` sums all occurred activities for a child in a month and
+creates a negative bank Transaction on the child's configured transaction_day.  A
+MonthlyChildcareSummary is created or updated to link the two.
+
+Primary entry points
+--------------------
+  get_monthly_calendar()          — calendar grid data for rendering
+  update_daily_activity()         — mark an activity as occurred/not occurred
+  create_monthly_transaction()    — generate month-end payment transaction
+  apply_templates_to_month()      — populate a month from weekly templates
+  copy_previous_month()           — copy previous month's pattern
+  get_annual_costs()              — annual totals by child
+"""
 from models.childcare import Child, ChildActivityType, DailyChildcareActivity, MonthlyChildcareSummary
 from models.transactions import Transaction
 from models.categories import Category
@@ -11,6 +48,12 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class ChildcareService:
+    """
+    Daily childcare activity tracking and monthly cost aggregation.
+
+    Activity costs: the actual_cost property on DailyChildcareActivity returns
+    cost_override if set, otherwise falls back to the activity_type's base cost.
+    """
     
     @staticmethod
     def get_or_create_child(name, year_group=None):
@@ -143,8 +186,24 @@ class ChildcareService:
     @staticmethod
     def create_monthly_transaction(year, month, child_id, account_id):
         """
-        Create a transaction for the month's childcare costs for a specific child.
-        Returns the created transaction.
+        Create a bank Transaction for a child's total occurred activities in a month.
+
+        Transaction date: child.transaction_day (default 28), clamped to last day of month.
+        Category: child.category_id if set, otherwise finds/creates 'Childcare' expense.
+        Vendor: child.vendor_id.
+
+        Also creates or updates a MonthlyChildcareSummary linking the child, month, and
+        transaction.
+
+        Args:
+            year:       Year of the childcare month.
+            month:      Month (1-12).
+            child_id:   ID of the Child.
+            account_id: ID of the bank account to debit.
+
+        Returns:
+            Transaction — the created transaction.
+            None if total cost is £0 (nothing occurred that month).
         """
         year_month = f"{year}-{month:02d}"
         
@@ -304,8 +363,15 @@ class ChildcareService:
     @staticmethod
     def apply_templates_to_month(year, month):
         """
-        Apply all activity type templates to entire month based on their weekly patterns.
-        This populates all activities according to their defined weekly schedule.
+        Bulk-populate a month's activities from each ChildActivityType's weekly schedule.
+
+        For every day in the month, checks whether each active activity type is
+        scheduled for that weekday (via activity_type.occurs_on_weekday()) and calls
+        update_daily_activity() with occurred=True.  Existing activities are updated;
+        days where an activity is not scheduled are left unchanged (not cleared).
+
+        Returns:
+            int — number of DailyChildcareActivity records created or updated.
         """
         first_day = date(year, month, 1)
         last_day = date(year, month, monthrange(year, month)[1])

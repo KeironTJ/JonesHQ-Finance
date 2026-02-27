@@ -1,3 +1,27 @@
+"""
+Loan Service
+============
+Amortization schedule generation and bank-transaction linking for personal loans.
+
+Amortization schedule
+---------------------
+Each Loan gets a series of LoanPayment records computed by the standard
+amortization formula (fixed monthly payment = principal + interest).
+
+  Period 0  — opening-balance record (payment_amount=0, is_paid=True); created once.
+  Period 1+ — monthly payment records (is_paid=False by default).
+
+If the loan has a ``default_payment_account_id``, a matching bank Transaction
+(payment_type='Direct Debit') is created for every period >= 1 and linked via
+loan_payment.bank_transaction_id.
+
+Primary entry points
+--------------------
+  generate_amortization_schedule() — create LoanPayment records for a loan
+  generate_payment_transaction()   — create a bank Transaction for one payment
+  regenerate_schedule()            — delete future payments and regenerate
+  get_payment_statistics()         — summary counts and totals (paid/unpaid)
+"""
 from models.loans import Loan
 from models.loan_payments import LoanPayment
 from models.transactions import Transaction
@@ -11,14 +35,42 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class LoanService:
+    """
+    Loan amortization schedule generation and payment-transaction management.
+
+    Each Loan has a fixed monthly_payment and a monthly_apr (stored as a percentage).
+    The service computes the interest and principal split for each month and creates
+    LoanPayment records.  If the loan has a default_payment_account_id, a matching
+    bank Transaction is created per payment period (>= 1).
+    """
     
     @staticmethod
     def generate_amortization_schedule(loan_id, start_date=None, end_date=None, commit=True):
         """
-        Generate amortization schedule for a loan
-        Creates LoanPayment records with interest and principal calculations
-        Period 0 = Opening balance (no payment)
-        Period 1+ = Actual payments
+        Generate LoanPayment records for a loan across its amortization term.
+
+        Period 0 — opening-balance record (payment_amount=0, is_paid=True); created
+                   only when no prior payments exist for the loan.
+        Period 1+ — monthly payment records computed as:
+                     interest_charge  = opening_balance × monthly_apr
+                     amount_paid_off  = monthly_payment - interest_charge
+                     closing_balance  = opening_balance - amount_paid_off
+                   The final payment adjusts to clear the exact remaining balance.
+
+        Skips months that already have a LoanPayment record.  Stops when
+        closing_balance <= £0.01 or end_date is reached.
+
+        After creating payments, generates a bank Transaction per period (>= 1) if
+        loan.default_payment_account_id is set, then updates loan.current_balance.
+
+        Args:
+            loan_id:    ID of the Loan.
+            start_date: First period date (defaults to loan.start_date).
+            end_date:   Last period date (defaults to loan.end_date).
+            commit:     Whether to commit and create bank transactions (default True).
+
+        Returns:
+            list[LoanPayment] — the payment records created.
         """
         loan = family_get(Loan, loan_id)
         if not loan:
@@ -156,9 +208,19 @@ class LoanService:
     @staticmethod
     def generate_payment_transaction(loan_id, payment_id, commit=True):
         """
-        Generate a bank transaction for a loan payment
-        Links the LoanPayment to a Transaction in the bank account
-        Similar to credit card payment transaction generation
+        Create a bank Transaction for one LoanPayment and link the two records.
+
+        Skips if loan has no default_payment_account_id, or if the payment already
+        has a bank_transaction_id.  Gets/creates a "Loans > {loan.name}" category
+        and a Vendor named after the loan.
+
+        Args:
+            loan_id:    ID of the Loan.
+            payment_id: ID of the LoanPayment to generate a transaction for.
+            commit:     Whether to commit and call recalculate_account_balance() (default True).
+
+        Returns:
+            Transaction — the bank transaction (new or existing), or None.
         """
         from models.categories import Category
         

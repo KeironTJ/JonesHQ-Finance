@@ -1,6 +1,51 @@
 """
 Credit Card Service
-Handles interest calculations, statement generation, and payment automation
+===================
+Business logic for credit card statement generation, interest calculation,
+payment automation, and payment/bank-transaction synchronisation.
+
+Balance sign convention
+-----------------------
+All credit card transaction amounts use the following convention:
+
+  - Negative  → money owed to the card issuer (debt increases)
+  - Positive  → payment or credit (debt decreases)
+
+Interest transactions are stored as **negative** amounts (they add to what you owe).
+Payment transactions are stored as **positive** amounts (they reduce what you owe).
+The matching bank transaction is stored as **negative** (money leaving the bank account).
+
+Statement chain
+---------------
+Each monthly statement creates up to three linked records:
+
+  1. CreditCardTransaction (transaction_type='Interest')
+       — the statement itself; amount is negative or zero.
+  2. CreditCardTransaction (transaction_type='Payment', statement_id=<interest.id>)
+       — the scheduled repayment; only created when statement balance < 0.
+  3. Transaction (linked via cc_payment.bank_transaction_id)
+       — the matching bank-account debit; only created when the card has a
+         ``default_payment_account_id``.
+
+Deleting a statement always walks the full chain (Interest → Payment → Bank txn).
+Regeneration replaces unlocked chains (is_fixed=False) while leaving locked ones
+(is_fixed=True) untouched.
+
+``commit`` parameter
+--------------------
+Most write methods accept a ``commit`` flag (default True).  Pass ``commit=False``
+when calling from within a loop to batch changes; the caller is then responsible
+for calling ``db.session.commit()`` and any required balance recalculations.
+
+Primary entry points (called from blueprints)
+---------------------------------------------
+  regenerate_future_transactions()       — delete + recreate future chains for one card
+  regenerate_all_future_transactions()   — same for all active cards
+  generate_all_monthly_statements()      — bulk-generate statements across a date range
+  delete_non_fixed_future_transactions() — delete all unlocked future chains
+  sync_bank_transaction_to_payment()     — called when a bank transaction is edited
+  sync_payment_to_bank_transaction()     — called when a CC payment transaction is edited
+  unlink_payment_and_transaction()       — called before either linked record is deleted
 """
 import logging
 from datetime import datetime, date, timedelta
@@ -21,14 +66,37 @@ class CreditCardService:
     @staticmethod
     def generate_monthly_statement(card_id, statement_date, payment_offset_days=14, commit=True):
         """
-        Generate monthly statement with intelligent payment triggering:
-        1. Check current balance BEFORE statement
-        2. Create interest transaction if balance > 0
-        3. Calculate statement balance (balance + interest)
-        4. If statement balance > 0, create payment 14 days later
-        5. If statement balance = 0, no payment needed
-        
-        Returns: dict with 'interest_txn', 'payment_txn', 'statement_balance'
+        Generate one month's statement for a card: interest charge + optional payment.
+
+        Steps:
+          1. Sum all CC transactions up to the day before ``statement_date`` to get the
+             opening balance.
+          2. If opening balance < 0 (debt exists), create an Interest transaction on
+             ``statement_date``.  The transaction is always created — even when the APR
+             is 0% (promotional) so the statement date is recorded.
+          3. Re-sum all transactions up to ``statement_date`` (now including interest) to
+             get the statement balance.
+          4. If statement balance < 0, schedule a Payment transaction
+             ``payment_offset_days`` later, linked to the Interest transaction.
+          5. If statement balance >= 0, no payment is needed (card is paid off).
+
+        Args:
+            card_id:              ID of the CreditCard to process.
+            statement_date:       Date the statement is issued (uses card.statement_date day).
+            payment_offset_days:  Days after statement date to schedule the payment (default 14).
+            commit:               Whether to commit all changes to the DB (default True).
+
+        Returns:
+            dict with keys:
+              'interest_txn'     — CreditCardTransaction created, or None
+              'payment_txn'      — CreditCardTransaction created, or None
+              'statement_balance'— float; the balance after interest (negative = still in debt)
+
+        Side effects:
+            Creates CreditCardTransaction records (Interest and/or Payment).
+            If the card has a default_payment_account_id, also creates a linked
+            bank Transaction for the payment amount.
+            Calls recalculate_card_balance() after each phase.
         """
         card = family_get(CreditCard, card_id)
         if not card or not card.is_active:
@@ -111,14 +179,22 @@ class CreditCardService:
     @staticmethod
     def calculate_interest(card_id, statement_date, balance_to_use=None):
         """
-        Calculate interest for a credit card on a specific statement date
-        
+        Calculate the monthly interest charge for a card on a given statement date.
+
+        Uses the card's APR for that date (respects 0% promotional periods).
+        Interest is always returned as a positive number; the caller is responsible
+        for negating it when storing as a transaction.
+
         Args:
-            card_id: The credit card ID
-            statement_date: The statement date
-            balance_to_use: Optional balance to use for calculation (if None, uses card.current_balance)
-        
-        Returns the interest amount (0 if in 0% period)
+            card_id:        ID of the CreditCard.
+            statement_date: Date used to look up the applicable APR.
+            balance_to_use: Balance to charge interest on.  If None, uses
+                            card.current_balance.  Should be the absolute
+                            balance (sign is ignored via abs()).
+
+        Returns:
+            float — interest amount, rounded to 2 decimal places.
+            Returns 0.0 if the card is not found or the APR is 0%.
         """
         card = family_get(CreditCard, card_id)
         if not card:
@@ -144,17 +220,31 @@ class CreditCardService:
     @staticmethod
     def generate_statement_interest(card_id, statement_date, balance_for_interest=None, commit=True):
         """
-        Generate an interest transaction for a credit card on statement date
-        
+        Create an Interest CreditCardTransaction for a card on its statement date.
+
+        Always creates a transaction, even when the calculated interest is £0 (e.g.
+        during a 0% promotional period) so that the statement date is recorded in the
+        chain.  Only call this method when the opening balance is negative (debt exists);
+        the guard lives in generate_monthly_statement.
+
+        The category "Credit Cards > {CardName}" is created automatically if it does
+        not already exist.
+
         Args:
-            card_id: The credit card ID
-            statement_date: The statement date
-            balance_for_interest: The balance to use for interest calculation
-                                 (should be the projected balance including all transactions)
-            commit: Whether to commit the transaction
-        
-        Returns the created transaction or None if no balance
-        Note: This should only be called when opening balance > 0
+            card_id:              ID of the CreditCard.
+            statement_date:       Date the interest is charged.
+            balance_for_interest: Balance to calculate interest on (negative = debt).
+                                  If None, uses card.current_balance.
+            commit:               Whether to commit and recalculate balances (default True).
+
+        Returns:
+            CreditCardTransaction — the newly created Interest transaction.
+            None if the card is not found or inactive.
+
+        Side effects:
+            Adds a CreditCardTransaction to the session.
+            May add a Category if one does not exist for this card.
+            If commit=True, commits and calls recalculate_card_balance().
         """
         card = family_get(CreditCard, card_id)
         if not card or not card.is_active:
@@ -223,19 +313,35 @@ class CreditCardService:
     @staticmethod
     def generate_payment_transaction(card_id, payment_date, balance_override=None, statement_id=None, commit=True):
         """
-        Generate a payment transaction based on card's set_payment
-        Uses logic: MIN(set_payment, current_balance)
-        
+        Create a Payment CreditCardTransaction (and a linked bank Transaction).
+
+        Payment amount logic:
+          - If ``balance_override`` is provided and >= 0, nothing is owed — returns None.
+          - If ``card.set_payment`` is set: amount = MIN(set_payment, abs(balance)).
+          - Otherwise: amount = abs(balance) * card.min_payment_percent / 100.
+
+        If ``card.default_payment_account_id`` is set, a matching bank Transaction is
+        also created (negative amount = debit from the bank account) and the two records
+        are linked via cc_payment.bank_transaction_id.
+
         Args:
-            card_id: The credit card ID
-            payment_date: Date for the payment
-            balance_override: Optional balance to use instead of card.current_balance
-                             (useful when generating payments for unpaid statements)
-            statement_id: ID of the Interest (statement) transaction that triggered this payment.
-                          Links the two so regeneration and deletion are aware of each other.
-            commit: Whether to commit the transaction
-        
-        Returns the created transaction
+            card_id:          ID of the CreditCard.
+            payment_date:     Date the payment is scheduled.
+            balance_override: Balance to base the payment on.  If None, uses
+                              card.calculate_actual_payment().
+            statement_id:     ID of the Interest transaction that triggered this payment.
+                              Stored on the Payment so the deletion/regen chain can find it.
+            commit:           Whether to commit and recalculate balances (default True).
+
+        Returns:
+            CreditCardTransaction — the newly created Payment transaction.
+            None if the card is inactive, not found, or payment amount is <= 0.
+
+        Side effects:
+            Adds a CreditCardTransaction (Payment) to the session.
+            May add a Transaction (bank debit) and a Vendor if not already present.
+            May add a Category if one does not exist for this card.
+            If commit=True, commits and recalculates both CC and bank account balances.
         """
         card = family_get(CreditCard, card_id)
         if not card or not card.is_active:
@@ -347,8 +453,17 @@ class CreditCardService:
     @staticmethod
     def generate_future_statements(card_id, start_date, end_date):
         """
-        Generate all future statement interest transactions for a card
-        between start_date and end_date
+        Generate Interest transactions for a card across a date range.
+
+        .. deprecated::
+            Superseded by generate_future_monthly_statements(), which also handles
+            linked payments and bank transactions.  Use that method instead.
+
+        Walks month by month from start_date to end_date on the card's statement day,
+        skipping months that already have an Interest transaction.
+
+        Returns:
+            list[CreditCardTransaction] — the Interest transactions created.
         """
         card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
@@ -389,8 +504,18 @@ class CreditCardService:
     @staticmethod
     def generate_future_payments(card_id, start_date, end_date, payment_day_offset=5):
         """
-        Generate all future payment transactions for a card
-        Payments occur payment_day_offset days after statement date
+        Generate Payment transactions for a card across a date range.
+
+        .. deprecated::
+            Superseded by generate_future_monthly_statements(), which handles
+            interest, payments, and bank transactions together as a linked chain.
+            Use that method instead.
+
+        Payments are scheduled ``payment_day_offset`` days after the statement date.
+        Skips months that already have a Payment transaction on the calculated date.
+
+        Returns:
+            list[CreditCardTransaction] — the Payment transactions created.
         """
         card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
@@ -476,7 +601,30 @@ class CreditCardService:
     @staticmethod
     def generate_future_monthly_statements(card_id, start_date, end_date, payment_offset_days=14):
         """
-        Generate monthly statements for a single card with intelligent payment logic
+        Generate full statement chains (Interest + Payment + bank txn) for a single card.
+
+        Walks month by month from start_date to end_date on the card's statement day,
+        calling generate_monthly_statement() for each month that does not already have
+        an Interest transaction.
+
+        Stops early once the projected statement balance reaches >= 0 (card paid off),
+        so statements are not generated past the point the debt clears.
+
+        Args:
+            card_id:              ID of the CreditCard.
+            start_date:           First date to consider.
+            end_date:             Last date to consider.
+            payment_offset_days:  Days after statement to schedule payment (default 14).
+
+        Returns:
+            dict with keys:
+              'statements_created'        — number of Interest transactions created
+              'payments_created'          — number of Payment transactions created
+              'zero_balance_statements'   — months where interest was created but
+                                           no payment was needed
+
+        Side effects:
+            Commits all changes and calls recalculate_card_balance() at the end.
         """
         card = family_get(CreditCard, card_id)
         if not card or not card.statement_date:
@@ -676,8 +824,22 @@ class CreditCardService:
     @staticmethod
     def regenerate_all_future_transactions(start_date=None, end_date=None, payment_offset_days=14):
         """
-        Regenerate future transactions for ALL active cards
-        Preserves any transactions marked as is_fixed=True
+        Regenerate future statement chains for all active cards.
+
+        Iterates over every active CreditCard and calls regenerate_future_transactions()
+        on each.  Transactions marked is_fixed=True are preserved on every card.
+
+        Args:
+            start_date:           Start of the regeneration window (default: today).
+            end_date:             End of the regeneration window (default: 10 years out).
+            payment_offset_days:  Days after statement to schedule payment (default 14).
+
+        Returns:
+            dict with keys:
+              'cards_processed'  — number of active cards iterated
+              'total_deleted'    — total records deleted across all cards
+              'total_statements' — total Interest transactions created
+              'total_payments'   — total Payment transactions created
         """
         if not start_date:
             start_date = date.today()
@@ -735,14 +897,30 @@ class CreditCardService:
     @staticmethod
     def sync_bank_transaction_to_payment(bank_txn):
         """
-        Sync changes from a bank transaction to its linked credit card payment.
-        Called when a bank transaction is edited.
-        
+        Sync edits from a bank Transaction to its linked CC Payment transaction.
+
+        Called from the transaction-edit blueprint whenever a bank Transaction that
+        has a credit_card_id is saved.  Keeps the two records in step for date, amount,
+        and paid status.
+
+        Locking behaviour: when synced, the CC payment is always marked is_fixed=True
+        (regardless of the bank transaction's is_fixed value) because a real bank
+        transaction is now linked — it should not be overwritten by regeneration.
+
+        Does nothing (returns None) if:
+          - bank_txn has no credit_card_id
+          - no matching CC payment is found
+          - the CC payment is already marked is_paid (historical record — do not touch)
+
         Args:
-            bank_txn: Transaction model instance with credit_card_id
-        
+            bank_txn: Transaction instance whose credit_card_id links it to a CC payment.
+
         Returns:
-            CreditCardTransaction if updated, None otherwise
+            CreditCardTransaction — the updated payment, or None if no action taken.
+
+        Side effects:
+            Flushes the session.  Calls recalculate_card_balance() on the CC.
+            Does NOT commit — the caller's transaction boundary handles that.
         """
         if not bank_txn.credit_card_id:
             return None
@@ -785,14 +963,27 @@ class CreditCardService:
     @staticmethod
     def sync_payment_to_bank_transaction(cc_payment):
         """
-        Sync changes from a credit card payment to its linked bank transaction.
-        Called when a credit card payment is edited.
-        
+        Sync edits from a CC Payment transaction to its linked bank Transaction.
+
+        Called from the credit-card-transaction-edit blueprint whenever a CC Payment
+        that has a bank_transaction_id is saved.  Mirrors date, amount, paid status,
+        and is_fixed onto the bank record.
+
+        Does nothing (returns None) if:
+          - cc_payment has no bank_transaction_id
+          - the linked bank transaction no longer exists
+          - the bank transaction is already marked is_paid (historical — do not touch)
+
         Args:
-            cc_payment: CreditCardTransaction model instance with bank_transaction_id
-        
+            cc_payment: CreditCardTransaction instance whose bank_transaction_id links
+                        it to a bank Transaction.
+
         Returns:
-            Transaction if updated, None otherwise
+            Transaction — the updated bank record, or None if no action taken.
+
+        Side effects:
+            Flushes the session.  Calls recalculate_account_balance() on the bank account.
+            Does NOT commit — the caller's transaction boundary handles that.
         """
         if not cc_payment.bank_transaction_id:
             return None
@@ -834,12 +1025,21 @@ class CreditCardService:
     @staticmethod
     def unlink_payment_and_transaction(cc_payment_id=None, bank_txn_id=None):
         """
-        Remove the link between a credit card payment and bank transaction.
-        Called when either is being deleted.
-        
+        Remove the foreign-key links between a CC Payment and a bank Transaction.
+
+        Called before either record is deleted so the remaining record is left in
+        a clean, unlinked state rather than pointing at a deleted row.
+
+        Both arguments are optional; pass whichever side is being unlinked.  If both
+        are provided, each side is cleaned up independently.
+
         Args:
-            cc_payment_id: ID of credit card payment
-            bank_txn_id: ID of bank transaction
+            cc_payment_id: ID of the CreditCardTransaction (Payment) to unlink.
+            bank_txn_id:   ID of the bank Transaction to unlink.
+
+        Side effects:
+            Sets cc_payment.bank_transaction_id = None and/or bank_txn.credit_card_id = None.
+            Does NOT commit — the caller's transaction boundary handles that.
         """
         if cc_payment_id:
             cc_payment = family_get(CreditCardTransaction, cc_payment_id)

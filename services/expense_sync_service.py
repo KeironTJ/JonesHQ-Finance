@@ -1,3 +1,39 @@
+"""
+Expense Sync Service
+====================
+Keeps Expense records in sync with their corresponding bank/credit-card transactions
+and handles end-of-period reimbursement and CC-payment generation.
+
+Expense lifecycle
+-----------------
+1. Expense created → ``reconcile()`` creates an immediate Purchase transaction
+   (CreditCardTransaction if the expense was paid by card, otherwise a bank Transaction).
+2. End of period → ``reconcile_monthly_reimbursements()`` creates a single Expense
+   Reimbursement bank Transaction aggregating all expenses in that period.
+3. CC payoff → ``reconcile_credit_card_payments()`` creates a CC Payment transaction
+   (and matching bank debit) 1 working day after the reimbursement date, covering the
+   total card-expense spend for that period.
+
+Period modes
+------------
+The service respects the ``expenses.period_mode`` setting:
+  'calendar_month'  — periods run from the 1st to the last day of each month.
+  'payday_period'   — periods follow the configured payday cycle.
+
+Both modes use YYYY-MM as the period key (same format as the payday period label).
+
+``auto_sync`` guard
+-------------------
+Every public write method checks the ``expenses.auto_sync`` setting and returns early
+if sync is disabled, so callers don't need to check this themselves.
+
+Primary entry points (called from blueprints)
+---------------------------------------------
+  reconcile()                       — sync a single expense after create/edit/delete
+  reconcile_monthly_reimbursements()— rebuild end-of-period reimbursement transactions
+  reconcile_credit_card_payments()  — rebuild per-card payment transactions
+  bulk_delete_linked_transactions() — remove all linked bank/CC txns for given expenses
+"""
 from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from extensions import db
@@ -18,19 +54,37 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class ExpenseSyncService:
-    """Service to sync Expense rows into linked transactions (credit card / bank) and keep them in sync.
+    """
+    Syncs Expense records into linked bank/CC transactions.
 
-    Workflow:
-    1. When expense created → Create immediate transaction (credit card OR bank)
-    2. Monthly reimbursement → Aggregate all expenses for calendar month → Single reimbursement on last working day
-    3. Auto credit card payment → 1 working day after reimbursement, create payment transaction
-    
-    The service works for both current and future-dated expenses without distinction.
+    One expense can be linked to at most one immediate transaction
+    (expense.bank_transaction_id  OR  expense.credit_card_transaction_id).
+    Fuel expenses are a special case: instead of a transaction, a Trip row is created
+    and linked via the journey_description sentinel "Expense #<id>: <description>".
+
+    Locking: expense-linked transactions are always created with is_fixed=True so
+    regeneration (e.g. credit card regen) cannot delete them.
     """
 
     @staticmethod
     def reconcile(expense_id):
-        """Reconcile a single expense - create/update its payment transaction"""
+        """
+        Create or update the immediate payment transaction for a single expense.
+
+        Dispatches based on expense type:
+          - 'Fuel' → creates/updates a Trip row (no bank/CC transaction).
+          - Expense with credit_card_id → creates/updates a CreditCardTransaction
+            (type='Purchase', is_fixed=True).
+          - All others → creates/updates a bank Transaction (payment_type='Work Expense').
+
+        Does nothing if ``expenses.auto_sync`` is disabled in settings.
+
+        Args:
+            expense_id: ID of the Expense to reconcile.
+
+        Side effects:
+            Commits the session.  Rolls back on exception and re-raises.
+        """
         exp = family_get(Expense, expense_id)
         if not exp:
             return
@@ -128,8 +182,23 @@ class ExpenseSyncService:
     @staticmethod
     def reconcile_credit_card_payments(year_month=None):
         """
-        Create automatic credit card payment transactions 1 working day after reimbursement.
-        Returns dict with created payment transaction IDs by card.
+        Create or update CC Payment transactions funded by expense reimbursements.
+
+        For each reimbursement transaction, groups CC expenses for that period by card
+        and creates one CC Payment + linked bank debit per card (1 working day after the
+        reimbursement date).  Skips periods/cards where the payment is already is_paid.
+
+        Args:
+            year_month: YYYY-MM period key to restrict to one period.
+                        If None, processes all reimbursement transactions.
+
+        Returns:
+            dict mapping card_id → CreditCardTransaction.id for each payment created
+            or updated.  Only changed records are included.
+
+        Side effects:
+            Commits the session.  Rolls back on exception and re-raises.
+            Calls recalculate_account_balance() and recalculate_card_balance().
         """
         auto_sync = Settings.get_value('expenses.auto_sync', True)
         if not auto_sync:
@@ -321,7 +390,16 @@ class ExpenseSyncService:
 
     @staticmethod
     def _ensure_credit_card_payment(exp: Expense):
-        """Create or update credit card transaction for expense payment (outgoing)"""
+        """
+        Create or update the immediate CC Purchase transaction for an expense.
+
+        Searches for an existing transaction via expense.credit_card_transaction_id first,
+        then falls back to matching on (card, date, item description).  Updates amount and
+        type if changed; always locks the record (is_fixed=True).  Links the expense to the
+        transaction via expense.credit_card_transaction_id.
+
+        Does nothing if exp.total_cost is falsy or the CC cannot be found.
+        """
         if not exp.total_cost:
             return
         cc = family_get(CreditCard, exp.credit_card_id)
@@ -394,7 +472,20 @@ class ExpenseSyncService:
     
     @staticmethod
     def _ensure_bank_payment(exp: Expense):
-        """Create or update bank transaction for direct expense payment (outgoing)"""
+        """
+        Create or update a bank Transaction for a directly-paid expense.
+
+        Account lookup order: exp.account_id → expenses.payment_account_id setting
+        → first account alphabetically.  Category and vendor come from the
+        expenses.reimburse_category_id / expenses.reimburse_vendor_id settings with
+        name-based fallbacks.
+
+        Searches for an existing transaction via expense.bank_transaction_id first,
+        then by (account, date, description, payment_type='Work Expense').  Updates
+        amount if changed.  Links the expense via expense.bank_transaction_id.
+
+        Does nothing if exp.total_cost is falsy or no account can be resolved.
+        """
         if not exp.total_cost:
             return
         # Get expense account - use expense's account_id if set, otherwise fall back to settings
@@ -630,8 +721,19 @@ class ExpenseSyncService:
 
     @staticmethod
     def _create_cc_payment_from_reimbursement(card_id, total, payment_date, period_key):
-        """Create or update a credit card Payment transaction from expense reimbursement funds.
-        Also creates/updates the matching bank account debit transaction and links the two."""
+        """
+        Create (or update) a CC Payment + linked bank debit for one card's expenses in a period.
+
+        Looks for an existing Payment matching (card_id, type='Payment', item LIKE %period_key%).
+        If found and is_paid, skips (returns id, False).  If found and changed, updates amount/date.
+        Otherwise creates new CC Payment (is_fixed=True) and a matching bank debit, linking them.
+
+        Account for bank debit: card.default_payment_account_id →
+        expenses.payment_account_id setting.
+
+        Returns:
+            (CreditCardTransaction.id, changed: bool) or None if card not found.
+        """
         cc = family_get(CreditCard, card_id)
         if not cc:
             return None

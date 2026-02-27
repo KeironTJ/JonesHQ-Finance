@@ -1,3 +1,22 @@
+"""
+Vehicle Service
+===============
+Fuel metrics, trip cost estimation, and bank-transaction creation for vehicle records.
+
+Fuel metrics
+------------
+All MPG and per-mile cost calculations are derived by comparing consecutive FuelRecord
+rows (current mileage minus previous fill mileage).  The first fill for a vehicle has
+no previous record, so actual_miles=0 and MPG=0 for that entry.
+
+Primary entry points
+--------------------
+  calculate_fuel_metrics()    — derive MPG, per-mile cost from a new fill vs previous
+  get_vehicle_stats()         — aggregate totals and averages across all fills
+  calculate_trip_cost()       — estimated cost for a trip using recent MPG + price data
+  estimate_monthly_fuel_cost()— rolling 3-month average monthly fuel cost
+  create_fuel_transaction()   — create a bank Transaction for an actual fuel purchase
+"""
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
@@ -12,11 +31,28 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class VehicleService:
+    """
+    Fuel efficiency metrics, trip cost estimation, and bank-transaction creation.
+
+    All cost/price values use Decimal internally.  Prices are stored in pence-per-litre
+    for fuel; costs and trip expenses are stored in pounds.
+    """
+
     @staticmethod
     def calculate_fuel_metrics(vehicle_id, current_mileage, gallons, cost, fuel_date):
         """
-        Calculate fuel metrics based on previous fill-up
-        Returns: (actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles)
+        Derive fuel metrics for a new fill-up by comparing to the previous record.
+
+        Args:
+            vehicle_id:       ID of the Vehicle.
+            current_mileage:  Odometer reading at this fill-up.
+            gallons:          Gallons added.
+            cost:             Total cost in £ (Decimal).
+            fuel_date:        Date of this fill-up (used to find the previous fill).
+
+        Returns:
+            (actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles)
+            All zero/None for the first fill (no prior record to compare against).
         """
         # Get the most recent fuel record before this one
         previous_fill = family_query(FuelRecord).filter(

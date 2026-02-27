@@ -1,6 +1,29 @@
 """
 Fuel Forecasting Service
-Handles prediction of future fuel refills based on trips and integration with transactions.
+========================
+Predicts future fuel refill dates from the vehicle's planned trip schedule and
+creates/maintains forecasted bank Transactions for those refills.
+
+How predictions work
+--------------------
+1. Walk all Trip rows for the vehicle in date order, accumulating gallons consumed
+   (miles / avg_MPG).
+2. When cumulative consumption hits the refill threshold (tank_size × refuel_threshold_pct),
+   record a predicted refill date (the previous trip's date) and reset the counter.
+3. An actual FuelRecord on a given date resets the counter (tank was filled that day).
+
+Forecasted transactions
+-----------------------
+``sync_forecasted_transactions()`` deletes all future forecasted fuel transactions for
+the vehicle and recreates them from the latest predictions.  When a real FuelRecord is
+logged, ``link_fuel_record_to_transaction()`` promotes the nearest forecasted transaction
+to is_forecasted=False / is_paid=True (or creates a new actual transaction if none is found).
+
+Primary entry points
+--------------------
+  predict_refills()                   — list of predicted refill dates + costs
+  sync_forecasted_transactions()      — delete stale forecasts and recreate from predictions
+  link_fuel_record_to_transaction()   — convert a forecasted transaction to actual on fill
 """
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -15,6 +38,13 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class FuelForecastingService:
+    """
+    Predict future fuel refills from trip data and maintain forecasted transactions.
+
+    All price calculations: price_per_litre is stored in pence.  Costs are computed
+    as (litres × price_pence) / 100 to convert to £.  UK gallon conversion factor:
+    1 gallon = 4.54609 litres.
+    """
     
     @staticmethod
     def get_average_fuel_price(vehicle_id, recent_count=5):
@@ -239,8 +269,17 @@ class FuelForecastingService:
     @staticmethod
     def sync_forecasted_transactions(vehicle_id):
         """
-        Synchronize forecasted transactions for a vehicle.
-        Creates forecasted transactions for predicted refills.
+        Rebuild all future forecasted fuel transactions for a vehicle.
+
+        Deletes any existing future forecasted transactions in the 'Transportation - Fuel'
+        category matching the vehicle's registration, then calls predict_refills() and
+        creates a new forecasted transaction for each predicted date >= today.
+
+        Call this after adding/editing Trip or FuelRecord rows to keep forecasts current.
+        Also called internally by link_fuel_record_to_transaction() after a fill is logged.
+
+        Side effects:
+            Commits the session.
         """
         # Delete old forecasted transactions for this vehicle
         vehicle = family_get(Vehicle, vehicle_id)
@@ -277,9 +316,23 @@ class FuelForecastingService:
     @staticmethod
     def link_fuel_record_to_transaction(fuel_record_id):
         """
-        Link a fuel record to a transaction.
-        If a forecasted transaction exists for that date/vehicle, replace it.
-        Otherwise, create a new transaction.
+        Convert a forecasted fuel transaction to actual when a real fill-up is recorded.
+
+        Looks for a forecasted transaction within ±3 days of the fill date for the same
+        vehicle registration.  If found, updates it to is_forecasted=False, is_paid=True
+        with the actual amount and date.  If not found, creates a new actual transaction.
+
+        In both cases, links the record via fuel_record.linked_transaction_id and calls
+        sync_forecasted_transactions() to regenerate future forecasts.
+
+        Args:
+            fuel_record_id: ID of the FuelRecord that was just created.
+
+        Returns:
+            Transaction — the created or updated transaction, or None if fuel record not found.
+
+        Side effects:
+            Commits the session.
         """
         fuel_record = family_get(FuelRecord, fuel_record_id)
         if not fuel_record:

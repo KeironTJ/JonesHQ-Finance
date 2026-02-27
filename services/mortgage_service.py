@@ -1,5 +1,41 @@
 """
-Mortgage Service - Handles mortgage projections, calculations, and scenario modeling
+Mortgage Service
+================
+Monthly mortgage projection generation, scenario modelling, and snapshot confirmation
+for properties with one or more MortgageProduct records.
+
+Key concepts
+------------
+MortgageSnapshot — one row per month per product, storing balance, payment,
+                   interest, principal, and projected property valuation.
+  is_projection=False  → confirmed actual (imported or manually entered).
+  is_projection=True   → computed projection for a named scenario.
+
+Scenarios
+---------
+  'base'        — no overpayments.
+  'aggressive'  — £500/month overpayment (default second scenario).
+  Any custom scenario can be passed as a dict to generate_projections().
+
+After the last defined MortgageProduct ends, the service continues projecting
+using an assumed variable rate (last product's rate + 2%) until the balance
+reaches zero or 30 years pass (hard limit).
+
+Transaction link
+----------------
+For the 'base' scenario, a bank Transaction (is_forecasted=True, is_paid=False)
+is created for each snapshot when the product has an account_id.  Confirming a
+snapshot via confirm_snapshot() marks it is_projection=False and is_paid=True.
+
+Primary entry points
+--------------------
+  generate_projections()       — regenerate all scenarios for a property
+  confirm_snapshot()           — convert a projection to actual, optionally with
+                                 revised balance/valuation
+  create_transaction_for_snapshot() — add a bank transaction to an existing snapshot
+  get_combined_timeline()      — actual + projected rows merged, sorted by date
+  get_scenario_comparison()    — interest totals and mortgage-free dates per scenario
+  calculate_ltv()              — current loan-to-value ratio
 """
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import date, timedelta
@@ -16,20 +52,36 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class MortgageService:
-    """Service for mortgage calculations and projections"""
+    """
+    Mortgage projection generation and snapshot management for properties.
+
+    Projections are generated per-scenario by walking month by month through each
+    MortgageProduct.  When the last product ends and there is still a balance, an
+    assumed variable rate continuation is appended (rate = last product rate + 2%,
+    capped at 30 years).
+    """
     
     @staticmethod
     def generate_projections(property_id, scenarios=None):
         """
-        Generate mortgage projections for all products on a property
-        
+        Regenerate MortgageSnapshot projections for all products on a property.
+
+        Deletes all unpaid projection snapshots (and their bank transactions), then
+        generates new snapshots for each scenario.  Only 'base' scenario snapshots get
+        bank Transactions (is_forecasted=True).  Paid snapshots are never deleted.
+
         Args:
-            property_id: The property to project
-            scenarios: List of scenario configs, e.g. [
-                {'name': 'base', 'overpayment': 0},
-                {'name': 'aggressive', 'overpayment': 500},
-                {'name': 'conservative', 'overpayment': 250}
-            ]
+            property_id: ID of the Property to project.
+            scenarios:   List of scenario dicts, each with 'name' and 'overpayment'
+                         (Decimal monthly overpayment amount).  Defaults to:
+                         [{'name': 'base', 'overpayment': 0},
+                          {'name': 'aggressive', 'overpayment': 500}].
+
+        Returns:
+            True on success, False if property or products not found.
+
+        Side effects:
+            Commits the session.  May create/delete Transaction and MortgageSnapshot rows.
         """
         if scenarios is None:
             scenarios = [
@@ -536,8 +588,19 @@ class MortgageService:
     @staticmethod
     def confirm_snapshot(snapshot_id, actual_balance=None, actual_valuation=None):
         """
-        Convert a projected snapshot to actual, optionally updating values
-        Creates a transaction if the product has a linked account
+        Promote a projected MortgageSnapshot to an actual confirmed record.
+
+        Clears is_projection=True and scenario_name, optionally updates balance and
+        valuation (and recalculates equity).  If the product has an account_id and
+        no transaction exists yet, creates one (is_paid=True, is_forecasted=False).
+
+        Args:
+            snapshot_id:        ID of the MortgageSnapshot to confirm.
+            actual_balance:     Actual closing balance (replaces projected if provided).
+            actual_valuation:   Actual property valuation (replaces projected if provided).
+
+        Returns:
+            True on success, False if snapshot not found or already confirmed.
         """
         snapshot = family_get(MortgageSnapshot, snapshot_id)
         if not snapshot or not snapshot.is_projection:
