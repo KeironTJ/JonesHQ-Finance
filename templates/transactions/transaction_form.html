@@ -348,8 +348,8 @@
         // day_name
         const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         document.getElementById('day_name').value = days[d.getDay()];
-        // payday_period - same as year_month as a baseline (server will use PaydayService)
-        document.getElementById('payday_period_override').value = ym;
+        // payday_period: leave blank so server always uses PaydayService.get_period_for_date()
+        // (user can still type an override manually)
     }
 
     // Wire up date change
