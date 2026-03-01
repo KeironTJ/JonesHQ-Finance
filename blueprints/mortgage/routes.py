@@ -1,6 +1,7 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from . import mortgage_bp
 from models.property import Property
+from models.property_valuation_snapshot import PropertyValuationSnapshot
 from models.mortgage import Mortgage, MortgageProduct
 from models.mortgage_payments import MortgagePayment, MortgageSnapshot
 from models.accounts import Account
@@ -309,6 +310,98 @@ def create():
     """Create a new mortgage (legacy endpoint)"""
     # Implementation here
     return redirect(url_for('mortgage.index'))
+
+
+# ---------------------------------------------------------------------------
+# Property Valuation Snapshots
+# ---------------------------------------------------------------------------
+
+@mortgage_bp.route('/mortgage/property/<int:property_id>/valuations')
+def valuations(property_id):
+    """View valuation snapshot history for a property"""
+    prop = family_get_or_404(Property, property_id)
+    snapshots = family_query(PropertyValuationSnapshot).filter_by(
+        property_id=property_id
+    ).order_by(PropertyValuationSnapshot.valuation_date.desc()).all()
+    return render_template('mortgage/valuations.html', property=prop, snapshots=snapshots)
+
+
+@mortgage_bp.route('/mortgage/property/<int:property_id>/valuations/add', methods=['GET', 'POST'])
+def add_valuation(property_id):
+    """Add an actual valuation snapshot for a property"""
+    prop = family_get_or_404(Property, property_id)
+
+    if request.method == 'POST':
+        try:
+            valuation_date = datetime.strptime(request.form['valuation_date'], '%Y-%m-%d').date()
+            value = Decimal(request.form['value'])
+            source = request.form.get('source', 'manual')
+            notes = request.form.get('notes', '')
+
+            # Calculate change % vs previous actual
+            previous = family_query(PropertyValuationSnapshot).filter(
+                PropertyValuationSnapshot.property_id == property_id,
+                PropertyValuationSnapshot.valuation_date < valuation_date,
+                PropertyValuationSnapshot.is_projection == False,
+            ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+
+            change_percent = None
+            if previous and previous.value and previous.value > 0:
+                change_percent = ((value - previous.value) / previous.value) * 100
+
+            # Remove any projection for this exact date (superseded by actual)
+            family_query(PropertyValuationSnapshot).filter_by(
+                property_id=property_id,
+                valuation_date=valuation_date,
+                is_projection=True,
+            ).delete()
+
+            snapshot = PropertyValuationSnapshot(
+                property_id=property_id,
+                valuation_date=valuation_date,
+                value=value,
+                change_percent=change_percent,
+                source=source,
+                notes=notes,
+            )
+            db.session.add(snapshot)
+
+            # Keep Property.current_valuation in sync with the latest actual
+            latest_actual = family_query(PropertyValuationSnapshot).filter(
+                PropertyValuationSnapshot.property_id == property_id,
+                PropertyValuationSnapshot.is_projection == False,
+            ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+
+            if latest_actual is None or valuation_date >= latest_actual.valuation_date:
+                prop.current_valuation = value
+
+            db.session.commit()
+
+            flash(f'Valuation saved: £{value:,.2f}' +
+                  (f' ({change_percent:+.1f}% vs previous)' if change_percent else ''), 'success')
+            return redirect(url_for('mortgage.valuations', property_id=property_id))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error saving valuation: {str(e)}', 'danger')
+
+    return render_template('mortgage/add_valuation.html', property=prop)
+
+
+@mortgage_bp.route('/mortgage/property/<int:property_id>/valuations/<int:snapshot_id>/delete', methods=['POST'])
+def delete_valuation(property_id, snapshot_id):
+    """Delete a valuation snapshot"""
+    snapshot = family_get_or_404(PropertyValuationSnapshot, snapshot_id)
+
+    try:
+        db.session.delete(snapshot)
+        db.session.commit()
+        flash('Valuation deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting valuation: {str(e)}', 'danger')
+
+    return redirect(url_for('mortgage.valuations', property_id=property_id))
 
 
 @mortgage_bp.route('/mortgage/snapshot/<int:snapshot_id>/create_transaction', methods=['POST'])

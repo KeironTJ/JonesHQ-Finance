@@ -27,6 +27,9 @@ def index():
     expense_reimburse_category_id = Settings.get_value('expenses.reimburse_category_id')
     expense_reimburse_vendor_id   = Settings.get_value('expenses.reimburse_vendor_id')
 
+    # Net Worth settings
+    networth_start_date = Settings.get_value('networth.start_date', '')
+
     # Dashboard preferences
     networth_expanded = Settings.get_value('dashboard.networth_expanded', True)
     account_selection_expanded = Settings.get_value('dashboard.account_selection_expanded', True)
@@ -52,6 +55,7 @@ def index():
                          accounts=accounts,
                          categories=categories,
                          vendors=vendors,
+                         networth_start_date=networth_start_date,
                          networth_expanded=networth_expanded,
                          account_selection_expanded=account_selection_expanded,
                          payday_expanded=payday_expanded,
@@ -139,6 +143,22 @@ def update():
             'Expense accumulation period: calendar_month or payday_period',
             'string'
         )
+
+        # Net Worth Settings
+        networth_start_date_str = request.form.get('networth_start_date', '').strip()
+        if networth_start_date_str:
+            datetime.strptime(networth_start_date_str, '%Y-%m-%d')  # validate
+            Settings.set_value(
+                'networth.start_date',
+                networth_start_date_str,
+                'Earliest date to show on the net worth timeline',
+                'date'
+            )
+        else:
+            # Blank = clear the setting (revert to 5-year default)
+            existing = Settings.query.filter_by(key='networth.start_date').first()
+            if existing:
+                db.session.delete(existing)
 
         # Dashboard Preferences
         networth_expanded = request.form.get('dashboard_networth_expanded') == '1'

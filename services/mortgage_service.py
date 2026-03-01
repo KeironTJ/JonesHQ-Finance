@@ -450,35 +450,92 @@ class MortgageService:
     @staticmethod
     def get_combined_timeline(property_id, scenario='base'):
         """
-        Get combined actual + projected timeline for a property (all products)
-        Returns list of dictionaries with monthly data
+        Get combined actual + projected timeline for a property (all products).
+        Property valuations are computed live from PropertyValuationSnapshot so they
+        always reflect the most recent actual entries and appreciation projections.
+        Returns list of dictionaries with monthly data.
         """
+        from models.property_valuation_snapshot import PropertyValuationSnapshot
+
         property_obj = family_get(Property, property_id)
         if not property_obj:
             return []
-        
+
         products = family_query(MortgageProduct).filter_by(
             property_id=property_id
         ).order_by(MortgageProduct.start_date).all()
-        
+
+        today = date.today()
+
+        # Fetch all actual valuation snapshots once (ordered oldest → newest)
+        actual_pvs = family_query(PropertyValuationSnapshot).filter_by(
+            property_id=property_id,
+            is_projection=False,
+        ).order_by(PropertyValuationSnapshot.valuation_date).all()
+
+        def _property_value_at(target_date):
+            """Return the best property value estimate for target_date."""
+            is_future = target_date > today
+
+            if not is_future:
+                # Latest actual on or before target_date
+                for pvs in reversed(actual_pvs):
+                    if pvs.valuation_date <= target_date:
+                        return float(pvs.value)
+                return float(property_obj.current_valuation or 0)
+
+            # Future: check for an explicit projection snapshot first
+            proj = family_query(PropertyValuationSnapshot).filter(
+                PropertyValuationSnapshot.property_id == property_id,
+                PropertyValuationSnapshot.valuation_date <= target_date,
+                PropertyValuationSnapshot.is_projection == True,
+            ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+            if proj:
+                return float(proj.value)
+
+            # Compound forward from latest actual
+            if actual_pvs:
+                latest = actual_pvs[-1]
+                base_value = float(latest.value)
+                base_date = latest.valuation_date
+            else:
+                base_value = float(property_obj.current_valuation or 0)
+                base_date = today
+
+            if property_obj.annual_appreciation_rate and base_value:
+                months_diff = (
+                    (target_date.year - base_date.year) * 12
+                    + (target_date.month - base_date.month)
+                )
+                monthly_rate = (
+                    Decimal(str(property_obj.annual_appreciation_rate))
+                    / Decimal('12') / Decimal('100')
+                )
+                projected = Decimal(str(base_value)) * (
+                    (Decimal('1') + monthly_rate) ** months_diff
+                )
+                return float(projected)
+            return base_value
+
         timeline = []
-        
+
         for product in products:
-            # Get actual snapshots
             actuals = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=product.id,
                 is_projection=False
             ).order_by(MortgageSnapshot.date).all()
-            
-            # Get projected snapshots for this scenario
+
             projections = family_query(MortgageSnapshot).filter_by(
                 mortgage_product_id=product.id,
                 is_projection=True,
                 scenario_name=scenario
             ).order_by(MortgageSnapshot.date).all()
-            
-            # Combine into timeline
+
             for snapshot in actuals:
+                valuation = _property_value_at(snapshot.date)
+                balance = float(snapshot.balance)
+                equity = valuation - balance
+                equity_pct = (equity / valuation * 100) if valuation > 0 else 0
                 timeline.append({
                     'snapshot_id': snapshot.id,
                     'date': snapshot.date,
@@ -490,16 +547,20 @@ class MortgageService:
                     'interest': snapshot.interest_charge,
                     'principal': snapshot.principal_paid,
                     'rate': product.annual_rate,
-                    'valuation': snapshot.property_valuation,
-                    'equity': snapshot.equity_amount,
-                    'equity_pct': snapshot.equity_percent,
+                    'valuation': valuation,
+                    'equity': equity,
+                    'equity_pct': equity_pct,
                     'is_projection': False,
                     'is_paid': snapshot.is_paid,
                     'transaction_id': snapshot.transaction_id,
                     'notes': snapshot.notes
                 })
-            
+
             for snapshot in projections:
+                valuation = _property_value_at(snapshot.date)
+                balance = float(snapshot.balance)
+                equity = valuation - balance
+                equity_pct = (equity / valuation * 100) if valuation > 0 else 0
                 timeline.append({
                     'snapshot_id': snapshot.id,
                     'date': snapshot.date,
@@ -511,18 +572,16 @@ class MortgageService:
                     'interest': snapshot.interest_charge,
                     'principal': snapshot.principal_paid,
                     'rate': product.annual_rate,
-                    'valuation': snapshot.property_valuation,
-                    'equity': snapshot.equity_amount,
-                    'equity_pct': snapshot.equity_percent,
+                    'valuation': valuation,
+                    'equity': equity,
+                    'equity_pct': equity_pct,
                     'is_projection': True,
                     'is_paid': snapshot.is_paid,
                     'transaction_id': snapshot.transaction_id,
                     'notes': snapshot.notes
                 })
-        
-        # Sort by date
+
         timeline.sort(key=lambda x: x['date'])
-        
         return timeline
     
     @staticmethod

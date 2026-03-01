@@ -10,6 +10,9 @@
             <p class="text-muted">Property Details & Mortgage Products</p>
         </div>
         <div class="col-md-4 text-end">
+            <a href="{{ url_for('mortgage.valuations', property_id=property.id) }}" class="btn btn-info text-white">
+                <i class="bi bi-house-check"></i> Valuations
+            </a>
             <a href="{{ url_for('mortgage.edit_property', property_id=property.id) }}" class="btn btn-warning">
                 <i class="bi bi-pencil"></i> Edit Property
             </a>

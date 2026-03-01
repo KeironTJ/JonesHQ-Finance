@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Valuation History - {{ property.address }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="bi bi-house-check"></i> Valuation History</h1>
+            <p class="text-muted mb-0">{{ property.address }}</p>
+        </div>
+        <div>
+            <a href="{{ url_for('mortgage.add_valuation', property_id=property.id) }}" class="btn btn-success">
+                <i class="bi bi-plus-circle"></i> Add Valuation
+            </a>
+            <a href="{{ url_for('mortgage.property_detail', property_id=property.id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Property
+            </a>
+        </div>
+    </div>
+
+    <!-- Current values summary -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Current Valuation</h6>
+                    <h3 class="mb-0">£{{ "{:,.2f}".format(property.current_valuation) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Purchase Price</h6>
+                    <h3 class="mb-0">
+                        {% if property.purchase_price %}
+                            £{{ "{:,.2f}".format(property.purchase_price) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Total Growth</h6>
+                    <h3 class="mb-0">
+                        {% if property.purchase_price and property.current_valuation %}
+                            {% set growth = ((property.current_valuation - property.purchase_price) / property.purchase_price * 100) %}
+                            {{ "{:+.1f}".format(growth) }}%
+                        {% else %}
+                            —
+                        {% endif %}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Snapshot table -->
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-table"></i> Valuation Records</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if snapshots %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th class="text-end">Value</th>
+                            <th class="text-end">Change</th>
+                            <th>Source</th>
+                            <th>Type</th>
+                            <th>Notes</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for snap in snapshots %}
+                        <tr {% if snap.is_projection %}class="table-secondary"{% endif %}>
+                            <td>{{ snap.valuation_date.strftime('%d %b %Y') }}</td>
+                            <td class="text-end"><strong>£{{ "{:,.2f}".format(snap.value) }}</strong></td>
+                            <td class="text-end">
+                                {% if snap.change_percent is not none %}
+                                <span class="{% if snap.change_percent >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ "{:+.1f}".format(snap.change_percent) }}%
+                                </span>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                            <td>{{ snap.source or '—' }}</td>
+                            <td>
+                                {% if snap.is_projection %}
+                                <span class="badge bg-secondary">Projected</span>
+                                {% else %}
+                                <span class="badge bg-success">Actual</span>
+                                {% endif %}
+                            </td>
+                            <td><small class="text-muted">{{ snap.notes or '' }}</small></td>
+                            <td class="text-end">
+                                {% if not snap.is_projection %}
+                                <form method="POST" action="{{ url_for('mortgage.delete_valuation', property_id=property.id, snapshot_id=snap.id) }}"
+                                      onsubmit="return confirm('Delete this valuation?');" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-house fs-1"></i>
+                <p class="mt-2">No valuation records yet. Add one to start tracking property value over time.</p>
+                <a href="{{ url_for('mortgage.add_valuation', property_id=property.id) }}" class="btn btn-success">
+                    <i class="bi bi-plus-circle"></i> Add First Valuation
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

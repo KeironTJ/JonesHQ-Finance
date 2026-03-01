@@ -98,6 +98,7 @@
                             <th class="text-end">Cash</th>
                             <th class="text-end">Savings</th>
                             <th class="text-end">Pensions</th>
+                            <th class="text-end">Property</th>
                             <th class="text-end">Assets</th>
                             <th class="text-end">CC</th>
                             <th class="text-end">Loans</th>
@@ -119,6 +120,7 @@
                             <td class="text-end">£{{ "{:,.0f}".format(month_data.cash) }}</td>
                             <td class="text-end">£{{ "{:,.0f}".format(month_data.savings) }}</td>
                             <td class="text-end">£{{ "{:,.0f}".format(month_data.pensions_value) }}</td>
+                            <td class="text-end">£{{ "{:,.0f}".format(month_data.house_value) }}</td>
                             <td class="text-end"><strong>£{{ "{:,.0f}".format(month_data.total_assets) }}</strong></td>
                             <td class="text-end text-danger">£{{ "{:,.0f}".format(month_data.credit_cards) }}</td>
                             <td class="text-end text-danger">£{{ "{:,.0f}".format(month_data.loans) }}</td>
@@ -195,11 +197,24 @@
                         <span class="fw-bold"><i class="bi bi-briefcase me-1"></i> Pensions</span>
                         <span class="fw-bold text-success">£{{ "{:,.2f}".format(current_values.pensions_value) }}</span>
                     </div>
-                    <ul class="list-group list-group-flush">
+                    <ul class="list-group list-group-flush mb-3">
                         {% for pension in current_values.pension_details %}
                         <li class="list-group-item d-flex justify-content-between">
                             <span>{{ pension.name }}</span>
                             <strong>£{{ "{:,.2f}".format(pension.value) }}</strong>
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                    <div class="d-flex justify-content-between align-items-center bg-light rounded px-2 py-1 mb-2">
+                        <span class="fw-bold"><i class="bi bi-house me-1"></i> Property</span>
+                        <span class="fw-bold text-success">£{{ "{:,.2f}".format(current_values.house_value) }}</span>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        {% for prop in current_values.property_details %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{ prop.address }}</span>
+                            <strong>£{{ "{:,.2f}".format(prop.valuation) }}</strong>
                         </li>
                         {% endfor %}
                     </ul>
@@ -221,10 +236,7 @@
                         {% for cc in current_values.cc_details %}
                         <li class="list-group-item d-flex justify-content-between">
                             <span>{{ cc.name }}</span>
-                            <div>
-                                <span class="text-muted me-2">Balance: £{{ "{:,.2f}".format(cc.balance) }}</span>
-                                <strong class="text-danger">Owed: £{{ "{:,.2f}".format(cc.owed) }}</strong>
-                            </div>
+                            <strong class="text-danger">£{{ "{:,.2f}".format(cc.owed) }}</strong>
                         </li>
                         {% endfor %}
                     </ul>
@@ -395,31 +407,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">Select how far into the future to project net worth (for retirement planning)</p>
+                <p class="text-muted">Past is always 5 years. Select how far into the future to project.</p>
                 <div class="list-group">
+                    <a href="{{ url_for('networth.index', period=12) }}" class="list-group-item list-group-item-action {% if period_months == 12 %}active{% endif %}">
+                        1 Year future
+                    </a>
                     <a href="{{ url_for('networth.index', period=24) }}" class="list-group-item list-group-item-action {% if period_months == 24 %}active{% endif %}">
-                        2 Years (24 months)
+                        2 Years future <span class="badge bg-secondary">default</span>
                     </a>
                     <a href="{{ url_for('networth.index', period=36) }}" class="list-group-item list-group-item-action {% if period_months == 36 %}active{% endif %}">
-                        3 Years (36 months)
+                        3 Years future
                     </a>
                     <a href="{{ url_for('networth.index', period=60) }}" class="list-group-item list-group-item-action {% if period_months == 60 %}active{% endif %}">
-                        5 Years (60 months)
+                        5 Years future
                     </a>
                     <a href="{{ url_for('networth.index', period=120) }}" class="list-group-item list-group-item-action {% if period_months == 120 %}active{% endif %}">
-                        10 Years (120 months)
+                        10 Years future
                     </a>
                     <a href="{{ url_for('networth.index', period=180) }}" class="list-group-item list-group-item-action {% if period_months == 180 %}active{% endif %}">
-                        15 Years (180 months)
-                    </a>
-                    <a href="{{ url_for('networth.index', period=240) }}" class="list-group-item list-group-item-action {% if period_months == 240 %}active{% endif %}">
-                        20 Years (240 months) - Retirement Planning
+                        15 Years future — Retirement Planning
                     </a>
                 </div>
                 <div class="alert alert-info mt-3 mb-0">
                     <small>
-                        <i class="bi bi-info-circle"></i> 
-                        Currently showing: <strong>{{ period_months }} months</strong>
+                        <i class="bi bi-info-circle"></i>
+                        Currently showing: <strong>5 years past + {{ period_months }} months future</strong>
                         <br>Note: You may need to refresh the cache to extend projections beyond the cached period.
                     </small>
                 </div>
@@ -444,12 +456,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="mb-3">
                         <label class="form-label">Future Projection Period</label>
                         <select name="future_months" class="form-select">
-                            <option value="24" {% if period_months <= 24 %}selected{% endif %}>2 Years (24 months)</option>
-                            <option value="36" {% if period_months > 24 and period_months <= 36 %}selected{% endif %}>3 Years (36 months)</option>
-                            <option value="60" {% if period_months > 36 and period_months <= 60 %}selected{% endif %}>5 Years (60 months)</option>
-                            <option value="120" {% if period_months > 60 and period_months <= 120 %}selected{% endif %}>10 Years (120 months)</option>
-                            <option value="180" {% if period_months > 120 and period_months <= 180 %}selected{% endif %}>15 Years (180 months)</option>
-                            <option value="240" {% if period_months > 180 %}selected{% endif %}>20 Years (240 months)</option>
+                            <option value="24" {% if period_months <= 24 %}selected{% endif %}>2 Years future (default)</option>
+                            <option value="36" {% if period_months == 36 %}selected{% endif %}>3 Years future</option>
+                            <option value="60" {% if period_months == 60 %}selected{% endif %}>5 Years future</option>
+                            <option value="120" {% if period_months == 120 %}selected{% endif %}>10 Years future</option>
+                            <option value="180" {% if period_months > 120 %}selected{% endif %}>15 Years future</option>
                         </select>
                         <small class="text-muted">Select how many months into the future to calculate</small>
                     </div>

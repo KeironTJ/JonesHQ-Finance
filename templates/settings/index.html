@@ -232,6 +232,27 @@
                     </div>
                 </div>
 
+                <!-- Net Worth Settings -->
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Net Worth Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="networth_start_date" class="form-label">Timeline Start Date</label>
+                            <input type="date"
+                                   class="form-control"
+                                   id="networth_start_date"
+                                   name="networth_start_date"
+                                   value="{{ networth_start_date }}">
+                            <small class="text-muted">
+                                The net worth timeline will start from this date (e.g. your first transaction or
+                                property purchase date). Leave blank to use the default 5-year lookback.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Save Button -->
                 <div class="d-flex justify-content-between">
                     <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">

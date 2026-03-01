@@ -65,161 +65,92 @@ class NetWorthService:
         """
         Calculate today's net worth across all asset and liability categories.
 
-        Returns a dict with keys:
-          cash, savings, house_value, pensions_value, total_assets, liquid_assets,
-          credit_cards, loans, mortgage, total_liabilities, net_worth,
-          liquid_net_worth, account_details, pension_details, cc_details,
-          loan_details, property_details.
+        Delegates core number calculation to calculate_networth_at_date(today) so
+        that the summary cards and the timeline's current-month row always agree.
+        Adds detail breakdowns (account_details, cc_details, etc.) for template display.
 
-        Uses is_paid=True CC/loan records (current position, not forecast).
+        Returns a dict with all keys from calculate_networth_at_date plus:
+          account_details, pension_details, cc_details, loan_details,
+          mortgage_balance, property_details.
         """
         from services.monthly_balance_service import MonthlyBalanceService
-        
+
         today = date.today()
-        
-        # ASSETS
-        # Get all active account balances using cache
+
+        # Single source of truth for all totals
+        base = NetWorthService.calculate_networth_at_date(today)
+
+        # --- Detail breakdowns (display only, do not affect totals) ---
+
+        # Account details
         active_accounts = family_query(Account).filter_by(is_active=True).all()
-        cash = 0.00
-        savings = 0.00
-        
         account_details = []
         for acc in active_accounts:
-            # Try to get cached balance for current month
             balance = MonthlyBalanceService.get_balance_for_month(
-                acc.id, 
-                today.year, 
-                today.month,
-                use_projected=True  # Use projected for most up-to-date view
+                acc.id, today.year, today.month, use_projected=True
             )
-            
-            # Fallback to account balance if cache miss
             if balance is None:
                 balance = float(acc.balance)
-            
             account_details.append({'name': acc.name, 'type': acc.account_type, 'balance': balance})
-            
-            if acc.account_type in ['Joint', 'Personal']:
-                cash += balance
-            elif acc.account_type == 'Savings':
-                savings += balance
-        
-        # Get pension values (sum of current values from active pensions)
+
+        # Pension details
         active_pensions = family_query(Pension).filter_by(is_active=True).all()
-        pensions_value = sum(float(pension.current_value) for pension in active_pensions)
-        
         pension_details = [
             {'name': p.provider, 'value': float(p.current_value)}
             for p in active_pensions
         ]
-        
-        # Initialize house_value (calculated below with mortgage section)
-        house_value = 0.00
-        
-        total_assets = cash + savings + house_value + pensions_value
-        
-        # LIABILITIES
-        # Credit cards - sum of balances (negative balances = owe money)
+
+        # Credit card details
         active_credit_cards = family_query(CreditCard).filter_by(is_active=True).all()
-        credit_cards_total = 0.00
         cc_details = []
         for card in active_credit_cards:
-            # Get latest transaction balance (paid only for current, all for projection)
             latest_txn = family_query(CreditCardTransaction).filter_by(
                 credit_card_id=card.id,
                 is_paid=True
             ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).first()
-            
             if latest_txn:
                 balance = float(latest_txn.balance)
-                # If balance is negative, we owe money (add as positive liability)
-                if balance < 0:
-                    credit_cards_total += abs(balance)
-                    cc_details.append({'name': card.card_name, 'balance': balance, 'owed': abs(balance)})
-                else:
-                    cc_details.append({'name': card.card_name, 'balance': balance, 'owed': 0})
+                cc_details.append({'name': card.card_name, 'balance': balance, 'owed': abs(balance) if balance < 0 else 0})
             else:
                 cc_details.append({'name': card.card_name, 'balance': 0, 'owed': 0})
-        
-        # Loans - sum of remaining balances
+
+        # Loan details
         active_loans = family_query(Loan).filter_by(is_active=True).all()
-        loans_total = 0.00
         loan_details = []
         for loan in active_loans:
-            # Get latest paid loan payment
             latest_payment = family_query(LoanPayment).filter_by(
                 loan_id=loan.id,
                 is_paid=True
             ).order_by(LoanPayment.date.desc(), LoanPayment.id.desc()).first()
-            
             if latest_payment:
                 remaining = float(latest_payment.closing_balance)
-                loans_total += remaining
-                loan_details.append({'name': loan.name, 'balance': remaining})
             else:
-                # No payments yet, use original loan value
-                original = float(loan.loan_value)
-                loans_total += original
-                loan_details.append({'name': loan.name, 'balance': original})
-        
-        # Mortgage - get remaining balance from all properties
-        mortgage_total = 0.00
-        house_value = 0.00  # Reset to recalculate
-        property_details = []
-        
+                remaining = float(loan.loan_value)
+            loan_details.append({'name': loan.name, 'balance': remaining})
+
+        # Property / mortgage details
         active_properties = family_query(Property).filter_by(is_active=True).all()
+        property_details = []
         for prop in active_properties:
-            # Add property valuation to house value
-            if prop.current_valuation:
-                house_value += float(prop.current_valuation)
-            
-            # Sum all active mortgage products for this property
             active_products = family_query(MortgageProduct).filter_by(
                 property_id=prop.id,
                 is_active=True
             ).all()
-            
-            property_mortgage = sum([float(p.current_balance) for p in active_products])
-            mortgage_total += property_mortgage
-            
+            property_mortgage = sum(float(p.current_balance) for p in active_products)
             property_details.append({
                 'address': prop.address,
                 'valuation': float(prop.current_valuation) if prop.current_valuation else 0,
                 'mortgage': property_mortgage,
                 'equity': float(prop.current_equity)
             })
-        
-        total_liabilities = credit_cards_total + loans_total + mortgage_total
-        
-        # Recalculate total assets now that we have house_value
-        total_assets = cash + savings + house_value + pensions_value
-        
-        # NET WORTH
-        net_worth = total_assets - total_liabilities
-        
-        # Calculate liquid net worth (excluding pensions and house)
-        liquid_assets = cash + savings
-        liquid_net_worth = liquid_assets - total_liabilities
-        
+
         return {
-            'cash': cash,
-            'savings': savings,
-            'house_value': house_value,
-            'pensions_value': pensions_value,
-            'total_assets': total_assets,
-            'liquid_assets': liquid_assets,
-            'credit_cards': credit_cards_total,
-            'loans': loans_total,
-            'mortgage': mortgage_total,
-            'total_liabilities': total_liabilities,
-            'net_worth': net_worth,
-            'liquid_net_worth': liquid_net_worth,
-            # Detailed breakdowns for debugging
+            **base,
             'account_details': account_details,
             'pension_details': pension_details,
             'cc_details': cc_details,
             'loan_details': loan_details,
-            'mortgage_balance': mortgage_total,
+            'mortgage_balance': base['mortgage'],
             'property_details': property_details
         }
     
@@ -245,8 +176,9 @@ class NetWorthService:
         today = date.today()
         
         for acc in active_accounts:
-            # Determine if we should use actual or projected balance
-            use_projected = target_date > today
+            # Determine if we should use actual or projected balance.
+            # Use projected for today too so it matches calculate_current_networth.
+            use_projected = target_date >= today
             
             # Try to get balance from cache
             balance = MonthlyBalanceService.get_balance_for_month(
@@ -257,9 +189,12 @@ class NetWorthService:
             )
             
             if balance is None:
-                # Cache miss - fallback to current account balance
-                # This should rarely happen if cache is populated properly
-                balance = float(acc.balance)
+                # Cache miss — for future/today use current balance as best estimate;
+                # for past months we have no data so report 0 to avoid showing stale values.
+                if use_projected:
+                    balance = float(acc.balance)
+                else:
+                    balance = 0.0
             
             if balance != 0:
                 if acc.account_type in ['Joint', 'Personal']:
@@ -271,8 +206,7 @@ class NetWorthService:
         # Get pension values - use actual for past/present, projections for future
         from models.pension_snapshots import PensionSnapshot
         
-        # Include both active AND inactive pensions in net worth
-        all_pensions = family_query(Pension).all()
+        all_pensions = family_query(Pension).filter_by(is_active=True).all()
         pensions_value = 0.00
         is_future_date = target_date > datetime.now().date()
         
@@ -301,9 +235,7 @@ class NetWorthService:
                 
                 if latest_snapshot:
                     pensions_value += float(latest_snapshot.value)
-                elif pension.current_value:
-                    # If no snapshot exists yet, use current value
-                    pensions_value += float(pension.current_value)
+                # No fallback to current_value for past dates — show 0 if no actual snapshot exists
         
         house_value = 0.00
         total_assets = cash + savings + house_value + pensions_value
@@ -359,63 +291,156 @@ class NetWorthService:
                 loans_total += float(loan.loan_value)
         
         # LIABILITIES - Mortgage & Property Values
+        from models.property_valuation_snapshot import PropertyValuationSnapshot
+
         mortgage_total = 0.00
         house_value = 0.00
-        
+
         is_future_date = target_date > today
         active_properties = family_query(Property).filter_by(is_active=True).all()
-        
+
         for prop in active_properties:
-            # Get property valuation at target date
-            if prop.purchase_date and prop.purchase_date <= target_date:
-                # Use current valuation or calculate projected
-                if is_future_date and prop.annual_appreciation_rate:
-                    # Project forward from current valuation
-                    months_diff = (target_date.year - today.year) * 12 + (target_date.month - today.month)
-                    monthly_rate = Decimal(str(prop.annual_appreciation_rate)) / Decimal('12') / Decimal('100')
-                    projected_val = Decimal(str(prop.current_valuation)) * ((Decimal('1') + monthly_rate) ** months_diff)
-                    house_value += float(projected_val)
+            # Exclude property before its purchase date (skip entirely for those months).
+            # If purchase_date is not set we can't gate by date, so include for all months.
+            if prop.purchase_date and prop.purchase_date > target_date:
+                continue
+
+            if is_future_date:
+                # For future dates: use a projection snapshot if available, otherwise
+                # compound forward from the latest actual snapshot (or current_valuation).
+                proj_snapshot = family_query(PropertyValuationSnapshot).filter(
+                    PropertyValuationSnapshot.property_id == prop.id,
+                    PropertyValuationSnapshot.valuation_date <= target_date,
+                    PropertyValuationSnapshot.is_projection == True,
+                ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+
+                if proj_snapshot:
+                    house_value += float(proj_snapshot.value)
                 else:
-                    house_value += float(prop.current_valuation) if prop.current_valuation else 0
-                
-                # Get mortgage products for this property
-                active_products = family_query(MortgageProduct).filter_by(
-                    property_id=prop.id,
-                    is_active=True
-                ).all()
-                
-                for product in active_products:
-                    # Skip if product hasn't started yet
-                    if product.start_date > target_date:
-                        continue
-                    
-                    # Get snapshot at or before target date
-                    if is_future_date:
-                        # Use projection
-                        snapshot = family_query(MortgageSnapshot).filter(
-                            MortgageSnapshot.mortgage_product_id == product.id,
-                            MortgageSnapshot.date <= target_date,
-                            MortgageSnapshot.is_projection == True,
-                            MortgageSnapshot.scenario_name == 'base'
-                        ).order_by(MortgageSnapshot.date.desc()).first()
+                    # Fall back: compound from latest actual snapshot or current_valuation
+                    latest_actual = family_query(PropertyValuationSnapshot).filter(
+                        PropertyValuationSnapshot.property_id == prop.id,
+                        PropertyValuationSnapshot.is_projection == False,
+                    ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+
+                    if latest_actual:
+                        base_value = float(latest_actual.value)
+                        # Compound from the snapshot date, not from today
+                        base_date = latest_actual.valuation_date
                     else:
-                        # Use actual
-                        snapshot = family_query(MortgageSnapshot).filter(
-                            MortgageSnapshot.mortgage_product_id == product.id,
-                            MortgageSnapshot.date <= target_date,
-                            MortgageSnapshot.is_projection == False
-                        ).order_by(MortgageSnapshot.date.desc()).first()
-                    
-                    if snapshot:
-                        mortgage_total += float(snapshot.balance)
-                    elif product.start_date <= target_date:
-                        # Product started but no snapshot yet
-                        mortgage_total += float(product.initial_balance)
+                        base_value = float(prop.current_valuation) if prop.current_valuation else 0
+                        base_date = today
+
+                    if prop.annual_appreciation_rate and base_value:
+                        months_diff = (target_date.year - base_date.year) * 12 + (target_date.month - base_date.month)
+                        monthly_rate = Decimal(str(prop.annual_appreciation_rate)) / Decimal('12') / Decimal('100')
+                        projected_val = Decimal(str(base_value)) * ((Decimal('1') + monthly_rate) ** months_diff)
+                        house_value += float(projected_val)
+                    else:
+                        house_value += base_value
+            else:
+                # For past/present dates: interpolate between surrounding actual snapshots
+                # to show smooth monthly growth rather than a flat staircase.
+                prev_snap = family_query(PropertyValuationSnapshot).filter(
+                    PropertyValuationSnapshot.property_id == prop.id,
+                    PropertyValuationSnapshot.valuation_date <= target_date,
+                    PropertyValuationSnapshot.is_projection == False,
+                ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+
+                next_snap = family_query(PropertyValuationSnapshot).filter(
+                    PropertyValuationSnapshot.property_id == prop.id,
+                    PropertyValuationSnapshot.valuation_date > target_date,
+                    PropertyValuationSnapshot.is_projection == False,
+                ).order_by(PropertyValuationSnapshot.valuation_date.asc()).first()
+
+                if prev_snap and next_snap:
+                    # Interpolate linearly between the two known valuations
+                    prev_val = float(prev_snap.value)
+                    next_val = float(next_snap.value)
+                    prev_d = prev_snap.valuation_date
+                    next_d = next_snap.valuation_date
+                    span = (next_d.year - prev_d.year) * 12 + (next_d.month - prev_d.month)
+                    elapsed = ((target_date.year - prev_d.year) * 12
+                               + (target_date.month - prev_d.month))
+                    fraction = elapsed / span if span > 0 else 0
+                    house_value += prev_val + (next_val - prev_val) * fraction
+
+                elif prev_snap:
+                    # After the last known snapshot: compound forward at annual_appreciation_rate
+                    base_val = float(prev_snap.value)
+                    base_d = prev_snap.valuation_date
+                    months_elapsed = ((target_date.year - base_d.year) * 12
+                                      + (target_date.month - base_d.month))
+                    if prop.annual_appreciation_rate and months_elapsed > 0:
+                        monthly_rate = (Decimal(str(prop.annual_appreciation_rate))
+                                        / Decimal('12') / Decimal('100'))
+                        projected = Decimal(str(base_val)) * ((Decimal('1') + monthly_rate) ** months_elapsed)
+                        house_value += float(projected)
+                    else:
+                        house_value += base_val
+
+                elif next_snap:
+                    # Before the first snapshot: interpolate from purchase price → first snapshot,
+                    # but only if we know both when and at what price it was acquired.
+                    # Without a purchase_date we can't anchor the curve, so show 0.
+                    if prop.purchase_date and prop.purchase_price:
+                        next_val = float(next_snap.value)
+                        next_d = next_snap.valuation_date
+                        anchor_val = float(prop.purchase_price)
+                        span = ((next_d.year - prop.purchase_date.year) * 12
+                                + (next_d.month - prop.purchase_date.month))
+                        elapsed = ((target_date.year - prop.purchase_date.year) * 12
+                                   + (target_date.month - prop.purchase_date.month))
+                        fraction = elapsed / span if span > 0 else 0
+                        house_value += anchor_val + (next_val - anchor_val) * fraction
+
+                else:
+                    # No snapshots at all: purchase_price is the best known historical value.
+                    # Do NOT fall back to current_valuation — that's today's value, wrong for history.
+                    if prop.purchase_price:
+                        house_value += float(prop.purchase_price)
+
+            # Get mortgage products for this property (runs for past AND future)
+            active_products = family_query(MortgageProduct).filter_by(
+                property_id=prop.id,
+                is_active=True
+            ).all()
+
+            for product in active_products:
+                # Skip if product hasn't started yet
+                if product.start_date > target_date:
+                    continue
+
+                # Get snapshot at or before target date
+                if is_future_date:
+                    # Use projection
+                    snapshot = family_query(MortgageSnapshot).filter(
+                        MortgageSnapshot.mortgage_product_id == product.id,
+                        MortgageSnapshot.date <= target_date,
+                        MortgageSnapshot.is_projection == True,
+                        MortgageSnapshot.scenario_name == 'base'
+                    ).order_by(MortgageSnapshot.date.desc()).first()
+                else:
+                    # Use actual
+                    snapshot = family_query(MortgageSnapshot).filter(
+                        MortgageSnapshot.mortgage_product_id == product.id,
+                        MortgageSnapshot.date <= target_date,
+                        MortgageSnapshot.is_projection == False
+                    ).order_by(MortgageSnapshot.date.desc()).first()
+
+                if snapshot:
+                    mortgage_total += float(snapshot.balance)
+                elif product.start_date <= target_date:
+                    # Product started but no snapshot yet — use current_balance, not initial
+                    mortgage_total += float(product.current_balance)
         
+        # Recalculate now that house_value is populated from the property loop
+        total_assets = cash + savings + house_value + pensions_value
+
         total_liabilities = credit_cards_total + loans_total + mortgage_total
         net_worth = total_assets - total_liabilities
         liquid_net_worth = liquid_assets - total_liabilities
-        
+
         return {
             'date': target_date,
             'cash': cash,
@@ -442,8 +467,9 @@ class NetWorthService:
         today = date.today()
         
         if start_year is None or start_month is None:
-            # Default to 12 months ago from today
-            start_date = today - relativedelta(months=12)
+            # Always show exactly 5 years (60 months) of history.
+            # num_months = 60 past + however many future months the caller wants.
+            start_date = today - relativedelta(months=60)
             start_year = start_date.year
             start_month = start_date.month
         
@@ -455,10 +481,9 @@ class NetWorthService:
             _, last_day = calendar.monthrange(current_date.year, current_date.month)
             month_end = date(current_date.year, current_date.month, last_day)
             
-            # For future months beyond today, mark as projection
+            # Past months: month_end is settled history.
+            # Current/future months: month_end is a projection.
             is_future = month_end > today
-            
-            # Always use month_end for calculations (past or future)
             calc_date = month_end
             
             values = NetWorthService.calculate_networth_at_date(calc_date)
@@ -583,7 +608,6 @@ class NetWorthService:
             'recent_snapshots': recent_snapshots
         }
     
-    @staticmethod
     @staticmethod
     def get_comparison_data():
         """Get month-over-month and year-over-year comparisons using timeline calculation"""

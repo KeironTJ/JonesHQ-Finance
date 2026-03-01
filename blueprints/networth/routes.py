@@ -14,23 +14,39 @@ def index():
     from dateutil.relativedelta import relativedelta
     
     # Get year and period from query params
+    # period_months = future projection window; past is always fixed at 5 years (60 months)
     selected_year = request.args.get('year', type=int)
-    period_months = request.args.get('period', type=int, default=24)  # Default 24 months
-    
-    # Limit period to reasonable range (1-240 months = 20 years)
-    period_months = max(1, min(period_months, 240))
-    
+    period_months = request.args.get('period', type=int, default=24)  # future months
+
+    # Limit future window to reasonable range (12–180 months)
+    period_months = max(12, min(period_months, 180))
+
     # Get current calculated values for header (uses cached balances)
     current_values = NetWorthService.calculate_current_networth()
-    
+
+    # Determine timeline start
+    from models.settings import Settings
+    from datetime import datetime as _dt
+
+    networth_start_date_str = Settings.get_value('networth.start_date', '')
+
     # Get monthly timeline
     if selected_year:
         # If specific year selected, show that year (12 months)
         timeline = NetWorthService.get_monthly_timeline(selected_year, 1, 12)
+    elif networth_start_date_str:
+        # User-configured start date: show from that date to today + future window
+        today = date.today()
+        start = _dt.strptime(networth_start_date_str, '%Y-%m-%d').date().replace(day=1)
+        months_since_start = (today.year - start.year) * 12 + (today.month - start.month)
+        total_months = max(months_since_start, 1) + period_months
+        selected_year = today.year
+        timeline = NetWorthService.get_monthly_timeline(start.year, start.month, total_months)
     else:
-        # Default: show period starting from 12 months ago
+        # Default: 5 years past + selected future window
         selected_year = date.today().year
-        timeline = NetWorthService.get_monthly_timeline(None, None, period_months)
+        total_months = 60 + period_months
+        timeline = NetWorthService.get_monthly_timeline(None, None, total_months)
     
     # Get trend analysis (12 months)
     trend = NetWorthService.get_networth_trend()

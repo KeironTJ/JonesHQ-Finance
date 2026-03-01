@@ -22,6 +22,7 @@ from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
 from models.planned import PlannedTransaction
 from models.property import Property
+from models.property_valuation_snapshot import PropertyValuationSnapshot
 from models.settings import Settings
 from models.tax_settings import TaxSettings
 from models.transactions import Transaction
@@ -57,6 +58,7 @@ __all__ = [
     'PensionSnapshot',
     'PlannedTransaction',
     'Property',
+    'PropertyValuationSnapshot',
     'Settings',
     'TaxSettings',
     'Transaction',

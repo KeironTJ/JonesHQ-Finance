@@ -24,6 +24,9 @@ class Property(db.Model):
     
     # Relationships
     mortgage_products = db.relationship('MortgageProduct', backref='property', lazy=True, cascade='all, delete-orphan')
+    valuation_snapshots = db.relationship('PropertyValuationSnapshot', backref='property', lazy=True,
+                                          cascade='all, delete-orphan',
+                                          order_by='PropertyValuationSnapshot.valuation_date')
     
     def __repr__(self):
         return f'<Property {self.address}>'

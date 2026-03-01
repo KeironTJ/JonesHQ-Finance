@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Add Valuation - {{ property.address }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 600px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-house-check"></i> Add Valuation</h1>
+        <a href="{{ url_for('mortgage.valuations', property_id=property.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <p class="text-muted mb-0">{{ property.address }}</p>
+            <strong>Current valuation: £{{ "{:,.2f}".format(property.current_valuation) }}</strong>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                <div class="mb-3">
+                    <label for="valuation_date" class="form-label">Valuation Date <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="valuation_date" name="valuation_date" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="value" class="form-label">Valuation (£) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text">£</span>
+                        <input type="number" class="form-control" id="value" name="value"
+                               step="0.01" min="0" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="source" class="form-label">Source</label>
+                    <select class="form-select" id="source" name="source">
+                        <option value="manual">Manual estimate</option>
+                        <option value="estate_agent">Estate agent</option>
+                        <option value="zoopla">Zoopla / Rightmove</option>
+                        <option value="remortgage">Remortgage survey</option>
+                        <option value="sale">Sale agreed</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="notes" class="form-label">Notes</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i> Save Valuation
+                    </button>
+                    <a href="{{ url_for('mortgage.valuations', property_id=property.id) }}" class="btn btn-secondary">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Default to today
+    document.getElementById('valuation_date').value = new Date().toISOString().split('T')[0];
+</script>
+{% endblock %}
