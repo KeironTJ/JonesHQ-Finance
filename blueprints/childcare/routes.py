@@ -22,7 +22,17 @@ def index():
     
     # Get monthly totals
     monthly_totals = ChildcareService.get_monthly_totals(year, month)
-    
+
+    # Per-activity-type totals for column totals row in the calendar table
+    activity_type_totals = {}
+    for child_id, data in monthly_totals.items():
+        activity_type_totals[child_id] = {}
+        for activity in data['activities']:
+            at_id = activity.activity_type_id
+            if at_id not in activity_type_totals[child_id]:
+                activity_type_totals[child_id][at_id] = Decimal('0')
+            activity_type_totals[child_id][at_id] += activity.actual_cost
+
     # Get all accounts for transaction creation
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
@@ -43,6 +53,7 @@ def index():
         calendar_data=calendar_data,
         children=children,
         monthly_totals=monthly_totals,
+        activity_type_totals=activity_type_totals,
         accounts=accounts,
         summaries=summaries,
         current_year=year,

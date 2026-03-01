@@ -166,6 +166,30 @@
                 </tr>
                 {% endfor %}
             </tbody>
+            <tfoot>
+                <tr style="background: var(--bg-surface-2); border-top: 2px solid var(--border-color);">
+                    <td colspan="2" class="align-middle text-end" style="font-size: 0.75rem; font-weight: 600; padding: 8px; color: var(--text-muted); white-space: nowrap;">Month Total</td>
+                    {% for child in children %}
+                        {% for activity_type in child.activity_types if activity_type.is_active %}
+                        <td class="text-center align-middle" style="padding: 6px;">
+                            <span class="activity-type-col-total" data-child-id="{{ child.id }}" data-activity-type-id="{{ activity_type.id }}" style="font-size: 0.8rem; font-weight: 600;">
+                                £{{ "%.2f"|format(activity_type_totals.get(child.id, {}).get(activity_type.id, 0)) }}
+                            </span>
+                        </td>
+                        {% endfor %}
+                        <td class="text-center align-middle border-start" style="padding: 6px; background: var(--bg-surface-3);">
+                            <strong class="monthly-total tfoot-child-total" data-child-id="{{ child.id }}" style="font-size: 0.9rem; color: var(--text-primary);">
+                                £{{ "%.2f"|format(monthly_totals[child.id].total if child.id in monthly_totals else 0) }}
+                            </strong>
+                        </td>
+                    {% endfor %}
+                    <td class="text-end align-middle" style="padding: 8px;">
+                        {% set grand_total = namespace(value=0) %}
+                        {% for data in monthly_totals.values() %}{% set grand_total.value = grand_total.value + data.total %}{% endfor %}
+                        <strong id="table-grand-total" class="text-primary" style="font-size: 0.95rem;">£{{ "%.2f"|format(grand_total.value) }}</strong>
+                    </td>
+                </tr>
+            </tfoot>
         </table>
     </div>
 
@@ -199,15 +223,26 @@
                             
                             {% if summary and summary.transaction_id %}
                             <div id="transaction-status-{{ child_id }}">
-                                <div class="alert alert-success py-2 px-2 mb-0 d-flex align-items-center justify-content-between">
-                                    <small><i class="bi bi-check-circle-fill"></i> Transaction: £<span class="transaction-amount" data-child-id="{{ child_id }}">{{ "%.2f"|format(data.total) }}</span></small>
-                                    <button class="btn btn-sm btn-outline-primary update-transaction-btn" 
+                                <div class="alert alert-success py-2 px-2 mb-2 d-flex align-items-center justify-content-between">
+                                    <small>
+                                        <i class="bi bi-check-circle-fill"></i>
+                                        £<span class="transaction-amount" data-child-id="{{ child_id }}">{{ "%.2f"|format(data.total) }}</span>
+                                        {% if summary.transaction and summary.transaction.is_paid %}
+                                            <span class="badge bg-success ms-1" style="font-size: 0.65rem;">Paid</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Unpaid</span>
+                                        {% endif %}
+                                    </small>
+                                    <button class="btn btn-sm btn-outline-primary update-transaction-btn"
                                             data-child-id="{{ child_id }}"
                                             data-transaction-id="{{ summary.transaction_id }}"
                                             style="display: none; padding: 2px 6px; font-size: 0.7rem;">
                                         <i class="bi bi-arrow-repeat"></i> Sync
                                     </button>
                                 </div>
+                                <a href="{{ url_for('transactions.edit', id=summary.transaction_id) }}" class="btn btn-sm btn-outline-secondary w-100" style="font-size: 0.75rem;">
+                                    <i class="bi bi-box-arrow-up-right"></i> View Transaction
+                                </a>
                             </div>
                             {% else %}
                             <div id="transaction-status-{{ child_id }}">
@@ -392,7 +427,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Update monthly total
                     updateMonthlyTotal(childId, data.monthly_total);
-                    
+
+                    // Update column totals
+                    updateColumnTotal(childId, activityTypeId);
+                    updateGrandTotal();
+
                     // Check if transaction needs updating
                     checkTransactionSync(childId, data.monthly_total);
                     
@@ -454,20 +493,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function updateMonthlyTotal(childId, monthlyTotal) {
-        const monthlyTotalElement = document.querySelector(`.monthly-total[data-child-id="${childId}"]`);
-        if (monthlyTotalElement) {
-            monthlyTotalElement.textContent = '£' + monthlyTotal.toFixed(2);
-            
-            // Add pulse animation using Bootstrap color tokens
-            monthlyTotalElement.style.color = 'var(--bs-success)';
-            monthlyTotalElement.style.transform = 'scale(1.1)';
-            monthlyTotalElement.style.transition = 'all 0.3s ease';
-            
+        document.querySelectorAll(`.monthly-total[data-child-id="${childId}"]`).forEach(el => {
+            el.textContent = '£' + monthlyTotal.toFixed(2);
+            el.style.color = 'var(--bs-success)';
+            el.style.transform = 'scale(1.1)';
+            el.style.transition = 'all 0.3s ease';
             setTimeout(() => {
-                monthlyTotalElement.style.color = 'var(--bs-body-color)';
-                monthlyTotalElement.style.transform = 'scale(1)';
+                el.style.color = 'var(--bs-body-color)';
+                el.style.transform = 'scale(1)';
             }, 500);
-        }
+        });
+    }
+
+    function updateColumnTotal(childId, activityTypeId) {
+        let total = 0;
+        document.querySelectorAll(`.activity-toggle[data-child-id="${childId}"][data-activity-type-id="${activityTypeId}"]`).forEach(btn => {
+            if (btn.dataset.active === 'true') {
+                total += parseFloat(btn.dataset.cost);
+            }
+        });
+        const el = document.querySelector(`.activity-type-col-total[data-child-id="${childId}"][data-activity-type-id="${activityTypeId}"]`);
+        if (el) el.textContent = '£' + total.toFixed(2);
+    }
+
+    function updateGrandTotal() {
+        let total = 0;
+        document.querySelectorAll('tfoot .tfoot-child-total').forEach(el => {
+            total += parseFloat(el.textContent.replace('£', ''));
+        });
+        const el = document.getElementById('table-grand-total');
+        if (el) el.textContent = '£' + total.toFixed(2);
     }
     
     function checkTransactionSync(childId, newTotal) {
