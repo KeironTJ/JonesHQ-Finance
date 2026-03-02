@@ -126,8 +126,14 @@ def snapshots(id):
         PensionSnapshot.review_date.asc(),
         PensionSnapshot.is_projection.asc()
     ).all()
-    
-    return render_template('pensions/snapshots.html', pension=pension, snapshots=snapshots)
+
+    latest_actual = family_query(PensionSnapshot).filter(
+        PensionSnapshot.pension_id == id,
+        PensionSnapshot.is_projection == False
+    ).order_by(PensionSnapshot.review_date.desc()).first()
+
+    return render_template('pensions/snapshots.html', pension=pension, snapshots=snapshots,
+                           latest_actual=latest_actual)
 
 
 @pensions_bp.route('/pensions/<int:id>/snapshots/add', methods=['GET', 'POST'])

@@ -41,20 +41,20 @@
                 </div>
             </div>
         </div>
-        {% if snapshots %}
+        {% if latest_actual %}
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
                     <h6 class="text-muted">Latest Growth</h6>
-                    {% if snapshots[-1].growth_percent is not none %}
-                    <h3 class="{% if snapshots[-1].growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
-                        {{ "{:+.2f}".format(snapshots[-1].growth_percent) }}%
+                    {% if latest_actual.growth_percent is not none %}
+                    <h3 class="{% if latest_actual.growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ "{:+.2f}".format(latest_actual.growth_percent) }}%
                     </h3>
                     {% else %}
                     <h3 class="text-muted">N/A</h3>
                     {% endif %}
                     <hr>
-                    <small class="text-muted">Since {{ snapshots[-2].review_date.strftime('%d/%m/%Y') if snapshots|length > 1 else 'previous' }}</small>
+                    <small class="text-muted">As of {{ latest_actual.review_date.strftime('%d/%m/%Y') }}</small>
                 </div>
             </div>
         </div>
