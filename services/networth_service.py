@@ -130,6 +130,7 @@ class NetWorthService:
 
         # Property / mortgage details
         active_properties = family_query(Property).filter_by(is_active=True).all()
+        property_contributions = base.get('property_contributions', {})
         property_details = []
         for prop in active_properties:
             active_products = family_query(MortgageProduct).filter_by(
@@ -137,11 +138,15 @@ class NetWorthService:
                 is_active=True
             ).all()
             property_mortgage = sum(float(p.current_balance) for p in active_products)
+            valuation = property_contributions.get(
+                prop.id,
+                float(prop.current_valuation) if prop.current_valuation else 0
+            )
             property_details.append({
                 'address': prop.address,
-                'valuation': float(prop.current_valuation) if prop.current_valuation else 0,
+                'valuation': valuation,
                 'mortgage': property_mortgage,
-                'equity': float(prop.current_equity)
+                'equity': valuation - property_mortgage,
             })
 
         return {
@@ -295,6 +300,7 @@ class NetWorthService:
 
         mortgage_total = 0.00
         house_value = 0.00
+        property_contributions = {}  # property_id -> computed valuation for this date
 
         is_future_date = target_date > today
         active_properties = family_query(Property).filter_by(is_active=True).all()
@@ -304,6 +310,8 @@ class NetWorthService:
             # If purchase_date is not set we can't gate by date, so include for all months.
             if prop.purchase_date and prop.purchase_date > target_date:
                 continue
+
+            prop_value = 0.0  # this property's contribution to house_value
 
             if is_future_date:
                 # For future dates: use a projection snapshot if available, otherwise
@@ -315,7 +323,7 @@ class NetWorthService:
                 ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
 
                 if proj_snapshot:
-                    house_value += float(proj_snapshot.value)
+                    prop_value += float(proj_snapshot.value)
                 else:
                     # Fall back: compound from latest actual snapshot or current_valuation
                     latest_actual = family_query(PropertyValuationSnapshot).filter(
@@ -335,9 +343,9 @@ class NetWorthService:
                         months_diff = (target_date.year - base_date.year) * 12 + (target_date.month - base_date.month)
                         monthly_rate = Decimal(str(prop.annual_appreciation_rate)) / Decimal('12') / Decimal('100')
                         projected_val = Decimal(str(base_value)) * ((Decimal('1') + monthly_rate) ** months_diff)
-                        house_value += float(projected_val)
+                        prop_value += float(projected_val)
                     else:
-                        house_value += base_value
+                        prop_value += base_value
             else:
                 # For past/present dates: interpolate between surrounding actual snapshots
                 # to show smooth monthly growth rather than a flat staircase.
@@ -363,7 +371,7 @@ class NetWorthService:
                     elapsed = ((target_date.year - prev_d.year) * 12
                                + (target_date.month - prev_d.month))
                     fraction = elapsed / span if span > 0 else 0
-                    house_value += prev_val + (next_val - prev_val) * fraction
+                    prop_value += prev_val + (next_val - prev_val) * fraction
 
                 elif prev_snap:
                     # After the last known snapshot: compound forward at annual_appreciation_rate
@@ -375,9 +383,9 @@ class NetWorthService:
                         monthly_rate = (Decimal(str(prop.annual_appreciation_rate))
                                         / Decimal('12') / Decimal('100'))
                         projected = Decimal(str(base_val)) * ((Decimal('1') + monthly_rate) ** months_elapsed)
-                        house_value += float(projected)
+                        prop_value += float(projected)
                     else:
-                        house_value += base_val
+                        prop_value += base_val
 
                 elif next_snap:
                     # Before the first snapshot: interpolate from purchase price → first snapshot,
@@ -392,13 +400,16 @@ class NetWorthService:
                         elapsed = ((target_date.year - prop.purchase_date.year) * 12
                                    + (target_date.month - prop.purchase_date.month))
                         fraction = elapsed / span if span > 0 else 0
-                        house_value += anchor_val + (next_val - anchor_val) * fraction
+                        prop_value += anchor_val + (next_val - anchor_val) * fraction
 
                 else:
                     # No snapshots at all: purchase_price is the best known historical value.
                     # Do NOT fall back to current_valuation — that's today's value, wrong for history.
                     if prop.purchase_price:
-                        house_value += float(prop.purchase_price)
+                        prop_value += float(prop.purchase_price)
+
+            house_value += prop_value
+            property_contributions[prop.id] = prop_value
 
             # Get mortgage products for this property (runs for past AND future)
             active_products = family_query(MortgageProduct).filter_by(
@@ -454,7 +465,8 @@ class NetWorthService:
             'mortgage': mortgage_total,
             'total_liabilities': total_liabilities,
             'net_worth': net_worth,
-            'liquid_net_worth': liquid_net_worth
+            'liquid_net_worth': liquid_net_worth,
+            'property_contributions': property_contributions,
         }
     
     @staticmethod
