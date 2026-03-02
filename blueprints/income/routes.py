@@ -38,7 +38,8 @@ def index():
                          people=people,
                          years=years,
                          current_person=person,
-                         current_year=year)
+                         current_year=year,
+                         today_year=datetime.now().year)
 
 
 @income_bp.route('/income/add', methods=['GET', 'POST'])
@@ -154,28 +155,27 @@ def edit(id):
 def delete(id):
     """Delete an income record"""
     income = family_get_or_404(Income, id)
-    
+    keep_transaction = request.form.get('keep_transaction') == '1'
+
     try:
         from models.transactions import Transaction
-        
-        # Break circular reference first
+
         if income.transaction_id:
             transaction = family_get(Transaction, income.transaction_id)
             if transaction:
-                # Clear both sides of the relationship
                 transaction.income_id = None
                 income.transaction_id = None
                 db.session.flush()
-                # Now delete the transaction
-                db.session.delete(transaction)
-        
+                if not keep_transaction:
+                    db.session.delete(transaction)
+
         db.session.delete(income)
         db.session.commit()
         flash('Income record deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting income: {str(e)}', 'danger')
-    
+
     return redirect(url_for('income.index'))
 
 

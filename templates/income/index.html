@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Income Tracking - JonesHQ Finance{% endblock %}
 
@@ -8,7 +8,7 @@
         <div class="col">
             <h1><i class="bi bi-cash-coin"></i> Income Tracking</h1>
         </div>
-        <div class="col-auto">
+        <div class="col-auto d-flex gap-2 align-items-center flex-wrap">
             <button type="button" id="deleteSelectedBtn" class="btn btn-danger" style="display: none;">
                 <i class="bi bi-trash"></i> Delete Selected
             </button>
@@ -26,7 +26,7 @@
             </a>
         </div>
     </div>
-    
+
     <!-- Summary Cards -->
     <div class="row mb-4">
         <div class="col-md-3">
@@ -66,7 +66,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Filters -->
     <div class="card mb-4">
         <div class="card-body">
@@ -100,99 +100,160 @@
             </form>
         </div>
     </div>
-    
-    <!-- Income Records Table -->
-    <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">Income History</h5>
+
+    <!-- Income Records grouped by year -->
+    {% if income_records %}
+    <div class="accordion" id="incomeAccordion">
+        {% for year_group in income_records | groupby('pay_date.year') %}
+        {% set year_records = year_group.list | sort(attribute='pay_date') %}
+        {% set ns = namespace(take_home=0, upcoming=0) %}
+        {% for inc in year_records %}
+            {% set ns.take_home = ns.take_home + inc.take_home %}
+            {% if not inc.is_paid %}{% set ns.upcoming = ns.upcoming + 1 %}{% endif %}
+        {% endfor %}
+
+        <div class="accordion-item mb-2">
+            <h2 class="accordion-header" id="heading-{{ year_group.grouper }}">
+                <button class="accordion-button fw-semibold {% if year_group.grouper != today_year %}collapsed{% endif %}"
+                        type="button" data-bs-toggle="collapse"
+                        data-bs-target="#collapse-{{ year_group.grouper }}"
+                        aria-expanded="{{ 'true' if year_group.grouper == today_year else 'false' }}"
+                        aria-controls="collapse-{{ year_group.grouper }}">
+                    <span class="me-3">{{ year_group.grouper }}</span>
+                    <span class="badge bg-secondary fw-normal me-2">{{ year_records | length }} records</span>
+                    {% if ns.upcoming > 0 %}
+                    <span class="badge bg-primary fw-normal me-2">{{ ns.upcoming }} upcoming</span>
+                    {% endif %}
+                    <span class="text-success fw-bold ms-2">£{{ "{:,.2f}".format(ns.take_home) }} take home</span>
+                </button>
+            </h2>
+            <div id="collapse-{{ year_group.grouper }}"
+                 class="accordion-collapse collapse {% if year_group.grouper == today_year %}show{% endif %}"
+                 aria-labelledby="heading-{{ year_group.grouper }}">
+                <div class="accordion-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 30px;">
+                                        <input type="checkbox" class="form-check-input select-year-all"
+                                               title="Select all in {{ year_group.grouper }}">
+                                    </th>
+                                    <th>Person</th>
+                                    <th>Pay Date</th>
+                                    <th>Tax Year</th>
+                                    <th>Gross</th>
+                                    <th>Pension</th>
+                                    <th>Tax</th>
+                                    <th>NI</th>
+                                    <th>Take Home</th>
+                                    <th>Account</th>
+                                    <th>Paid</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for income in year_records %}
+                                <tr class="{% if not income.is_paid %}table-info{% endif %}">
+                                    <td>
+                                        <input type="checkbox" class="form-check-input income-checkbox" value="{{ income.id }}">
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ income.person }}</span></td>
+                                    <td>{{ income.pay_date.strftime('%d/%m/%Y') }}</td>
+                                    <td>{{ income.tax_year }}</td>
+                                    <td>£{{ "{:,.2f}".format(income.gross_monthly_income) }}</td>
+                                    <td>
+                                        <span class="text-muted" data-bs-toggle="tooltip"
+                                              title="Employer: £{{ '{:,.2f}'.format(income.employer_pension_amount) }} ({{ income.employer_pension_percent }}%) + Employee: £{{ '{:,.2f}'.format(income.employee_pension_amount) }} ({{ income.employee_pension_percent }}%)">
+                                            £{{ "{:,.2f}".format(income.total_pension) }}
+                                        </span>
+                                    </td>
+                                    <td>£{{ "{:,.2f}".format(income.income_tax) }}</td>
+                                    <td>£{{ "{:,.2f}".format(income.national_insurance) }}</td>
+                                    <td class="fw-bold text-success">£{{ "{:,.2f}".format(income.take_home) }}</td>
+                                    <td>
+                                        {% if income.deposit_account %}
+                                        <span class="badge bg-primary">{{ income.deposit_account.name }}</span>
+                                        {% endif %}
+                                        {% if income.transaction_id %}
+                                        <br><a href="{{ url_for('transactions.edit', id=income.transaction_id) }}"
+                                               class="small text-success" data-bs-toggle="tooltip" title="View linked transaction">
+                                            <i class="bi bi-arrow-right-circle"></i> Txn #{{ income.transaction_id }}
+                                        </a>
+                                        {% elif not income.deposit_account %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if income.is_paid %}
+                                        <button class="btn btn-sm btn-success toggle-paid" data-id="{{ income.id }}" title="Toggle Paid">
+                                            <i class="bi bi-check-circle"></i> Paid
+                                        </button>
+                                        {% else %}
+                                        <button class="btn btn-sm btn-outline-secondary toggle-paid" data-id="{{ income.id }}" title="Toggle Paid">
+                                            <i class="bi bi-circle"></i> Not Paid
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('income.edit', id=income.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-outline-danger delete-income-btn"
+                                                data-id="{{ income.id }}"
+                                                data-action="{{ url_for('income.delete', id=income.id) }}"
+                                                data-has-transaction="{{ 'true' if income.transaction_id else 'false' }}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            {% if income_records %}
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th style="width: 30px;">
-                                <input type="checkbox" id="selectAll" class="form-check-input">
-                            </th>
-                            <th>Person</th>
-                            <th>Pay Date</th>
-                            <th>Tax Year</th>
-                            <th>Gross</th>
-                            <th>Pension</th>
-                            <th>Tax</th>
-                            <th>NI</th>
-                            <th>Take Home</th>
-                            <th>Account</th>
-                            <th>Paid</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for income in income_records %}
-                        <tr>
-                            <td>
-                                <input type="checkbox" class="form-check-input income-checkbox" value="{{ income.id }}">
-                            </td>
-                            <td>
-                                <span class="badge bg-secondary">{{ income.person }}</span>
-                            </td>
-                            <td>{{ income.pay_date.strftime('%d/%m/%Y') }}</td>
-                            <td>{{ income.tax_year }}</td>
-                            <td>£{{ "{:,.2f}".format(income.gross_monthly_income) }}</td>
-                            <td>
-                                <span class="text-muted" data-bs-toggle="tooltip" 
-                                      title="Employer: £{{ '{:,.2f}'.format(income.employer_pension_amount) }} ({{ income.employer_pension_percent }}%) + Employee: £{{ '{:,.2f}'.format(income.employee_pension_amount) }} ({{ income.employee_pension_percent }}%)">
-                                    £{{ "{:,.2f}".format(income.total_pension) }}
-                                </span>
-                            </td>
-                            <td>£{{ "{:,.2f}".format(income.income_tax) }}</td>
-                            <td>£{{ "{:,.2f}".format(income.national_insurance) }}</td>
-                            <td class="fw-bold text-success">£{{ "{:,.2f}".format(income.take_home) }}</td>
-                            <td>
-                                {% if income.deposit_account %}
-                                <span class="badge bg-primary">{{ income.deposit_account.name }}</span>
-                                {% if income.transaction_id %}
-                                <i class="bi bi-check-circle text-success" data-bs-toggle="tooltip" title="Transaction created"></i>
-                                {% endif %}
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if income.is_paid %}
-                                    <button class="btn btn-sm btn-success toggle-paid" data-id="{{ income.id }}" title="Toggle Paid">
-                                        <i class="bi bi-check-circle"></i> Paid
-                                    </button>
-                                {% else %}
-                                    <button class="btn btn-sm btn-outline-secondary toggle-paid" data-id="{{ income.id }}" title="Toggle Paid">
-                                        <i class="bi bi-circle"></i> Not Paid
-                                    </button>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="{{ url_for('income.edit', id=income.id) }}" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <form method="post" action="{{ url_for('income.delete', id=income.id) }}" class="d-inline" 
-                                      onsubmit="return confirm('Are you sure you want to delete this income record?');">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox empty-state-icon"></i>
+            <p class="text-muted mt-3">No income records found. Click "Add One-Time Income" to get started.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Delete Income Modal -->
+<div class="modal fade" id="deleteIncomeModal" tabindex="-1" aria-labelledby="deleteIncomeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteIncomeModalLabel">Delete Income Record</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            {% else %}
-            <div class="text-center py-5">
-                <i class="bi bi-inbox empty-state-icon"></i>
-                <p class="text-muted mt-3">No income records found. Click "Add Income Record" to get started.</p>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this income record?</p>
+                <div id="txnWarning" class="alert alert-warning mb-0" style="display:none">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    This record has a linked transaction. Do you want to delete it too, or keep it?
+                </div>
             </div>
-            {% endif %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteIncomeForm" method="post" class="d-flex gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="keep_transaction" id="keepTxnInput" value="0"/>
+                    <button id="keepTxnBtn" type="button" class="btn btn-warning" style="display:none">
+                        <i class="bi bi-scissors"></i> Delete Income, Keep Transaction
+                    </button>
+                    <button type="submit" id="deleteSubmitBtn" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
@@ -202,92 +263,78 @@
 <script>
     // Enable Bootstrap tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
-    
+    tooltipTriggerList.map(el => new bootstrap.Tooltip(el));
+
     // Toggle paid status
     document.querySelectorAll('.toggle-paid').forEach(btn => {
-        btn.addEventListener('click', function(e) {
+        btn.addEventListener('click', function() {
             const id = this.dataset.id;
+            const row = this.closest('tr');
             fetch(`/income/toggle/${id}/paid`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'}
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
             })
             .then(r => r.json())
             .then(data => {
-                if (data.error) {
-                    alert('Error: ' + data.error);
-                    return;
-                }
+                if (data.error) { alert('Error: ' + data.error); return; }
                 const isPaid = data.value;
-                // Update button appearance and text
                 if (isPaid) {
                     this.classList.remove('btn-outline-secondary');
                     this.classList.add('btn-success');
                     this.innerHTML = '<i class="bi bi-check-circle"></i> Paid';
+                    row.classList.remove('table-info');
                 } else {
                     this.classList.remove('btn-success');
                     this.classList.add('btn-outline-secondary');
                     this.innerHTML = '<i class="bi bi-circle"></i> Not Paid';
+                    row.classList.add('table-info');
                 }
             })
-            .catch(err => {
-                alert('Toggle failed');
-                console.error(err);
-            });
+            .catch(err => { alert('Toggle failed'); console.error(err); });
         });
     });
-    
-    // Bulk delete functionality
-    const selectAllCheckbox = document.getElementById('selectAll');
-    const incomeCheckboxes = document.querySelectorAll('.income-checkbox');
-    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
-    
-    // Select/deselect all
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', function() {
-            incomeCheckboxes.forEach(cb => cb.checked = this.checked);
+
+    // Per-year select-all checkboxes
+    document.querySelectorAll('.select-year-all').forEach(selectAll => {
+        selectAll.addEventListener('change', function() {
+            const table = this.closest('table');
+            table.querySelectorAll('.income-checkbox').forEach(cb => cb.checked = this.checked);
             updateDeleteButton();
         });
-    }
-    
-    // Update delete button visibility
-    incomeCheckboxes.forEach(cb => {
+    });
+
+    document.querySelectorAll('.income-checkbox').forEach(cb => {
         cb.addEventListener('change', updateDeleteButton);
     });
-    
+
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+
     function updateDeleteButton() {
         const checkedCount = document.querySelectorAll('.income-checkbox:checked').length;
         if (checkedCount > 0) {
             deleteSelectedBtn.style.display = 'inline-block';
-            deleteSelectedBtn.textContent = `Delete Selected (${checkedCount})`;
             deleteSelectedBtn.innerHTML = `<i class="bi bi-trash"></i> Delete Selected (${checkedCount})`;
         } else {
             deleteSelectedBtn.style.display = 'none';
         }
     }
-    
-    // Handle bulk delete
+
     deleteSelectedBtn.addEventListener('click', function() {
         const checkedIds = Array.from(document.querySelectorAll('.income-checkbox:checked'))
             .map(cb => cb.value);
-        
         if (checkedIds.length === 0) return;
-        
+
         if (confirm(`Are you sure you want to delete ${checkedIds.length} income record(s)? This will also delete their linked transactions.`)) {
-            // Create form and submit
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = '{{ url_for("income.delete_multiple") }}';
-            
-            // Add CSRF token
+
             const csrfInput = document.createElement('input');
             csrfInput.type = 'hidden';
             csrfInput.name = 'csrf_token';
             csrfInput.value = '{{ csrf_token() }}';
             form.appendChild(csrfInput);
-            
+
             checkedIds.forEach(id => {
                 const input = document.createElement('input');
                 input.type = 'hidden';
@@ -295,11 +342,43 @@
                 input.value = id;
                 form.appendChild(input);
             });
-            
+
             document.body.appendChild(form);
             form.submit();
         }
     });
+
+    // Single-row delete modal
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteIncomeModal'));
+    const deleteForm = document.getElementById('deleteIncomeForm');
+    const txnWarning = document.getElementById('txnWarning');
+    const keepTxnBtn = document.getElementById('keepTxnBtn');
+    const keepTxnInput = document.getElementById('keepTxnInput');
+    const deleteSubmitBtn = document.getElementById('deleteSubmitBtn');
+
+    document.querySelectorAll('.delete-income-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const hasTransaction = this.dataset.hasTransaction === 'true';
+            deleteForm.action = this.dataset.action;
+
+            if (hasTransaction) {
+                txnWarning.style.display = 'block';
+                keepTxnBtn.style.display = 'inline-block';
+                deleteSubmitBtn.innerHTML = '<i class="bi bi-trash"></i> Delete Income & Transaction';
+            } else {
+                txnWarning.style.display = 'none';
+                keepTxnBtn.style.display = 'none';
+                deleteSubmitBtn.innerHTML = '<i class="bi bi-trash"></i> Delete';
+            }
+
+            keepTxnInput.value = '0';
+            deleteModal.show();
+        });
+    });
+
+    keepTxnBtn.addEventListener('click', function() {
+        keepTxnInput.value = '1';
+        deleteForm.submit();
+    });
 </script>
 {% endblock %}
-
