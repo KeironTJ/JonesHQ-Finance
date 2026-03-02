@@ -46,15 +46,15 @@
             <div class="card">
                 <div class="card-body">
                     <h6 class="text-muted">Latest Growth</h6>
-                    {% if snapshots[0].growth_percent %}
-                    <h3 class="{% if snapshots[0].growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
-                        {{ "{:+.2f}".format(snapshots[0].growth_percent) }}%
+                    {% if snapshots[-1].growth_percent is not none %}
+                    <h3 class="{% if snapshots[-1].growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ "{:+.2f}".format(snapshots[-1].growth_percent) }}%
                     </h3>
                     {% else %}
                     <h3 class="text-muted">N/A</h3>
                     {% endif %}
                     <hr>
-                    <small class="text-muted">Since {{ snapshots[1].review_date.strftime('%d/%m/%Y') if snapshots|length > 1 else 'previous' }}</small>
+                    <small class="text-muted">Since {{ snapshots[-2].review_date.strftime('%d/%m/%Y') if snapshots|length > 1 else 'previous' }}</small>
                 </div>
             </div>
         </div>
@@ -86,7 +86,7 @@
                             <td>{{ snapshot.review_date.strftime('%d/%m/%Y') }}</td>
                             <td class="fw-bold">£{{ "{:,.2f}".format(snapshot.value) }}</td>
                             <td>
-                                {% if snapshot.growth_percent %}
+                                {% if snapshot.growth_percent is not none %}
                                 <span class="{% if snapshot.growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
                                     {{ "{:+.2f}".format(snapshot.growth_percent) }}%
                                 </span>

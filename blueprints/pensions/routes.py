@@ -167,10 +167,19 @@ def add_snapshot(id):
             ).delete()
             
             db.session.add(snapshot)
-            
+
             # Update pension current value
             pension.current_value = value
-            
+
+            # If inserting a historic actual, the snapshot immediately after it now has
+            # a new "previous" — recalculate its growth_percent so it doesn't stay stale.
+            next_snapshot = family_query(PensionSnapshot).filter_by(pension_id=id)\
+                .filter(PensionSnapshot.review_date > review_date)\
+                .order_by(PensionSnapshot.review_date.asc())\
+                .first()
+            if next_snapshot is not None and value > 0:
+                next_snapshot.growth_percent = ((next_snapshot.value - value) / value) * 100
+
             db.session.commit()
             
             # Auto-regenerate projections if enabled
