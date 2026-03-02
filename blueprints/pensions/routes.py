@@ -145,12 +145,19 @@ def add_snapshot(id):
                 .filter(PensionSnapshot.review_date < review_date)\
                 .order_by(PensionSnapshot.review_date.desc())\
                 .first()
-            
+
             # Calculate growth
             growth_percent = None
             if previous and previous.value > 0:
                 growth_percent = ((value - previous.value) / previous.value) * 100
-            
+
+            # Check whether there is already a more recent actual (before touching the session)
+            has_newer_actual = family_query(PensionSnapshot).filter(
+                PensionSnapshot.pension_id == id,
+                PensionSnapshot.review_date > review_date,
+                PensionSnapshot.is_projection == False
+            ).first() is not None
+
             # Create snapshot
             snapshot = PensionSnapshot(
                 pension_id=id,
@@ -158,18 +165,20 @@ def add_snapshot(id):
                 value=value,
                 growth_percent=growth_percent
             )
-            
+
             # Remove any existing projection for this exact date (now superseded by actual)
             family_query(PensionSnapshot).filter_by(
                 pension_id=id,
                 review_date=review_date,
                 is_projection=True
             ).delete()
-            
+
             db.session.add(snapshot)
 
-            # Update pension current value
-            pension.current_value = value
+            # Only advance the pension's current value when this is the most recent actual;
+            # historic snapshots inserted before existing actuals should not roll it back.
+            if not has_newer_actual:
+                pension.current_value = value
 
             # If inserting a historic actual, the snapshot immediately after it now has
             # a new "previous" — recalculate its growth_percent so it doesn't stay stale.
