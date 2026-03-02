@@ -1,9 +1,11 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{{ pension.provider }} Snapshots - JonesHQ Finance{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
+
+    <!-- Header -->
     <div class="row mb-4">
         <div class="col">
             <h1><i class="bi bi-graph-up"></i> {{ pension.provider }} - Performance Tracking</h1>
@@ -25,8 +27,8 @@
             </a>
         </div>
     </div>
-    
-    <!-- Summary Card -->
+
+    <!-- Summary Cards -->
     <div class="row mb-4">
         <div class="col-md-4">
             <div class="card">
@@ -60,64 +62,174 @@
         </div>
         {% endif %}
     </div>
-    
-    <!-- Snapshots Table -->
-    <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">Historical Snapshots</h5>
+
+    <!-- Actual Snapshots -->
+    <div class="card mb-4">
+        {% if actual_snapshots|length > 1 %}
+        <div class="card-header d-flex justify-content-between align-items-center collapse-header"
+             data-bs-toggle="collapse" data-bs-target="#historyCollapse"
+             aria-expanded="false" aria-controls="historyCollapse" role="button">
+        {% else %}
+        <div class="card-header d-flex justify-content-between align-items-center">
+        {% endif %}
+            <h5 class="mb-0"><i class="bi bi-check-circle-fill text-success me-1"></i> Actual Snapshots</h5>
+            {% if actual_snapshots|length > 1 %}
+            <span class="text-muted small">
+                <i class="bi bi-clock-history me-1"></i> History ({{ actual_snapshots|length - 1 }})
+                <i class="bi bi-chevron-down ms-1 collapse-chevron"></i>
+            </span>
+            {% endif %}
         </div>
-        <div class="card-body">
-            {% if snapshots %}
+
+        {% if actual_snapshots %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Value</th>
+                        <th>Growth %</th>
+                        <th>Change (£)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    {# Older actuals — collapsed, ascending order so index maths is straightforward #}
+                    {% if actual_snapshots|length > 1 %}
+                    <tr class="p-0 border-0">
+                        <td colspan="5" class="p-0 border-0">
+                            <div class="collapse" id="historyCollapse">
+                                <table class="table table-hover mb-0">
+                                    <tbody>
+                                        {% for snapshot in actual_snapshots[:-1] %}
+                                        <tr class="text-muted">
+                                            <td style="width:15%">{{ snapshot.review_date.strftime('%d/%m/%Y') }}</td>
+                                            <td style="width:20%">£{{ "{:,.2f}".format(snapshot.value) }}</td>
+                                            <td style="width:15%">
+                                                {% if snapshot.growth_percent is not none %}
+                                                <span class="{% if snapshot.growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
+                                                    {{ "{:+.2f}".format(snapshot.growth_percent) }}%
+                                                </span>
+                                                {% else %}
+                                                <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="width:20%">
+                                                {% if loop.index0 > 0 %}
+                                                {% set change = snapshot.value - actual_snapshots[loop.index0 - 1].value %}
+                                                <span class="{% if change > 0 %}text-success{% else %}text-danger{% endif %}">
+                                                    {{ "{:+,.2f}".format(change) }}
+                                                </span>
+                                                {% else %}
+                                                <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="width:30%">
+                                                <form method="post" action="{{ url_for('pensions.delete_snapshot', pension_id=pension.id, snapshot_id=snapshot.id) }}" class="d-inline"
+                                                      onsubmit="return confirm('Delete this snapshot?')">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+
+                    {# Latest actual — always visible #}
+                    <tr class="table-success">
+                        <td class="fw-bold">
+                            {{ latest_actual.review_date.strftime('%d/%m/%Y') }}
+                            <span class="badge bg-success ms-1">Latest</span>
+                        </td>
+                        <td class="fw-bold">£{{ "{:,.2f}".format(latest_actual.value) }}</td>
+                        <td>
+                            {% if latest_actual.growth_percent is not none %}
+                            <span class="{% if latest_actual.growth_percent > 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                                {{ "{:+.2f}".format(latest_actual.growth_percent) }}%
+                            </span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if actual_snapshots|length > 1 %}
+                            {% set change = latest_actual.value - actual_snapshots[-2].value %}
+                            <span class="{% if change > 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                                {{ "{:+,.2f}".format(change) }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="post" action="{{ url_for('pensions.delete_snapshot', pension_id=pension.id, snapshot_id=latest_actual.id) }}" class="d-inline"
+                                  onsubmit="return confirm('Delete this snapshot?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <p class="text-muted mt-3">No actual snapshots yet. <a href="{{ url_for('pensions.add_snapshot', id=pension.id) }}">Add one now.</a></p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Projected Snapshots -->
+    {% if projected_snapshots %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center collapse-header"
+             data-bs-toggle="collapse" data-bs-target="#projectionsCollapse"
+             aria-expanded="true" aria-controls="projectionsCollapse" role="button">
+            <h5 class="mb-0"><i class="bi bi-graph-up-arrow text-warning me-1"></i> Projections</h5>
+            <span class="text-muted small">
+                {{ projected_snapshots|length }} months
+                <i class="bi bi-chevron-down ms-1 collapse-chevron"></i>
+            </span>
+        </div>
+        <div class="collapse show" id="projectionsCollapse">
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <th>Review Date</th>
-                            <th>Value</th>
+                            <th>Date</th>
+                            <th>Projected Value</th>
                             <th>Growth %</th>
-                            <th>Change (£)</th>
-                            <th>Type</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for snapshot in snapshots %}
-                        <tr {% if snapshot.is_projection %}class="table-warning"{% endif %}>
+                        {% for snapshot in projected_snapshots %}
+                        <tr>
                             <td>{{ snapshot.review_date.strftime('%d/%m/%Y') }}</td>
-                            <td class="fw-bold">£{{ "{:,.2f}".format(snapshot.value) }}</td>
+                            <td>£{{ "{:,.2f}".format(snapshot.value) }}</td>
                             <td>
                                 {% if snapshot.growth_percent is not none %}
-                                <span class="{% if snapshot.growth_percent > 0 %}text-success{% else %}text-danger{% endif %}">
-                                    {{ "{:+.2f}".format(snapshot.growth_percent) }}%
-                                </span>
+                                <span class="text-success">{{ "{:+.2f}".format(snapshot.growth_percent) }}%</span>
                                 {% else %}
                                 <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if loop.index > 1 %}
-                                {% set prev = snapshots[loop.index0 - 1] %}
-                                {% set change = snapshot.value - prev.value %}
-                                <span class="{% if change > 0 %}text-success{% else %}text-danger{% endif %}">
-                                    {{ "{:+,.2f}".format(change) }}
-                                </span>
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if snapshot.is_projection %}
-                                <span class="badge bg-warning text-dark">Projected</span>
-                                {% else %}
-                                <span class="badge bg-success">Actual</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if snapshot.is_projection %}
                                 <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#confirmModal{{ snapshot.id }}">
                                     <i class="bi bi-check-circle"></i> Confirm
                                 </button>
-                                {% endif %}
                                 <form method="post" action="{{ url_for('pensions.delete_snapshot', pension_id=pension.id, snapshot_id=snapshot.id) }}" class="d-inline"
                                       onsubmit="return confirm('Delete this snapshot?')">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -131,19 +243,14 @@
                     </tbody>
                 </table>
             </div>
-            {% else %}
-            <div class="text-center py-5">
-                <i class="bi bi-inbox empty-state-icon"></i>
-                <p class="text-muted mt-3">No snapshots recorded yet. Click "Add Snapshot" to start tracking performance.</p>
-            </div>
-            {% endif %}
         </div>
     </div>
+    {% endif %}
+
 </div>
 
 <!-- Confirmation Modals -->
-{% for snapshot in snapshots %}
-{% if snapshot.is_projection %}
+{% for snapshot in projected_snapshots %}
 <div class="modal fade" id="confirmModal{{ snapshot.id }}" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -163,7 +270,7 @@
                         <label for="value{{ snapshot.id }}" class="form-label">Actual Value from Statement</label>
                         <div class="input-group">
                             <span class="input-group-text">£</span>
-                            <input type="number" step="0.01" class="form-control" id="value{{ snapshot.id }}" 
+                            <input type="number" step="0.01" class="form-control" id="value{{ snapshot.id }}"
                                    name="value" value="{{ snapshot.value }}" required>
                         </div>
                     </div>
@@ -181,8 +288,15 @@
         </div>
     </div>
 </div>
-{% endif %}
 {% endfor %}
 
+{% block extra_css %}
+<style>
+.collapse-header { cursor: pointer; user-select: none; }
+.collapse-header:hover { background-color: rgba(0,0,0,.03); }
+.collapse-chevron { transition: transform .2s ease; }
+.collapse-header[aria-expanded="true"] .collapse-chevron { transform: rotate(180deg); }
+</style>
 {% endblock %}
 
+{% endblock %}

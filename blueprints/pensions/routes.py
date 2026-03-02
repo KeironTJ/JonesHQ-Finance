@@ -121,18 +121,22 @@ def delete(id):
 def snapshots(id):
     """View snapshots for a pension"""
     pension = family_get_or_404(Pension, id)
-    # Order by review_date ascending (oldest first), then by is_projection (actual before projected)
-    snapshots = family_query(PensionSnapshot).filter_by(pension_id=id).order_by(
-        PensionSnapshot.review_date.asc(),
-        PensionSnapshot.is_projection.asc()
-    ).all()
 
-    latest_actual = family_query(PensionSnapshot).filter(
+    actual_snapshots = family_query(PensionSnapshot).filter(
         PensionSnapshot.pension_id == id,
         PensionSnapshot.is_projection == False
-    ).order_by(PensionSnapshot.review_date.desc()).first()
+    ).order_by(PensionSnapshot.review_date.asc()).all()
 
-    return render_template('pensions/snapshots.html', pension=pension, snapshots=snapshots,
+    projected_snapshots = family_query(PensionSnapshot).filter(
+        PensionSnapshot.pension_id == id,
+        PensionSnapshot.is_projection == True
+    ).order_by(PensionSnapshot.review_date.asc()).all()
+
+    latest_actual = actual_snapshots[-1] if actual_snapshots else None
+
+    return render_template('pensions/snapshots.html', pension=pension,
+                           actual_snapshots=actual_snapshots,
+                           projected_snapshots=projected_snapshots,
                            latest_actual=latest_actual)
 
 
