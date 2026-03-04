@@ -131,8 +131,8 @@
                 </thead>
                 <tbody>
                     {% for trip in trips %}
-                    {% set _next_fuel = fuel_records_dict.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
-                    {% set _next_forecasted = forecasted_transactions.get(trip.vehicle_id, {}).get(trip.date + timedelta(days=1)) %}
+                    {% set _next_fuel = fuel_records_dict.get(trip.vehicle_id, {}).get(trip.date) %}
+                    {% set _next_forecasted = forecasted_transactions.get(trip.vehicle_id, {}).get(trip.date) %}
                     {% set _is_last_trip = trip.id in last_trip_ids %}
                     {% if trip.date == today %}
                     {% set _row_cls = 'trip-row-today' %}
@@ -166,23 +166,23 @@
                             {% set next_day_forecasted = _next_forecasted if _is_last_trip else none %}
                             
                             {% if next_day_fuel %}
-                                {# Actual fuel record next day - this trip triggered it #}
+                                {# Actual fuel record this day - this trip triggered it #}
                                 {% if next_day_fuel.linked_transaction_id %}
-                                    <a href="{{ url_for('transactions.index') }}?id={{ next_day_fuel.linked_transaction_id }}" 
-                                       class="btn btn-sm btn-success" 
-                                       title="Triggered refuel next day - view transaction">
+                                    <a href="{{ url_for('transactions.index') }}?id={{ next_day_fuel.linked_transaction_id }}"
+                                       class="btn btn-sm btn-success"
+                                       title="Refuel on this day - view transaction">
                                         <i class="bi bi-receipt"></i> {{ next_day_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_fuel.cost) }}
                                     </a>
                                 {% else %}
-                                    <span class="badge bg-info" title="Triggered refuel next day">
+                                    <span class="badge bg-info" title="Refuel on this day">
                                         <i class="bi bi-fuel-pump"></i> {{ next_day_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_fuel.cost) }}
                                     </span>
                                 {% endif %}
                             {% elif next_day_forecasted %}
-                                {# Forecasted transaction next day - this trip will trigger it #}
-                                <a href="{{ url_for('transactions.index') }}?id={{ next_day_forecasted.id }}" 
-                                   class="btn btn-sm btn-warning" 
-                                   title="Forecasted refuel next day - view transaction">
+                                {# Forecasted transaction this day - this trip will trigger it #}
+                                <a href="{{ url_for('transactions.index') }}?id={{ next_day_forecasted.id }}"
+                                   class="btn btn-sm btn-warning"
+                                   title="Forecasted refuel on this day - view transaction">
                                     <i class="bi bi-calendar-event"></i> {{ next_day_forecasted.transaction_date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_forecasted.amount|abs) }}
                                 </a>
                             {% else %}
