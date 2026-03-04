@@ -873,6 +873,9 @@ class ExpenseSyncService:
 
         miles = int(exp.covered_miles) if exp.covered_miles else 0
 
+        from services.vehicle_service import VehicleService
+        trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(vehicle.id, miles, exp.date)
+
         if existing:
             existing.date = exp.date
             existing.month = exp.date.strftime('%Y-%m')
@@ -882,7 +885,9 @@ class ExpenseSyncService:
             existing.business_miles = miles
             existing.journey_description = journey_desc
             existing.fuel_cost = exp.total_cost
-            existing.trip_cost = exp.total_cost
+            existing.trip_cost = trip_cost
+            existing.gallons_used = gallons_used
+            existing.approx_mpg = approx_mpg
             db.session.add(existing)
         else:
             trip = Trip(
@@ -897,7 +902,9 @@ class ExpenseSyncService:
                 personal_miles=0,
                 journey_description=journey_desc,
                 fuel_cost=exp.total_cost,
-                trip_cost=exp.total_cost
+                trip_cost=trip_cost,
+                gallons_used=gallons_used,
+                approx_mpg=approx_mpg
             )
             db.session.add(trip)
 
