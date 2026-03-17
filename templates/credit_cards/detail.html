@@ -311,9 +311,17 @@
                         <input type="text" class="form-control" id="add_txn_item" name="txn_item" placeholder="e.g., Amazon purchase, monthly payment" required>
                     </div>
                     <div class="mb-3">
-                        <label for="add_txn_amount" class="form-label">Amount (£)</label>
-                        <input type="number" class="form-control" id="add_txn_amount" name="txn_amount" step="0.01" required>
-                        <small class="text-muted">For purchases/fees: enter negative amount (e.g., -50.00). For payments/rewards: enter positive amount (e.g., 100.00)</small>
+                        <label class="form-label">Amount (£)</label>
+                        <div class="input-group">
+                            <button type="button" id="addCCAmountSignBtn" class="btn btn-danger" style="min-width:90px" onclick="toggleCCAmountSign('add')">
+                                Debit
+                            </button>
+                            <span class="input-group-text">£</span>
+                            <input type="text" inputmode="decimal" class="form-control" id="addCCAmountDisplay"
+                                   placeholder="0.00" required autocomplete="off" oninput="syncCCAmountHidden('add')">
+                        </div>
+                        <input type="hidden" id="addCCAmount" name="txn_amount">
+                        <small class="form-text text-muted" id="addCCAmountHint">Debit = increases balance (purchase/fee, stored as negative)</small>
                     </div>
                     <div class="mb-3">
                         <label for="add_category" class="form-label">Category (Optional)</label>
@@ -422,9 +430,17 @@
                         <input type="text" class="form-control" id="txn_item" name="txn_item" required>
                     </div>
                     <div class="mb-3">
-                        <label for="txn_amount" class="form-label">Amount (£)</label>
-                        <input type="number" class="form-control" id="txn_amount" name="txn_amount" step="0.01" required>
-                        <small class="text-muted">Positive = reduces debt (payment/reward), Negative = increases debt (purchase/fee)</small>
+                        <label class="form-label">Amount (£)</label>
+                        <div class="input-group">
+                            <button type="button" id="editCCAmountSignBtn" class="btn btn-danger" style="min-width:90px" onclick="toggleCCAmountSign('edit')">
+                                Debit
+                            </button>
+                            <span class="input-group-text">£</span>
+                            <input type="text" inputmode="decimal" class="form-control" id="editCCAmountDisplay"
+                                   placeholder="0.00" required autocomplete="off" oninput="syncCCAmountHidden('edit')">
+                        </div>
+                        <input type="hidden" id="editCCAmount" name="txn_amount">
+                        <small class="form-text text-muted" id="editCCAmountHint">Debit = increases balance (purchase/fee, stored as negative)</small>
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" id="add_txn_fixed" name="txn_fixed" value="1" checked>
@@ -531,6 +547,29 @@
 </div>
 
 <script>
+// ── CC Amount sign toggle ─────────────────────────────────────────────
+function toggleCCAmountSign(prefix) {
+    var btn = document.getElementById(prefix + 'CCAmountSignBtn');
+    var hint = document.getElementById(prefix + 'CCAmountHint');
+    if (btn.classList.contains('btn-danger')) {
+        btn.classList.replace('btn-danger', 'btn-success');
+        btn.textContent = 'Credit';
+        hint.textContent = 'Credit = reduces balance (payment/reward, stored as positive)';
+    } else {
+        btn.classList.replace('btn-success', 'btn-danger');
+        btn.textContent = 'Debit';
+        hint.textContent = 'Debit = increases balance (purchase/fee, stored as negative)';
+    }
+    syncCCAmountHidden(prefix);
+}
+
+function syncCCAmountHidden(prefix) {
+    var display = document.getElementById(prefix + 'CCAmountDisplay').value.replace(/[^0-9.]/g, '');
+    var btn = document.getElementById(prefix + 'CCAmountSignBtn');
+    var isDebit = btn.classList.contains('btn-danger');
+    document.getElementById(prefix + 'CCAmount').value = display ? (isDebit ? '-' + display : display) : '';
+}
+
 // Toggle account field visibility when transaction type changes in add modal
 function toggleAddAccountField() {
     const typeSelect = document.getElementById('add_txn_type');
@@ -547,6 +586,20 @@ function toggleAddAccountField() {
         accountField.style.display = 'none';
         accountSelect.value = '';
     }
+
+    // Auto-set Debit/Credit based on type
+    var btn = document.getElementById('addCCAmountSignBtn');
+    var hint = document.getElementById('addCCAmountHint');
+    if (typeSelect.value === 'Payment' || typeSelect.value === 'Reward') {
+        btn.classList.replace('btn-danger', 'btn-success');
+        btn.textContent = 'Credit';
+        hint.textContent = 'Credit = reduces balance (payment/reward, stored as positive)';
+    } else {
+        btn.classList.replace('btn-success', 'btn-danger');
+        btn.textContent = 'Debit';
+        hint.textContent = 'Debit = increases balance (purchase/fee, stored as negative)';
+    }
+    syncCCAmountHidden('add');
 }
 
 // Set up edit transaction modal
@@ -566,7 +619,20 @@ editTransactionModal.addEventListener('show.bs.modal', function (event) {
     document.getElementById('txn_date').value = txnDate;
     document.getElementById('txn_type').value = txnType;
     document.getElementById('txn_item').value = txnItem;
-    document.getElementById('txn_amount').value = parseFloat(txnAmount);
+    var amt = parseFloat(txnAmount);
+    var btn = document.getElementById('editCCAmountSignBtn');
+    var hint = document.getElementById('editCCAmountHint');
+    if (amt >= 0) {
+        btn.classList.replace('btn-danger', 'btn-success');
+        btn.textContent = 'Credit';
+        hint.textContent = 'Credit = reduces balance (payment/reward, stored as positive)';
+    } else {
+        btn.classList.replace('btn-success', 'btn-danger');
+        btn.textContent = 'Debit';
+        hint.textContent = 'Debit = increases balance (purchase/fee, stored as negative)';
+    }
+    document.getElementById('editCCAmountDisplay').value = Math.abs(amt).toFixed(2);
+    syncCCAmountHidden('edit');
     document.getElementById('txn_fixed').checked = txnFixed;
 });
 
