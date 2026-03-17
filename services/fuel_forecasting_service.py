@@ -245,7 +245,7 @@ class FuelForecastingService:
             return existing
         
         # Calculate payday period
-        _, _, payday_period = PaydayService.get_payday_period(refill_date.year, refill_date.month)
+        payday_period = PaydayService.get_period_for_date(refill_date)
         
         # Create new forecasted transaction
         transaction = Transaction(
