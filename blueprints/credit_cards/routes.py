@@ -445,17 +445,13 @@ def edit_transaction(id, txn_id):
             flash('Transaction does not belong to this card!', 'danger')
             return redirect(url_for('credit_cards.detail', id=id))
         
-        # Only allow editing unpaid transactions
-        if txn.is_paid:
-            flash('Cannot edit a paid transaction!', 'danger')
-            return redirect(url_for('credit_cards.detail', id=id))
-        
         # Get form data
         txn_date_str = request.form.get('txn_date')
         txn_type = request.form.get('txn_type')
         txn_item = request.form.get('txn_item')
         txn_amount = float(request.form.get('txn_amount'))
         txn_fixed = request.form.get('txn_fixed') == '1'
+        txn_paid = request.form.get('txn_paid') == '1'
         
         # Update transaction
         if txn_date_str:
@@ -468,6 +464,7 @@ def edit_transaction(id, txn_id):
         txn.item = txn_item
         txn.amount = txn_amount
         txn.is_fixed = txn_fixed
+        txn.is_paid = txn_paid
         
         db.session.commit()
         

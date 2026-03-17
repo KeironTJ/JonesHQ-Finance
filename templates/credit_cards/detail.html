@@ -197,6 +197,7 @@
                                             data-txn-item="{{ txn.item }}"
                                             data-txn-amount="{{ txn.amount }}"
                                             data-txn-fixed="{{ txn.is_fixed|lower }}"
+                                            data-txn-paid="{{ txn.is_paid|lower }}"
                                             title="Edit Transaction">
                                         <i class="bi bi-pencil"></i>
                                     </button>
@@ -633,7 +634,9 @@ editTransactionModal.addEventListener('show.bs.modal', function (event) {
     }
     document.getElementById('editCCAmountDisplay').value = Math.abs(amt).toFixed(2);
     syncCCAmountHidden('edit');
-    document.getElementById('txn_fixed').checked = txnFixed;
+    document.getElementById('edit_txn_fixed').checked = txnFixed;
+    var txnPaid = button.getAttribute('data-txn-paid') === 'true';
+    document.getElementById('edit_txn_paid').checked = txnPaid;
 });
 
 // Set up edit payment modal
