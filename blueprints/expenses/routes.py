@@ -40,7 +40,7 @@ def index():
 
     expenses = query.order_by(Expense.date.desc()).all()
     credit_cards = family_query(CreditCard).order_by(CreditCard.card_name).all()
-    vehicles = family_query(Vehicle).order_by(Vehicle.registration).all()
+    vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.registration).all()
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
     # Get linked trips for fuel expenses (trips created by the sync service are

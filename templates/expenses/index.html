@@ -344,7 +344,12 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label">VRN</label>
-                <input type="text" name="vehicle_registration" class="form-control">
+                <select name="vehicle_registration" class="form-select">
+                    <option value="">-- Select --</option>
+                    {% for v in vehicles %}
+                    <option value="{{ v.registration }}">{{ v.registration }} ({{ v.name }})</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-md-3 d-flex align-items-center">
                 <div class="form-check ms-2">
@@ -444,7 +449,12 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label">VRN</label>
-                <input type="text" name="vehicle_registration" id="edit_vehicle_registration" class="form-control">
+                <select name="vehicle_registration" id="edit_vehicle_registration" class="form-select">
+                    <option value="">-- Select --</option>
+                    {% for v in vehicles %}
+                    <option value="{{ v.registration }}">{{ v.registration }} ({{ v.name }})</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-md-3 d-flex align-items-center">
                 <div class="form-check ms-2">
