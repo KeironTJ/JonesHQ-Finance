@@ -408,8 +408,8 @@ def add_fuel():
         # Update cache after commit (manually since we disabled the event handler)
         from services.monthly_balance_service import MonthlyBalanceService
         from models.transactions import Transaction
-        if fuel_record.transaction_id:
-            txn = family_get(Transaction, fuel_record.transaction_id)
+        if fuel_record.linked_transaction_id:
+            txn = family_get(Transaction, fuel_record.linked_transaction_id)
             if txn and txn.account_id:
                 MonthlyBalanceService.handle_transaction_change(txn.account_id, txn.transaction_date)
         
