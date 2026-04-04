@@ -123,6 +123,12 @@
                                    class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-pencil"></i>
                                 </a>
+                                {% if recurring.is_active %}
+                                <a href="{{ url_for('income.edit_recurring', id=recurring.id) }}#end-job"
+                                   class="btn btn-sm btn-outline-warning" title="Change / End this job">
+                                    <i class="bi bi-door-closed"></i>
+                                </a>
+                                {% endif %}
                                 <form method="post" action="{{ url_for('income.delete_recurring', id=recurring.id) }}" 
                                       class="d-inline" 
                                       onsubmit="return confirm('Are you sure? This will not delete existing income records.');">
@@ -143,6 +149,56 @@
                 <p class="text-muted mt-3">No recurring income templates found. Click "Add Recurring Income" to get started.</p>
             </div>
             {% endif %}
+        </div>
+    </div>
+
+    <!-- Reperiod Transactions Tool -->
+    <div class="card mt-4 border-info">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Update Pay Period Buckets (Reperiod)</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                If you have changed jobs and your new pay day is different, use this tool to
+                re-bucket <strong>all</strong> your existing bank and credit card transactions
+                into the correct pay periods.
+            </p>
+            <p class="text-muted">
+                Optionally enter your new pay day below first — this updates the global setting and then
+                re-calculates every transaction's <code>payday_period</code> based on the new day.
+                Leave blank to re-calculate using the current payday setting without changing it.
+            </p>
+
+            <form method="post" action="{{ url_for('income.reperiod_transactions') }}"
+                  onsubmit="return confirm('This will update the payday_period field on ALL transactions. Continue?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="row align-items-end g-3">
+                    <div class="col-md-4">
+                        <label for="new_payday_day" class="form-label fw-bold">New Pay Day of Month <span class="text-muted">(optional)</span></label>
+                        <select class="form-select" id="new_payday_day" name="new_payday_day">
+                            <option value="">— Keep current setting —</option>
+                            <option value="0">Last day of month</option>
+                            {% for day in range(1, 32) %}
+                            <option value="{{ day }}">{{ day }}{{ 'st' if day in [1, 21, 31] else ('nd' if day in [2, 22] else ('rd' if day in [3, 23] else 'th')) }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            This updates the global payday day setting for the whole app.
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-info text-white w-100">
+                            <i class="bi bi-arrow-repeat"></i> Re-bucket All Transactions
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div class="alert alert-warning mt-3 mb-0">
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>Note:</strong> This only updates the pay-period label used for budgeting/reporting.
+                It does <em>not</em> change transaction dates, amounts, or any other data.
+            </div>
         </div>
     </div>
 </div>

@@ -6,8 +6,14 @@
 <div class="container">
     <div class="row mb-4">
         <div class="col">
-            <h1><i class="bi bi-pencil"></i> Edit Recurring Income</h1>
+            <h1><i class="bi bi-pencil"></i> Edit Recurring Income — {{ recurring.source or recurring.person }}</h1>
         </div>
+        <div class="col-auto d-flex align-items-center gap-2">
+            <a href="{{ url_for('income.recurring') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Recurring Income
+            </a>
+        </div>
+    </div>
     </div>
     
     <div class="card">
@@ -284,8 +290,7 @@
     <div class="card mt-4">
         <div class="card-header bg-warning">
             <h5 class="mb-0"><i class="bi bi-arrow-clockwise"></i> Regenerate Income Range</h5>
-        </div>
-        <div class="card-body">
+        </div>        <div class="card-body">
             <p class="text-muted">
                 Use this to delete and regenerate income records within a specific date range. 
                 This is useful when you've updated salary/pension amounts and need to regenerate future records.
@@ -337,6 +342,50 @@
                     <li>Income records linked to transactions will be skipped (unless you check "Force")</li>
                     <li>After deletion, new records are generated using the current template settings</li>
                 </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- End Job Section -->
+    <div class="card mt-4 border-danger">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0"><i class="bi bi-door-closed"></i> Change Job / End This Recurring Income</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Use this when you have changed jobs or this income source ends.
+                It will set an end date on this template, deactivate it, and delete all
+                <strong>future unpaid</strong> income records and their linked transactions
+                beyond the last pay date.  Already-paid records are never touched.
+            </p>
+
+            <form method="post"
+                  action="{{ url_for('income.end_job', id=recurring.id) }}"
+                  onsubmit="return confirm('This will close this recurring income and delete all future unpaid records. Continue?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="row align-items-end g-3">
+                    <div class="col-md-5">
+                        <label for="last_pay_date" class="form-label fw-bold">Last Pay Date</label>
+                        <input type="date" class="form-control" id="last_pay_date" name="last_pay_date" required>
+                        <div class="form-text">The final pay date for this job (this record will be kept).</div>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="bi bi-door-closed"></i> End This Job
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div class="alert alert-warning mt-3 mb-0">
+                <i class="bi bi-lightbulb"></i>
+                <strong>Next step:</strong> After ending this job, go to
+                <a href="{{ url_for('income.add_recurring') }}" class="alert-link">Add Recurring Income</a>
+                to set up your new employer's salary template.
+                If your new pay day is different, use the
+                <strong>Reperiod Transactions</strong> tool on the
+                <a href="{{ url_for('income.recurring') }}" class="alert-link">Recurring Income</a> page
+                to re-bucket all your transactions into the correct pay periods.
             </div>
         </div>
     </div>

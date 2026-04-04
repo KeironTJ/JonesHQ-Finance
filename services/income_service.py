@@ -778,3 +778,61 @@ class IncomeService:
             'skipped_records': delete_result['skipped_records']
         }
 
+    @staticmethod
+    def end_job(recurring_income_id, last_pay_date):
+        """
+        End a recurring income job cleanly when an employee changes jobs.
+
+        Sets end_date to last_pay_date, deactivates the template, then
+        deletes all *unpaid* Income records with pay_date > last_pay_date and
+        their linked Transactions.  Records linked to already-paid transactions
+        are left intact (they represent real historical payments).
+
+        Args:
+            recurring_income_id: ID of the RecurringIncome template.
+            last_pay_date:       The final pay date for this job (inclusive).
+
+        Returns:
+            dict  with keys 'deleted' (int) and 'kept_paid' (int).
+        """
+        recurring = family_get(RecurringIncome, recurring_income_id)
+        if not recurring:
+            raise ValueError("Recurring income not found")
+
+        # Close out the template
+        recurring.end_date = last_pay_date
+        recurring.is_active = False
+
+        # Delete future unpaid income records (and their forecasted transactions)
+        future_incomes = family_query(Income).filter(
+            Income.recurring_income_id == recurring_income_id,
+            Income.pay_date > last_pay_date
+        ).all()
+
+        deleted = 0
+        kept_paid = 0
+
+        for income in future_incomes:
+            txn = None
+            if income.transaction_id:
+                txn = family_get(Transaction, income.transaction_id)
+
+            if txn and txn.is_paid:
+                # Keep records that have already been paid — don't touch paid history
+                kept_paid += 1
+                continue
+
+            # Break circular references before deletion
+            if txn:
+                txn.income_id = None
+                income.transaction_id = None
+                db.session.flush()
+                db.session.delete(txn)
+
+            db.session.delete(income)
+            deleted += 1
+
+        db.session.commit()
+
+        return {'deleted': deleted, 'kept_paid': kept_paid}
+

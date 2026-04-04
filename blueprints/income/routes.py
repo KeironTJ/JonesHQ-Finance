@@ -491,3 +491,56 @@ def regenerate_range(id):
         flash(f'Error regenerating income: {str(e)}', 'danger')
     
     return redirect(url_for('income.edit_recurring', id=id))
+
+
+@income_bp.route('/income/recurring/<int:id>/end-job', methods=['POST'])
+def end_job(id):
+    """End a recurring income job: close the template and delete future unpaid records."""
+    recurring = family_get_or_404(RecurringIncome, id)
+
+    try:
+        last_pay_date = datetime.strptime(request.form['last_pay_date'], '%Y-%m-%d').date()
+        result = IncomeService.end_job(recurring.id, last_pay_date)
+
+        msg = f"Job ended on {last_pay_date.strftime('%d/%m/%Y')}. "
+        if result['deleted']:
+            msg += f"Deleted {result['deleted']} future unpaid income record(s) and their transactions. "
+        if result['kept_paid']:
+            msg += f"{result['kept_paid']} already-paid record(s) were kept."
+        flash(msg.strip(), 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error ending job: {str(e)}', 'danger')
+
+    return redirect(url_for('income.recurring'))
+
+
+@income_bp.route('/income/reperiod-transactions', methods=['POST'])
+def reperiod_transactions():
+    """Re-stamp payday_period on all transactions, optionally updating the payday_day setting first."""
+    from services.payday_service import PaydayService
+    from models.settings import Settings
+
+    try:
+        new_payday_day = request.form.get('new_payday_day', '').strip()
+        if new_payday_day:
+            day = int(new_payday_day)
+            if not 0 <= day <= 31:
+                raise ValueError("Payday day must be between 1 and 31 (or 0 for last day of month).")
+            Settings.set_value('payday_day', day, description='Day of month salary is paid', setting_type='int')
+            db.session.commit()
+
+        updated = PaydayService.reperiod_all_transactions()
+        flash(
+            f"Payday periods updated for {updated} transaction(s)."
+            + (f" Payday day is now the {new_payday_day}." if new_payday_day else ""),
+            'success'
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating payday periods: {str(e)}', 'danger')
+
+    return redirect(url_for('income.recurring'))
+

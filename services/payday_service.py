@@ -628,3 +628,31 @@ class PaydayService:
             })
 
         return results
+
+    @staticmethod
+    def reperiod_all_transactions():
+        """
+        Re-calculate and update payday_period for every transaction in the family.
+
+        Call this after the global payday_day setting has been changed so that all
+        historical and future transactions are re-bucketed into the correct period.
+
+        Returns:
+            int — number of transaction rows whose payday_period was changed.
+        """
+        transactions = family_query(Transaction).filter(
+            Transaction.transaction_date.isnot(None)
+        ).all()
+
+        updated = 0
+        for txn in transactions:
+            new_period = PaydayService.get_period_for_date(txn.transaction_date)
+            if txn.payday_period != new_period:
+                txn.payday_period = new_period
+                updated += 1
+
+        if updated > 0:
+            db.session.commit()
+
+        return updated
+
