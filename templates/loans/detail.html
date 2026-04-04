@@ -228,6 +228,31 @@
                     </form>
                 </div>
             </div>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Update Future Payment Date</h6>
+                    <p class="text-muted">Change the day-of-month for all upcoming unpaid payments and their linked transactions</p>
+                    <form method="POST" action="{{ url_for('loans.update_payment_day', id=loan.id) }}"
+                          onsubmit="return confirm('Update the payment date for all future unpaid transactions?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="mb-3">
+                            <label for="payment_day" class="form-label">New Payment Day of Month</label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="payment_day" 
+                                   name="payment_day" 
+                                   min="1" max="31"
+                                   placeholder="e.g. 15"
+                                   value="{{ loan.start_date.day }}">
+                            <div class="form-text">Applies from today onwards. Months shorter than this day will use the last day of that month.</div>
+                        </div>
+                        <button type="submit" class="btn btn-info text-white">
+                            <i class="bi bi-calendar-event"></i> Update Payment Day
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
         </div>
     </div>

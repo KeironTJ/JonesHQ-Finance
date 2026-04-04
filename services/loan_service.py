@@ -272,7 +272,7 @@ class LoanService:
             loan_id=loan_id,
             vendor_id=vendor.id,
             transaction_date=loan_payment.date,
-            amount=float(loan_payment.payment_amount),  # Positive = expense
+            amount=-float(loan_payment.payment_amount),  # Negative = expense (money out)
             description=f"Loan Payment - {loan.name}",
             item=f"Period {loan_payment.period}",
             payment_type='Direct Debit',
@@ -295,8 +295,7 @@ class LoanService:
             Transaction.recalculate_account_balance(loan.default_payment_account_id)
         
         return bank_txn
-        return bank_txn
-    
+
     @staticmethod
     def delete_future_payments(loan_id, from_date, commit=True):
         """Delete all loan payments from a specific date onwards"""
@@ -364,6 +363,81 @@ class LoanService:
         loan = family_get(Loan, loan_id)
         return float(loan.loan_value) if loan else 0.0
     
+    @staticmethod
+    def update_future_payment_dates(loan_id, new_day, from_date=None, commit=True):
+        """
+        Update the day-of-month for all future (unpaid) loan payment records.
+
+        For each unpaid LoanPayment on or after ``from_date``, its date is moved to
+        ``new_day`` of the same month (clamped to the last day of that month when the
+        month is shorter, e.g. day 31 in February → 28/29).  The linked bank
+        Transaction (if any) is updated in-step so both records stay in sync.
+
+        Args:
+            loan_id:   ID of the Loan.
+            new_day:   Target day-of-month (1–31).
+            from_date: Earliest payment date to update (defaults to today).
+            commit:    Whether to commit the changes (default True).
+
+        Returns:
+            int — number of payment records updated.
+        """
+        import calendar as cal_mod
+        from services.payday_service import PaydayService
+
+        if from_date is None:
+            from_date = datetime.now().date()
+
+        new_day = max(1, min(31, int(new_day)))
+
+        future_payments = (
+            family_query(LoanPayment)
+            .filter(
+                LoanPayment.loan_id == loan_id,
+                LoanPayment.is_paid == False,
+                LoanPayment.period > 0,
+                LoanPayment.date >= from_date,
+            )
+            .order_by(LoanPayment.date)
+            .all()
+        )
+
+        updated = 0
+        for payment in future_payments:
+            # Clamp day to last day of month
+            max_day = cal_mod.monthrange(payment.date.year, payment.date.month)[1]
+            actual_day = min(new_day, max_day)
+            new_date = payment.date.replace(day=actual_day)
+
+            payment.date = new_date
+            payment.year_month = new_date.strftime('%Y-%m')
+
+            # Sync linked bank transaction
+            if payment.bank_transaction_id:
+                bank_txn = family_get(Transaction, payment.bank_transaction_id)
+                if bank_txn:
+                    bank_txn.transaction_date = new_date
+                    bank_txn.year_month = new_date.strftime('%Y-%m')
+                    bank_txn.week_year = f"{new_date.isocalendar()[1]:02d}-{new_date.year}"
+                    bank_txn.day_name = new_date.strftime('%a')
+                    bank_txn.payday_period = PaydayService.get_period_for_date(new_date)
+
+            updated += 1
+
+        if commit and updated:
+            db.session.commit()
+            # Recalculate balances for any affected accounts
+            account_ids = set()
+            for payment in future_payments:
+                if payment.bank_transaction_id:
+                    bank_txn = family_get(Transaction, payment.bank_transaction_id)
+                    if bank_txn and bank_txn.account_id:
+                        account_ids.add(bank_txn.account_id)
+            for account_id in account_ids:
+                Transaction.recalculate_account_balance(account_id)
+
+        return updated
+
     @staticmethod
     def get_payment_statistics(loan_id):
         """Get statistics about loan payments"""

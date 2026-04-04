@@ -340,7 +340,7 @@ def edit_payment(id, payment_id):
             if bank_txn:
                 # Update all relevant transaction fields
                 bank_txn.transaction_date = payment.date
-                bank_txn.amount = float(payment.payment_amount)
+                bank_txn.amount = -float(payment.payment_amount)  # Negative = expense (money out)
                 bank_txn.description = f"Loan Payment - {loan.name}"
                 bank_txn.item = f"Period {payment.period}"
                 bank_txn.year_month = payment.date.strftime('%Y-%m')
@@ -443,6 +443,32 @@ def bulk_delete_payments(id):
         db.session.rollback()
         flash(f'Error deleting payments: {str(e)}', 'danger')
         return redirect(url_for('loans.detail', id=id))
+
+
+@loans_bp.route('/<int:id>/update-payment-day', methods=['POST'])
+def update_payment_day(id):
+    """Update the day-of-month for all future unpaid payments"""
+    loan = family_get_or_404(Loan, id)
+
+    try:
+        new_day = int(request.form.get('payment_day', 0))
+        if not (1 <= new_day <= 31):
+            flash('Payment day must be between 1 and 31.', 'danger')
+            return redirect(url_for('loans.detail', id=id))
+
+        updated = LoanService.update_future_payment_dates(
+            loan_id=id,
+            new_day=new_day,
+            from_date=date.today()
+        )
+
+        flash(f'Updated {updated} future payment(s) to day {new_day} of each month.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating payment dates: {str(e)}', 'danger')
+
+    return redirect(url_for('loans.detail', id=id))
 
 
 @loans_bp.route('/generate-all', methods=['POST'])
