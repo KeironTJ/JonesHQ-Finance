@@ -167,12 +167,17 @@ class FuelForecastingService:
         last_fill = fuel_records[-1] if fuel_records else None
         
         # Seed cumulative with the deficit already present after the last fill.
-        # A full fill leaves 0 gallons consumed; a partial fill of N gallons when
-        # M gallons had been consumed leaves (M - N) gallons still "owed" to the tank.
+        # Use actual_miles (miles since previous fill) to compute gallons consumed
+        # before the fill.  deficit_after_fill = gallons_consumed - gallons_added.
+        # A full fill (consumed ≈ filled) → deficit 0.  A partial fill → small
+        # positive deficit.  Clamped to 0 if more was filled than consumed.
+        # Falls back to 0 (assume full fill) when actual_miles is not recorded.
         if last_fill and last_fill.gallons:
-            # We don't know the exact cumulative before the last fill without
-            # replaying history, so approximate: deficit = tank_capacity - gallons_added
-            initial_deficit = max(0.0, tank_capacity - float(last_fill.gallons))
+            if last_fill.actual_miles:
+                gallons_consumed_before_fill = last_fill.actual_miles / avg_mpg
+                initial_deficit = max(0.0, gallons_consumed_before_fill - float(last_fill.gallons))
+            else:
+                initial_deficit = 0.0  # No miles data — assume tank was filled to full
         else:
             initial_deficit = 0.0
         
@@ -296,11 +301,12 @@ class FuelForecastingService:
     @staticmethod
     def sync_forecasted_transactions(vehicle_id):
         """
-        Rebuild all future forecasted fuel transactions for a vehicle.
+        Rebuild all forecasted fuel transactions for a vehicle (past and future).
 
-        Deletes any existing future forecasted transactions in the 'Transportation - Fuel'
+        Deletes all existing forecasted transactions in the 'Transportation - Fuel'
         category matching the vehicle's registration, then calls predict_refills() and
-        creates a new forecasted transaction for each predicted date >= today.
+        creates a forecasted transaction for every predicted date.  Past predictions
+        represent missed refills when trips weren't kept up to date.
 
         Call this after adding/editing Trip or FuelRecord rows to keep forecasts current.
         Also called internally by link_fuel_record_to_transaction() after a fill is logged.
@@ -317,10 +323,9 @@ class FuelForecastingService:
         if not fuel_category:
             return
         
-        # Delete future forecasted fuel transactions for this vehicle
-        today = date.today()
+        # Delete ALL forecasted fuel transactions for this vehicle (past and future)
+        # so stale predictions don't accumulate when trips/fills are edited.
         family_query(Transaction).filter(
-            Transaction.transaction_date >= today,
             Transaction.is_forecasted == True,
             Transaction.category_id == fuel_category.id,
             Transaction.description.like(f'%{vehicle.registration}%')
@@ -329,14 +334,14 @@ class FuelForecastingService:
         # Get predicted refills
         predicted_refills = FuelForecastingService.predict_refills(vehicle_id)
         
-        # Create forecasted transactions
+        # Create forecasted transactions for all predicted refills (past and future).
+        # Past ones represent missed fills when trips weren't kept up to date.
         for refill in predicted_refills:
-            if refill['date'] >= today:
-                FuelForecastingService.create_forecasted_transaction(
-                    vehicle_id=vehicle_id,
-                    refill_date=refill['date'],
-                    cost=refill['cost']
-                )
+            FuelForecastingService.create_forecasted_transaction(
+                vehicle_id=vehicle_id,
+                refill_date=refill['date'],
+                cost=refill['cost']
+            )
         
         db.session.commit()
     
