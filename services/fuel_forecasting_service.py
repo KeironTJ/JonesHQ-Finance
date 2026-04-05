@@ -179,7 +179,7 @@ class FuelForecastingService:
         predicted_refills = []
         cumulative_gallons = initial_deficit
         last_reset_date = last_fill.date if last_fill else None
-        previous_trip_date = last_fill.date if last_fill else None
+        previous_trip_date = None  # Only set once an actual trip is processed
         
         for trip in trips:
             # Skip trips on or before the last actual fill — we already seeded
