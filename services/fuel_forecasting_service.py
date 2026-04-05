@@ -100,16 +100,19 @@ class FuelForecastingService:
         
         # Get all actual fuel records
         fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
-        fuel_dates = {f.date for f in fuel_records}
+        fuel_date_map = {f.date: f for f in fuel_records}
         
         consumption_data = {}
         cumulative_gallons = 0.0
         last_reset_date = None
         
         for trip in trips:
-            # Reset cumulative if there was a fuel fill on this date
-            if trip.date in fuel_dates:
-                cumulative_gallons = 0.0
+            # Adjust cumulative if there was a fuel fill on this date.
+            # Subtract gallons added so partial fills are handled correctly.
+            if trip.date in fuel_date_map:
+                fill = fuel_date_map[trip.date]
+                gallons_added = float(fill.gallons) if fill.gallons else 0.0
+                cumulative_gallons = max(0.0, cumulative_gallons - gallons_added)
                 last_reset_date = trip.date
                 continue
             
@@ -156,17 +159,41 @@ class FuelForecastingService:
         
         # Get all actual fuel records to know when tank was filled
         fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
-        fuel_dates = {f.date for f in fuel_records}
+        fuel_date_map = {f.date: f for f in fuel_records}  # date -> record (for gallons lookup)
+        
+        # Start accumulation from the last actual fuel record — that is the only
+        # date we know for certain the tank state.  Trips on or before that
+        # date are irrelevant to the next predicted refill.
+        last_fill = fuel_records[-1] if fuel_records else None
+        
+        # Seed cumulative with the deficit already present after the last fill.
+        # A full fill leaves 0 gallons consumed; a partial fill of N gallons when
+        # M gallons had been consumed leaves (M - N) gallons still "owed" to the tank.
+        if last_fill and last_fill.gallons:
+            # We don't know the exact cumulative before the last fill without
+            # replaying history, so approximate: deficit = tank_capacity - gallons_added
+            initial_deficit = max(0.0, tank_capacity - float(last_fill.gallons))
+        else:
+            initial_deficit = 0.0
         
         predicted_refills = []
-        cumulative_gallons = 0.0
-        last_reset_date = None
-        previous_trip_date = None
+        cumulative_gallons = initial_deficit
+        last_reset_date = last_fill.date if last_fill else None
+        previous_trip_date = last_fill.date if last_fill else None
         
         for trip in trips:
-            # Reset cumulative if there was an actual fuel fill on this date
-            if trip.date in fuel_dates:
-                cumulative_gallons = 0.0
+            # Skip trips on or before the last actual fill — we already seeded
+            # the deficit from that fill above.
+            if last_fill and trip.date <= last_fill.date:
+                continue
+
+            # Adjust cumulative if there was an actual fuel fill on this date.
+            # Subtract gallons added rather than resetting to 0, so partial fills
+            # are handled correctly.
+            if trip.date in fuel_date_map:
+                fill = fuel_date_map[trip.date]
+                gallons_added = float(fill.gallons) if fill.gallons else 0.0
+                cumulative_gallons = max(0.0, cumulative_gallons - gallons_added)
                 last_reset_date = trip.date
                 previous_trip_date = trip.date
                 continue
