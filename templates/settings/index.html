@@ -178,11 +178,22 @@
                                 </div>
                                 <small class="text-muted d-block mt-1">
                                     <strong>0</strong> = last day of month (default).<br>
-                                    <strong>1–28</strong>: expenses on or after this day belong to <em>next</em> month's
-                                    claim period. Reimbursement is dated on this day (adjusted to a working day if needed).<br>
+                                    <strong>1–28</strong>: expenses on or after this day belong to <em>next</em> month's claim period.<br>
                                     <em>Only applies in Calendar Month mode.</em>
-                                    <br>Example: cutoff&nbsp;15 → Jan expenses split at the 15th;
-                                    Jan&nbsp;1–14 reimb. Jan&nbsp;15, Jan&nbsp;15–31 reimb. Feb&nbsp;15.
+                                </small>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="expense_reimburse_day" class="form-label fw-semibold">Reimbursement Day</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="expense_reimburse_day"
+                                           name="expense_reimburse_day" min="0" max="28"
+                                           value="{{ expense_reimburse_day }}">
+                                    <span class="input-group-text">of month</span>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    <strong>0</strong> = auto (uses cutoff day or last working day of period).<br>
+                                    <strong>1–28</strong>: fixed reimbursement date, adjusted to the previous working day if it falls on a weekend.<br>
+                                    <em>Example: cutoff 15, reimburse 25 → May expenses cut off 15 May, reimbursed 23 May (Fri if 25 is a Sun).</em>
                                 </small>
                             </div>
                         </div>

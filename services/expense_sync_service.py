@@ -145,7 +145,15 @@ class ExpenseSyncService:
         Return the monthly cutoff day (1-28) used in 'calendar_month' mode.
         0 (default) means the last day of the month.
         """
-        return Settings.get_value('expenses.cutoff_day', 0)
+        return int(Settings.get_value('expenses.cutoff_day', 0) or 0)
+
+    @staticmethod
+    def get_reimburse_day():
+        """
+        Return the fixed reimbursement day of month (1-28).
+        0 (default) means derive from cutoff/period-end logic.
+        """
+        return int(Settings.get_value('expenses.reimburse_day', 0) or 0)
 
     @staticmethod
     def get_period_key_for_expense(exp):
@@ -789,14 +797,26 @@ class ExpenseSyncService:
     @staticmethod
     def _get_reimbursement_date(period_key):
         """
-        Return the date on which the reimbursement transaction should be placed:
-          'calendar_month' → last working day of that calendar month
-            If cutoff_day=D: the cutoff day itself (adjusted to a working day)
-          'payday_period'  → last working day on or before the payday period's end date
+        Return the date on which the reimbursement transaction should be placed.
+
+        Priority order:
+          1. expenses.reimburse_day is set (1-28): use that fixed day of the period month,
+             adjusted to the previous working day if it falls on a weekend.
+          2. payday_period mode: last working day on or before the payday period end.
+          3. cutoff_day > 0: the cutoff day of the period month (on-or-next working day).
+          4. Default: last working day of the period month.
         """
         import calendar as _cal
         year, month = map(int, period_key.split('-'))
         mode = ExpenseSyncService.get_period_mode()
+
+        reimburse_day = ExpenseSyncService.get_reimburse_day()
+        if reimburse_day > 0:
+            max_day = _cal.monthrange(year, month)[1]
+            raw = date(year, month, min(reimburse_day, max_day))
+            # Use previous-working-day so reimbursement never lands after the target date
+            return PaydayService.get_previous_working_day(raw)
+
         if mode == 'payday_period':
             _, end_date, _ = PaydayService.get_payday_period(year, month)
             return PaydayService.get_previous_working_day(end_date)

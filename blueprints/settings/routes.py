@@ -25,6 +25,7 @@ def index():
     expense_auto_sync = Settings.get_value('expenses.auto_sync', True)
     expense_period_mode = Settings.get_value('expenses.period_mode', 'calendar_month')
     expense_cutoff_day = Settings.get_value('expenses.cutoff_day', 0)
+    expense_reimburse_day = Settings.get_value('expenses.reimburse_day', 0)
     expense_reimburse_category_id = Settings.get_value('expenses.reimburse_category_id')
     expense_reimburse_vendor_id   = Settings.get_value('expenses.reimburse_vendor_id')
 
@@ -52,6 +53,7 @@ def index():
                          expense_auto_sync=expense_auto_sync,
                          expense_period_mode=expense_period_mode,
                          expense_cutoff_day=int(expense_cutoff_day) if expense_cutoff_day else 0,
+                         expense_reimburse_day=int(expense_reimburse_day) if expense_reimburse_day else 0,
                          expense_reimburse_category_id=int(expense_reimburse_category_id) if expense_reimburse_category_id else None,
                          expense_reimburse_vendor_id=int(expense_reimburse_vendor_id) if expense_reimburse_vendor_id else None,
                          accounts=accounts,
@@ -154,6 +156,17 @@ def update():
             'expenses.cutoff_day',
             expense_cutoff_day,
             'Day of month expenses are cut off for claiming (0 = last day of month)',
+            'int'
+        )
+
+        expense_reimburse_day = int(request.form.get('expense_reimburse_day', 0) or 0)
+        if not (0 <= expense_reimburse_day <= 28):
+            flash('Reimbursement day must be between 0 (auto) and 28.', 'danger')
+            return redirect(url_for('settings.index'))
+        Settings.set_value(
+            'expenses.reimburse_day',
+            expense_reimburse_day,
+            'Fixed day of month for reimbursement date (0 = derive from cutoff/period-end)',
             'int'
         )
 
