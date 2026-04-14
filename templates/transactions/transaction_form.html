@@ -111,6 +111,12 @@
                                     <option value="BACS" {% if transaction and transaction.payment_type == 'BACS' %}selected{% endif %}>BACS</option>
                                     <option value="Standing Order" {% if transaction and transaction.payment_type == 'Standing Order' %}selected{% endif %}>Standing Order</option>
                                     <option value="Cash" {% if transaction and transaction.payment_type == 'Cash' %}selected{% endif %}>Cash</option>
+                                    <optgroup label="── System (Expense) ──">
+                                        <option value="Expense Reimbursement" {% if transaction and transaction.payment_type == 'Expense Reimbursement' %}selected{% endif %}>Expense Reimbursement</option>
+                                        <option value="Expense Partial Reimbursement" {% if transaction and transaction.payment_type == 'Expense Partial Reimbursement' %}selected{% endif %}>Expense Partial Reimbursement</option>
+                                        <option value="Expense CC Purchase" {% if transaction and transaction.payment_type == 'Expense CC Purchase' %}selected{% endif %}>Expense CC Purchase</option>
+                                        <option value="Expense CC Payment" {% if transaction and transaction.payment_type == 'Expense CC Payment' %}selected{% endif %}>Expense CC Payment</option>
+                                    </optgroup>
                                 </select>
                             </div>
 

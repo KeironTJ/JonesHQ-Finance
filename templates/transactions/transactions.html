@@ -671,12 +671,19 @@
                     <div class="mb-3">
                         <label for="edit_payment_type" class="form-label">Payment Type</label>
                         <select class="form-select" name="payment_type" id="edit_payment_type">
+                            <option value="">Select...</option>
                             <option value="Transfer">Transfer</option>
                             <option value="Direct Debit">Direct Debit</option>
                             <option value="Card Payment">Card Payment</option>
                             <option value="BACS">BACS</option>
                             <option value="Standing Order">Standing Order</option>
                             <option value="Cash">Cash</option>
+                            <optgroup label="── System (Expense) ──">
+                                <option value="Expense Reimbursement">Expense Reimbursement</option>
+                                <option value="Expense Partial Reimbursement">Expense Partial Reimbursement</option>
+                                <option value="Expense CC Purchase">Expense CC Purchase</option>
+                                <option value="Expense CC Payment">Expense CC Payment</option>
+                            </optgroup>
                         </select>
                     </div>
                     
