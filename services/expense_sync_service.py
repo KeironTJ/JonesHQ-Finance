@@ -543,7 +543,8 @@ class ExpenseSyncService:
                 year_month=txn_year_month,
                 week_year=f"{reimbursement_date.isocalendar()[1]:02d}-{reimbursement_date.year}",
                 day_name=reimbursement_date.strftime('%A'),
-                payday_period=PaydayService.get_period_for_date(reimbursement_date)
+                payday_period=PaydayService.get_period_for_date(reimbursement_date),
+                claim_group=claim_group
             )
             db.session.add(partial_txn)
             db.session.flush()
@@ -878,10 +879,16 @@ class ExpenseSyncService:
                 existing.amount = total_reimbursement
                 existing.transaction_date = reimbursement_date
                 existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                if existing.claim_group is None:
+                    existing.claim_group = period_key
                 db.session.add(existing)
                 db.session.flush()
                 Transaction.recalculate_account_balance(existing.account_id)
                 return existing.id, True
+            # Ensure claim_group is stamped even if amount hasn't changed
+            if existing.claim_group is None:
+                existing.claim_group = period_key
+                db.session.add(existing)
             return existing.id, False
 
         # Find reimbursement account
@@ -923,7 +930,8 @@ class ExpenseSyncService:
             year_month=period_key,
             week_year=f"{reimbursement_date.isocalendar()[1]:02d}-{reimbursement_date.year}",
             day_name=reimbursement_date.strftime('%A'),
-            payday_period=PaydayService.get_period_for_date(reimbursement_date)
+            payday_period=PaydayService.get_period_for_date(reimbursement_date),
+            claim_group=period_key
         )
         db.session.add(reimburse_txn)
         db.session.flush()

@@ -38,7 +38,12 @@ class Transaction(db.Model):
     payday_period = db.Column(db.String(7))  # 2026-01 (payday period this transaction falls in)
     
     is_forecasted = db.Column(db.Boolean, default=False)  # True for predicted/forecasted transactions
-    
+
+    # Expense claim group — mirrors Expense.claim_group for reimbursement/partial transactions.
+    # Format: 'YYYY-MM' for full-period reimbursements, 'YYYY-MM-P1' etc. for partials.
+    # NULL for all non-expense transactions.
+    claim_group = db.Column(db.String(20), nullable=True, index=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     

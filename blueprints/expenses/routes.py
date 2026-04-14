@@ -103,15 +103,42 @@ def index():
         period_summaries[key]['count'] += 1
         period_summaries[key]['total'] += float(e.total_cost or 0)
 
-    # Get reimbursement transactions by month
-    reimbursement_txns = family_query(Transaction).filter_by(payment_type='Expense Reimbursement').all()
-    reimbursements_by_month = {txn.year_month: txn for txn in reimbursement_txns}
+    # Get all expense-linked reimbursement transactions keyed by claim_group.
+    # Using claim_group (indexed column) is robust — survives edits to date, description or payment_type.
+    # Fall back to payment_type matching for older transactions that pre-date the claim_group column.
+    all_reimb_txns = family_query(Transaction).filter(
+        Transaction.claim_group.isnot(None)
+    ).all()
+    # Also pick up legacy txns that have no claim_group yet but are typed as expense reimbursements
+    legacy_reimb_txns = family_query(Transaction).filter(
+        Transaction.claim_group.is_(None),
+        Transaction.payment_type.in_(['Expense Reimbursement', 'Expense Partial Reimbursement'])
+    ).all()
+    # Merge: legacy txns use year_month (full) or regex (partial) as fallback key
+    reimbursements_by_claim = {}  # claim_group -> Transaction (full period: YYYY-MM)
+    partial_reimbursements_by_claim = {}  # claim_group -> Transaction (partial: YYYY-MM-Pn)
+    for txn in all_reimb_txns:
+        if '-P' in txn.claim_group:
+            partial_reimbursements_by_claim[txn.claim_group] = txn
+        else:
+            reimbursements_by_claim[txn.claim_group] = txn
+    for txn in legacy_reimb_txns:
+        if txn.payment_type == 'Expense Partial Reimbursement':
+            m = re.search(r'\((\d{4}-\d{2}-P\d+)\)\s*$', txn.description or '')
+            cg_key = m.group(1) if m else None
+            if cg_key and cg_key not in partial_reimbursements_by_claim:
+                partial_reimbursements_by_claim[cg_key] = txn
+        else:
+            if txn.year_month and txn.year_month not in reimbursements_by_claim:
+                reimbursements_by_claim[txn.year_month] = txn
+    # Keep backward-compat name used by template
+    reimbursements_by_month = reimbursements_by_claim
 
     # Determine which periods are fully settled (locked from sync edits).
     # A period is closed if: its reimbursement transaction is marked is_paid=True,
     # OR every expense in the period is individually marked reimbursed=True.
     closed_periods = set()
-    for key, txn in reimbursements_by_month.items():
+    for key, txn in reimbursements_by_claim.items():
         if txn.is_paid:
             closed_periods.add(key)
     for key in list(period_summaries.keys()):
@@ -119,15 +146,6 @@ def index():
             period_exps = [e for e in expenses if expense_period_keys[e.id] == key]
             if period_exps and all(e.reimbursed for e in period_exps):
                 closed_periods.add(key)
-
-    # Get partial reimbursement transactions keyed by claim_group extracted from their description
-    partial_reimb_txns = family_query(Transaction).filter_by(payment_type='Expense Partial Reimbursement').all()
-    partial_reimbursements_by_claim = {}  # claim_group -> Transaction
-    for txn in partial_reimb_txns:
-        # Description format: '... (YYYY-MM-Pn)' — extract claim_group from trailing parenthesis
-        m = re.search(r'\((\d{4}-\d{2}-P\d+)\)\s*$', txn.description or '')
-        cg_key = m.group(1) if m else txn.year_month
-        partial_reimbursements_by_claim[cg_key] = txn
 
     # A partial claim group is also closed if its txn is_paid, or all its expenses are reimbursed.
     for cg, txn in partial_reimbursements_by_claim.items():
@@ -139,10 +157,11 @@ def index():
             if cg_exps and all(e.reimbursed for e in cg_exps):
                 closed_periods.add(cg)
 
-    # Keep the old month-keyed dict for the period header (shows all partials for a period)
+    # Keep the old month-keyed dict for the period header (shows all partials for a period).
+    # Key by base period (first 7 chars of the claim_group) so '2026-02-P1' maps to '2026-02'.
     partial_reimbursements_by_month = {}
     for cg, txn in partial_reimbursements_by_claim.items():
-        month_key = txn.year_month
+        month_key = cg[:7]
         if month_key not in partial_reimbursements_by_month:
             partial_reimbursements_by_month[month_key] = []
         partial_reimbursements_by_month[month_key].append(txn)
