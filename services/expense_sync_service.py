@@ -22,6 +22,23 @@ The service respects the ``expenses.period_mode`` setting:
 
 Both modes use YYYY-MM as the period key (same format as the payday period label).
 
+Cutoff day (``expenses.cutoff_day``, calendar_month mode only)
+--------------------------------------------------------------
+When set to a value between 1 and 28, periods are shifted so that expenses on or
+after day N belong to the *following* month's period.  The reimbursement date
+becomes the cutoff day itself (adjusted forward to a working day if needed).
+
+  cutoff_day=0  (default) — identical to existing calendar_month behaviour.
+  cutoff_day=15 — Jan 1–14 → period "2026-01" (reimburse 15 Jan);
+                  Jan 15–31 → period "2026-02" (reimburse 15 Feb).
+
+Partial / mid-period claims
+---------------------------
+``create_partial_reimbursement(from_date, to_date)`` creates a standalone
+'Expense Partial Reimbursement' transaction covering any custom date range.
+These are not touched by the automatic ``reconcile_monthly_reimbursements`` cycle
+and appear alongside normal reimbursements in the expense list.
+
 ``auto_sync`` guard
 -------------------
 Every public write method checks the ``expenses.auto_sync`` setting and returns early
@@ -123,17 +140,36 @@ class ExpenseSyncService:
         return Settings.get_value('expenses.period_mode', 'calendar_month')
 
     @staticmethod
+    def get_cutoff_day():
+        """
+        Return the monthly cutoff day (1-28) used in 'calendar_month' mode.
+        0 (default) means the last day of the month.
+        """
+        return Settings.get_value('expenses.cutoff_day', 0)
+
+    @staticmethod
     def get_period_key_for_expense(exp):
         """
         Return the period key (YYYY-MM) that this expense belongs to under the current mode.
         Always derived from exp.date so it is resilient to NULL Expense.month fields.
+
+        With cutoff_day=D (calendar_month mode):
+          - expense date.day < D  → belongs to THIS month's period (YYYY-MM)
+          - expense date.day >= D → belongs to NEXT month's period
         """
         if not exp.date:
             return None
         mode = ExpenseSyncService.get_period_mode()
         if mode == 'payday_period':
             return PaydayService.get_period_for_date(exp.date)
-        # Default: calendar month
+        # calendar_month: respect cutoff_day setting
+        cutoff = ExpenseSyncService.get_cutoff_day()
+        if cutoff > 0:
+            if exp.date.day >= cutoff:
+                # Expense falls on/after the cutoff → belongs to next month's period
+                if exp.date.month == 12:
+                    return f"{exp.date.year + 1}-01"
+                return f"{exp.date.year}-{exp.date.month + 1:02d}"
         return exp.date.strftime('%Y-%m')
 
     @staticmethod
@@ -389,6 +425,148 @@ class ExpenseSyncService:
         return summary
 
     @staticmethod
+    def create_partial_reimbursement(from_date, to_date, reimbursement_date=None):
+        """
+        Create (or update) a partial reimbursement transaction covering a custom date range.
+
+        This is used for mid-period claims — e.g., generating a reimbursement for the
+        first two weeks of a month rather than waiting for the full period to close.
+
+        The transaction uses payment_type='Expense Partial Reimbursement' so the standard
+        ``reconcile_monthly_reimbursements`` cycle does not overwrite it.
+
+        Args:
+            from_date:          First day of expenses to include (inclusive).
+            to_date:            Last day of expenses to include (inclusive).
+            reimbursement_date: Date to stamp on the reimbursement transaction.
+                                Defaults to ``to_date`` adjusted to the next working day.
+
+        Returns:
+            (transaction_id, total_amount, claim_group) tuple, or None if no unclaimed
+            expenses found in the date range.
+
+        Side effects:
+            Stamps ``claim_group`` on every covered expense.
+            Commits the session on success.  Rolls back on failure and re-raises.
+        """
+        try:
+            # Include expenses that are either:
+            #   (a) not yet assigned to any claim group (claim_group is NULL), or
+            #   (b) assigned to a full-period group (YYYY-MM, no -P suffix) meaning a
+            #       full sync has run but no partial has claimed them yet.
+            # Expenses already in a partial group (YYYY-MM-P*) are excluded.
+            all_in_range = family_query(Expense).filter(
+                Expense.date >= from_date,
+                Expense.date <= to_date
+            ).all()
+
+            unclaimed = [
+                exp for exp in all_in_range
+                if exp.claim_group is None or '-P' not in exp.claim_group
+            ]
+
+            # Sort unclaimed so the earliest date determines the base period.
+            unclaimed.sort(key=lambda e: e.date or date.min)
+
+            if not unclaimed:
+                return None
+
+            total = sum(exp.total_cost for exp in unclaimed if exp.total_cost)
+            if not total or total <= 0:
+                return None
+
+            if reimbursement_date is None:
+                reimbursement_date = ExpenseSyncService._on_or_next_working_day(to_date)
+
+            # Base period from the earliest expense in the range.
+            base_period = unclaimed[0].date.strftime('%Y-%m')
+
+            # Auto-number the partial suffix by counting distinct claim_groups already
+            # used for this base period on the expenses table.  This is reliable even
+            # when the reimbursement date falls in a different calendar month.
+            existing_partial_count = (
+                family_query(Expense)
+                .filter(Expense.claim_group.like(f'{base_period}-P%'))
+                .with_entities(Expense.claim_group)
+                .distinct()
+                .count()
+            )
+            partial_number = existing_partial_count + 1
+            claim_group = f'{base_period}-P{partial_number}'
+
+            description = (
+                f'Expense Reimbursement {from_date.strftime("%d %b %Y")}'
+                f' to {to_date.strftime("%d %b %Y")} ({claim_group})'
+            )
+            # year_month on the partial transaction = base_period so that partial
+            # number counting is always consistent, regardless of whether the
+            # reimbursement date falls in a different calendar month.
+            txn_year_month = base_period
+
+            # Stamp claim_group on every expense being claimed
+            for exp in unclaimed:
+                exp.claim_group = claim_group
+                db.session.add(exp)
+
+            # Resolve account
+            acct_id = Settings.get_value('expenses.payment_account_id')
+            account = family_get(Account, int(acct_id)) if acct_id else None
+            if not account:
+                account = family_query(Account).order_by(Account.name).first()
+            if not account:
+                raise ValueError('No account configured — set expenses.payment_account_id in Settings.')
+
+            # Resolve category
+            cat_id = Settings.get_value('expenses.reimburse_category_id')
+            reimburse_cat = family_get(Category, int(cat_id)) if cat_id else None
+            if not reimburse_cat:
+                reimburse_cat = (
+                    family_query(Category).filter_by(head_budget='Income', sub_budget='Expense').first()
+                    or family_query(Category).filter_by(head_budget='Expenses').first()
+                    or family_query(Category).first()
+                )
+
+            vendor_id_setting = Settings.get_value('expenses.reimburse_vendor_id')
+            reimburse_vendor_id = int(vendor_id_setting) if vendor_id_setting else None
+
+            partial_txn = Transaction(
+                family_id=get_family_id(),
+                account_id=account.id,
+                category_id=reimburse_cat.id if reimburse_cat else None,
+                vendor_id=reimburse_vendor_id,
+                amount=total,
+                transaction_date=reimbursement_date,
+                description=description,
+                item=description,
+                payment_type='Expense Partial Reimbursement',
+                is_paid=False,
+                year_month=txn_year_month,
+                week_year=f"{reimbursement_date.isocalendar()[1]:02d}-{reimbursement_date.year}",
+                day_name=reimbursement_date.strftime('%A'),
+                payday_period=PaydayService.get_period_for_date(reimbursement_date)
+            )
+            db.session.add(partial_txn)
+            db.session.flush()
+            Transaction.recalculate_account_balance(account.id)
+            db.session.commit()
+
+            # After committing the partial, re-sync the base period reimbursement so it
+            # is updated to exclude the expenses now assigned to the partial group.
+            try:
+                ExpenseSyncService._create_period_reimbursement(base_period)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                # Non-fatal — the partial was created successfully; the base period
+                # reimbursement will be corrected on the next full sync.
+
+            return partial_txn.id, total, claim_group
+
+        except Exception:
+            db.session.rollback()
+            raise
+
+    @staticmethod
     def _ensure_credit_card_payment(exp: Expense):
         """
         Create or update the immediate CC Purchase transaction for an expense.
@@ -580,6 +758,7 @@ class ExpenseSyncService:
         """
         Return (start_date, end_date) for the given period key, respecting the current mode:
           'calendar_month' → first day … last day of that calendar month
+            If cutoff_day=D: start = D of previous month, end = (D-1) of this month
           'payday_period'  → PaydayService start/end for that payday period
         Raises ValueError if period_key is malformed.
         """
@@ -589,7 +768,21 @@ class ExpenseSyncService:
         if mode == 'payday_period':
             start_date, end_date, _ = PaydayService.get_payday_period(year, month)
             return start_date, end_date
-        # Default: calendar month
+        # calendar_month: respect cutoff_day setting
+        cutoff = ExpenseSyncService.get_cutoff_day()
+        if cutoff > 0:
+            prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+            # Clamp cutoff to valid day in previous month
+            prev_max = _cal.monthrange(prev_year, prev_month)[1]
+            start_date = date(prev_year, prev_month, min(cutoff, prev_max))
+            # End is the day before cutoff in the current month; if cutoff=1, end = last day of prev month
+            end_date = (
+                date(year, month, 1) - timedelta(days=1)
+                if cutoff == 1
+                else date(year, month, cutoff - 1)
+            )
+            return start_date, end_date
+        # Default: full calendar month
         return date(year, month, 1), date(year, month, _cal.monthrange(year, month)[1])
 
     @staticmethod
@@ -597,13 +790,20 @@ class ExpenseSyncService:
         """
         Return the date on which the reimbursement transaction should be placed:
           'calendar_month' → last working day of that calendar month
+            If cutoff_day=D: the cutoff day itself (adjusted to a working day)
           'payday_period'  → last working day on or before the payday period's end date
         """
+        import calendar as _cal
         year, month = map(int, period_key.split('-'))
         mode = ExpenseSyncService.get_period_mode()
         if mode == 'payday_period':
             _, end_date, _ = PaydayService.get_payday_period(year, month)
             return PaydayService.get_previous_working_day(end_date)
+        cutoff = ExpenseSyncService.get_cutoff_day()
+        if cutoff > 0:
+            max_day = _cal.monthrange(year, month)[1]
+            raw = date(year, month, min(cutoff, max_day))
+            return ExpenseSyncService._on_or_next_working_day(raw)
         return ExpenseSyncService._last_working_day_of_month(year, month)
 
     @staticmethod
@@ -620,18 +820,38 @@ class ExpenseSyncService:
         except (ValueError, AttributeError):
             return None
 
-        # Include all expenses in the period (submitted or not); created as is_paid=False.
-        expenses = family_query(Expense).filter(
+        # Only include expenses that have NOT been claimed in a partial group.
+        # An expense belongs to this full-period claim if:
+        #   claim_group is NULL (never assigned) OR claim_group == period_key exactly.
+        all_period_expenses = family_query(Expense).filter(
             Expense.date >= period_start,
             Expense.date <= period_end
         ).all()
 
+        expenses = [
+            exp for exp in all_period_expenses
+            if exp.claim_group is None or exp.claim_group == period_key
+        ]
+
         if not expenses:
+            # All expenses in this period have been claimed by partials.
+            # Remove the stale full-period reimbursement txn if it exists and is not yet paid.
+            stale = family_query(Transaction).filter(
+                Transaction.payment_type == 'Expense Reimbursement',
+                Transaction.year_month == period_key
+            ).first()
+            if stale and not stale.is_paid:
+                acct_id_for_del = stale.account_id
+                db.session.delete(stale)
+                db.session.flush()
+                if acct_id_for_del:
+                    Transaction.recalculate_account_balance(acct_id_for_del)
             return None
 
         total_reimbursement = sum(exp.total_cost for exp in expenses if exp.total_cost)
         if total_reimbursement <= 0:
             return None
+
         # Look for existing reimbursement transaction for this period
         existing = family_query(Transaction).filter(
             Transaction.payment_type == 'Expense Reimbursement',
@@ -640,13 +860,27 @@ class ExpenseSyncService:
 
         if existing:
             if existing.is_paid:
-                # Locked — do not modify a paid/reconciled reimbursement
+                # Locked — do not stamp claim_group or modify anything
                 return existing.id, False
+            # Also locked if every expense in the full-period group is already reimbursed
+            if expenses and all(exp.reimbursed for exp in expenses):
+                return existing.id, False
+
+        # Stamp claim_group on any unclaimed expenses so they are locked from future partials.
+        # Only done here, after confirming the period is not already settled.
+        for exp in expenses:
+            if exp.claim_group is None:
+                exp.claim_group = period_key
+                db.session.add(exp)
+
+        if existing:
             if abs(existing.amount - total_reimbursement) > Decimal('0.01'):
                 existing.amount = total_reimbursement
                 existing.transaction_date = reimbursement_date
                 existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 db.session.add(existing)
+                db.session.flush()
+                Transaction.recalculate_account_balance(existing.account_id)
                 return existing.id, True
             return existing.id, False
 
@@ -710,6 +944,13 @@ class ExpenseSyncService:
         while last_day.weekday() > 4:
             last_day -= timedelta(days=1)
         return last_day
+
+    @staticmethod
+    def _on_or_next_working_day(d):
+        """Return d if it is Mon–Fri, otherwise the next working day after d."""
+        while d.weekday() > 4:  # Sat=5, Sun=6
+            d += timedelta(days=1)
+        return d
 
     @staticmethod
     def _next_working_day(d):

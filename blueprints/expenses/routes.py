@@ -13,6 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 import csv
 import io
+import re
 import base64
 from services.expense_sync_service import ExpenseSyncService
 from flask import current_app
@@ -39,6 +40,26 @@ def index():
             query = query.filter(Expense.reimbursed == False)
 
     expenses = query.order_by(Expense.date.desc()).all()
+
+    # Compute the claim period key for each expense (respects cutoff_day and period_mode).
+    # This may differ from e.month when a cutoff day is configured.
+    expense_period_keys = {
+        e.id: (ExpenseSyncService.get_period_key_for_expense(e) or e.month or '')
+        for e in expenses
+    }
+
+    # Re-sort expenses: claim group descending (partials sit within their base period), then date descending.
+    # Build claim_group early so we can use it for sorting. The full dict is populated below.
+    def _sort_key(e):
+        cg = e.claim_group or expense_period_keys[e.id]
+        # Normalise: YYYY-MM sorts before YYYY-MM-P1 when reversed, so partials appear first within a base month.
+        # To keep partials grouped under their period but below the main group, embed a secondary sort character.
+        base = cg.split('-P')[0]  # e.g. '2026-03'
+        suffix = cg[len(base):]   # e.g. '' or '-P1'
+        return (base, suffix, str(e.date or ''))
+
+    expenses = sorted(expenses, key=_sort_key, reverse=True)
+
     credit_cards = family_query(CreditCard).order_by(CreditCard.card_name).all()
     vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.registration).all()
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
@@ -58,10 +79,74 @@ def index():
                 if trip:
                     trips_dict[exp.id] = trip
     
+    # Pre-compute per-claim-group summaries for the header rows.
+    # Uses claim_group (e.g. '2026-03', '2026-03-P1') if set, else the period key.
+    expense_claim_groups = {
+        e.id: (e.claim_group or expense_period_keys[e.id])
+        for e in expenses
+    }
+    claim_group_summaries = {}  # claim_group → {'count': N, 'total': float, 'period': YYYY-MM}
+    for e in expenses:
+        cg = expense_claim_groups[e.id]
+        period = expense_period_keys[e.id]
+        if cg not in claim_group_summaries:
+            claim_group_summaries[cg] = {'count': 0, 'total': 0.0, 'period': period}
+        claim_group_summaries[cg]['count'] += 1
+        claim_group_summaries[cg]['total'] += float(e.total_cost or 0)
+
+    # Legacy period_summaries still needed for closed_periods logic
+    period_summaries = {}  # period_key → {'count': N, 'total': float}
+    for e in expenses:
+        key = expense_period_keys[e.id]
+        if key not in period_summaries:
+            period_summaries[key] = {'count': 0, 'total': 0.0}
+        period_summaries[key]['count'] += 1
+        period_summaries[key]['total'] += float(e.total_cost or 0)
+
     # Get reimbursement transactions by month
     reimbursement_txns = family_query(Transaction).filter_by(payment_type='Expense Reimbursement').all()
     reimbursements_by_month = {txn.year_month: txn for txn in reimbursement_txns}
-    
+
+    # Determine which periods are fully settled (locked from sync edits).
+    # A period is closed if: its reimbursement transaction is marked is_paid=True,
+    # OR every expense in the period is individually marked reimbursed=True.
+    closed_periods = set()
+    for key, txn in reimbursements_by_month.items():
+        if txn.is_paid:
+            closed_periods.add(key)
+    for key in list(period_summaries.keys()):
+        if key not in closed_periods:
+            period_exps = [e for e in expenses if expense_period_keys[e.id] == key]
+            if period_exps and all(e.reimbursed for e in period_exps):
+                closed_periods.add(key)
+
+    # Get partial reimbursement transactions keyed by claim_group extracted from their description
+    partial_reimb_txns = family_query(Transaction).filter_by(payment_type='Expense Partial Reimbursement').all()
+    partial_reimbursements_by_claim = {}  # claim_group -> Transaction
+    for txn in partial_reimb_txns:
+        # Description format: '... (YYYY-MM-Pn)' — extract claim_group from trailing parenthesis
+        m = re.search(r'\((\d{4}-\d{2}-P\d+)\)\s*$', txn.description or '')
+        cg_key = m.group(1) if m else txn.year_month
+        partial_reimbursements_by_claim[cg_key] = txn
+
+    # A partial claim group is also closed if its txn is_paid, or all its expenses are reimbursed.
+    for cg, txn in partial_reimbursements_by_claim.items():
+        if txn.is_paid:
+            closed_periods.add(cg)
+    for cg in list(claim_group_summaries.keys()):
+        if '-P' in cg and cg not in closed_periods:
+            cg_exps = [e for e in expenses if expense_claim_groups[e.id] == cg]
+            if cg_exps and all(e.reimbursed for e in cg_exps):
+                closed_periods.add(cg)
+
+    # Keep the old month-keyed dict for the period header (shows all partials for a period)
+    partial_reimbursements_by_month = {}
+    for cg, txn in partial_reimbursements_by_claim.items():
+        month_key = txn.year_month
+        if month_key not in partial_reimbursements_by_month:
+            partial_reimbursements_by_month[month_key] = []
+        partial_reimbursements_by_month[month_key].append(txn)
+
     # Get CC payment transactions by month (these are CreditCardTransaction, not Transaction)
     cc_payment_txns = family_query(CreditCardTransaction).filter(
         CreditCardTransaction.transaction_type == 'Payment',
@@ -84,6 +169,11 @@ def index():
     return render_template(
         'expenses/index.html',
         expenses=expenses,
+        expense_period_keys=expense_period_keys,
+        expense_claim_groups=expense_claim_groups,
+        claim_group_summaries=claim_group_summaries,
+        period_summaries=period_summaries,
+        closed_periods=closed_periods,
         credit_cards=credit_cards,
         vehicles=vehicles,
         accounts=accounts,
@@ -93,6 +183,8 @@ def index():
         trips_dict=trips_dict,
         highlight_expense_id=highlight_id,
         reimbursements_by_month=reimbursements_by_month,
+        partial_reimbursements_by_claim=partial_reimbursements_by_claim,
+        partial_reimbursements_by_month=partial_reimbursements_by_month,
         cc_payments_by_month=cc_payments_by_month
     )
 
@@ -187,12 +279,12 @@ def add_expense():
         )
         db.session.add(expense)
         db.session.commit()
-        # Reconcile linked transaction, then run full period sync for this month
+        # Reconcile linked transaction, then run full period sync for this expense's period
         try:
             ExpenseSyncService.reconcile(expense.id)
-            _month = expense.date.strftime('%Y-%m') if expense.date else None
-            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_month)
-            ExpenseSyncService.reconcile_credit_card_payments(year_month=_month)
+            _period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None
+            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_period)
+            ExpenseSyncService.reconcile_credit_card_payments(year_month=_period)
         except Exception as sync_err:
             current_app.logger.exception(f'Sync failed after add for expense {expense.id}')
             flash('Expense saved but syncing linked transactions failed — check the server log.', 'warning')
@@ -240,12 +332,12 @@ def update_expense(expense_id):
         expense.reimbursed = request.form.get('reimbursed') == 'on'
 
         db.session.commit()
-        # Reconcile linked transaction, then run full period sync for this month
+        # Reconcile linked transaction, then run full period sync for this expense's period
         try:
             ExpenseSyncService.reconcile(expense.id)
-            _month = expense.date.strftime('%Y-%m') if expense.date else None
-            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_month)
-            ExpenseSyncService.reconcile_credit_card_payments(year_month=_month)
+            _period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None
+            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_period)
+            ExpenseSyncService.reconcile_credit_card_payments(year_month=_period)
         except Exception as sync_err:
             current_app.logger.exception(f'Sync failed after update for expense {expense.id}')
             flash('Expense updated but syncing linked transactions failed — check the server log.', 'warning')
@@ -373,6 +465,56 @@ def generate_cc_payments():
         current_app.logger.exception('Error generating CC payments')
         flash('Error generating credit card payments — check the server log for details.', 'danger')
     
+    return redirect(url_for('expenses.index'))
+
+
+@expenses_bp.route('/expenses/generate-partial-reimbursement', methods=['POST'])
+def generate_partial_reimbursement():
+    """Create a partial (mid-period) reimbursement for a custom date range."""
+    try:
+        from_date_str = request.form.get('from_date', '').strip()
+        to_date_str   = request.form.get('to_date', '').strip()
+        reimb_date_str = request.form.get('reimbursement_date', '').strip()
+
+        if not from_date_str or not to_date_str:
+            flash('Both a start and end date are required for a partial reimbursement.', 'warning')
+            return redirect(url_for('expenses.index'))
+
+        from_date = datetime.strptime(from_date_str, '%Y-%m-%d').date()
+        to_date   = datetime.strptime(to_date_str,   '%Y-%m-%d').date()
+
+        if from_date > to_date:
+            flash('Start date must be on or before end date.', 'warning')
+            return redirect(url_for('expenses.index'))
+
+        reimb_date = (
+            datetime.strptime(reimb_date_str, '%Y-%m-%d').date()
+            if reimb_date_str else None
+        )
+
+        result = ExpenseSyncService.create_partial_reimbursement(from_date, to_date, reimb_date)
+        if result:
+            txn_id, total, claim_group = result
+            flash(
+                f'Partial reimbursement {claim_group} of £{total:.2f} created for '
+                f'{from_date.strftime("%d %b %Y")} – {to_date.strftime("%d %b %Y")}.',
+                'success'
+            )
+        else:
+            flash(
+                f'No expenses found between {from_date.strftime("%d %b %Y")} and '
+                f'{to_date.strftime("%d %b %Y")} — partial reimbursement not created.',
+                'info'
+            )
+
+    except ValueError as exc:
+        db.session.rollback()
+        flash(f'Invalid date format: {exc}', 'danger')
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error generating partial reimbursement')
+        flash('Error generating partial reimbursement — check the server log for details.', 'danger')
+
     return redirect(url_for('expenses.index'))
 
 

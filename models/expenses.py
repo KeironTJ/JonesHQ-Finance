@@ -32,6 +32,11 @@ class Expense(db.Model):
     cost = db.Column(db.Numeric(10, 2), nullable=False)
     total_cost = db.Column(db.Numeric(10, 2), nullable=False)
     
+    # Claim grouping
+    # Format: 'YYYY-MM' for full-period claims, 'YYYY-MM-P1' etc. for partial claims.
+    # NULL means the expense has not yet been assigned to any claim group (pending).
+    claim_group = db.Column(db.String(20), nullable=True, index=True)
+
     # Status
     paid_for = db.Column(db.Boolean, default=False)
     submitted = db.Column(db.Boolean, default=False)

@@ -166,6 +166,26 @@
                                 </small>
                             </div>
                         </div>
+
+                        <div class="row g-3 mt-1" id="cutoff_day_section">
+                            <div class="col-md-4">
+                                <label for="expense_cutoff_day" class="form-label fw-semibold">Monthly Cutoff Day</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="expense_cutoff_day"
+                                           name="expense_cutoff_day" min="0" max="28"
+                                           value="{{ expense_cutoff_day }}">
+                                    <span class="input-group-text">of month</span>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    <strong>0</strong> = last day of month (default).<br>
+                                    <strong>1–28</strong>: expenses on or after this day belong to <em>next</em> month's
+                                    claim period. Reimbursement is dated on this day (adjusted to a working day if needed).<br>
+                                    <em>Only applies in Calendar Month mode.</em>
+                                    <br>Example: cutoff&nbsp;15 → Jan expenses split at the 15th;
+                                    Jan&nbsp;1–14 reimb. Jan&nbsp;15, Jan&nbsp;15–31 reimb. Feb&nbsp;15.
+                                </small>
+                            </div>
+                        </div>
                         
                         <div class="alert alert-info mt-3 mb-0">
                             <i class="bi bi-info-circle"></i> <strong>Expense Workflow:</strong>
