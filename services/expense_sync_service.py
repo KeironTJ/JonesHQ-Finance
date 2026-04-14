@@ -895,20 +895,19 @@ class ExpenseSyncService:
                 db.session.add(exp)
 
         if existing:
-            if abs(existing.amount - total_reimbursement) > Decimal('0.01'):
+            amount_changed = abs(existing.amount - total_reimbursement) > Decimal('0.01')
+            date_changed = existing.transaction_date != reimbursement_date
+            if existing.claim_group is None:
+                existing.claim_group = period_key
+                db.session.add(existing)
+            if amount_changed or date_changed:
                 existing.amount = total_reimbursement
                 existing.transaction_date = reimbursement_date
                 existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-                if existing.claim_group is None:
-                    existing.claim_group = period_key
                 db.session.add(existing)
                 db.session.flush()
                 Transaction.recalculate_account_balance(existing.account_id)
                 return existing.id, True
-            # Ensure claim_group is stamped even if amount hasn't changed
-            if existing.claim_group is None:
-                existing.claim_group = period_key
-                db.session.add(existing)
             return existing.id, False
 
         # Find reimbursement account
