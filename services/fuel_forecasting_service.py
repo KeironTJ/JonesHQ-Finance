@@ -275,18 +275,13 @@ class FuelForecastingService:
         ).filter(Trip.total_miles > 0).order_by(Trip.date.asc()).all()
 
         last_fill = all_fills[-1] if all_fills else None
-        fill_cutoff = last_fill.date if last_fill else None
+        today = date_type.today()
 
-        # Miles driven after the last actual fill (for display only)
-        miles_since_fill = sum(
-            t.total_miles for t in all_trips
-            if fill_cutoff is None or t.date > fill_cutoff
-        )
-
-        # Walk the full merged timeline to compute current tank level.
-        # Same algorithm as get_trip_tank_levels — fills add gallons (capped at
-        # tank_capacity), trips subtract.  First fill seeds the tank at gallons_added
-        # (assumes empty before the first recorded fill).
+        # Walk the full merged timeline to compute current tank level and
+        # miles since last fill.  Fills add gallons (capped at tank_capacity),
+        # trips subtract.  First fill seeds the tank at gallons_added.
+        # We track miles_since_fill inside the walk so it resets on any fill,
+        # matching the same ordering logic as the tank level calculation.
         events = []
         for trip in all_trips:
             events.append((trip.date, 1, 'trip', trip))
@@ -296,8 +291,13 @@ class FuelForecastingService:
 
         has_fill = False
         tank_level = 0.0
+        miles_since_fill = 0
 
         for (_event_date, _priority, event_type, event_obj) in events:
+            # Only walk up to today — future pre-logged trips must not drain
+            # the current estimated tank level.
+            if _event_date > today:
+                break
             if event_type == 'fill':
                 gallons_added = float(event_obj.gallons) if event_obj.gallons else 0.0
                 if not has_fill:
@@ -305,9 +305,11 @@ class FuelForecastingService:
                     has_fill = True
                 else:
                     tank_level = min(tank_capacity, tank_level + gallons_added)
+                miles_since_fill = 0  # reset on every fill
             elif event_type == 'trip' and has_fill:
                 gallons_used = event_obj.total_miles / avg_mpg
                 tank_level = max(0.0, tank_level - gallons_used)
+                miles_since_fill += event_obj.total_miles
 
         if not has_fill:
             return None
@@ -322,7 +324,6 @@ class FuelForecastingService:
         gallons_until_threshold = max(0.0, gallons_remaining - (tank_capacity - refill_threshold))
         miles_until_threshold = gallons_until_threshold * avg_mpg
 
-        today = date_type.today()
         thirty_days_ago = today - timedelta(days=30)
         recent_miles = sum(
             t.total_miles for t in all_trips
@@ -384,12 +385,19 @@ class FuelForecastingService:
             vehicle_id=vehicle_id
         ).filter(Trip.total_miles > 0).order_by(Trip.date.asc()).all()
 
-        # Merged timeline; fills before trips on same day
+        # Merged timeline; fills before trips on same day.
+        # Also inject predicted future refill events so the tank column
+        # doesn't drain to zero past each predicted fill date.
+        predicted = FuelForecastingService.predict_refills(vehicle_id)
+
         events = []
         for trip in all_trips:
             events.append((trip.date, 1, 'trip', trip))
         for fill in all_fills:
             events.append((fill.date, 0, 'fill', fill))
+        for p in predicted:
+            # predicted_fill priority 0 — processed before trips on the same day
+            events.append((p['date'], 0, 'predicted_fill', p))
         events.sort(key=lambda x: (x[0], x[1]))
 
         has_fill = False
@@ -404,6 +412,9 @@ class FuelForecastingService:
                     has_fill = True
                 else:
                     tank_level = min(tank_capacity, tank_level + gallons_added)
+            elif event_type == 'predicted_fill' and has_fill:
+                # Predicted refill — treat as filling back to full
+                tank_level = tank_capacity
             elif event_type == 'trip' and has_fill:
                 gallons_used = event_obj.total_miles / avg_mpg
                 tank_level = max(0.0, tank_level - gallons_used)
