@@ -318,23 +318,26 @@ class FuelForecastingService:
         gallons_consumed = miles_since_fill / avg_mpg  # used for display only
 
         tank_pct = min(100.0, (gallons_remaining / tank_capacity) * 100)
+        # Miles to empty (classic "est. range")
         estimated_range = int(gallons_remaining * avg_mpg)
 
         # Days until refill threshold is reached
+        # gallons_until_threshold = usable gallons before the predicted-fill alert fires
         gallons_until_threshold = max(0.0, gallons_remaining - (tank_capacity - refill_threshold))
-        miles_until_threshold = gallons_until_threshold * avg_mpg
+        miles_to_refill = int(gallons_until_threshold * avg_mpg)
 
+        # avg_daily_miles: only count actual past trips (not future bulk-added ones)
         thirty_days_ago = today - timedelta(days=30)
         recent_miles = sum(
             t.total_miles for t in all_trips
-            if t.date >= thirty_days_ago and t.total_miles
+            if thirty_days_ago <= t.date <= today and t.total_miles
         )
         avg_daily_miles = recent_miles / 30.0
 
-        if avg_daily_miles > 0 and miles_until_threshold > 0:
-            days_until_refill = int(miles_until_threshold / avg_daily_miles)
+        if avg_daily_miles > 0 and miles_to_refill > 0:
+            days_until_refill = int(miles_to_refill / avg_daily_miles)
             estimated_fill_date = today + timedelta(days=days_until_refill)
-        elif miles_until_threshold <= 0:
+        elif miles_to_refill <= 0:
             days_until_refill = 0
             estimated_fill_date = today
         else:
@@ -352,7 +355,8 @@ class FuelForecastingService:
             'gallons_consumed': round(gallons_consumed, 2),
             'gallons_remaining': round(gallons_remaining, 2),
             'tank_pct': round(tank_pct, 1),
-            'estimated_range_miles': estimated_range,
+            'estimated_range_miles': estimated_range,   # miles to empty
+            'miles_to_refill': miles_to_refill,          # miles until fill-up threshold
             'estimated_fill_date': estimated_fill_date,
             'days_until_refill': days_until_refill,
             'estimated_fill_cost': estimated_fill_cost,

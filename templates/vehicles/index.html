@@ -181,7 +181,7 @@
                                         {% if tank_pct <= 25 %}
                                         <div class="alert alert-danger py-1 px-2 mt-1 mb-0 small">
                                             <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                                            Tank low — est. range {{ ts.estimated_range_miles }} mi
+                                            Tank low — {{ ts.estimated_range_miles }} mi to empty
                                         </div>
                                         {% endif %}
                                     </div>
@@ -190,8 +190,11 @@
                                     <div class="row g-2 text-center mb-3">
                                         <div class="col-4">
                                             <div class="p-2 jhq-metric-tile">
-                                                <div class="small text-muted">Est. Range</div>
+                                                <div class="small text-muted">Range to Empty</div>
                                                 <div class="fw-bold fs-6">{{ ts.estimated_range_miles }} mi</div>
+                                                {% if ts.miles_to_refill < ts.estimated_range_miles %}
+                                                <div class="small text-muted">fill at ~{{ ts.miles_to_refill }} mi</div>
+                                                {% endif %}
                                             </div>
                                         </div>
                                         <div class="col-4">
