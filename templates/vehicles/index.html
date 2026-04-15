@@ -1,15 +1,70 @@
 {% extends "base.html" %}
 
-{% block title %}Vehicle Tracking{% endblock %}
+{% block title %}My Garage{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Page entrance animation */
+.jhq-page-enter { animation: jhqFadeSlide 0.18s ease both; }
+@keyframes jhqFadeSlide {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Section pill nav */
+.vehicle-section-nav .nav-link {
+    border-radius: var(--radius-pill);
+    padding: 0.45rem 1.1rem;
+    font-weight: 500;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    transition: all 0.15s ease;
+}
+.vehicle-section-nav .nav-link:hover  { background: var(--bg-surface-2); }
+.vehicle-section-nav .nav-link.active { background: var(--brand); color: #fff; }
+
+/* Metric tiles */
+.jhq-metric-tile {
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    transition: background var(--t-slow), border-color var(--t-slow);
+}
+
+/* Themed table head */
+.jhq-thead th {
+    background: var(--bg-surface-3);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border-color);
+    border-top: none;
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
+<div class="container-fluid mt-4 jhq-page-enter">
     <div class="row">
         <div class="col-12">
-            <h1 class="mb-4"><i class="bi bi-car-front"></i> Vehicle Tracking</h1>
-            
-            <!-- Navigation -->
-            <ul class="nav nav-tabs mb-4">
+
+            <!-- Page header -->
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h1 class="mb-0"><i class="bi bi-car-front"></i> My Garage</h1>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#addFuelModal">
+                        <i class="bi bi-fuel-pump-fill"></i> Log Fill
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addVehicleModal">
+                        <i class="bi bi-plus-circle"></i> Add Vehicle
+                    </button>
+                </div>
+            </div>
+
+            <!-- Page nav tabs (between pages) -->
+            <ul class="nav nav-tabs mb-3">
                 <li class="nav-item">
                     <a class="nav-link active" href="{{ url_for('vehicles.index') }}">
                         <i class="bi bi-speedometer2"></i> Overview
@@ -25,67 +80,546 @@
                         <i class="bi bi-map"></i> Trip Log
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('vehicles.manage') }}">
-                        <i class="bi bi-car-front-fill"></i> Manage Vehicles
-                    </a>
+            </ul>
+
+            <!-- Inner section pills (My Garage ↔ Manage) -->
+            <ul class="nav vehicle-section-nav mb-4 gap-1" id="vehicleSectionNav" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if active_tab != 'manage' %}active{% endif %}"
+                            id="tab-garage" data-bs-toggle="tab" data-bs-target="#pane-garage"
+                            type="button" role="tab">
+                        <i class="bi bi-car-front-fill me-1"></i> My Garage
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if active_tab == 'manage' %}active{% endif %}"
+                            id="tab-manage" data-bs-toggle="tab" data-bs-target="#pane-manage"
+                            type="button" role="tab">
+                        <i class="bi bi-sliders me-1"></i> Manage
+                    </button>
                 </li>
             </ul>
 
             <div class="tab-content">
-                <!-- Overview Tab -->
-                <div id="overview" class="tab-pane fade show active">
-                    <div class="row">
+
+                <!-- ══════════════ MY GARAGE TAB ══════════════ -->
+                <div class="tab-pane fade {% if active_tab != 'manage' %}show active{% endif %}"
+                     id="pane-garage" role="tabpanel">
+
+                    {% if not vehicles %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i> No active vehicles found.
+                        <a href="#" class="alert-link" onclick="bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-manage')).show()">Add a vehicle to your garage</a> to get started.
+                    </div>
+                    {% endif %}
+
+                    <div class="row g-4">
                         {% for vehicle in vehicles %}
-                        <div class="col-md-6 mb-4">
-                            <div class="card shadow">
-                                <div class="card-header bg-primary text-white">
-                                    <h5 class="mb-0">{{ vehicle.name }} ({{ vehicle.registration }})</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-6">
-                                            <p><strong>Make:</strong> {{ vehicle.make }}</p>
-                                            <p><strong>Model:</strong> {{ vehicle.model }}</p>
-                                            <p><strong>Fuel Type:</strong> {{ vehicle.fuel_type }}</p>
-                                        </div>
-                                        <div class="col-6">
-                                            <p><strong>Tank Size:</strong> {{ vehicle.tank_size }} gal</p>
-                                            <p><strong>Status:</strong> 
-                                                {% if vehicle.is_active %}
-                                                <span class="badge bg-success">Active</span>
-                                                {% else %}
-                                                <span class="badge bg-secondary">Inactive</span>
-                                                {% endif %}
-                                            </p>
-                                        </div>
+                        {% set stats = vehicle_stats.get(vehicle.id) %}
+                        {% set ts = tank_statuses.get(vehicle.id) %}
+                        {% set next_fill = next_predicted_refills.get(vehicle.id) %}
+
+                        <div class="col-xl-6 col-12">
+                            <div class="card shadow h-100">
+
+                                <!-- Card header -->
+                                <div class="card-header bg-primary d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="mb-0 fw-bold">
+                                            <i class="bi bi-car-front-fill me-2"></i>{{ vehicle.name }}
+                                        </h5>
+                                        <small class="opacity-75">
+                                            {{ vehicle.registration }} · {{ vehicle.make }} {{ vehicle.model }}{% if vehicle.year %} ({{ vehicle.year }}){% endif %} · {{ vehicle.fuel_type }}
+                                        </small>
                                     </div>
-                                    {% if vehicle_stats and vehicle_stats[vehicle.id] %}
-                                    <hr>
-                                    <div class="row text-center">
+                                    <div class="d-flex gap-2 flex-shrink-0">
+                                        <a href="{{ url_for('vehicles.trips') }}?vehicle_id_trip={{ vehicle.id }}" class="btn btn-sm btn-light" title="Trip log">
+                                            <i class="bi bi-map"></i>
+                                        </a>
+                                        <a href="{{ url_for('vehicles.fuel') }}?vehicle_id={{ vehicle.id }}" class="btn btn-sm btn-light" title="Fuel log">
+                                            <i class="bi bi-fuel-pump-fill"></i>
+                                        </a>
+                                        <button class="btn btn-sm btn-light"
+                                                title="Edit vehicle"
+                                                onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form method="post" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=vehicle.id) }}" class="d-inline"
+                                              onsubmit="return confirm('Refresh fuel forecasts for {{ vehicle.name }}?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-sm btn-warning" title="Refresh forecast">
+                                                <i class="bi bi-arrow-clockwise"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <div class="card-body">
+
+                                    <!-- Tank gauge -->
+                                    {% if ts %}
+                                    {% set tank_pct = ts.tank_pct %}
+                                    {% set gauge_cls = 'bg-success' if tank_pct > 50 else ('bg-warning' if tank_pct > 25 else 'bg-danger') %}
+                                    {% set gauge_text_cls = 'text-success' if tank_pct > 50 else ('text-warning' if tank_pct > 25 else 'text-danger') %}
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="small fw-semibold text-muted"><i class="bi bi-fuel-pump me-1"></i>Tank Level</span>
+                                            <span class="small fw-bold {{ gauge_text_cls }}">{{ "%.0f"|format(tank_pct) }}%
+                                                {% if ts.gallons_remaining is not none %}
+                                                <span class="text-muted fw-normal">({{ "%.1f"|format(ts.gallons_remaining) }} gal)</span>
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                        <div class="progress rounded-pill" style="height: 22px;">
+                                            <div class="progress-bar {{ gauge_cls }} rounded-pill"
+                                                 role="progressbar"
+                                                 style="width: {{ [tank_pct, 5]|max }}%; transition: width 0.6s ease;"
+                                                 aria-valuenow="{{ tank_pct }}" aria-valuemin="0" aria-valuemax="100">
+                                                {% if tank_pct >= 15 %}<span class="fw-bold">{{ "%.0f"|format(tank_pct) }}%</span>{% endif %}
+                                            </div>
+                                        </div>
+                                        {% if tank_pct <= 25 %}
+                                        <div class="alert alert-danger py-1 px-2 mt-1 mb-0 small">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                            Tank low — est. range {{ ts.estimated_range_miles }} mi
+                                        </div>
+                                        {% endif %}
+                                    </div>
+
+                                    <!-- Key metrics -->
+                                    <div class="row g-2 text-center mb-3">
                                         <div class="col-4">
-                                            <h6 class="text-muted">Avg MPG</h6>
-                                            <h4 class="text-primary">{{ "%.1f"|format(vehicle_stats[vehicle.id].avg_mpg or 0) }}</h4>
+                                            <div class="p-2 jhq-metric-tile">
+                                                <div class="small text-muted">Est. Range</div>
+                                                <div class="fw-bold fs-6">{{ ts.estimated_range_miles }} mi</div>
+                                            </div>
                                         </div>
                                         <div class="col-4">
-                                            <h6 class="text-muted">Total Cost</h6>
-                                            <h4 class="text-danger">£{{ "%.2f"|format(vehicle_stats[vehicle.id].total_cost or 0) }}</h4>
+                                            <div class="p-2 jhq-metric-tile">
+                                                <div class="small text-muted">Miles Since Fill</div>
+                                                <div class="fw-bold fs-6">{{ "{:,}".format(ts.miles_since_fill) }}</div>
+                                            </div>
                                         </div>
                                         <div class="col-4">
-                                            <h6 class="text-muted">Total Miles</h6>
-                                            <h4 class="text-success">{{ "{:,}".format(vehicle_stats[vehicle.id].total_miles or 0) }}</h4>
+                                            {% if ts.days_until_refill is not none %}
+                                            {% set urgency_cls = 'text-danger' if ts.days_until_refill <= 2 else ('text-warning' if ts.days_until_refill <= 5 else 'text-success') %}
+                                            <div class="p-2 jhq-metric-tile">
+                                                <div class="small text-muted">Fill In</div>
+                                                <div class="fw-bold fs-6 {{ urgency_cls }}">
+                                                    {% if ts.days_until_refill == 0 %}Today
+                                                    {% elif ts.days_until_refill == 1 %}Tomorrow
+                                                    {% else %}{{ ts.days_until_refill }}d{% endif %}
+                                                </div>
+                                            </div>
+                                            {% else %}
+                                            <div class="p-2 jhq-metric-tile">
+                                                <div class="small text-muted">Fill In</div>
+                                                <div class="fw-bold fs-6 text-muted">N/A</div>
+                                            </div>
+                                            {% endif %}
                                         </div>
                                     </div>
                                     {% endif %}
-                                </div>
+
+                                    <!-- Next predicted fill -->
+                                    {% if next_fill %}
+                                    <div class="alert alert-warning py-2 px-3 mb-3 d-flex justify-content-between align-items-center small">
+                                        <span><i class="bi bi-calendar-event me-1"></i><strong>Next predicted fill:</strong> {{ next_fill.date.strftime('%a %d %b') }}</span>
+                                        <span class="fw-bold text-danger">≈ £{{ "%.2f"|format(next_fill.cost) }}</span>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Lifetime stats -->
+                                    {% if stats %}
+                                    <hr class="my-2">
+                                    <div class="row g-2 text-center">
+                                        <div class="col-4">
+                                            <div class="small text-muted">Avg MPG</div>
+                                            <div class="fw-bold text-primary">{{ "%.1f"|format(stats.avg_mpg or 0) }}</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="small text-muted">Total Fuel Cost</div>
+                                            <div class="fw-bold text-danger">£{{ "%.2f"|format(stats.total_cost or 0) }}</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="small text-muted">Total Miles</div>
+                                            <div class="fw-bold text-success">{{ "{:,}".format(stats.total_miles or 0) }}</div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Quick log fill button -->
+                                    <div class="mt-3 d-grid">
+                                        <button class="btn btn-outline-danger btn-sm"
+                                                data-bs-toggle="modal" data-bs-target="#addFuelModal"
+                                                onclick="document.querySelector('#addFuelModal select[name=vehicle_id]').value='{{ vehicle.id }}'">
+                                            <i class="bi bi-plus-circle me-1"></i>Log Fuel Fill
+                                        </button>
+                                    </div>
+
+                                </div><!-- /.card-body -->
                             </div>
                         </div>
                         {% endfor %}
                     </div>
+
                 </div>
-            </div>
+                <!-- ══════════════ END MY GARAGE ══════════════ -->
+
+
+                <!-- ══════════════ MANAGE TAB ══════════════ -->
+                <div class="tab-pane fade {% if active_tab == 'manage' %}show active{% endif %}"
+                     id="pane-manage" role="tabpanel">
+
+                    <div class="card shadow">
+                        <div class="card-header bg-success d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-sliders me-2"></i>Manage Vehicles</h5>
+                            <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addVehicleModal">
+                                <i class="bi bi-plus-circle me-1"></i> Add Vehicle
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+
+                            <!-- Active vehicles -->
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="jhq-thead">
+                                        <tr>
+                                            <th>Vehicle</th>
+                                            <th>Reg</th>
+                                            <th>Make / Model</th>
+                                            <th>Year</th>
+                                            <th>Tank</th>
+                                            <th>Fuel</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for vehicle in all_vehicles if vehicle.is_active %}
+                                        <tr>
+                                            <td class="fw-semibold">{{ vehicle.name }}</td>
+                                            <td><span class="badge bg-primary">{{ vehicle.registration }}</span></td>
+                                            <td>{{ vehicle.make }} {{ vehicle.model }}</td>
+                                            <td>{{ vehicle.year or '—' }}</td>
+                                            <td>{{ vehicle.tank_size }} gal</td>
+                                            <td>{{ vehicle.fuel_type }}</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary"
+                                                        onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                                    <i class="bi bi-pencil"></i> Edit
+                                                </button>
+                                                <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;"
+                                                      onsubmit="return confirm('Delete {{ vehicle.name }}? This will also delete all fuel and trip records!');">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        {% else %}
+                                        <tr><td colspan="7" class="text-center text-muted py-3">No active vehicles.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Inactive vehicles collapsible -->
+                            {% set inactive = all_vehicles | selectattr('is_active', 'equalto', false) | list %}
+                            {% if inactive %}
+                            <div class="px-3 py-2 border-top">
+                                <button class="btn btn-sm btn-outline-secondary" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#inactiveVehicles">
+                                    <i class="bi bi-chevron-down me-1"></i>Inactive ({{ inactive|length }})
+                                </button>
+                                <div class="collapse mt-2" id="inactiveVehicles">
+                                    <table class="table table-sm table-hover align-middle mb-0">
+                                        <thead class="jhq-thead">
+                                            <tr>
+                                                <th>Vehicle</th>
+                                                <th>Reg</th>
+                                                <th>Make / Model</th>
+                                                <th>Year</th>
+                                                <th>Tank</th>
+                                                <th>Fuel</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="text-muted">
+                                            {% for vehicle in inactive %}
+                                            <tr>
+                                                <td class="fw-semibold">{{ vehicle.name }}</td>
+                                                <td><span class="badge bg-secondary">{{ vehicle.registration }}</span></td>
+                                                <td>{{ vehicle.make }} {{ vehicle.model }}</td>
+                                                <td>{{ vehicle.year or '—' }}</td>
+                                                <td>{{ vehicle.tank_size }} gal</td>
+                                                <td>{{ vehicle.fuel_type }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-secondary"
+                                                            onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                                        <i class="bi bi-pencil"></i> Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                        </div>
+                    </div>
+
+                </div>
+                <!-- ══════════════ END MANAGE ══════════════ -->
+
+            </div><!-- /.tab-content -->
+
         </div>
     </div>
 </div>
+
+<!-- ─── MODALS ─────────────────────────────────────────────── -->
+
+<!-- Add Fuel Modal -->
+<div class="modal fade" id="addFuelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('vehicles.add_fuel') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-fuel-pump-fill me-2"></i>Log Fuel Fill</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Vehicle</label>
+                        <select name="vehicle_id" class="form-select" required>
+                            {% for vehicle in vehicles %}
+                            <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date</label>
+                        <input type="date" name="date" class="form-control" value="{{ today.isoformat() }}" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Price per Litre (p)</label>
+                            <input type="number" step="0.1" name="price_per_litre" id="ov_price_per_litre"
+                                   class="form-control" placeholder="138.7" required oninput="ovCalcGallons()">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Mileage (odometer)</label>
+                            <input type="number" name="mileage" class="form-control" placeholder="115224" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Cost (£)</label>
+                            <input type="number" step="0.01" name="cost" id="ov_cost"
+                                   class="form-control" placeholder="87.38" required oninput="ovCalcGallons()">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Gallons (auto-calculated)</label>
+                            <input type="number" step="0.01" name="gallons" id="ov_gallons"
+                                   class="form-control" readonly required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-fuel-pump-fill me-1"></i>Save Fill</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Vehicle Modal -->
+<div class="modal fade" id="addVehicleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('vehicles.add_vehicle') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Add Vehicle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" name="name" class="form-control" placeholder="Vauxhall Zafira" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Registration (VRN)</label>
+                        <input type="text" name="registration" class="form-control" placeholder="MV15LZJ" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Make</label>
+                            <input type="text" name="make" class="form-control" placeholder="Vauxhall" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Model</label>
+                            <input type="text" name="model" class="form-control" placeholder="Zafira" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Year</label>
+                            <input type="number" name="year" class="form-control" placeholder="2015">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Tank Size (gal)</label>
+                            <input type="number" step="0.1" name="tank_size" class="form-control" placeholder="12.5" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Fuel Type</label>
+                            <select name="fuel_type" class="form-select" required>
+                                <option value="Diesel">Diesel</option>
+                                <option value="Petrol">Petrol</option>
+                                <option value="Electric">Electric</option>
+                                <option value="Hybrid">Hybrid</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Refuel Forecast Threshold (%)</label>
+                        <input type="number" step="1" min="50" max="100" name="refuel_threshold_pct"
+                               class="form-control" value="95">
+                        <small class="text-muted">Forecast a refuel when this % of tank capacity is consumed</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Starting Mileage</label>
+                        <input type="number" name="starting_mileage" class="form-control" placeholder="64050">
+                        <small class="text-muted">Initial odometer reading when you started tracking</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Default Fuel Account</label>
+                        <select name="fuel_account_id" class="form-select">
+                            <option value="">Select account…</option>
+                            {% for account in accounts %}
+                            <option value="{{ account.id }}">{{ account.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-plus-circle me-1"></i>Add Vehicle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Vehicle Modal -->
+<div class="modal fade" id="editVehicleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="editVehicleForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Edit Vehicle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" name="name" id="edit_vehicle_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Registration (VRN)</label>
+                        <input type="text" name="registration" id="edit_vehicle_registration" class="form-control" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Make</label>
+                            <input type="text" name="make" id="edit_vehicle_make" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Model</label>
+                            <input type="text" name="model" id="edit_vehicle_model" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Year</label>
+                            <input type="number" name="year" id="edit_vehicle_year" class="form-control">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Tank Size (gal)</label>
+                            <input type="number" step="0.1" name="tank_size" id="edit_vehicle_tank_size" class="form-control" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Fuel Type</label>
+                            <select name="fuel_type" id="edit_vehicle_fuel_type" class="form-select" required>
+                                <option value="Diesel">Diesel</option>
+                                <option value="Petrol">Petrol</option>
+                                <option value="Electric">Electric</option>
+                                <option value="Hybrid">Hybrid</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Refuel Forecast Threshold (%)</label>
+                        <input type="number" step="1" min="50" max="100" name="refuel_threshold_pct"
+                               id="edit_vehicle_refuel_threshold_pct" class="form-control">
+                        <small class="text-muted">Forecast a refuel when this % of tank capacity is consumed</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Default Fuel Account</label>
+                        <select name="fuel_account_id" id="edit_vehicle_fuel_account_id" class="form-select">
+                            <option value="">Select account…</option>
+                            {% for account in accounts %}
+                            <option value="{{ account.id }}">{{ account.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" name="is_active" id="edit_vehicle_is_active" class="form-check-input">
+                        <label class="form-check-label" for="edit_vehicle_is_active">Active</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Vehicle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
+{% block extra_js %}
+<script>
+function ovCalcGallons() {
+    const price = parseFloat(document.getElementById('ov_price_per_litre').value);
+    const cost  = parseFloat(document.getElementById('ov_cost').value);
+    if (price > 0 && cost > 0) {
+        const litres  = (cost / price) * 100;
+        const gallons = litres / 4.54609;
+        document.getElementById('ov_gallons').value = gallons.toFixed(2);
+    }
+}
+
+function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct) {
+    document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
+    document.getElementById('edit_vehicle_name').value = name;
+    document.getElementById('edit_vehicle_registration').value = registration;
+    document.getElementById('edit_vehicle_make').value = make;
+    document.getElementById('edit_vehicle_model').value = model;
+    document.getElementById('edit_vehicle_year').value = year || '';
+    document.getElementById('edit_vehicle_tank_size').value = tank_size;
+    document.getElementById('edit_vehicle_fuel_type').value = fuel_type;
+    document.getElementById('edit_vehicle_is_active').checked = is_active;
+    document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
+    document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
+    new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
+}
+</script>
+{% endblock %}

@@ -140,102 +140,277 @@ class FuelForecastingService:
         """
         Predict when refills will be needed based on tank capacity.
         Returns list of predicted refill dates with costs.
+
+        Uses a merged timeline of trips and fuel fill events sorted by date.
+        Fill events are processed before trip events on the same date (fill up,
+        then drive).  This means a fill on any date — even one with no trip entry
+        — correctly resets the consumption counter, unlike the old date-keyed
+        approach that required a trip to exist on the same day as the fill.
         """
         vehicle = family_get(Vehicle, vehicle_id)
         if not vehicle or not vehicle.tank_size:
             return []
-        
+
         tank_capacity = float(vehicle.tank_size)
         refill_threshold = tank_capacity * (float(vehicle.refuel_threshold_pct or 95) / 100)
-        
-        # Get average MPG and price
+
         avg_mpg = FuelForecastingService.get_average_mpg(vehicle_id)
         if not avg_mpg:
             return []
         avg_price = FuelForecastingService.get_average_fuel_price(vehicle_id)
-        
-        # Get all trips ordered by date
+
         trips = family_query(Trip).filter_by(vehicle_id=vehicle_id).order_by(Trip.date.asc()).all()
-        
-        # Get all actual fuel records to know when tank was filled
         fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
-        fuel_date_map = {f.date: f for f in fuel_records}  # date -> record (for gallons lookup)
-        
-        # Start accumulation from the last actual fuel record — that is the only
-        # date we know for certain the tank state.  Trips on or before that
-        # date are irrelevant to the next predicted refill.
+
+        # Build a merged timeline: (date, sort_priority, type, obj)
+        # Priority 0 = fill, 1 = trip → fills processed before trips on the same day.
+        events = []
+        for trip in trips:
+            if trip.total_miles and trip.total_miles > 0:
+                events.append((trip.date, 1, 'trip', trip))
+        for fill in fuel_records:
+            events.append((fill.date, 0, 'fill', fill))
+        events.sort(key=lambda x: (x[0], x[1]))
+
+        # Seed the cumulative from the last actual fill.
+        # deficit_after_fill = gallons consumed before fill − gallons added.
+        # A full fill → deficit ≈ 0.  Clamped to 0 if more filled than consumed.
         last_fill = fuel_records[-1] if fuel_records else None
-        
-        # Seed cumulative with the deficit already present after the last fill.
-        # Use actual_miles (miles since previous fill) to compute gallons consumed
-        # before the fill.  deficit_after_fill = gallons_consumed - gallons_added.
-        # A full fill (consumed ≈ filled) → deficit 0.  A partial fill → small
-        # positive deficit.  Clamped to 0 if more was filled than consumed.
-        # Falls back to 0 (assume full fill) when actual_miles is not recorded.
         if last_fill and last_fill.gallons:
             if last_fill.actual_miles:
                 gallons_consumed_before_fill = last_fill.actual_miles / avg_mpg
                 initial_deficit = max(0.0, gallons_consumed_before_fill - float(last_fill.gallons))
             else:
-                initial_deficit = 0.0  # No miles data — assume tank was filled to full
+                initial_deficit = 0.0
         else:
             initial_deficit = 0.0
-        
+
         predicted_refills = []
         cumulative_gallons = initial_deficit
         last_reset_date = last_fill.date if last_fill else None
-        previous_trip_date = None  # Only set once an actual trip is processed
-        
-        for trip in trips:
-            # Skip trips on or before the last actual fill — we already seeded
-            # the deficit from that fill above.
-            if last_fill and trip.date <= last_fill.date:
+        prev_event_date = last_fill.date if last_fill else None
+
+        for (event_date, _priority, event_type, event_obj) in events:
+            # Skip events on or before the last actual fill — already seeded above.
+            if last_fill and event_date <= last_fill.date:
+                if event_type == 'fill':
+                    prev_event_date = event_date
                 continue
 
-            # Adjust cumulative if there was an actual fuel fill on this date.
-            # Subtract gallons added rather than resetting to 0, so partial fills
-            # are handled correctly.
-            if trip.date in fuel_date_map:
-                fill = fuel_date_map[trip.date]
-                gallons_added = float(fill.gallons) if fill.gallons else 0.0
+            if event_type == 'fill':
+                # Actual fill on a future date (decrement cumulative, don't reset to 0
+                # so partial fills are handled correctly).
+                gallons_added = float(event_obj.gallons) if event_obj.gallons else 0.0
                 cumulative_gallons = max(0.0, cumulative_gallons - gallons_added)
-                last_reset_date = trip.date
-                previous_trip_date = trip.date
-                continue
-            
-            # Calculate fuel needed for this trip
-            if trip.total_miles and trip.total_miles > 0:
-                gallons_needed = trip.total_miles / avg_mpg
-                
-                # Check if THIS trip would push us over the threshold
+                last_reset_date = event_date
+                prev_event_date = event_date
+
+            elif event_type == 'trip':
+                gallons_needed = event_obj.total_miles / avg_mpg
+
                 if cumulative_gallons + gallons_needed >= refill_threshold:
-                    # Predict refill BEFORE this trip (use previous trip date or day before)
-                    from datetime import timedelta
-                    refill_date = previous_trip_date if previous_trip_date else (trip.date - timedelta(days=1))
-                    
-                    # Refill amount is the cumulative consumed (capped at tank capacity)
+                    # This trip would cross the threshold — predict a fill before it.
+                    refill_date = prev_event_date if prev_event_date else (event_date - timedelta(days=1))
+
                     refill_gallons = min(cumulative_gallons, tank_capacity)
                     litres = refill_gallons * 4.54609
                     cost = (litres * float(avg_price)) / 100
-                    
+
                     predicted_refills.append({
                         'date': refill_date,
                         'gallons': round(refill_gallons, 2),
                         'cost': round(cost, 2),
-                        'cumulative_since_last': cumulative_gallons,
-                        'last_reset_date': last_reset_date
+                        'cumulative_since_last': round(cumulative_gallons, 2),
+                        'trigger_trip_date': event_date,
+                        'last_reset_date': last_reset_date,
                     })
-                    
-                    # Reset cumulative after refill
+
                     cumulative_gallons = 0.0
                     last_reset_date = refill_date
-                
-                # Add this trip's consumption
+
                 cumulative_gallons += gallons_needed
-                previous_trip_date = trip.date
-        
+                prev_event_date = event_date
+
         return predicted_refills
     
+    @staticmethod
+    def get_tank_status(vehicle_id):
+        """
+        Return the current estimated tank state for a vehicle.
+
+        Walks the merged trip + fill timeline from the last actual fill forward,
+        subtracting gallons consumed by each trip.  Returns a dict:
+
+            last_fill_date          date | None
+            last_fill_gallons       float | None   — gallons added at last fill
+            miles_since_fill        int            — miles driven since last fill
+            gallons_consumed        float          — estimated gallons used since last fill
+            gallons_remaining       float          — estimated gallons left in tank
+            tank_pct                float 0–100    — % of tank capacity remaining
+            estimated_range_miles   int            — approx miles left before empty
+            estimated_fill_date     date | None    — projected date threshold is hit
+            days_until_refill       int | None     — days from today until threshold
+            estimated_fill_cost     float          — estimated cost of next fill-up (£)
+            tank_capacity           float
+            avg_mpg                 float | None
+
+        Returns None if there is insufficient data to compute a level.
+        """
+        from datetime import date as date_type
+        vehicle = family_get(Vehicle, vehicle_id)
+        if not vehicle or not vehicle.tank_size:
+            return None
+
+        tank_capacity = float(vehicle.tank_size)
+        refill_threshold = tank_capacity * (float(vehicle.refuel_threshold_pct or 95) / 100)
+        avg_mpg = FuelForecastingService.get_average_mpg(vehicle_id)
+        avg_price = FuelForecastingService.get_average_fuel_price(vehicle_id)
+
+        if not avg_mpg:
+            return None
+
+        all_fills = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
+        all_trips = family_query(Trip).filter_by(
+            vehicle_id=vehicle_id
+        ).filter(Trip.total_miles > 0).order_by(Trip.date.asc()).all()
+
+        last_fill = all_fills[-1] if all_fills else None
+        fill_cutoff = last_fill.date if last_fill else None
+
+        # Miles driven after the last actual fill (for display only)
+        miles_since_fill = sum(
+            t.total_miles for t in all_trips
+            if fill_cutoff is None or t.date > fill_cutoff
+        )
+
+        # Walk the full merged timeline to compute current tank level.
+        # Same algorithm as get_trip_tank_levels — fills add gallons (capped at
+        # tank_capacity), trips subtract.  First fill seeds the tank at gallons_added
+        # (assumes empty before the first recorded fill).
+        events = []
+        for trip in all_trips:
+            events.append((trip.date, 1, 'trip', trip))
+        for fill in all_fills:
+            events.append((fill.date, 0, 'fill', fill))
+        events.sort(key=lambda x: (x[0], x[1]))
+
+        has_fill = False
+        tank_level = 0.0
+
+        for (_event_date, _priority, event_type, event_obj) in events:
+            if event_type == 'fill':
+                gallons_added = float(event_obj.gallons) if event_obj.gallons else 0.0
+                if not has_fill:
+                    tank_level = gallons_added  # first fill: assume was empty
+                    has_fill = True
+                else:
+                    tank_level = min(tank_capacity, tank_level + gallons_added)
+            elif event_type == 'trip' and has_fill:
+                gallons_used = event_obj.total_miles / avg_mpg
+                tank_level = max(0.0, tank_level - gallons_used)
+
+        if not has_fill:
+            return None
+
+        gallons_remaining = tank_level
+        gallons_consumed = miles_since_fill / avg_mpg  # used for display only
+
+        tank_pct = min(100.0, (gallons_remaining / tank_capacity) * 100)
+        estimated_range = int(gallons_remaining * avg_mpg)
+
+        # Days until refill threshold is reached
+        gallons_until_threshold = max(0.0, gallons_remaining - (tank_capacity - refill_threshold))
+        miles_until_threshold = gallons_until_threshold * avg_mpg
+
+        today = date_type.today()
+        thirty_days_ago = today - timedelta(days=30)
+        recent_miles = sum(
+            t.total_miles for t in all_trips
+            if t.date >= thirty_days_ago and t.total_miles
+        )
+        avg_daily_miles = recent_miles / 30.0
+
+        if avg_daily_miles > 0 and miles_until_threshold > 0:
+            days_until_refill = int(miles_until_threshold / avg_daily_miles)
+            estimated_fill_date = today + timedelta(days=days_until_refill)
+        elif miles_until_threshold <= 0:
+            days_until_refill = 0
+            estimated_fill_date = today
+        else:
+            days_until_refill = None
+            estimated_fill_date = None
+
+        fill_gallons = tank_capacity - gallons_remaining
+        fill_litres = fill_gallons * 4.54609
+        estimated_fill_cost = round((fill_litres * float(avg_price)) / 100, 2)
+
+        return {
+            'last_fill_date': last_fill.date if last_fill else None,
+            'last_fill_gallons': float(last_fill.gallons) if last_fill and last_fill.gallons else None,
+            'miles_since_fill': miles_since_fill,
+            'gallons_consumed': round(gallons_consumed, 2),
+            'gallons_remaining': round(gallons_remaining, 2),
+            'tank_pct': round(tank_pct, 1),
+            'estimated_range_miles': estimated_range,
+            'estimated_fill_date': estimated_fill_date,
+            'days_until_refill': days_until_refill,
+            'estimated_fill_cost': estimated_fill_cost,
+            'tank_capacity': tank_capacity,
+            'avg_mpg': avg_mpg,
+        }
+
+    @staticmethod
+    def get_trip_tank_levels(vehicle_id):
+        """
+        Compute the estimated tank level (%) at the END of each trip.
+
+        Walks the merged trip + fill timeline, tracking gallons in the tank.
+        Tracking begins from the first actual fill.  Trips with no prior fill
+        are omitted from the result (unknown starting level).
+
+        Returns dict {trip_id: tank_pct}.
+        """
+        vehicle = family_get(Vehicle, vehicle_id)
+        if not vehicle or not vehicle.tank_size:
+            return {}
+
+        tank_capacity = float(vehicle.tank_size)
+        avg_mpg = FuelForecastingService.get_average_mpg(vehicle_id)
+        if not avg_mpg:
+            return {}
+
+        all_fills = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.asc()).all()
+        all_trips = family_query(Trip).filter_by(
+            vehicle_id=vehicle_id
+        ).filter(Trip.total_miles > 0).order_by(Trip.date.asc()).all()
+
+        # Merged timeline; fills before trips on same day
+        events = []
+        for trip in all_trips:
+            events.append((trip.date, 1, 'trip', trip))
+        for fill in all_fills:
+            events.append((fill.date, 0, 'fill', fill))
+        events.sort(key=lambda x: (x[0], x[1]))
+
+        has_fill = False
+        tank_level = 0.0
+        trip_tank_levels = {}
+
+        for (event_date, _priority, event_type, event_obj) in events:
+            if event_type == 'fill':
+                gallons_added = float(event_obj.gallons) if event_obj.gallons else 0.0
+                if not has_fill:
+                    tank_level = gallons_added
+                    has_fill = True
+                else:
+                    tank_level = min(tank_capacity, tank_level + gallons_added)
+            elif event_type == 'trip' and has_fill:
+                gallons_used = event_obj.total_miles / avg_mpg
+                tank_level = max(0.0, tank_level - gallons_used)
+                trip_tank_levels[event_obj.id] = round((tank_level / tank_capacity) * 100, 1)
+
+        return trip_tank_levels
+
     @staticmethod
     def create_forecasted_transaction(vehicle_id, refill_date, cost, description=None):
         """Create a forecasted transaction for a predicted refill"""

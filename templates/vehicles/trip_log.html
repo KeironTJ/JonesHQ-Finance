@@ -2,11 +2,53 @@
 
 {% block title %}Trip Log{% endblock %}
 
+{% block extra_css %}
+<style>
+@keyframes jhqFadeSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.jhq-page-enter { animation: jhqFadeSlide .25s ease both; }
+
+/* Themed table head */
+.jhq-thead th {
+    background: var(--bg-surface-3);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border-color);
+    border-top: none;
+    white-space: nowrap;
+}
+
+/* Legend */
+.jhq-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+/* Row tinting */
+.trip-row-today  { background: rgba(var(--bs-info-rgb), 0.08) !important; }
+.trip-row-past   { opacity: 0.85; }
+.trip-row-business { background: rgba(var(--bs-warning-rgb), 0.06) !important; }
+.trip-row-refuel { border-left: 3px solid var(--clr-warning); }
+
+/* Action group */
+.jhq-row-actions { white-space: nowrap; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
+<div class="container-fluid mt-4 jhq-page-enter">
     <div class="row">
         <div class="col-12">
-            <h1 class="mb-4"><i class="bi bi-car-front"></i> Vehicle Tracking</h1>
+            <h1 class="mb-4"><i class="bi bi-car-front"></i> My Garage</h1>
             
             <!-- Navigation -->
             <ul class="nav nav-tabs mb-4">
@@ -25,17 +67,12 @@
                         <i class="bi bi-map"></i> Trip Log
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('vehicles.manage') }}">
-                        <i class="bi bi-car-front-fill"></i> Manage Vehicles
-                    </a>
-                </li>
             </ul>
 
-            <!-- Trip Log Content -->
+    <!-- Trip Log Content -->
 <div id="trip-log-panel"><div class="card shadow">
-    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-map"></i> Trip Log</h5>
+    <div class="card-header bg-success d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-map me-2"></i>Trip Log</h5>
         <div>
             {% if selected_vehicle_id_trip %}
             <form method="POST" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=selected_vehicle_id_trip) }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for this vehicle?');">
@@ -64,54 +101,62 @@
         </div>
     </div>
     <div class="card-body">
-        <div id="panel-filters-trip" class="mb-2 small text-muted">Filters: vehicle={{ selected_vehicle_id_trip or 'any' }}, payday={{ selected_payday_period_trip or 'all' }}</div>
         <form id="trip_filters_form" method="get" action="{{ url_for('vehicles.trips') }}">
-            <div class="row mb-3">
-                <div class="col-md-12">
-                    <div class="d-flex align-items-center">
-                        <div class="me-2">
-                            <label class="form-label">Vehicle</label>
-                            <select name="vehicle_id_trip" id="vehicle_filter_trip" class="form-select" style="min-width:260px;" onchange="this.form.submit()">
-                                <option value="">All Vehicles</option>
-                                {% for v in vehicles %}
-                                <option value="{{ v.id }}" {% if selected_vehicle_id_trip and selected_vehicle_id_trip|int == v.id %}selected{% endif %}>{{ v.name }} ({{ v.registration }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="flex-grow-1">
-                            <label class="form-label">Pay Period</label>
-                            <div class="input-group flex-nowrap">
-                                <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period_trip', -1)">Prev</button>
-                                <select name="payday_period_trip" id="payday_period_trip" class="form-select" onchange="this.form.submit()">
-                                    <option value="" {% if not selected_payday_period_trip %}selected{% endif %}>All Periods</option>
-                                    {% for period in payday_periods %}
-                                    <option value="{{ period.label }}" {% if selected_payday_period_trip == period.label %}selected{% endif %}>{{ period.display_name }}</option>
-                                    {% endfor %}
-                                </select>
-                                <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period_trip', 1)">Next</button>
-                                <button class="btn btn-outline-primary" type="button" onclick="jumpToCurrentPeriod('payday_period_trip')" title="Jump to current period"><i class="bi bi-calendar-check"></i> Current</button>
-                            </div>
-                        </div>
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-sm-auto">
+                    <label class="form-label mb-1 small fw-semibold">Vehicle</label>
+                    <select name="vehicle_id_trip" id="vehicle_filter_trip" class="form-select form-select-sm" style="min-width:200px;" onchange="this.form.submit()">
+                        <option value="">All Vehicles</option>
+                        {% for v in vehicles %}
+                        <option value="{{ v.id }}" {% if selected_vehicle_id_trip and selected_vehicle_id_trip|int == v.id %}selected{% endif %}>{{ v.name }} ({{ v.registration }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label mb-1 small fw-semibold">Pay Period</label>
+                    <div class="input-group input-group-sm flex-nowrap">
+                        <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period_trip', -1)" title="Previous period"><i class="bi bi-chevron-left"></i></button>
+                        <select name="payday_period_trip" id="payday_period_trip" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="" {% if not selected_payday_period_trip %}selected{% endif %}>All Periods</option>
+                            {% for period in payday_periods %}
+                            <option value="{{ period.label }}" {% if selected_payday_period_trip == period.label %}selected{% endif %}>{{ period.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-outline-secondary" type="button" onclick="changePeriodBy('payday_period_trip', 1)" title="Next period"><i class="bi bi-chevron-right"></i></button>
+                        <button class="btn btn-outline-primary" type="button" onclick="jumpToCurrentPeriod('payday_period_trip')" title="Current period"><i class="bi bi-calendar-check"></i></button>
                     </div>
                 </div>
             </div>
         </form>
         
-        <div class="alert alert-info d-flex align-items-center mb-3" role="alert">
-            <i class="bi bi-info-circle me-2"></i>
-            <div>
-                <strong>Refuel Indicators:</strong> 
-                <span class="badge bg-success"><i class="bi bi-receipt"></i></span> = Actual refuel with bank transaction |
-                <span class="badge bg-info"><i class="bi bi-fuel-pump"></i></span> = Actual refuel (no transaction yet) |
-                <span class="badge bg-warning text-dark"><i class="bi bi-calendar-event"></i></span> = Forecasted refuel transaction
+        <!-- Legend (collapsed by default) -->
+        <div class="mb-3">
+            <button class="btn btn-link btn-sm p-0 text-muted text-decoration-none"
+                    data-bs-toggle="collapse" data-bs-target="#tripLegend" aria-expanded="false">
+                <i class="bi bi-info-circle me-1"></i><small>Legend</small>
+            </button>
+            <div class="collapse" id="tripLegend">
+                <div class="jhq-legend mt-1 p-2 rounded" style="background:var(--bg-surface-2); border:1px solid var(--border-color);">
+                    <span><span class="badge bg-success"><i class="bi bi-receipt"></i></span> Actual fill + txn</span>
+                    <span class="text-muted">·</span>
+                    <span><span class="badge bg-info text-dark"><i class="bi bi-fuel-pump"></i></span> Actual fill</span>
+                    <span class="text-muted">·</span>
+                    <span><span class="badge bg-warning text-dark"><i class="bi bi-calendar-event"></i></span> Forecasted fill</span>
+                    <span class="text-muted">·</span>
+                    <span><strong>Tank:</strong>
+                        <span class="badge bg-success">&nbsp;</span> &gt;50%
+                        <span class="badge bg-warning text-dark">&nbsp;</span> 25–50%
+                        <span class="badge bg-danger">&nbsp;</span> &lt;25%
+                    </span>
+                </div>
             </div>
         </div>
         
         <div class="table-responsive">
             <table class="table table-hover table-sm">
-                <thead class="table-dark">
+                <thead class="jhq-thead">
                     <tr>
-                        <th style="width: 30px;">
+                        <th style="width:30px;">
                             <input type="checkbox" id="selectAllTrips" onchange="toggleAllTrips(this)">
                         </th>
                         <th>Date</th>
@@ -124,6 +169,7 @@
                         <th>MPG</th>
                         <th>Gallons</th>
                         <th>Trip Cost</th>
+                        <th style="min-width:80px;">Tank</th>
                         <th>Refuel</th>
                         <th>Expense</th>
                         <th>Actions</th>
@@ -131,7 +177,7 @@
                 </thead>
                 <tbody>
                     {% for trip in trips %}
-                    {% set _next_fuel = fuel_records_dict.get(trip.vehicle_id, {}).get(trip.date) %}
+                    {% set _next_fuel = fill_by_last_trip_id.get(trip.id) %}
                     {% set _next_forecasted = forecasted_transactions.get(trip.vehicle_id, {}).get(trip.date) %}
                     {% set _is_last_trip = trip.id in last_trip_ids %}
                     {% if trip.date == today %}
@@ -161,32 +207,43 @@
                         <td>{{ "%.1f"|format(trip.approx_mpg or 0) }}</td>
                         <td>{{ "%.2f"|format(trip.gallons_used or 0) }}</td>
                         <td class="text-danger">£{{ "%.2f"|format(trip.trip_cost or 0) }}</td>
+                        {# Tank level gauge #}
                         <td>
-                            {% set next_day_fuel = _next_fuel if _is_last_trip else none %}
-                            {% set next_day_forecasted = _next_forecasted if _is_last_trip else none %}
-                            
-                            {% if next_day_fuel %}
-                                {# Actual fuel record this day - this trip triggered it #}
-                                {% if next_day_fuel.linked_transaction_id %}
-                                    <a href="{{ url_for('transactions.index') }}?id={{ next_day_fuel.linked_transaction_id }}"
+                            {% set _tank_pct = trip_tank_levels.get(trip.id) %}
+                            {% if _tank_pct is not none %}
+                                {% set _bar_cls = 'bg-success' if _tank_pct > 50 else ('bg-warning' if _tank_pct > 25 else 'bg-danger') %}
+                                <div class="progress rounded-pill" style="height: 14px; min-width: 60px;" title="{{ _tank_pct }}% full after this trip">
+                                    <div class="progress-bar {{ _bar_cls }} rounded-pill" style="width: {{ [_tank_pct, 4]|max }}%;"></div>
+                                </div>
+                                <span class="small text-muted">{{ "%.0f"|format(_tank_pct) }}%</span>
+                            {% else %}
+                                <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {# _next_fuel is set for the last trip before each actual fill #}
+                            {# _next_forecasted is set for the last trip on the forecasted date #}
+                            {% if _next_fuel %}
+                                {% if _next_fuel.linked_transaction_id %}
+                                    <a href="{{ url_for('transactions.index') }}?id={{ _next_fuel.linked_transaction_id }}"
                                        class="btn btn-sm btn-success"
-                                       title="Refuel on this day - view transaction">
-                                        <i class="bi bi-receipt"></i> {{ next_day_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_fuel.cost) }}
+                                       title="Actual fill {{ _next_fuel.date.strftime('%d/%m/%Y') }} — click to view transaction">
+                                        <i class="bi bi-receipt"></i> {{ _next_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(_next_fuel.cost) }}
                                     </a>
                                 {% else %}
-                                    <span class="badge bg-info" title="Refuel on this day">
-                                        <i class="bi bi-fuel-pump"></i> {{ next_day_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_fuel.cost) }}
+                                    <span class="badge bg-info text-dark"
+                                          title="Actual fill {{ _next_fuel.date.strftime('%d/%m/%Y') }}">
+                                        <i class="bi bi-fuel-pump"></i> {{ _next_fuel.date.strftime('%d/%m') }} £{{ "%.2f"|format(_next_fuel.cost) }}
                                     </span>
                                 {% endif %}
-                            {% elif next_day_forecasted %}
-                                {# Forecasted transaction this day - this trip will trigger it #}
-                                <a href="{{ url_for('transactions.index') }}?id={{ next_day_forecasted.id }}"
+                            {% elif _is_last_trip and _next_forecasted %}
+                                <a href="{{ url_for('transactions.index') }}?id={{ _next_forecasted.id }}"
                                    class="btn btn-sm btn-warning"
-                                   title="Forecasted refuel on this day - view transaction">
-                                    <i class="bi bi-calendar-event"></i> {{ next_day_forecasted.transaction_date.strftime('%d/%m') }} £{{ "%.2f"|format(next_day_forecasted.amount|abs) }}
+                                   title="Forecasted fill {{ _next_forecasted.transaction_date.strftime('%d/%m/%Y') }}">
+                                    <i class="bi bi-calendar-event"></i> {{ _next_forecasted.transaction_date.strftime('%d/%m') }} £{{ "%.2f"|format(_next_forecasted.amount|abs) }}
                                 </a>
                             {% else %}
-                                <span class="text-muted" title="No refuel triggered">-</span>
+                                <span class="text-muted">—</span>
                             {% endif %}
                         </td>
                         <td>
@@ -201,22 +258,27 @@
                                 <span class="text-muted" title="No fuel expense">-</span>
                             {% endif %}
                         </td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary edit-trip-btn" 
-                                    data-id="{{ trip.id }}" 
-                                    data-date="{{ trip.date.isoformat() }}" 
-                                    data-vehicle-id="{{ trip.vehicle_id }}" 
-                                    data-personal-miles="{{ trip.personal_miles }}" 
-                                    data-business-miles="{{ trip.business_miles }}" 
-                                    data-journey-description="{{ trip.journey_description or '' }}" 
-                                    data-school-holidays="{{ trip.school_holidays or '' }}">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <form method="POST" action="{{ url_for('vehicles.delete_trip', trip_id=trip.id) }}" style="display:inline;" onsubmit="return confirm('Delete this trip?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <td class="jhq-row-actions">
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary edit-trip-btn"
+                                        title="Edit"
+                                        data-id="{{ trip.id }}"
+                                        data-date="{{ trip.date.isoformat() }}"
+                                        data-vehicle-id="{{ trip.vehicle_id }}"
+                                        data-personal-miles="{{ trip.personal_miles }}"
+                                        data-business-miles="{{ trip.business_miles }}"
+                                        data-journey-description="{{ trip.journey_description or '' }}"
+                                        data-school-holidays="{{ trip.school_holidays or '' }}">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger"
+                                        title="Delete"
+                                        onclick="if(confirm('Delete this trip?')){this.closest('tr').querySelector('form.del-form').submit()}">
                                     <i class="bi bi-trash"></i>
                                 </button>
+                            </div>
+                            <form class="del-form d-none" method="POST" action="{{ url_for('vehicles.delete_trip', trip_id=trip.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             </form>
                         </td>
                     </tr>

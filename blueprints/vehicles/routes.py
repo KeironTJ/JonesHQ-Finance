@@ -16,20 +16,36 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 @vehicles_bp.route('/vehicles')
 def index():
-    """Vehicle overview page"""
-    vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all()
+    """Vehicle overview page (also hosts Manage Fleet tab)"""
+    active_vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all()
+    all_vehicles = family_query(Vehicle).order_by(Vehicle.is_active.desc(), Vehicle.name).all()
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
 
-    # Get stats for each vehicle
+    # active_tab: 'fleet' (default) or 'manage'
+    active_tab = request.args.get('tab', 'fleet')
+
+    # Get stats and tank status for each active vehicle
     vehicle_stats = {}
-    for vehicle in vehicles:
+    tank_statuses = {}
+    next_predicted_refills = {}
+    for vehicle in active_vehicles:
         vehicle_stats[vehicle.id] = VehicleService.get_vehicle_stats(vehicle.id)
+        tank_statuses[vehicle.id] = FuelForecastingService.get_tank_status(vehicle.id)
+        predictions = FuelForecastingService.predict_refills(vehicle.id)
+        from datetime import date as _date
+        future = [p for p in predictions if p['date'] >= _date.today()]
+        next_predicted_refills[vehicle.id] = future[0] if future else None
 
     return render_template(
         'vehicles/index.html',
-        vehicles=vehicles,
+        vehicles=active_vehicles,
+        all_vehicles=all_vehicles,
         accounts=accounts,
-        vehicle_stats=vehicle_stats
+        vehicle_stats=vehicle_stats,
+        tank_statuses=tank_statuses,
+        next_predicted_refills=next_predicted_refills,
+        active_tab=active_tab,
+        today=date.today(),
     )
 
 
@@ -145,13 +161,31 @@ def trips():
             pass
     trips = trip_query.order_by(Trip.date.desc()).all()
     
-    # Get all fuel records to check for linked transactions
-    fuel_records_dict = {}
+    # Get all fuel records per vehicle (used for fill-by-trip mapping)
+    all_vehicle_fills = {}
     for vehicle in vehicles:
-        fuel_records = family_query(FuelRecord).filter_by(vehicle_id=vehicle.id).all()
-        fuel_records_dict[vehicle.id] = {f.date: f for f in fuel_records}
-    
-    # Get forecasted fuel transactions
+        all_vehicle_fills[vehicle.id] = family_query(FuelRecord).filter_by(
+            vehicle_id=vehicle.id
+        ).order_by(FuelRecord.date.asc()).all()
+
+    # Build fill_by_last_trip_id: trip_id → FuelRecord
+    # For each fill, find the last filtered trip on or before that fill's date.
+    # This correctly handles fills that happen on non-trip days.
+    sorted_trips = sorted(trips, key=lambda t: t.date)
+    fill_by_last_trip_id = {}
+    for vehicle in vehicles:
+        vehicle_fills = all_vehicle_fills[vehicle.id]
+        vehicle_trips = [t for t in sorted_trips if t.vehicle_id == vehicle.id]
+        for fill in vehicle_fills:
+            last_trip = None
+            for trip in reversed(vehicle_trips):
+                if trip.date <= fill.date:
+                    last_trip = trip
+                    break
+            if last_trip and last_trip.id not in fill_by_last_trip_id:
+                fill_by_last_trip_id[last_trip.id] = fill
+
+    # Get forecasted fuel transactions (keyed by vehicle id → transaction_date → tx)
     from models.categories import Category
     from models.transactions import Transaction
     from models.expenses import Expense
@@ -162,18 +196,15 @@ def trips():
             Transaction.is_forecasted == True,
             Transaction.category_id == fuel_category.id
         ).all()
-        # Group by vehicle registration extracted from description
         for trans in forecasted_fuel:
-            # Description format: "Forecasted fuel - ABC123" or similar
             for vehicle in vehicles:
                 if vehicle.registration in trans.description:
                     if vehicle.id not in forecasted_transactions:
                         forecasted_transactions[vehicle.id] = {}
                     forecasted_transactions[vehicle.id][trans.transaction_date] = trans
                     break
-    
+
     # Get fuel expenses keyed by trip ID via sentinel description match
-    # (avoids showing the same expense on every trip sharing the same vehicle+date)
     fuel_expenses_all = family_query(Expense).filter_by(expense_type='Fuel').all()
     fuel_expenses_by_trip = {}
     for exp in fuel_expenses_all:
@@ -183,7 +214,21 @@ def trips():
                 fuel_expenses_by_trip[trip.id] = exp
                 break
 
-    # Only the last trip of each (vehicle, date) shows the refuel indicator
+    # Tank levels per trip (estimated % at end of each trip)
+    trip_tank_levels = {}
+    if selected_vehicle_id_trip:
+        try:
+            trip_tank_levels = FuelForecastingService.get_trip_tank_levels(int(selected_vehicle_id_trip))
+        except Exception:
+            pass
+    else:
+        for vehicle in vehicles:
+            try:
+                trip_tank_levels.update(FuelForecastingService.get_trip_tank_levels(vehicle.id))
+            except Exception:
+                pass
+
+    # Only the last trip of each (vehicle, date) shows the forecasted refuel indicator
     _last_per_day = {}
     for trip in trips:
         key = (trip.vehicle_id, trip.date)
@@ -198,9 +243,10 @@ def trips():
         payday_periods=payday_periods,
         selected_payday_period_trip=selected_payday_period_trip,
         selected_vehicle_id_trip=selected_vehicle_id_trip,
-        fuel_records_dict=fuel_records_dict,
+        fill_by_last_trip_id=fill_by_last_trip_id,
         forecasted_transactions=forecasted_transactions,
         fuel_expenses_by_trip=fuel_expenses_by_trip,
+        trip_tank_levels=trip_tank_levels,
         last_trip_ids=last_trip_ids,
         today=date.today()
     )
@@ -208,15 +254,8 @@ def trips():
 
 @vehicles_bp.route('/vehicles/manage')
 def manage():
-    """Manage vehicles page (standalone)"""
-    vehicles = family_query(Vehicle).order_by(Vehicle.is_active.desc(), Vehicle.name).all()
-    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-
-    return render_template(
-        'vehicles/manage_vehicles.html',
-        vehicles=vehicles,
-        accounts=accounts
-    )
+    """Redirect to combined overview/manage page"""
+    return redirect(url_for('vehicles.index', tab='manage'))
 
 
 # ===== VEHICLE MANAGEMENT =====
