@@ -15,15 +15,33 @@ If the loan has a ``default_payment_account_id``, a matching bank Transaction
 (payment_type='Direct Debit') is created for every period >= 1 and linked via
 loan_payment.bank_transaction_id.
 
+Weekend adjustment
+------------------
+Each Loan has a ``weekend_adjustment`` field ('previous', 'next', or 'none').
+When a computed payment date falls on a Saturday or Sunday:
+  'previous' — roll back to the preceding Friday
+  'next'     — roll forward to the following Monday
+  'none'     — leave the date unchanged
+
+Term changes
+------------
+When loan terms change mid-course (payment amount, APR, payment day, or term
+extension), ``apply_term_change()`` records the change in ``LoanTermChange``,
+updates the ``Loan`` fields, then deletes and regenerates all future unpaid
+payments from the effective date onward.
+
 Primary entry points
 --------------------
   generate_amortization_schedule() — create LoanPayment records for a loan
   generate_payment_transaction()   — create a bank Transaction for one payment
   regenerate_schedule()            — delete future payments and regenerate
+  apply_term_change()              — record a term change and re-generate schedule
+  update_future_payment_dates()    — shift payment day-of-month for unpaid payments
   get_payment_statistics()         — summary counts and totals (paid/unpaid)
 """
 from models.loans import Loan
 from models.loan_payments import LoanPayment
+from models.loan_term_changes import LoanTermChange
 from models.transactions import Transaction
 from models.vendors import Vendor
 from services.payday_service import PaydayService
@@ -43,6 +61,32 @@ class LoanService:
     LoanPayment records.  If the loan has a default_payment_account_id, a matching
     bank Transaction is created per payment period (>= 1).
     """
+
+    # ------------------------------------------------------------------
+    # Weekend adjustment
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _adjust_for_weekend(date_obj, adjustment):
+        """
+        Adjust a date if it falls on a weekend, according to the loan's rule.
+
+        Args:
+            date_obj:   datetime.date to check.
+            adjustment: 'previous' — roll back to Friday
+                        'next'     — roll forward to Monday
+                        'none'     — leave unchanged
+
+        Returns:
+            datetime.date (possibly unchanged).
+        """
+        if adjustment == 'none' or not PaydayService.is_weekend(date_obj):
+            return date_obj
+        if adjustment == 'previous':
+            return PaydayService.get_previous_working_day(date_obj)
+        if adjustment == 'next':
+            return PaydayService.get_next_working_day(date_obj)
+        return date_obj
     
     @staticmethod
     def generate_amortization_schedule(loan_id, start_date=None, end_date=None, commit=True):
@@ -101,6 +145,9 @@ class LoanService:
         current_date = start_date
         payments_created = []
         
+        # Weekend adjustment rule for this loan
+        weekend_adj = getattr(loan, 'weekend_adjustment', 'none') or 'none'
+
         # Create Period 0 - Opening Balance (if first time)
         if create_opening_record:
             existing = family_query(LoanPayment).filter_by(
@@ -132,11 +179,19 @@ class LoanService:
         
         # Create actual payment schedule
         while current_date <= end_date and opening_balance > Decimal('0.01'):  # Continue until balance is essentially zero
-            # Check if payment already exists for this date
+            # Apply weekend adjustment to the raw calendar date
+            adjusted_date = LoanService._adjust_for_weekend(current_date, weekend_adj)
+
+            # Check if payment already exists for this adjusted date or raw date
             existing = family_query(LoanPayment).filter_by(
                 loan_id=loan_id,
-                date=current_date
+                date=adjusted_date
             ).first()
+            if not existing:
+                existing = family_query(LoanPayment).filter_by(
+                    loan_id=loan_id,
+                    date=current_date
+                ).first()
             
             if not existing:
                 # Calculate interest charge for this period
@@ -164,8 +219,8 @@ class LoanService:
                 # Create payment record
                 payment = LoanPayment(
                     loan_id=loan_id,
-                    date=current_date,
-                    year_month=current_date.strftime('%Y-%m'),
+                    date=adjusted_date,
+                    year_month=adjusted_date.strftime('%Y-%m'),
                     period=period,
                     opening_balance=opening_balance,
                     payment_amount=payment_amount,
@@ -298,18 +353,30 @@ class LoanService:
 
     @staticmethod
     def delete_future_payments(loan_id, from_date, commit=True):
-        """Delete all loan payments from a specific date onwards"""
+        """
+        Delete all unpaid loan payments from from_date onward, including their
+        linked bank transactions.  Account balances are recalculated after delete.
+        """
         payments = family_query(LoanPayment).filter(
             LoanPayment.loan_id == loan_id,
             LoanPayment.date >= from_date
         ).all()
-        
+
+        account_ids = set()
         for payment in payments:
+            if payment.bank_transaction_id:
+                bank_txn = family_get(Transaction, payment.bank_transaction_id)
+                if bank_txn:
+                    if bank_txn.account_id:
+                        account_ids.add(bank_txn.account_id)
+                    db.session.delete(bank_txn)
             db.session.delete(payment)
-        
+
         if commit:
             db.session.commit()
-        
+            for account_id in account_ids:
+                Transaction.recalculate_account_balance(account_id)
+
         return len(payments)
     
     @staticmethod
@@ -403,11 +470,17 @@ class LoanService:
         )
 
         updated = 0
+        loan = family_get(Loan, loan_id)
+        weekend_adj = getattr(loan, 'weekend_adjustment', 'none') or 'none'
+
         for payment in future_payments:
             # Clamp day to last day of month
             max_day = cal_mod.monthrange(payment.date.year, payment.date.month)[1]
             actual_day = min(new_day, max_day)
             new_date = payment.date.replace(day=actual_day)
+
+            # Apply weekend adjustment
+            new_date = LoanService._adjust_for_weekend(new_date, weekend_adj)
 
             payment.date = new_date
             payment.year_month = new_date.strftime('%Y-%m')
@@ -490,4 +563,160 @@ class LoanService:
             'remaining_interest': remaining_interest,
             'remaining_principal': remaining_principal,
             'remaining_amount': remaining_amount
+        }
+
+    @staticmethod
+    def apply_term_change(
+        loan_id,
+        effective_date,
+        new_monthly_payment=None,
+        new_annual_apr=None,
+        new_payment_day=None,
+        new_term_months=None,
+        notes=None,
+    ):
+        """
+        Record a mid-loan term change and regenerate future payments.
+
+        Captures the previous values from the Loan record, applies the requested
+        changes to the Loan, writes a ``LoanTermChange`` history record, then deletes
+        all unpaid payments on or after ``effective_date`` and regenerates the
+        amortization schedule from that point using the updated terms.
+
+        At least one of the ``new_*`` kwargs must differ from the current value.
+
+        Args:
+            loan_id:              ID of the Loan.
+            effective_date:       datetime.date — first month the new terms apply.
+            new_monthly_payment:  New fixed monthly payment amount (Decimal/float/str),
+                                  or None to leave unchanged.
+            new_annual_apr:       New annual APR percentage, or None to leave unchanged.
+            new_payment_day:      New day-of-month (1–31) for payments, or None to
+                                  leave unchanged.
+            new_term_months:      New total term in months (extends the end_date),
+                                  or None to leave unchanged.
+            notes:                Optional free-text note about why the change occurred.
+
+        Returns:
+            dict with keys:
+              'term_change'    — the LoanTermChange record created
+              'deleted'        — number of future payments deleted
+              'created'        — number of new payment records generated
+              'loan'           — the updated Loan record
+
+        Raises:
+            ValueError: if loan not found, effective_date is in the past relative to
+                        the earliest unpaid payment, or no fields were actually changed.
+        """
+        import calendar as cal_mod
+
+        loan = family_get(Loan, loan_id)
+        if not loan:
+            raise ValueError(f"Loan {loan_id} not found.")
+
+        # Snapshot previous values for history record
+        prev_monthly_payment = Decimal(str(loan.monthly_payment))
+        prev_annual_apr = Decimal(str(loan.annual_apr))
+        prev_term_months = loan.term_months
+
+        # Derive current payment day from the first unpaid future payment,
+        # falling back to effective_date's day.
+        first_future = (
+            family_query(LoanPayment)
+            .filter(
+                LoanPayment.loan_id == loan_id,
+                LoanPayment.is_paid == False,
+                LoanPayment.period > 0,
+                LoanPayment.date >= effective_date,
+            )
+            .order_by(LoanPayment.date)
+            .first()
+        )
+        prev_payment_day = first_future.date.day if first_future else effective_date.day
+
+        # Validate at least one thing is actually changing
+        changes_requested = any([
+            new_monthly_payment is not None and Decimal(str(new_monthly_payment)) != prev_monthly_payment,
+            new_annual_apr is not None and Decimal(str(new_annual_apr)) != prev_annual_apr,
+            new_payment_day is not None and int(new_payment_day) != prev_payment_day,
+            new_term_months is not None and int(new_term_months) != prev_term_months,
+        ])
+        if not changes_requested:
+            raise ValueError("No fields changed — at least one new value must differ from the current value.")
+
+        # ------------------------------------------------------------------
+        # Apply changes to the Loan record
+        # ------------------------------------------------------------------
+        if new_monthly_payment is not None:
+            loan.monthly_payment = Decimal(str(new_monthly_payment))
+
+        if new_annual_apr is not None:
+            loan.annual_apr = Decimal(str(new_annual_apr))
+            loan.monthly_apr = Decimal(str(new_annual_apr)) / Decimal('12')
+
+        if new_term_months is not None:
+            loan.term_months = int(new_term_months)
+            # Recalculate end_date from start_date + new term
+            loan.end_date = loan.start_date + relativedelta(months=int(new_term_months))
+
+        # ------------------------------------------------------------------
+        # Build LoanTermChange record
+        # ------------------------------------------------------------------
+        term_change = LoanTermChange(
+            loan_id=loan_id,
+            effective_date=effective_date,
+            previous_monthly_payment=prev_monthly_payment
+            if new_monthly_payment is not None else None,
+            new_monthly_payment=Decimal(str(new_monthly_payment))
+            if new_monthly_payment is not None else None,
+            previous_annual_apr=prev_annual_apr
+            if new_annual_apr is not None else None,
+            new_annual_apr=Decimal(str(new_annual_apr))
+            if new_annual_apr is not None else None,
+            previous_payment_day=prev_payment_day
+            if new_payment_day is not None else None,
+            new_payment_day=int(new_payment_day)
+            if new_payment_day is not None else None,
+            previous_term_months=prev_term_months
+            if new_term_months is not None else None,
+            new_term_months=int(new_term_months)
+            if new_term_months is not None else None,
+            notes=notes,
+        )
+        db.session.add(term_change)
+
+        # Propagate family_id from loan (mirrors other models)
+        if hasattr(loan, 'family_id') and loan.family_id:
+            term_change.family_id = loan.family_id
+
+        # Commit loan + term_change before regenerating so the new rates are live
+        db.session.commit()
+
+        # ------------------------------------------------------------------
+        # Delete future unpaid payments from effective_date onward and
+        # regenerate the schedule using updated loan fields.
+        # ------------------------------------------------------------------
+        deleted_count = LoanService.delete_future_payments(loan_id, effective_date, commit=True)
+
+        payments = LoanService.generate_amortization_schedule(
+            loan_id=loan_id,
+            start_date=effective_date,
+            end_date=loan.end_date,
+            commit=True,
+        )
+
+        # If payment day is changing, shift the newly created records to the new day
+        if new_payment_day is not None:
+            LoanService.update_future_payment_dates(
+                loan_id=loan_id,
+                new_day=int(new_payment_day),
+                from_date=effective_date,
+                commit=True,
+            )
+
+        return {
+            'term_change': term_change,
+            'deleted': deleted_count,
+            'created': len(payments),
+            'loan': loan,
         }

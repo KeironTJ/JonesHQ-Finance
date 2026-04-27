@@ -793,11 +793,23 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_txn_fixed').checked = (txnFixed === '1');
             document.getElementById('edit_is_paid').checked = (txnPaid === '1');
 
-            // Period override fields
+            // Period override fields — pre-populate for visibility
             document.getElementById('edit_year_month').value = button.getAttribute('data-txn-year-month') || '';
             document.getElementById('edit_week_year').value = button.getAttribute('data-txn-week-year') || '';
             document.getElementById('edit_day_name').value = button.getAttribute('data-txn-day-name') || '';
             document.getElementById('edit_payday_period').value = button.getAttribute('data-txn-payday-period') || '';
+        });
+    }
+
+    // When the date changes in the modal, clear all period override fields so
+    // the server auto-recalculates them from the new date rather than keeping stale values.
+    const editDateInput = document.getElementById('edit_transaction_date');
+    if (editDateInput) {
+        editDateInput.addEventListener('change', function() {
+            document.getElementById('edit_year_month').value = '';
+            document.getElementById('edit_week_year').value = '';
+            document.getElementById('edit_day_name').value = '';
+            document.getElementById('edit_payday_period').value = '';
         });
     }
 });

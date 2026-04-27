@@ -180,82 +180,109 @@
         </div>
     </div>
 
-    <!-- Generate Schedule Section -->
+    <!-- Apply Term Change -->
     <div class="card mb-4">
-        <div class="card-header bg-primary text-white" style="cursor: pointer;"
-             data-bs-toggle="collapse" data-bs-target="#scheduleManagementBody" aria-expanded="false">
+        <div class="card-header bg-warning text-dark" style="cursor: pointer;"
+             data-bs-toggle="collapse" data-bs-target="#termChangeBody" aria-expanded="false">
             <h5 class="mb-0">
-                <i class="bi bi-chevron-down me-2"></i>Payment Schedule Management
+                <i class="bi bi-chevron-down me-2"></i>Apply Term Change
             </h5>
         </div>
-        <div class="collapse" id="scheduleManagementBody">
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <h6>Generate New Schedule</h6>
-                    <p class="text-muted">Create payment schedule from loan start date</p>
-                    <form method="POST" action="{{ url_for('loans.generate_schedule', id=loan.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <div class="mb-3">
-                            <label for="end_date_generate" class="form-label">End Date</label>
-                            <input type="date" 
-                                   class="form-control" 
-                                   id="end_date_generate" 
-                                   name="end_date" 
-                                   value="{{ loan.end_date.strftime('%Y-%m-%d') }}">
+        <div class="collapse" id="termChangeBody">
+            <div class="card-body">
+                <p class="text-muted">
+                    Use this when the lender changes your payment amount, APR, payment day, or loan term.
+                    Future unpaid payments will be deleted and regenerated from the effective date using the new terms.
+                    <strong>Paid payments are never touched.</strong>
+                </p>
+                <form method="POST" action="{{ url_for('loans.apply_term_change', id=loan.id) }}"
+                      onsubmit="return confirm('Apply term change? All unpaid payments from the effective date onward will be replaced.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Effective Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" name="effective_date" required
+                                   value="{{ today.strftime('%Y-%m-%d') if today is defined else '' }}">
+                            <div class="form-text">First month the new terms apply.</div>
                         </div>
-                        <button type="submit" class="btn btn-success" onclick="return confirm('Generate payment schedule?')">
-                            <i class="bi bi-calendar-check"></i> Generate Schedule
-                        </button>
-                    </form>
-                </div>
-                <div class="col-md-6">
-                    <h6>Regenerate Schedule</h6>
-                    <p class="text-muted">Delete future payments and regenerate from today</p>
-                    <form method="POST" action="{{ url_for('loans.regenerate_schedule', id=loan.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <div class="mb-3">
-                            <label for="end_date_regenerate" class="form-label">End Date</label>
-                            <input type="date" 
-                                   class="form-control" 
-                                   id="end_date_regenerate" 
-                                   name="end_date" 
-                                   value="{{ loan.end_date.strftime('%Y-%m-%d') }}">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">New Monthly Payment (£)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" step="0.01" class="form-control" name="new_monthly_payment"
+                                       placeholder="{{ '%.2f'|format(loan.monthly_payment) }}">
+                            </div>
+                            <div class="form-text">Leave blank to keep £{{ '%.2f'|format(loan.monthly_payment) }}.</div>
                         </div>
-                        <button type="submit" class="btn btn-warning" onclick="return confirm('Delete all future payments and regenerate?')">
-                            <i class="bi bi-arrow-repeat"></i> Regenerate Schedule
-                        </button>
-                    </form>
-                </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">New Annual APR (%)</label>
+                            <input type="number" step="0.01" class="form-control" name="new_annual_apr"
+                                   placeholder="{{ '%.2f'|format(loan.annual_apr) }}">
+                            <div class="form-text">Leave blank to keep {{ '%.2f'|format(loan.annual_apr) }}%.</div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">New Payment Day of Month</label>
+                            <input type="number" min="1" max="31" class="form-control" name="new_payment_day"
+                                   placeholder="{{ loan.start_date.day }}">
+                            <div class="form-text">Leave blank to keep day {{ loan.start_date.day }}.</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">New Term (Months)</label>
+                            <input type="number" min="1" class="form-control" name="new_term_months"
+                                   placeholder="{{ loan.term_months }}">
+                            <div class="form-text">Leave blank to keep {{ loan.term_months }} months.</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Notes</label>
+                            <input type="text" class="form-control" name="notes"
+                                   placeholder="e.g. Rate review, payment holiday ended">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-repeat"></i> Apply Term Change
+                    </button>
+                </form>
             </div>
-            <hr>
-            <div class="row">
-                <div class="col-md-6">
-                    <h6>Update Future Payment Date</h6>
-                    <p class="text-muted">Change the day-of-month for all upcoming unpaid payments and their linked transactions</p>
-                    <form method="POST" action="{{ url_for('loans.update_payment_day', id=loan.id) }}"
-                          onsubmit="return confirm('Update the payment date for all future unpaid transactions?')">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <div class="mb-3">
-                            <label for="payment_day" class="form-label">New Payment Day of Month</label>
-                            <input type="number" 
-                                   class="form-control" 
-                                   id="payment_day" 
-                                   name="payment_day" 
-                                   min="1" max="31"
-                                   placeholder="e.g. 15"
-                                   value="{{ loan.start_date.day }}">
-                            <div class="form-text">Applies from today onwards. Months shorter than this day will use the last day of that month.</div>
-                        </div>
-                        <button type="submit" class="btn btn-info text-white">
-                            <i class="bi bi-calendar-event"></i> Update Payment Day
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
         </div>
     </div>
+
+    <!-- Term Change History -->
+    {% if term_changes %}
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white" style="cursor: pointer;"
+             data-bs-toggle="collapse" data-bs-target="#termHistoryBody" aria-expanded="false">
+            <h5 class="mb-0">
+                <i class="bi bi-chevron-down me-2"></i>Term Change History ({{ term_changes|length }})
+            </h5>
+        </div>
+        <div class="collapse" id="termHistoryBody">
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Effective Date</th>
+                            <th>Changes</th>
+                            <th>Notes</th>
+                            <th>Recorded</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tc in term_changes %}
+                        <tr>
+                            <td><strong>{{ tc.effective_date.strftime('%d %b %Y') }}</strong></td>
+                            <td>{{ tc.change_summary }}</td>
+                            <td class="text-muted">{{ tc.notes or '—' }}</td>
+                            <td class="text-muted">{{ tc.created_at.strftime('%d %b %Y') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Payment Schedule -->
     <div class="card">
@@ -429,6 +456,48 @@
 </div>
 {% endif %}
 {% endfor %}
+
+<!-- Admin Recovery Tools (admin users only) -->
+{% if current_user.is_admin %}
+<div class="card mb-4 border-secondary">
+    <div class="card-header bg-secondary text-white" style="cursor: pointer;"
+         data-bs-toggle="collapse" data-bs-target="#adminRecoveryBody" aria-expanded="false">
+        <h5 class="mb-0">
+            <i class="bi bi-chevron-down me-2"></i>Admin Recovery Tools
+        </h5>
+    </div>
+    <div class="collapse" id="adminRecoveryBody">
+    <div class="card-body">
+        <div class="alert alert-danger mb-3">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>These tools are for error recovery only.</strong> Under normal operation you should not need them.
+            Use <strong>Apply Term Change</strong> to change payment terms on a live loan.
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Regenerate Schedule</h6>
+                <p class="text-muted small">Deletes <strong>all</strong> future unpaid payments (and their linked bank transactions) then rebuilds the schedule from today. Only use this if the schedule is corrupt or was generated with incorrect data.</p>
+                <form method="POST" action="{{ url_for('loans.regenerate_schedule', id=loan.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="mb-3">
+                        <label for="end_date_regenerate" class="form-label">End Date</label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="end_date_regenerate" 
+                               name="end_date" 
+                               value="{{ loan.end_date.strftime('%Y-%m-%d') }}">
+                    </div>
+                    <button type="submit" class="btn btn-danger"
+                            onclick="return confirm('WARNING: Delete all future payments and regenerate from scratch? This cannot be undone.')">
+                        <i class="bi bi-arrow-repeat"></i> Regenerate Schedule
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    </div>
+</div>
+{% endif %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

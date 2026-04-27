@@ -14,6 +14,7 @@ from models.income import Income
 from models.recurring_income import RecurringIncome
 from models.loans import Loan
 from models.loan_payments import LoanPayment
+from models.loan_term_changes import LoanTermChange
 from models.monthly_account_balance import MonthlyAccountBalance
 from models.mortgage import Mortgage, MortgageProduct
 from models.mortgage_payments import MortgagePayment, MortgageSnapshot

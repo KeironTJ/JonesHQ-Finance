@@ -14,6 +14,21 @@
                     </h4>
                 </div>
                 <div class="card-body">
+
+                    {% if loan and has_paid_payments %}
+                    <div class="alert alert-warning d-flex align-items-start gap-2 mb-4">
+                        <i class="bi bi-lock-fill fs-5 mt-1"></i>
+                        <div>
+                            <strong>Live loan — schedule fields are locked.</strong><br>
+                            This loan has payments already marked as paid. Only the name, payment account, weekend
+                            adjustment and active status can be changed here.
+                            To change rates, payment amount or term, use
+                            <a href="{{ url_for('loans.detail', id=loan.id) }}#termChangeBody" class="alert-link">Apply Term Change</a>
+                            on the detail page.
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="row">
@@ -40,7 +55,7 @@
                                            name="loan_value" 
                                            step="0.01"
                                            value="{{ '%.2f'|format(loan.loan_value) if loan else '' }}"
-                                           required>
+                                           {{ 'readonly disabled' if loan and has_paid_payments else 'required' }}>
                                 </div>
                                 <small class="text-muted">Original loan amount borrowed</small>
                             </div>
@@ -58,7 +73,8 @@
                                            name="current_balance" 
                                            step="0.01"
                                            value="{{ '%.2f'|format(loan.current_balance) if loan else '' }}"
-                                           placeholder="Leave blank to use loan amount">
+                                           placeholder="Leave blank to use loan amount"
+                                           {{ 'readonly disabled' if loan and has_paid_payments else '' }}>
                                 </div>
                                 <small class="text-muted">Current outstanding balance</small>
                             </div>
@@ -72,7 +88,7 @@
                                        name="annual_apr" 
                                        step="0.01"
                                        value="{{ '%.2f'|format(loan.annual_apr) if loan else '' }}"
-                                       required>
+                                       {{ 'readonly disabled' if loan and has_paid_payments else 'required' }}>
                                 <small class="text-muted">Annual interest rate (0.00 for 0% loans)</small>
                             </div>
                         </div>
@@ -89,7 +105,7 @@
                                            name="monthly_payment" 
                                            step="0.01"
                                            value="{{ '%.2f'|format(loan.monthly_payment) if loan else '' }}"
-                                           required>
+                                           {{ 'readonly disabled' if loan and has_paid_payments else 'required' }}>
                                 </div>
                                 <small class="text-muted">Fixed monthly payment amount</small>
                             </div>
@@ -103,7 +119,7 @@
                                        name="term_months" 
                                        min="1"
                                        value="{{ loan.term_months if loan else '' }}"
-                                       required>
+                                       {{ 'readonly disabled' if loan and has_paid_payments else 'required' }}>
                                 <small class="text-muted">Total loan term in months</small>
                             </div>
                         </div>
@@ -117,7 +133,7 @@
                                        id="start_date" 
                                        name="start_date" 
                                        value="{{ loan.start_date.strftime('%Y-%m-%d') if loan else '' }}"
-                                       required>
+                                       {{ 'readonly disabled' if loan and has_paid_payments else 'required' }}>
                                 <small class="text-muted">First payment date</small>
                             </div>
 
@@ -140,7 +156,7 @@
 
                         <div class="row">
                             <!-- Default Payment Account -->
-                            <div class="col-md-12 mb-3">
+                            <div class="col-md-6 mb-3">
                                 <label for="default_payment_account_id" class="form-label">Default Payment Account</label>
                                 <select class="form-select" id="default_payment_account_id" name="default_payment_account_id">
                                     <option value="">-- No Auto-Link --</option>
@@ -156,6 +172,23 @@
                                     Automatically creates linked bank transactions for each payment. 
                                     When you mark payments as paid/unpaid, the bank transaction is updated automatically.
                                 </small>
+                            </div>
+
+                            <!-- Weekend Adjustment -->
+                            <div class="col-md-6 mb-3">
+                                <label for="weekend_adjustment" class="form-label">Weekend Adjustment</label>
+                                <select class="form-select" id="weekend_adjustment" name="weekend_adjustment">
+                                    <option value="none" {% if not loan or (loan.weekend_adjustment or 'none') == 'none' %}selected{% endif %}>
+                                        None — keep date as-is
+                                    </option>
+                                    <option value="previous" {% if loan and loan.weekend_adjustment == 'previous' %}selected{% endif %}>
+                                        Previous working day (roll back to Friday)
+                                    </option>
+                                    <option value="next" {% if loan and loan.weekend_adjustment == 'next' %}selected{% endif %}>
+                                        Next working day (roll forward to Monday)
+                                    </option>
+                                </select>
+                                <small class="text-muted">When a payment date falls on a weekend, shift it to a working day.</small>
                             </div>
                         </div>
 

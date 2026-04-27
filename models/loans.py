@@ -21,7 +21,11 @@ class Loan(db.Model):
     
     # Default Payment Account
     default_payment_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
-    
+
+    # Weekend adjustment rule for payment dates: 'previous' (roll back to Friday),
+    # 'next' (roll forward to Monday), or 'none' (leave as-is).
+    weekend_adjustment = db.Column(db.String(10), nullable=True, default='none')
+
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
@@ -30,6 +34,8 @@ class Loan(db.Model):
     payments = db.relationship('LoanPayment', backref='loan', lazy=True)
     transactions = db.relationship('Transaction', backref='loan', lazy=True)
     default_payment_account = db.relationship('Account', foreign_keys=[default_payment_account_id])
+    term_changes = db.relationship('LoanTermChange', back_populates='loan',
+                                   order_by='LoanTermChange.effective_date', lazy=True)
     
     def __repr__(self):
         return f'<Loan {self.name}: £{self.current_balance}>'

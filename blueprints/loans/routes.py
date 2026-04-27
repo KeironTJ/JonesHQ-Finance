@@ -2,6 +2,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from . import loans_bp
 from models.loans import Loan
 from models.loan_payments import LoanPayment
+from models.loan_term_changes import LoanTermChange
 from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
@@ -71,7 +72,7 @@ def index():
 
 @loans_bp.route('/add', methods=['GET', 'POST'])
 def add():
-    """Add a new loan"""
+    """Add a new loan — saves the loan and immediately generates the full amortization schedule."""
     from models.accounts import Account
     
     if request.method == 'POST':
@@ -89,7 +90,7 @@ def add():
             loan = Loan(
                 name=request.form['name'],
                 loan_value=float(request.form['loan_value']),
-                principal=float(request.form['loan_value']),  # Same as loan_value
+                principal=float(request.form['loan_value']),
                 current_balance=float(request.form.get('current_balance', request.form['loan_value'])),
                 annual_apr=float(request.form['annual_apr']),
                 monthly_apr=float(request.form['annual_apr']) / 12,
@@ -98,13 +99,22 @@ def add():
                 end_date=end_date,
                 term_months=term_months,
                 default_payment_account_id=default_payment_account_id,
+                weekend_adjustment=request.form.get('weekend_adjustment', 'none'),
                 is_active=request.form.get('is_active') == 'on'
             )
             
             db.session.add(loan)
             db.session.commit()
+
+            # Auto-generate amortization schedule immediately
+            payments = LoanService.generate_amortization_schedule(
+                loan_id=loan.id,
+                start_date=loan.start_date,
+                end_date=loan.end_date,
+                commit=True
+            )
             
-            flash(f'Loan "{loan.name}" added successfully!', 'success')
+            flash(f'Loan "{loan.name}" created with {len(payments)} payment records.', 'success')
             return redirect(url_for('loans.detail', id=loan.id))
             
         except Exception as e:
@@ -113,7 +123,7 @@ def add():
             return redirect(url_for('loans.add'))
     
     accounts = family_query(Account).order_by(Account.name).all()
-    return render_template('loans/form.html', loan=None, accounts=accounts)
+    return render_template('loans/form.html', loan=None, accounts=accounts, has_paid_payments=False)
 
 
 @loans_bp.route('/<int:id>')
@@ -127,6 +137,10 @@ def detail(id):
     # Get statistics
     stats = LoanService.get_payment_statistics(id)
     
+    # Get term change history
+    term_changes = family_query(LoanTermChange).filter_by(loan_id=id)\
+        .order_by(LoanTermChange.effective_date.desc()).all()
+    
     # Calculate remaining months
     if payments:
         last_payment = payments[-1]
@@ -138,52 +152,91 @@ def detail(id):
                          loan=loan,
                          payments=payments,
                          stats=stats,
-                         remaining_months=remaining_months)
+                         term_changes=term_changes,
+                         remaining_months=remaining_months,
+                         today=date.today())
 
 
 @loans_bp.route('/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
-    """Edit a loan"""
+    """
+    Edit a loan.
+
+    Behaviour depends on whether any payments have been marked paid:
+
+    Live loan (has paid payments):
+      Only metadata fields are editable — name, default account, weekend
+      adjustment, and active status.  Schedule fields (APR, payment amount,
+      dates, term) are locked; use Apply Term Change instead.
+
+    New / unstarted loan (no paid payments):
+      All fields are editable.  After saving, the entire payment schedule is
+      deleted and regenerated from scratch so it stays in sync.
+    """
     from models.accounts import Account
     loan = family_get_or_404(Loan, id)
-    
+
+    # Determine if the loan has any paid payments (period > 0)
+    has_paid_payments = family_query(LoanPayment).filter(
+        LoanPayment.loan_id == id,
+        LoanPayment.is_paid == True,
+        LoanPayment.period > 0
+    ).first() is not None
+
     if request.method == 'POST':
         try:
-            # Parse dates
-            start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
-            term_months = int(request.form['term_months'])
-            end_date = start_date + relativedelta(months=term_months)
-            
             # Get default payment account
             default_payment_account_id = request.form.get('default_payment_account_id')
             if default_payment_account_id == '':
                 default_payment_account_id = None
-            
+
+            # Always-editable metadata fields
             loan.name = request.form['name']
-            loan.loan_value = float(request.form['loan_value'])
-            loan.principal = float(request.form['loan_value'])
-            loan.current_balance = float(request.form.get('current_balance', request.form['loan_value']))
-            loan.annual_apr = float(request.form['annual_apr'])
-            loan.monthly_apr = float(request.form['annual_apr']) / 12
-            loan.monthly_payment = float(request.form['monthly_payment'])
-            loan.start_date = start_date
-            loan.end_date = end_date
-            loan.term_months = term_months
             loan.default_payment_account_id = default_payment_account_id
+            loan.weekend_adjustment = request.form.get('weekend_adjustment', 'none')
             loan.is_active = request.form.get('is_active') == 'on'
             loan.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            
-            db.session.commit()
-            
-            flash(f'Loan "{loan.name}" updated successfully!', 'success')
+
+            if not has_paid_payments:
+                # Full edit allowed — update all schedule fields and regenerate
+                start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
+                term_months = int(request.form['term_months'])
+                end_date = start_date + relativedelta(months=term_months)
+
+                loan.loan_value = float(request.form['loan_value'])
+                loan.principal = float(request.form['loan_value'])
+                loan.current_balance = float(request.form.get('current_balance', request.form['loan_value']))
+                loan.annual_apr = float(request.form['annual_apr'])
+                loan.monthly_apr = float(request.form['annual_apr']) / 12
+                loan.monthly_payment = float(request.form['monthly_payment'])
+                loan.start_date = start_date
+                loan.end_date = end_date
+                loan.term_months = term_months
+
+                db.session.commit()
+
+                # Wipe existing schedule and regenerate from scratch
+                LoanService.delete_future_payments(loan_id=id, from_date=loan.start_date, commit=True)
+                payments = LoanService.generate_amortization_schedule(
+                    loan_id=id,
+                    start_date=loan.start_date,
+                    end_date=loan.end_date,
+                    commit=True
+                )
+                flash(f'Loan "{loan.name}" updated — schedule regenerated ({len(payments)} payments).', 'success')
+            else:
+                # Live loan — metadata only, schedule unchanged
+                db.session.commit()
+                flash(f'Loan "{loan.name}" details updated. To change rates or payment amounts, use Apply Term Change.', 'success')
+
             return redirect(url_for('loans.detail', id=loan.id))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error updating loan: {str(e)}', 'danger')
-    
+
     accounts = family_query(Account).order_by(Account.name).all()
-    return render_template('loans/form.html', loan=loan, accounts=accounts)
+    return render_template('loans/form.html', loan=loan, accounts=accounts, has_paid_payments=has_paid_payments)
 
 
 @loans_bp.route('/<int:id>/delete', methods=['POST'])
@@ -338,6 +391,7 @@ def edit_payment(id, payment_id):
         if payment.bank_transaction_id:
             bank_txn = family_get(Transaction, payment.bank_transaction_id)
             if bank_txn:
+                from services.payday_service import PaydayService
                 # Update all relevant transaction fields
                 bank_txn.transaction_date = payment.date
                 bank_txn.amount = -float(payment.payment_amount)  # Negative = expense (money out)
@@ -346,6 +400,7 @@ def edit_payment(id, payment_id):
                 bank_txn.year_month = payment.date.strftime('%Y-%m')
                 bank_txn.week_year = f"{payment.date.isocalendar()[1]:02d}-{payment.date.year}"
                 bank_txn.day_name = payment.date.strftime('%a')
+                bank_txn.payday_period = PaydayService.get_period_for_date(payment.date)
                 bank_txn.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 
                 db.session.commit()
@@ -467,6 +522,62 @@ def update_payment_day(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Error updating payment dates: {str(e)}', 'danger')
+
+    return redirect(url_for('loans.detail', id=id))
+
+
+@loans_bp.route('/<int:id>/apply-term-change', methods=['POST'])
+def apply_term_change(id):
+    """
+    Apply a mid-loan term change (APR, payment amount, payment day, or term length).
+    Deletes future unpaid payments and regenerates the schedule from the effective date.
+    """
+    loan = family_get_or_404(Loan, id)
+
+    try:
+        effective_date_str = request.form.get('effective_date', '').strip()
+        if not effective_date_str:
+            flash('Effective date is required.', 'danger')
+            return redirect(url_for('loans.detail', id=id))
+
+        effective_date = datetime.strptime(effective_date_str, '%Y-%m-%d').date()
+
+        # Collect only fields that were actually supplied in the form
+        new_monthly_payment = request.form.get('new_monthly_payment', '').strip() or None
+        new_annual_apr      = request.form.get('new_annual_apr', '').strip() or None
+        new_payment_day_str = request.form.get('new_payment_day', '').strip()
+        new_payment_day     = int(new_payment_day_str) if new_payment_day_str else None
+        new_term_months_str = request.form.get('new_term_months', '').strip()
+        new_term_months     = int(new_term_months_str) if new_term_months_str else None
+        notes               = request.form.get('notes', '').strip() or None
+
+        if new_payment_day is not None and not (1 <= new_payment_day <= 31):
+            flash('Payment day must be between 1 and 31.', 'danger')
+            return redirect(url_for('loans.detail', id=id))
+
+        result = LoanService.apply_term_change(
+            loan_id=id,
+            effective_date=effective_date,
+            new_monthly_payment=new_monthly_payment,
+            new_annual_apr=new_annual_apr,
+            new_payment_day=new_payment_day,
+            new_term_months=new_term_months,
+            notes=notes,
+        )
+
+        summary = result['term_change'].change_summary
+        flash(
+            f'Term change applied from {effective_date}: {summary}. '
+            f'{result["deleted"]} payment(s) replaced with {result["created"]} new record(s).',
+            'success'
+        )
+
+    except ValueError as e:
+        db.session.rollback()
+        flash(str(e), 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error applying term change: {str(e)}', 'danger')
 
     return redirect(url_for('loans.detail', id=id))
 
