@@ -512,7 +512,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_trip_journey_description').value = journeyDescription;
             document.getElementById('edit_trip_school_holidays').value = schoolHolidays;
             
-            const modal = new bootstrap.Modal(document.getElementById('editTripModal'));
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editTripModal'));
             modal.show();
         });
     });

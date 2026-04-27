@@ -305,7 +305,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
     document.getElementById('edit_vehicle_is_active').checked = is_active;
     document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
     document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
-    new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editVehicleModal')).show();
 }
 </script>
         </div>
@@ -327,7 +327,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
     document.getElementById('edit_vehicle_is_active').checked = is_active;
     document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
     document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
-    new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editVehicleModal')).show();
 }
 </script>
 {% endblock %}

@@ -134,6 +134,19 @@ window.updateChartTheme = function (theme) {
 
 document.addEventListener('DOMContentLoaded', function () {
     ThemeManager.init();
+
+    // ── Modal stacking-context fix ────────────────────────────────────────────
+    // Bootstrap appends its backdrop to <body> (z-index 1040) but leaves the
+    // .modal element wherever it sits in the DOM.  If any ancestor has a CSS
+    // stacking context (e.g. from an opacity or transform animation) the modal
+    // dialog's z-index becomes local to that context, rendering the backdrop
+    // visually on top of the dialog and blocking all pointer events.
+    // Relocating every .modal to <body> avoids this entirely.
+    document.querySelectorAll('.modal').forEach(function (modal) {
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+    });
 });
 
 // Helper function to format currency

@@ -18,6 +18,7 @@ class FuelRecord(db.Model):
     mpg = db.Column(db.Numeric(6, 2))  # Calculated MPG
     price_per_mile = db.Column(db.Numeric(6, 2))  # Cost per mile
     last_fill_date = db.Column(db.Date)  # Previous fill date
+    is_partial_fill = db.Column(db.Boolean, default=False, nullable=False)  # True = partial fill; False = full fill (tank topped up)
     linked_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'))  # Link to actual transaction
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     

@@ -24,15 +24,11 @@ def initialize_forecasting():
         
         for vehicle in vehicles:
             print(f"\nProcessing {vehicle.name} ({vehicle.registration})...")
-            
-            # Calculate consumption
-            consumption = FuelForecastingService.calculate_trip_fuel_consumption(vehicle.id)
-            print(f"  Found {len(consumption)} trip dates with fuel consumption data")
-            
-            # Predict refills
+
+            # Predict refills based on full / partial fill history and planned trips
             refills = FuelForecastingService.predict_refills(vehicle.id)
             print(f"  Predicted {len(refills)} refills")
-            
+
             for refill in refills:
                 print(f"    {refill['date']}: {refill['gallons']} gal, £{refill['cost']:.2f}")
             

@@ -159,7 +159,7 @@ def trips():
             trip_query = trip_query.filter(Trip.vehicle_id == int(selected_vehicle_id_trip))
         except Exception:
             pass
-    trips = trip_query.order_by(Trip.date.desc()).all()
+    trips = trip_query.order_by(Trip.date.desc(), Trip.id.desc()).all()
     
     # Get all fuel records per vehicle (used for fill-by-trip mapping)
     all_vehicle_fills = {}
@@ -417,6 +417,7 @@ def add_fuel():
         mileage = int(request.form.get('mileage'))
         cost = Decimal(request.form.get('cost'))
         gallons = Decimal(request.form.get('gallons'))
+        is_partial_fill = request.form.get('is_partial_fill') == '1'
         
         # Calculate metrics
         actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles = VehicleService.calculate_fuel_metrics(
@@ -434,7 +435,8 @@ def add_fuel():
             actual_cumulative_miles=cumulative_miles,
             mpg=mpg,
             price_per_mile=price_per_mile,
-            last_fill_date=last_fill_date
+            last_fill_date=last_fill_date,
+            is_partial_fill=is_partial_fill,
         )
         db.session.add(fuel_record)
         db.session.flush()  # Flush to get the ID
@@ -474,6 +476,7 @@ def update_fuel(fuel_id):
         fuel_record.mileage = int(request.form.get('mileage'))
         fuel_record.cost = Decimal(request.form.get('cost'))
         fuel_record.gallons = Decimal(request.form.get('gallons'))
+        fuel_record.is_partial_fill = request.form.get('is_partial_fill') == '1'
         
         # Recalculate metrics
         actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles = VehicleService.calculate_fuel_metrics(

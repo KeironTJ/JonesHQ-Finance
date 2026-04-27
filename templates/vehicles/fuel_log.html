@@ -186,6 +186,7 @@
                     <tr>
                         <th>Date</th>
                         <th>Vehicle</th>
+                        <th>Fill Type</th>
                         <th>Price/L</th>
                         <th>Mileage</th>
                         <th>Cost</th>
@@ -205,6 +206,13 @@
                     <tr {% if fuel.linked_transaction_id %}class="table-success"{% endif %}>
                         <td class="text-nowrap">{{ fuel.date.strftime('%d/%m/%Y') }}</td>
                         <td><span class="badge bg-primary">{{ fuel.vehicle.registration }}</span></td>
+                        <td>
+                            {% if fuel.is_partial_fill %}
+                                <span class="badge bg-warning text-dark" title="Partial fill — gallons added on top of existing level"><i class="bi bi-droplet-half"></i> Partial</span>
+                            {% else %}
+                                <span class="badge bg-info text-dark" title="Full fill — tank topped up to capacity"><i class="bi bi-droplet-fill"></i> Full</span>
+                            {% endif %}
+                        </td>
                         <td>{{ "%.1f"|format(fuel.price_per_litre) }}p</td>
                         <td class="text-nowrap">{{ "{:,}".format(fuel.mileage) }}</td>
                         <td class="text-nowrap">
@@ -256,7 +264,8 @@
                                         data-price-per-litre="{{ fuel.price_per_litre }}"
                                         data-mileage="{{ fuel.mileage }}"
                                         data-cost="{{ fuel.cost }}"
-                                        data-gallons="{{ fuel.gallons }}">
+                                        data-gallons="{{ fuel.gallons }}"
+                                        data-is-partial="{{ 'true' if fuel.is_partial_fill else 'false' }}">
                                     <i class="bi bi-pencil"></i>
                                 </button>
                                 <button type="button" class="btn btn-outline-danger"
@@ -329,6 +338,15 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="is_partial_fill" id="add_is_partial_fill" value="1">
+                            <label class="form-check-label" for="add_is_partial_fill">
+                                <strong>Partial Fill</strong>
+                                <span class="text-muted small d-block">Tick if you only added some fuel rather than filling the tank to full. The forecast will add gallons on top of the current estimated level.</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -382,6 +400,15 @@
                             <input type="number" step="0.01" name="gallons" id="edit_gallons" class="form-control" readonly required>
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="is_partial_fill" id="edit_is_partial_fill" value="1">
+                            <label class="form-check-label" for="edit_is_partial_fill">
+                                <strong>Partial Fill</strong>
+                                <span class="text-muted small d-block">Tick if you only added some fuel rather than filling the tank to full.</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -410,6 +437,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const cost = this.dataset.cost;
             const gallons = this.dataset.gallons;
             
+            const isPartial = this.dataset.isPartial === 'true';
+
             document.getElementById('editFuelForm').action = `/vehicles/fuel/update/${id}`;
             document.getElementById('edit_date').value = date;
             document.getElementById('edit_vehicle_id').value = vehicleId;
@@ -417,8 +446,9 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_mileage').value = mileage;
             document.getElementById('edit_cost').value = cost;
             document.getElementById('edit_gallons').value = gallons;
-            
-            const modal = new bootstrap.Modal(document.getElementById('editFuelModal'));
+            document.getElementById('edit_is_partial_fill').checked = isPartial;
+
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editFuelModal'));
             modal.show();
         });
     });
