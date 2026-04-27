@@ -171,25 +171,41 @@ class FuelForecastingService:
             return []
         avg_price = FuelForecastingService.get_average_fuel_price(vehicle_id)
 
+        # Anchor on the last FULL fill-up — it resets the tank to tank_capacity,
+        # so everything before it is irrelevant.  Partial-fills since that date
+        # are included because they adjust the level before the anchor date's trips.
+        today = date.today()
+
+        last_full_fill = (
+            family_query(FuelRecord)
+            .filter_by(vehicle_id=vehicle_id, is_partial_fill=False)
+            .order_by(FuelRecord.date.desc())
+            .first()
+        )
+
+        anchor_date = last_full_fill.date if last_full_fill else None
+
         trips = (
             family_query(Trip)
             .filter_by(vehicle_id=vehicle_id)
-            .order_by(Trip.date.asc())
-            .all()
-        )
+            .filter(Trip.date >= anchor_date) if anchor_date else
+            family_query(Trip).filter_by(vehicle_id=vehicle_id)
+        ).order_by(Trip.date.asc()).all()
+
         fuel_records = (
             family_query(FuelRecord)
             .filter_by(vehicle_id=vehicle_id)
-            .order_by(FuelRecord.date.asc())
-            .all()
-        )
+            .filter(FuelRecord.date >= anchor_date) if anchor_date else
+            family_query(FuelRecord).filter_by(vehicle_id=vehicle_id)
+        ).order_by(FuelRecord.date.asc()).all()
 
         events = FuelForecastingService._build_merged_timeline(trips, fuel_records)
 
+        # Start the tank at full (the anchor is always a full fill)
         predicted_refills = []
-        tank_level = 0.0
-        has_fill = False
-        prev_event_date = None
+        tank_level = tank_capacity if last_full_fill else 0.0
+        has_fill = bool(last_full_fill)
+        prev_event_date = anchor_date
 
         for (event_date, _priority, event_type, event_obj) in events:
             if event_type == 'fill':
@@ -208,16 +224,18 @@ class FuelForecastingService:
                     fill_litres = fill_gallons * 4.54609
                     cost = (fill_litres * float(avg_price)) / 100
 
-                    predicted_refills.append({
-                        'date': refill_date,
-                        'gallons': round(fill_gallons, 2),
-                        'cost': round(cost, 2),
-                        'tank_level_before': round(tank_level, 2),
-                        'trigger_trip_date': event_date,
-                        'trigger_trip_id': event_obj.id,
-                    })
+                    # Only emit predictions for present/future trips.
+                    if event_date >= today:
+                        predicted_refills.append({
+                            'date': refill_date,
+                            'gallons': round(fill_gallons, 2),
+                            'cost': round(cost, 2),
+                            'tank_level_before': round(tank_level, 2),
+                            'trigger_trip_date': event_date,
+                            'trigger_trip_id': event_obj.id,
+                        })
 
-                    tank_level = tank_capacity  # filled to full
+                    tank_level = tank_capacity  # filled to full (keeps chain intact)
 
                 tank_level = max(0.0, tank_level - gallons_needed)
                 prev_event_date = event_date

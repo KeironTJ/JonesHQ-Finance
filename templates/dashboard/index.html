@@ -361,14 +361,9 @@
         <!-- Credit Cards Summary -->
         <div class="col-md-6 col-lg-3 mb-3">
             <div class="card border-danger h-100">
-                <div class="card-header bg-danger text-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0"><i class="bi bi-credit-card"></i> Credit Cards</h6>
-                        <a href="{{ url_for('credit_cards.index') }}" class="btn btn-sm btn-light">
-                            <i class="bi bi-arrow-right-circle"></i>
-                        </a>
-                    </div>
-                </div>
+                <a href="{{ url_for('credit_cards.index') }}" class="card-header bg-danger text-white text-decoration-none summary-card-header">
+                    <h6 class="mb-0"><i class="bi bi-credit-card"></i> Credit Cards <i class="bi bi-arrow-right-circle ms-1 summary-header-arrow"></i></h6>
+                </a>
                 <div class="card-body">
                     <div class="mb-2">
                         <small class="text-muted">Active Cards</small>
@@ -393,14 +388,9 @@
         <!-- Loans Summary -->
         <div class="col-md-6 col-lg-3 mb-3">
             <div class="card border-warning h-100">
-                <div class="card-header bg-warning text-dark">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0"><i class="bi bi-cash-coin"></i> Loans</h6>
-                        <a href="{{ url_for('loans.index') }}" class="btn btn-sm btn-dark">
-                            <i class="bi bi-arrow-right-circle"></i>
-                        </a>
-                    </div>
-                </div>
+                <a href="{{ url_for('loans.index') }}" class="card-header bg-warning text-white text-decoration-none summary-card-header">
+                    <h6 class="mb-0"><i class="bi bi-cash-coin"></i> Loans <i class="bi bi-arrow-right-circle ms-1 summary-header-arrow"></i></h6>
+                </a>
                 <div class="card-body">
                     <div class="mb-2">
                         <small class="text-muted">Active Loans</small>
@@ -421,14 +411,9 @@
         <!-- Mortgage Summary -->
         <div class="col-md-6 col-lg-3 mb-3">
             <div class="card border-info h-100">
-                <div class="card-header bg-info text-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0"><i class="bi bi-house-door"></i> Mortgage</h6>
-                        <a href="{{ url_for('mortgage.index') }}" class="btn btn-sm btn-light">
-                            <i class="bi bi-arrow-right-circle"></i>
-                        </a>
-                    </div>
-                </div>
+                <a href="{{ url_for('mortgage.index') }}" class="card-header bg-info text-white text-decoration-none summary-card-header">
+                    <h6 class="mb-0"><i class="bi bi-house-door"></i> Mortgage <i class="bi bi-arrow-right-circle ms-1 summary-header-arrow"></i></h6>
+                </a>
                 <div class="card-body">
                     {% if mortgage_summary %}
                     <div class="mb-2">
@@ -460,14 +445,9 @@
         <!-- Pensions Summary -->
         <div class="col-md-6 col-lg-3 mb-3">
             <div class="card border-success h-100">
-                <div class="card-header bg-success text-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0"><i class="bi bi-piggy-bank"></i> Pensions</h6>
-                        <a href="{{ url_for('pensions.index') }}" class="btn btn-sm btn-light">
-                            <i class="bi bi-arrow-right-circle"></i>
-                        </a>
-                    </div>
-                </div>
+                <a href="{{ url_for('pensions.index') }}" class="card-header bg-success text-white text-decoration-none summary-card-header">
+                    <h6 class="mb-0"><i class="bi bi-piggy-bank"></i> Pensions <i class="bi bi-arrow-right-circle ms-1 summary-header-arrow"></i></h6>
+                </a>
                 <div class="card-body">
                     <div class="mb-2">
                         <small class="text-muted">Active Pensions</small>

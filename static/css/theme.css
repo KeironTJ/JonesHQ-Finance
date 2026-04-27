@@ -475,13 +475,20 @@ a:hover { color: var(--brand-hover); }
   border-bottom: none;
 }
 
+.card-header.bg-secondary {
+  background: linear-gradient(135deg, #475569 0%, #94a3b8 100%) !important;
+  color: #ffffff !important;
+  border-bottom: none;
+}
+
 /* Card header with coloured header – ensure text contrast */
 .card-header.bg-primary *,
 .card-header.bg-success *,
 .card-header.bg-danger *,
 .card-header.bg-warning *,
 .card-header.bg-info *,
-.card-header.bg-dark * { color: inherit; }
+.card-header.bg-dark *,
+.card-header.bg-secondary * { color: inherit; }
 
 .card-body {
   padding: 1.25rem;
@@ -791,6 +798,19 @@ a:hover { color: var(--brand-hover); }
   color: #ffffff;
 }
 
+/* Dark */
+.btn-dark {
+  background: var(--nav-bg);
+  border-color: var(--nav-bg);
+  color: #ffffff;
+}
+.btn-dark:hover {
+  background: #334155;
+  border-color: #334155;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 /* Small buttons */
 .btn-sm {
   font-size: 0.8rem;
@@ -862,6 +882,12 @@ a:hover { color: var(--brand-hover); }
   background: var(--clr-info-bg);
   border-color: var(--clr-info);
   color: var(--clr-info);
+}
+
+.alert-light {
+  background: var(--bg-surface-2);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 [data-theme="dark"] .alert-success { color: var(--clr-success); }
@@ -1118,6 +1144,7 @@ footer p { margin: 0; }
 .text-muted { color: var(--text-muted) !important; }
 .text-secondary { color: var(--text-secondary) !important; }
 .text-primary { color: var(--brand) !important; }
+.text-dark { color: var(--text-primary) !important; }
 
 .bg-light {
   background: var(--bg-surface-2) !important;
@@ -1265,6 +1292,18 @@ hr {
 .dashboard-page .past-period-item:hover { opacity: 0.9; transition: opacity var(--t-fast); }
 .dashboard-page .past-period-btn { color: var(--text-muted) !important; }
 .dashboard-page .past-period-btn:not(.collapsed) { color: var(--text-muted) !important; box-shadow: none !important; }
+
+/* Summary card clickable headers */
+.summary-card-header {
+  display: flex;
+  align-items: center;
+  transition: filter var(--t-fast);
+  cursor: pointer;
+}
+.summary-card-header:hover { filter: brightness(1.1); }
+.summary-card-header h6 { color: #ffffff !important; }
+.summary-header-arrow { opacity: 0.7; transition: opacity var(--t-fast), transform var(--t-fast); }
+.summary-card-header:hover .summary-header-arrow { opacity: 1; transform: translateX(3px); }
 
 .dashboard-collapse-toggle .bi { transition: transform var(--t-fast); }
 .dashboard-collapse-toggle[aria-expanded="true"] .bi { transform: rotate(180deg); }
