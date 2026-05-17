@@ -139,12 +139,9 @@
                                 <label for="assigned_to" class="form-label">Assigned To</label>
                                 <select class="form-select" id="assigned_to" name="assigned_to">
                                     <option value="">Select...</option>
-                                    <option value="Keiron" {% if transaction and transaction.assigned_to == 'Keiron' %}selected{% endif %}>Keiron</option>
-                                    <option value="Emma" {% if transaction and transaction.assigned_to == 'Emma' %}selected{% endif %}>Emma</option>
-                                    <option value="Both" {% if transaction and transaction.assigned_to == 'Both' %}selected{% endif %}>Both</option>
-                                    <option value="Michael" {% if transaction and transaction.assigned_to == 'Michael' %}selected{% endif %}>Michael</option>
-                                    <option value="Emily" {% if transaction and transaction.assigned_to == 'Emily' %}selected{% endif %}>Emily</option>
-                                    <option value="Ivy" {% if transaction and transaction.assigned_to == 'Ivy' %}selected{% endif %}>Ivy</option>
+                                    {% for person_name in assigned_people_options %}
+                                    <option value="{{ person_name }}" {% if transaction and transaction.assigned_to == person_name %}selected{% endif %}>{{ person_name }}</option>
+                                    {% endfor %}
                                 </select>
                             </div>
 

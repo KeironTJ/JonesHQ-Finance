@@ -299,12 +299,9 @@
                         <label for="bulk_assigned_to" class="form-label">Change Assigned To:</label>
                         <select class="form-select" name="bulk_assigned_to" id="bulk_assigned_to">
                             <option value="">-- No Change --</option>
-                            <option value="Keiron">Keiron</option>
-                            <option value="Emma">Emma</option>
-                            <option value="Both">Both</option>
-                            <option value="Michael">Michael</option>
-                            <option value="Emily">Emily</option>
-                            <option value="Ivy">Ivy</option>
+                            {% for person_name in assigned_people_options %}
+                            <option value="{{ person_name }}">{{ person_name }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     
@@ -696,12 +693,9 @@
                         <label for="edit_assigned_to" class="form-label">Assigned To</label>
                         <select class="form-select" name="assigned_to" id="edit_assigned_to">
                             <option value="">-- Select --</option>
-                            <option value="Keiron">Keiron</option>
-                            <option value="Emma">Emma</option>
-                            <option value="Both">Both</option>
-                            <option value="Michael">Michael</option>
-                            <option value="Emily">Emily</option>
-                            <option value="Ivy">Ivy</option>
+                            {% for person_name in assigned_people_options %}
+                            <option value="{{ person_name }}">{{ person_name }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     

@@ -12,6 +12,24 @@ from datetime import datetime
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
+def _normalize_assigned_people(raw_value):
+    """Normalize comma/newline separated names into newline-separated storage."""
+    if not raw_value:
+        return ''
+
+    normalized = str(raw_value).replace(';', ',').replace('\r', '\n')
+    items = []
+    seen = set()
+    for line in normalized.split('\n'):
+        for part in line.split(','):
+            name = part.strip()
+            if name and name not in seen:
+                seen.add(name)
+                items.append(name)
+
+    return '\n'.join(items)
+
+
 @settings_bp.route('/settings')
 def index():
     """Display application settings"""
@@ -39,6 +57,8 @@ def index():
     summaries_expanded = Settings.get_value('dashboard.summaries_expanded', True)
     quick_nav_expanded = Settings.get_value('dashboard.quick_nav_expanded', True)
 
+    assigned_people_setting = Settings.get_value('transactions.assigned_people', 'Keiron\nEmma\nBoth\nMichael\nEmily\nIvy')
+
     
     # Get all active accounts
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
@@ -64,7 +84,8 @@ def index():
                          account_selection_expanded=account_selection_expanded,
                          payday_expanded=payday_expanded,
                          summaries_expanded=summaries_expanded,
-                         quick_nav_expanded=quick_nav_expanded)
+                         quick_nav_expanded=quick_nav_expanded,
+                         assigned_people_setting=assigned_people_setting)
 
 
 @settings_bp.route('/settings/update', methods=['POST'])
@@ -222,6 +243,15 @@ def update():
             quick_nav_expanded,
             'Default expanded state for Quick Navigation on dashboard',
             'boolean'
+        )
+
+        assigned_people_raw = request.form.get('transactions_assigned_people', '')
+        assigned_people_normalized = _normalize_assigned_people(assigned_people_raw)
+        Settings.set_value(
+            'transactions.assigned_people',
+            assigned_people_normalized,
+            'Newline-separated list of options for transaction Assigned To fields',
+            'string'
         )
 
         
