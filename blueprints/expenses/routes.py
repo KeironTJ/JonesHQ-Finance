@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify
+from flask import render_template, request, redirect, url_for, flash, jsonify, Response
 from . import expenses_bp
 from extensions import db
 from extensions import limiter
@@ -16,8 +16,160 @@ import io
 import re
 import base64
 from services.expense_sync_service import ExpenseSyncService
+from services.work_expense_mileage_service import WorkExpenseMileageService
 from flask import current_app
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+
+
+def _build_expense_report(expenses, finance_year):
+    """Build report for all expenses, including mileage fields where available."""
+    try:
+        start_date, end_date = WorkExpenseMileageService.parse_finance_year(finance_year)
+    except ValueError:
+        start_date, end_date = None, None
+
+    monthly_map = {}
+    vehicle_map = {}
+    type_map = {}
+    rate_map = {}
+    detail_rows = []
+
+    total_amount = Decimal('0.00')
+    total_miles = 0
+    mileage_entries = 0
+
+    for exp in expenses:
+        amount = Decimal(str(exp.total_cost or exp.cost or 0)).quantize(Decimal('0.01'))
+        miles = int((exp.covered_miles or 0) * max(int(exp.days or 1), 1)) if exp.covered_miles else 0
+        month_key = exp.month or (exp.date.strftime('%Y-%m') if exp.date else 'Unknown')
+        vehicle_key = exp.vehicle_registration or 'Unassigned'
+        type_key = exp.expense_type or 'Uncategorized'
+
+        total_amount += amount
+        total_miles += miles
+        if miles > 0:
+            mileage_entries += 1
+
+        if month_key not in monthly_map:
+            monthly_map[month_key] = {
+                'month_key': month_key,
+                'month_label': month_key,
+                'entries': 0,
+                'miles': 0,
+                'amount': Decimal('0.00'),
+                'avg_rate': 0.0,
+            }
+        monthly_map[month_key]['entries'] += 1
+        monthly_map[month_key]['miles'] += miles
+        monthly_map[month_key]['amount'] += amount
+
+        if vehicle_key not in vehicle_map:
+            vehicle_map[vehicle_key] = {
+                'vehicle': vehicle_key,
+                'entries': 0,
+                'miles': 0,
+                'amount': Decimal('0.00'),
+                'avg_rate': 0.0,
+            }
+        vehicle_map[vehicle_key]['entries'] += 1
+        vehicle_map[vehicle_key]['miles'] += miles
+        vehicle_map[vehicle_key]['amount'] += amount
+
+        if type_key not in type_map:
+            type_map[type_key] = {
+                'type': type_key,
+                'entries': 0,
+                'miles': 0,
+                'amount': Decimal('0.00'),
+            }
+        type_map[type_key]['entries'] += 1
+        type_map[type_key]['miles'] += miles
+        type_map[type_key]['amount'] += amount
+
+        if miles > 0:
+            rate_key = f"{Decimal(str(exp.rate_per_mile or 0)).quantize(Decimal('0.01')):.2f}"
+            if rate_key not in rate_map:
+                rate_map[rate_key] = {
+                    'rate': float(Decimal(rate_key)),
+                    'entries': 0,
+                    'miles': 0,
+                    'amount': Decimal('0.00'),
+                    'first_date': exp.date,
+                    'last_date': exp.date,
+                }
+            rate_map[rate_key]['entries'] += 1
+            rate_map[rate_key]['miles'] += miles
+            rate_map[rate_key]['amount'] += amount
+            if exp.date:
+                rate_map[rate_key]['first_date'] = min(rate_map[rate_key]['first_date'], exp.date)
+                rate_map[rate_key]['last_date'] = max(rate_map[rate_key]['last_date'], exp.date)
+
+        detail_rows.append({
+            'id': exp.id,
+            'date': exp.date,
+            'description': exp.description,
+            'type': type_key,
+            'vehicle': vehicle_key,
+            'covered_miles': int(exp.covered_miles or 0),
+            'days': int(exp.days or 1),
+            'miles': miles,
+            'rate': float(Decimal(str(exp.rate_per_mile or 0)).quantize(Decimal('0.01'))),
+            'amount': float(amount),
+            'submitted': bool(exp.submitted),
+            'reimbursed': bool(exp.reimbursed),
+        })
+
+    monthly_rows = []
+    for key in sorted(monthly_map.keys()):
+        row = monthly_map[key]
+        amt = row['amount'].quantize(Decimal('0.01'))
+        row['amount'] = float(amt)
+        row['avg_rate'] = float((amt / Decimal(row['miles'])).quantize(Decimal('0.01'))) if row['miles'] else 0.0
+        monthly_rows.append(row)
+
+    vehicle_rows = []
+    for key in sorted(vehicle_map.keys()):
+        row = vehicle_map[key]
+        amt = row['amount'].quantize(Decimal('0.01'))
+        row['amount'] = float(amt)
+        row['avg_rate'] = float((amt / Decimal(row['miles'])).quantize(Decimal('0.01'))) if row['miles'] else 0.0
+        vehicle_rows.append(row)
+
+    type_rows = []
+    for key in sorted(type_map.keys()):
+        row = type_map[key]
+        amt = row['amount'].quantize(Decimal('0.01'))
+        row['amount'] = float(amt)
+        row['avg_amount'] = float((amt / Decimal(row['entries'])).quantize(Decimal('0.01'))) if row['entries'] else 0.0
+        type_rows.append(row)
+
+    rate_rows = []
+    for key in sorted(rate_map.keys(), key=lambda r: Decimal(r)):
+        row = rate_map[key]
+        amt = row['amount'].quantize(Decimal('0.01'))
+        row['amount'] = float(amt)
+        rate_rows.append(row)
+
+    summary_entries = len(expenses)
+    summary = {
+        'entries': summary_entries,
+        'miles': total_miles,
+        'amount': float(total_amount.quantize(Decimal('0.01'))),
+        'avg_rate': float((total_amount / Decimal(total_miles)).quantize(Decimal('0.01'))) if total_miles else 0.0,
+        'mileage_entries': mileage_entries,
+        'avg_per_expense': float((total_amount / Decimal(summary_entries)).quantize(Decimal('0.01'))) if summary_entries else 0.0,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+
+    return {
+        'summary': summary,
+        'monthly_rows': monthly_rows,
+        'vehicle_rows': vehicle_rows,
+        'type_rows': type_rows,
+        'rate_rows': rate_rows,
+        'detailed_rows': detail_rows,
+    }
 
 
 @expenses_bp.route('/expenses')
@@ -27,6 +179,13 @@ def index():
     vehicle = request.args.get('vehicle')
     reimbursed = request.args.get('reimbursed')
     highlight_id = request.args.get('id', type=int)
+
+    # Inline mileage insight controls (kept separate from expense list filters)
+    mileage_finance_year = request.args.get('mileage_finance_year') or WorkExpenseMileageService.current_finance_year()
+    mileage_view = request.args.get('mileage_view', 'monthly')
+    mileage_vehicle = request.args.get('mileage_vehicle') or ''
+    if mileage_view not in ('monthly', 'yearly', 'detail'):
+        mileage_view = 'monthly'
 
     query = family_query(Expense)
     if expense_type:
@@ -185,6 +344,35 @@ def index():
             cc_payments_by_month[period_key] = []
         cc_payments_by_month[period_key].append(txn)
 
+    # Build inline insights for all expenses (not mileage-only).
+    try:
+        WorkExpenseMileageService.parse_finance_year(mileage_finance_year)
+    except ValueError:
+        flash('Invalid finance year selected for insights. Showing current finance year instead.', 'warning')
+        mileage_finance_year = WorkExpenseMileageService.current_finance_year()
+
+    insight_query = family_query(Expense).filter(Expense.finance_year == mileage_finance_year)
+    if mileage_vehicle:
+        insight_query = insight_query.filter(Expense.vehicle_registration == mileage_vehicle)
+    insight_expenses = insight_query.order_by(Expense.date.asc(), Expense.id.asc()).all()
+
+    mileage_report = _build_expense_report(insight_expenses, mileage_finance_year)
+
+    mileage_finance_years = sorted(
+        {
+            row[0]
+            for row in family_query(Expense)
+            .filter(Expense.finance_year.isnot(None))
+            .with_entities(Expense.finance_year)
+            .distinct()
+            .all()
+            if row[0]
+        },
+        reverse=True
+    )
+    if not mileage_finance_years:
+        mileage_finance_years = [WorkExpenseMileageService.current_finance_year()]
+
     return render_template(
         'expenses/index.html',
         expenses=expenses,
@@ -204,8 +392,185 @@ def index():
         reimbursements_by_month=reimbursements_by_month,
         partial_reimbursements_by_claim=partial_reimbursements_by_claim,
         partial_reimbursements_by_month=partial_reimbursements_by_month,
-        cc_payments_by_month=cc_payments_by_month
+        cc_payments_by_month=cc_payments_by_month,
+        mileage_report=mileage_report,
+        mileage_finance_year=mileage_finance_year,
+        mileage_finance_years=mileage_finance_years,
+        mileage_view=mileage_view,
+        mileage_vehicle=mileage_vehicle,
     )
+
+
+@expenses_bp.route('/expenses/mileage')
+def mileage_review():
+    """Expense workspace with mileage fields, charts and CSV export."""
+    finance_year = request.args.get('finance_year') or WorkExpenseMileageService.current_finance_year()
+    view = request.args.get('view', 'monthly')
+    vehicle = request.args.get('vehicle') or ''
+    export = request.args.get('export')
+
+    if view not in ('monthly', 'yearly', 'detail'):
+        view = 'monthly'
+
+    try:
+        WorkExpenseMileageService.parse_finance_year(finance_year)
+    except ValueError:
+        flash('Invalid finance year selected. Using current finance year instead.', 'warning')
+        finance_year = WorkExpenseMileageService.current_finance_year()
+
+    expenses_query = family_query(Expense).filter(Expense.finance_year == finance_year)
+    if vehicle:
+        expenses_query = expenses_query.filter(Expense.vehicle_registration == vehicle)
+    expenses = expenses_query.order_by(Expense.date.asc(), Expense.id.asc()).all()
+    report = _build_expense_report(expenses, finance_year)
+
+    if export in ('detail', 'monthly', 'yearly'):
+        if export == 'monthly':
+            headers = ['Month', 'Entries', 'Miles', 'Amount', 'Average Rate']
+            rows = [[r['month_label'], r['entries'], r['miles'], f"{r['amount']:.2f}", f"{r['avg_rate']:.2f}"] for r in report['monthly_rows']]
+        elif export == 'yearly':
+            headers = ['Vehicle', 'Entries', 'Miles', 'Amount', 'Average Rate']
+            rows = [[r['vehicle'], r['entries'], r['miles'], f"{r['amount']:.2f}", f"{r['avg_rate']:.2f}"] for r in report['vehicle_rows']]
+        else:
+            headers = ['Date', 'Type', 'Description', 'Vehicle', 'Covered Miles', 'Days', 'Claim Miles', 'Rate Per Mile', 'Amount', 'Submitted', 'Reimbursed']
+            rows = [[
+                r['date'].isoformat() if r['date'] else '',
+                r['type'],
+                r['description'],
+                r['vehicle'],
+                r['covered_miles'],
+                r['days'],
+                r['miles'],
+                f"{r['rate']:.2f}",
+                f"{r['amount']:.2f}",
+                'Yes' if r['submitted'] else 'No',
+                'Yes' if r['reimbursed'] else 'No',
+            ] for r in report['detailed_rows']]
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+        csv_body = buffer.getvalue()
+        filename_vehicle = vehicle if vehicle else 'all-vehicles'
+        filename = f'mileage-{finance_year}-{filename_vehicle}-{export}.csv'
+        return Response(
+            csv_body,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"'
+            },
+        )
+
+    vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.registration).all()
+    finance_years = sorted(
+        {
+            row[0]
+            for row in family_query(Expense)
+            .filter(Expense.finance_year.isnot(None))
+            .with_entities(Expense.finance_year)
+            .distinct()
+            .all()
+            if row[0]
+        },
+        reverse=True
+    )
+    if not finance_years:
+        finance_years = [WorkExpenseMileageService.current_finance_year()]
+
+    return render_template(
+        'expenses/mileage.html',
+        report=report,
+        finance_year=finance_year,
+        finance_years=finance_years,
+        selected_view=view,
+        selected_vehicle=vehicle,
+        vehicles=vehicles,
+    )
+
+
+@expenses_bp.route('/expenses/mileage/rate-update', methods=['POST'])
+def bulk_update_mileage_rate():
+    """Apply a new mileage rate from an effective date for a finance year."""
+    finance_year = request.form.get('finance_year') or WorkExpenseMileageService.current_finance_year()
+    selected_vehicle = request.form.get('vehicle_registration') or ''
+    selected_view = request.form.get('view') or 'monthly'
+
+    try:
+        effective_date_str = (request.form.get('effective_date') or '').strip()
+        if not effective_date_str:
+            flash('Please provide an effective date for the mileage rate change.', 'warning')
+            return redirect(url_for('expenses.mileage_review', finance_year=finance_year, vehicle=selected_vehicle, view=selected_view))
+
+        new_rate = Decimal((request.form.get('new_rate') or '').strip())
+        if new_rate <= 0 or new_rate > Decimal('99.99'):
+            flash('Mileage rate must be greater than 0 and less than 100.', 'warning')
+            return redirect(url_for('expenses.mileage_review', finance_year=finance_year, vehicle=selected_vehicle, view=selected_view))
+
+        effective_date = datetime.strptime(effective_date_str, '%Y-%m-%d').date()
+        fy_start, fy_end = WorkExpenseMileageService.parse_finance_year(finance_year)
+        if effective_date < fy_start or effective_date > fy_end:
+            flash('Effective date must be inside the selected finance year.', 'warning')
+            return redirect(url_for('expenses.mileage_review', finance_year=finance_year, vehicle=selected_vehicle, view=selected_view))
+
+        include_submitted = request.form.get('include_submitted') == 'on'
+        include_reimbursed = request.form.get('include_reimbursed') == 'on'
+
+        query = family_query(Expense).filter(
+            Expense.date >= effective_date,
+            Expense.date <= fy_end,
+            Expense.covered_miles.isnot(None),
+            Expense.covered_miles > 0,
+        )
+
+        if selected_vehicle:
+            query = query.filter(Expense.vehicle_registration == selected_vehicle)
+        if not include_submitted:
+            query = query.filter(Expense.submitted == False)
+        if not include_reimbursed:
+            query = query.filter(Expense.reimbursed == False)
+
+        expenses = query.all()
+        if not expenses:
+            flash('No mileage expenses matched your update criteria.', 'info')
+            return redirect(url_for('expenses.mileage_review', finance_year=finance_year, vehicle=selected_vehicle, view=selected_view))
+
+        impacted_periods = set()
+        for exp in expenses:
+            days = Decimal(str(exp.days or 1))
+            miles = Decimal(str(exp.covered_miles or 0))
+            total = (miles * new_rate * days).quantize(Decimal('0.01'))
+
+            exp.rate_per_mile = new_rate
+            exp.cost = total
+            exp.total_cost = total
+
+            period_key = ExpenseSyncService.get_period_key_for_expense(exp)
+            if period_key:
+                impacted_periods.add(period_key)
+
+        db.session.commit()
+
+        for period_key in sorted(impacted_periods):
+            try:
+                ExpenseSyncService.reconcile_monthly_reimbursements(year_month=period_key)
+                ExpenseSyncService.reconcile_credit_card_payments(year_month=period_key)
+            except Exception:
+                current_app.logger.exception(f'Error reconciling expense period {period_key} after mileage rate update')
+
+        flash(
+            f'Updated mileage rate to £{new_rate:.2f} for {len(expenses)} expense(s) from {effective_date.strftime("%d/%m/%Y")}.',
+            'success',
+        )
+    except ValueError:
+        flash('Invalid input. Please check date and rate values.', 'danger')
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error applying mileage rate update')
+        flash('Failed to apply mileage rate update — check the server log for details.', 'danger')
+
+    return redirect(url_for('expenses.mileage_review', finance_year=finance_year, vehicle=selected_vehicle, view=selected_view))
 
 
 @expenses_bp.route('/expenses/toggle/<int:expense_id>/<string:field>', methods=['POST'])

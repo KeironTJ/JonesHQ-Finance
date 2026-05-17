@@ -19,6 +19,9 @@
             <i class="bi bi-info-circle fs-5"></i>
         </button>
         <div class="d-flex gap-2">
+            <a href="{{ url_for('expenses.mileage_review') }}" class="btn btn-outline-primary btn-sm" title="Open full mileage review workspace">
+                <i class="bi bi-speedometer2"></i> Mileage Workspace
+            </a>
             <a href="{{ url_for('settings.index') }}" class="btn btn-outline-secondary btn-sm" title="Configure expense accounts and settings">
                 <i class="bi bi-gear"></i> Settings
             </a>
@@ -29,6 +32,142 @@
                 <i class="bi bi-plus-circle"></i> Add Expense
             </button>
             <a href="{{ url_for('transactions.index') }}" class="btn btn-secondary">Back to Transactions</a>
+        </div>
+    </div>
+
+    <div class="card mb-4 border-primary-subtle">
+        <div class="card-header d-flex justify-content-between align-items-center"
+             role="button"
+             data-bs-toggle="collapse"
+             data-bs-target="#expenseInsightsCollapse"
+             aria-expanded="false"
+             aria-controls="expenseInsightsCollapse"
+             style="cursor:pointer;">
+            <div class="fw-semibold"><i class="bi bi-graph-up-arrow"></i> Expense Insights</div>
+            <div class="d-flex gap-2 align-items-center">
+                <small class="text-muted">{{ mileage_finance_year }}</small>
+                <span class="text-muted"><i class="bi bi-chevron-down"></i></span>
+            </div>
+        </div>
+        <div class="collapse" id="expenseInsightsCollapse">
+        <div class="card-body pb-2">
+            <form method="get" class="row g-2 align-items-end mb-3">
+                {% if selected_type %}<input type="hidden" name="type" value="{{ selected_type }}">{% endif %}
+                {% if selected_vehicle %}<input type="hidden" name="vehicle" value="{{ selected_vehicle }}">{% endif %}
+                {% if selected_reimbursed %}<input type="hidden" name="reimbursed" value="{{ selected_reimbursed }}">{% endif %}
+                <div class="col-md-3">
+                    <label class="form-label">Finance Year</label>
+                    <select name="mileage_finance_year" class="form-select form-select-sm">
+                        {% for fy in mileage_finance_years %}
+                        <option value="{{ fy }}" {% if fy == mileage_finance_year %}selected{% endif %}>{{ fy }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Vehicle (optional)</label>
+                    <select name="mileage_vehicle" class="form-select form-select-sm">
+                        <option value="">All Vehicles</option>
+                        {% for v in vehicles %}
+                        <option value="{{ v.registration }}" {% if mileage_vehicle == v.registration %}selected{% endif %}>{{ v.registration }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Insight View</label>
+                    <select name="mileage_view" class="form-select form-select-sm">
+                        <option value="monthly" {% if mileage_view == 'monthly' %}selected{% endif %}>Monthly</option>
+                        <option value="yearly" {% if mileage_view == 'yearly' %}selected{% endif %}>Yearly by Vehicle</option>
+                        <option value="detail" {% if mileage_view == 'detail' %}selected{% endif %}>Detailed Entries</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button class="btn btn-sm btn-primary w-100" type="submit"><i class="bi bi-funnel"></i> Apply</button>
+                    <a class="btn btn-sm btn-outline-success" title="Export CSV" href="{{ url_for('expenses.mileage_review', finance_year=mileage_finance_year, vehicle=mileage_vehicle, view=mileage_view, export=mileage_view) }}">
+                        <i class="bi bi-download"></i>
+                    </a>
+                </div>
+            </form>
+
+            <div class="row g-2 mb-2">
+                <div class="col-md-2"><div class="small text-muted">Expense Entries</div><div class="fw-semibold">{{ mileage_report.summary.entries }}</div></div>
+                <div class="col-md-2"><div class="small text-muted">Total Expense Value</div><div class="fw-semibold">£{{ "%.2f"|format(mileage_report.summary.amount) }}</div></div>
+                <div class="col-md-2"><div class="small text-muted">Mileage Entries</div><div class="fw-semibold">{{ mileage_report.summary.mileage_entries }}</div></div>
+                <div class="col-md-2"><div class="small text-muted">Total Claimed Miles</div><div class="fw-semibold">{{ mileage_report.summary.miles }}</div></div>
+                <div class="col-md-2"><div class="small text-muted">Avg per Expense</div><div class="fw-semibold">£{{ "%.2f"|format(mileage_report.summary.avg_per_expense) }}</div></div>
+                <div class="col-md-2"><div class="small text-muted">Avg £/Mile</div><div class="fw-semibold">£{{ "%.2f"|format(mileage_report.summary.avg_rate) }}</div></div>
+            </div>
+
+            <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+                {% if mileage_view == 'monthly' %}
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                        <tr><th>Month</th><th>Entries</th><th>Miles</th><th>Amount</th><th>Avg Rate</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for row in mileage_report.monthly_rows %}
+                        <tr>
+                            <td>{{ row.month_label }}</td>
+                            <td>{{ row.entries }}</td>
+                            <td>{{ row.miles }}</td>
+                            <td>£{{ "%.2f"|format(row.amount) }}</td>
+                            <td>£{{ "%.2f"|format(row.avg_rate) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if mileage_report.monthly_rows|length == 0 %}
+                        <tr><td colspan="5" class="text-center text-muted">No mileage rows for this filter.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% elif mileage_view == 'yearly' %}
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                        <tr><th>Vehicle</th><th>Entries</th><th>Miles</th><th>Amount</th><th>Avg Rate</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for row in mileage_report.vehicle_rows %}
+                        <tr>
+                            <td>{{ row.vehicle }}</td>
+                            <td>{{ row.entries }}</td>
+                            <td>{{ row.miles }}</td>
+                            <td>£{{ "%.2f"|format(row.amount) }}</td>
+                            <td>£{{ "%.2f"|format(row.avg_rate) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if mileage_report.vehicle_rows|length == 0 %}
+                        <tr><td colspan="5" class="text-center text-muted">No mileage rows for this filter.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% else %}
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                        <tr><th>Date</th><th>Type</th><th>Description</th><th>Vehicle</th><th>Miles</th><th>Rate</th><th>Amount</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for row in mileage_report.detailed_rows %}
+                        <tr>
+                            <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ row.type }}</td>
+                            <td>{{ row.description }}</td>
+                            <td>{{ row.vehicle }}</td>
+                            <td>{{ row.miles }}</td>
+                            <td>£{{ "%.2f"|format(row.rate) }}</td>
+                            <td>£{{ "%.2f"|format(row.amount) }}</td>
+                            <td>
+                                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('expenses.index', id=row.id) }}" title="Jump to expense row">
+                                    <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if mileage_report.detailed_rows|length == 0 %}
+                        <tr><td colspan="8" class="text-center text-muted">No expense rows for this filter.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% endif %}
+            </div>
+        </div>
         </div>
     </div>
 

@@ -44,6 +44,10 @@ def create_app(config_name=None):
     
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+
+    # Ensure Jinja template edits are picked up immediately in development.
+    if app.debug or app.config.get('TESTING'):
+        app.config['TEMPLATES_AUTO_RELOAD'] = True
     
     # Configure logging
     configure_logging(app)
