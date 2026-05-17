@@ -9,6 +9,7 @@ from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
 from models.expenses import Expense
 from models.family import Family, FamilyInvite
+from models.family_assignment_labels import FamilyAssignmentLabel
 from models.fuel import FuelRecord
 from models.income import Income
 from models.recurring_income import RecurringIncome
@@ -43,6 +44,7 @@ __all__ = [
     'CreditCardTransaction',
     'Expense',
     'Family',
+    'FamilyAssignmentLabel',
     'FamilyInvite',
     'FuelRecord',
     'Income',

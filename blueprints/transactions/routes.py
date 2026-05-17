@@ -12,6 +12,7 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.credit_cards import CreditCard
 from models.loan_payments import LoanPayment
 from models.loans import Loan
+from models.family_assignment_labels import FamilyAssignmentLabel
 from models.settings import Settings
 from models.users import User
 from services.payday_service import PaydayService
@@ -20,41 +21,33 @@ from models.expenses import Expense
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
-def _parse_assigned_people(raw_value):
-    """Parse comma/newline separated names into a deduplicated list."""
-    if not raw_value:
-        return []
-
-    normalized = str(raw_value).replace(';', ',').replace('\r', '\n')
-    candidates = []
-    for chunk in normalized.split('\n'):
-        candidates.extend(chunk.split(','))
-
-    seen = set()
-    result = []
-    for name in (c.strip() for c in candidates):
-        if name and name not in seen:
-            seen.add(name)
-            result.append(name)
-    return result
-
-
 def get_assigned_people_options():
-    """Return the configured Assigned To options for transaction forms."""
-    configured = _parse_assigned_people(Settings.get_value('transactions.assigned_people', ''))
+    """Return family assignment options from members + custom family labels."""
+    configured = []
+    seen = set()
+
+    members = family_query(User).filter(User.is_active == True).all()
+    for member in members:
+        display_name = (member.member_name or member.name or '').strip()
+        if display_name and display_name not in seen:
+            seen.add(display_name)
+            configured.append(display_name)
+
+    custom_labels = (
+        family_query(FamilyAssignmentLabel)
+        .filter(FamilyAssignmentLabel.is_active == True)
+        .order_by(FamilyAssignmentLabel.sort_order.asc(), FamilyAssignmentLabel.name.asc())
+        .all()
+    )
+    for label in custom_labels:
+        label_name = (label.name or '').strip()
+        if label_name and label_name not in seen:
+            seen.add(label_name)
+            configured.append(label_name)
 
     if not configured:
-        members = family_query(User).filter(User.is_active == True).all()
-        configured = []
-        seen = set()
-        for member in members:
-            display_name = (member.member_name or member.name or '').strip()
-            if display_name and display_name not in seen:
-                seen.add(display_name)
-                configured.append(display_name)
-
-    if not configured:
-        configured = ['Keiron', 'Emma', 'Both', 'Michael', 'Emily', 'Ivy']
+        configured = ['Household']
+        seen = {'Household'}
 
     existing_values = [
         row[0] for row in family_query(Transaction)
@@ -65,7 +58,8 @@ def get_assigned_people_options():
     ]
 
     for existing in existing_values:
-        if existing not in configured:
+        if existing not in seen:
+            seen.add(existing)
             configured.append(existing)
 
     return configured

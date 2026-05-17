@@ -248,21 +248,6 @@
                     </div>
                 </div>
 
-                <!-- Transaction Assignment Options -->
-                <div class="card mb-4">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0"><i class="bi bi-people"></i> Transaction Assignment Options</h5>
-                    </div>
-                    <div class="card-body">
-                        <label for="transactions_assigned_people" class="form-label">Assigned To Options</label>
-                        <textarea class="form-control" id="transactions_assigned_people" name="transactions_assigned_people" rows="6" placeholder="Enter one name per line">{{ assigned_people_setting }}</textarea>
-                        <small class="text-muted d-block mt-2">
-                            These names appear in transaction Create/Edit forms and bulk actions.
-                            Enter one option per line (for example: Keiron, Emma, Both).
-                        </small>
-                    </div>
-                </div>
-
                 <!-- Vendor Types -->
                 <div class="card mb-4">
                     <div class="card-header bg-secondary text-white">
@@ -398,6 +383,14 @@
                     </p>
                     <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vendors.types_index') }}">
                         <i class="bi bi-tags"></i> Manage Vendor Types
+                    </a>
+                    <hr>
+                    <h6>Family &amp; Assignments</h6>
+                    <p class="small mb-2">
+                        Manage family members and transaction assignment labels (e.g. children or anyone without a login account).
+                    </p>
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('family.index') }}">
+                        <i class="bi bi-people"></i> Family Settings
                     </a>
                 </div>
             </div>

@@ -92,6 +92,40 @@
         </div>
     </div>
 
+    <!-- ── Transaction Assignment Labels ─────────────────────────── -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-person-badge"></i> Transaction Assignment Labels</h5>
+            <small class="text-muted">Use this for children or anyone without a login account</small>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="/family/assignment-labels" class="row g-2 mb-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-8">
+                    <input type="text" class="form-control" name="label_name" placeholder="Add assignment label (e.g., Oliver, Sofia, Household)" required>
+                </div>
+                <div class="col-md-4 d-grid">
+                    <button type="submit" class="btn btn-outline-primary"><i class="bi bi-plus-circle"></i> Add Label</button>
+                </div>
+            </form>
+
+            {% if assignment_labels %}
+            <div class="d-flex flex-wrap gap-2">
+                {% for label in assignment_labels %}
+                <form method="POST" action="/family/assignment-labels/{{ label.id }}/delete" class="d-inline" onsubmit="return confirm('Remove assignment label {{ label.name }}?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                        {{ label.name }} <i class="bi bi-x ms-1"></i>
+                    </button>
+                </form>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No custom labels yet. Family members are still available automatically in transaction assignment dropdowns.</p>
+            {% endif %}
+        </div>
+    </div>
+
     <!-- ── Active invites ────────────────────────────────────────── -->
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">

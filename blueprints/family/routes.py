@@ -21,6 +21,7 @@ from flask_login import login_required, current_user, login_user
 from blueprints.family import family_bp
 from extensions import db
 from models.family import Family, FamilyInvite
+from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
 from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTIONS
 
@@ -69,6 +70,12 @@ def index():
         .limit(20)
         .all()
     )
+    assignment_labels = (
+        FamilyAssignmentLabel.query
+        .filter_by(family_id=family.id, is_active=True)
+        .order_by(FamilyAssignmentLabel.sort_order.asc(), FamilyAssignmentLabel.name.asc())
+        .all()
+    )
 
     return render_template(
         'family/index.html',
@@ -76,9 +83,66 @@ def index():
         members=members,
         active_invites=active_invites,
         expired_invites=expired_invites,
+        assignment_labels=assignment_labels,
         section_groups=SECTION_GROUPS,
         section_labels=SECTION_LABELS,
     )
+
+
+@family_bp.route('/assignment-labels', methods=['POST'])
+@login_required
+def create_assignment_label():
+    """Create a custom family assignment label (e.g., child/non-login person)."""
+    _require_admin()
+
+    family = current_user.family
+    if family is None:
+        flash('No family found. Please visit the Family page first.', 'danger')
+        return redirect(url_for('family.index'))
+
+    name = (request.form.get('label_name') or '').strip()
+    if not name:
+        flash('Label name is required.', 'danger')
+        return redirect(url_for('family.index'))
+
+    existing = FamilyAssignmentLabel.query.filter_by(
+        family_id=family.id,
+        name=name,
+        is_active=True,
+    ).first()
+    if existing:
+        flash('That assignment label already exists.', 'warning')
+        return redirect(url_for('family.index'))
+
+    max_sort = FamilyAssignmentLabel.query.filter_by(family_id=family.id).with_entities(db.func.max(FamilyAssignmentLabel.sort_order)).scalar()
+    next_sort = (max_sort or 0) + 1
+
+    db.session.add(FamilyAssignmentLabel(
+        family_id=family.id,
+        name=name,
+        is_active=True,
+        sort_order=next_sort,
+    ))
+    db.session.commit()
+
+    flash(f'Added assignment label: {name}', 'success')
+    return redirect(url_for('family.index'))
+
+
+@family_bp.route('/assignment-labels/<int:label_id>/delete', methods=['POST'])
+@login_required
+def delete_assignment_label(label_id):
+    """Delete a custom family assignment label."""
+    _require_admin()
+
+    label = FamilyAssignmentLabel.query.get_or_404(label_id)
+    if label.family_id != current_user.family_id:
+        abort(403)
+
+    db.session.delete(label)
+    db.session.commit()
+    flash(f'Removed assignment label: {label.name}', 'success')
+    return redirect(url_for('family.index'))
 
 
 @family_bp.route('/invite', methods=['POST'])
