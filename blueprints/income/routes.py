@@ -4,11 +4,35 @@ from models.income import Income
 from models.recurring_income import RecurringIncome
 from models.accounts import Account
 from models.categories import Category
+from models.users import User
 from services.income_service import IncomeService
 from extensions import db
 from datetime import datetime
 from decimal import Decimal
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+
+
+def _get_income_people():
+    """Return a list of person names for income forms, sourced from active family members."""
+    seen = set()
+    people = []
+    for member in family_query(User).filter(User.is_active == True).all():
+        name = (member.member_name or member.name or '').strip()
+        if name and name not in seen:
+            seen.add(name)
+            people.append(name)
+    # Fall back to names already stored in the database
+    if not people:
+        rows = (
+            family_query(Income).with_entities(Income.person).distinct()
+            .union(family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct())
+            .all()
+        )
+        for row in rows:
+            if row[0] and row[0] not in seen:
+                seen.add(row[0])
+                people.append(row[0])
+    return people or ['Household']
 
 
 @income_bp.route('/income')
@@ -90,7 +114,7 @@ def add():
     
     # GET request - show form
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    return render_template('income/add.html', accounts=accounts)
+    return render_template('income/add.html', accounts=accounts, people=_get_income_people())
 
 
 @income_bp.route('/income/<int:id>/edit', methods=['GET', 'POST'])
@@ -148,7 +172,7 @@ def edit(id):
     
     # GET request - show form
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    return render_template('income/edit.html', income=income, accounts=accounts)
+    return render_template('income/edit.html', income=income, accounts=accounts, people=_get_income_people())
 
 
 @income_bp.route('/income/<int:id>/delete', methods=['POST'])
@@ -366,7 +390,7 @@ def add_recurring():
     
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     categories = family_query(Category).filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
-    return render_template('income/add_recurring.html', accounts=accounts, categories=categories)
+    return render_template('income/add_recurring.html', accounts=accounts, categories=categories, people=_get_income_people())
 
 
 @income_bp.route('/income/recurring/<int:id>/edit', methods=['GET', 'POST'])
@@ -419,7 +443,7 @@ def edit_recurring(id):
     
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     categories = family_query(Category).filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
-    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories)
+    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories, people=_get_income_people())
 
 
 @income_bp.route('/income/recurring/<int:id>/delete', methods=['POST'])

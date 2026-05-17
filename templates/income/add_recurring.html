@@ -20,8 +20,9 @@
                         <div class="mb-3">
                             <label for="person" class="form-label">Person</label>
                             <select class="form-select" id="person" name="person" required>
-                                <option value="Keiron" selected>Keiron</option>
-                                <option value="Emma">Emma</option>
+                                {% for p in people %}
+                                <option value="{{ p }}"{% if loop.first %} selected{% endif %}>{{ p }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                     </div>

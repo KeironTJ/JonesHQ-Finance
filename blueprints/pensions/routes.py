@@ -3,11 +3,31 @@ from . import pensions_bp
 from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
 from models.settings import Settings
+from models.users import User
 from services.pension_service import PensionService
 from extensions import db
 from datetime import datetime
 from decimal import Decimal
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+
+
+def _get_pension_people():
+    """Return a list of person names for pension forms, sourced from active family members."""
+    seen = set()
+    people = []
+    for member in family_query(User).filter(User.is_active == True).all():
+        name = (member.member_name or member.name or '').strip()
+        if name and name not in seen:
+            seen.add(name)
+            people.append(name)
+    # Fall back to names already stored in the database
+    if not people:
+        rows = family_query(Pension).with_entities(Pension.person).distinct().order_by(Pension.person).all()
+        for row in rows:
+            if row[0] and row[0] not in seen:
+                seen.add(row[0])
+                people.append(row[0])
+    return people or ['Household']
 
 
 @pensions_bp.route('/pensions')
@@ -65,7 +85,7 @@ def add():
             db.session.rollback()
             flash(f'Error adding pension: {str(e)}', 'danger')
     
-    return render_template('pensions/add.html')
+    return render_template('pensions/add.html', people=_get_pension_people())
 
 
 @pensions_bp.route('/pensions/<int:id>/edit', methods=['GET', 'POST'])
@@ -98,7 +118,7 @@ def edit(id):
             db.session.rollback()
             flash(f'Error updating pension: {str(e)}', 'danger')
     
-    return render_template('pensions/edit.html', pension=pension)
+    return render_template('pensions/edit.html', pension=pension, people=_get_pension_people())
 
 
 @pensions_bp.route('/pensions/<int:id>/delete', methods=['POST'])
@@ -353,7 +373,7 @@ def retirement_summary():
     
     # Get age information
     people_info = []
-    for p in ['Keiron', 'Emma']:
+    for p in _get_pension_people():
         age = PensionService.get_person_age(p)
         retirement_age = Settings.get_value(f'{p.lower()}_retirement_age', 65)
         months_remaining = PensionService.get_months_until_retirement(p, retirement_age)
