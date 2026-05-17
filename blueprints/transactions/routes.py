@@ -47,20 +47,6 @@ def get_assigned_people_options():
 
     if not configured:
         configured = ['Household']
-        seen = {'Household'}
-
-    existing_values = [
-        row[0] for row in family_query(Transaction)
-        .with_entities(Transaction.assigned_to)
-        .distinct()
-        .all()
-        if row[0]
-    ]
-
-    for existing in existing_values:
-        if existing not in seen:
-            seen.add(existing)
-            configured.append(existing)
 
     return configured
 
