@@ -307,6 +307,43 @@
                             <option value="Ivy">Ivy</option>
                         </select>
                     </div>
+                    
+                    <!-- Bulk Amount Change Section -->
+                    <div class="col-md-12">
+                        <div class="card border-secondary">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-currency-pound"></i> Bulk Amount Changes</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <label for="bulk_amount_operation" class="form-label">Operation:</label>
+                                        <select class="form-select" name="bulk_amount_operation" id="bulk_amount_operation" onchange="updateAmountOperationUI()">
+                                            <option value="">-- No Change --</option>
+                                            <option value="set">Set to exact amount</option>
+                                            <option value="multiply">Multiply by percentage</option>
+                                            <option value="add">Add/Subtract amount</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="bulk_amount_value" class="form-label">Value:</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" name="bulk_amount_value" id="bulk_amount_value" step="0.01" placeholder="0.00">
+                                            <span class="input-group-text" id="bulk_amount_unit">£</span>
+                                        </div>
+                                        <small class="text-muted" id="bulk_amount_help"></small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">&nbsp;</label>
+                                        <div class="alert alert-info mb-0" id="bulk_amount_info" style="display: none;">
+                                            <small id="bulk_amount_info_text"></small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="col-md-12">
                         <button type="submit" class="btn btn-primary me-2">
                             <i class="bi bi-save"></i> Update Selected Transactions
@@ -1015,6 +1052,39 @@ function submitQuickAddVendor() {
         bootstrap.Modal.getInstance(document.getElementById('quickAddVendorModal')).hide();
     })
     .catch(() => { errEl.textContent = 'Request failed. Try again.'; errEl.style.display = ''; });
+}
+// Bulk amount operation UI update function
+function updateAmountOperationUI() {
+    const operation = document.getElementById('bulk_amount_operation').value;
+    const unitEl = document.getElementById('bulk_amount_unit');
+    const helpEl = document.getElementById('bulk_amount_help');
+    const valueInput = document.getElementById('bulk_amount_value');
+    const infoEl = document.getElementById('bulk_amount_info');
+    const infoTextEl = document.getElementById('bulk_amount_info_text');
+    
+    // Clear previous state
+    valueInput.placeholder = '0.00';
+    helpEl.textContent = '';
+    
+    if (operation === 'set') {
+        unitEl.textContent = '£';
+        helpEl.textContent = 'All selected transactions will be set to this exact amount.';
+        infoTextEl.textContent = 'Example: Set all to £5.00';
+        infoEl.style.display = 'block';
+    } else if (operation === 'multiply') {
+        unitEl.textContent = '%';
+        valueInput.placeholder = '100';
+        helpEl.textContent = 'Multiply each transaction amount by this percentage.';
+        infoTextEl.textContent = 'Example: Enter 110 to increase all by 10%, or 90 to decrease by 10%';
+        infoEl.style.display = 'block';
+    } else if (operation === 'add') {
+        unitEl.textContent = '£';
+        helpEl.textContent = 'Add or subtract this amount from each transaction.';
+        infoTextEl.textContent = 'Example: Enter 2.50 to add £2.50 to each, or -1.00 to subtract £1.00';
+        infoEl.style.display = 'block';
+    } else {
+        infoEl.style.display = 'none';
+    }
 }
 </script>
 

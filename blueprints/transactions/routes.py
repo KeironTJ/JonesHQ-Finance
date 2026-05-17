@@ -218,7 +218,14 @@ def index():
             pass
     
     # Get filter expanded preference
-    filter_expanded = Settings.get_value('transactions_filter_expanded', True)
+    # Expand if any filters are currently active
+    has_active_filters = (
+        account_id or head_budget or category_id or vendor_id or 
+        year_month or payday_period or search or is_paid_filter
+    )
+    filter_expanded = Settings.get_value('transactions_filter_expanded', False)
+    if has_active_filters:
+        filter_expanded = True
     
     return render_template(
         'transactions/transactions.html',
@@ -692,12 +699,25 @@ def bulk_edit():
         assigned_to = request.form.get('bulk_assigned_to')
         is_paid_str = request.form.get('bulk_is_paid')
         
+        # Bulk amount change parameters
+        amount_operation = request.form.get('bulk_amount_operation')
+        amount_value_str = request.form.get('bulk_amount_value')
+        
         # Convert is_paid to boolean if provided
         is_paid = None
         if is_paid_str == '1':
             is_paid = True
         elif is_paid_str == '0':
             is_paid = False
+        
+        # Parse amount operation
+        amount_operation_value = None
+        if amount_operation and amount_value_str:
+            try:
+                amount_operation_value = Decimal(str(amount_value_str))
+            except:
+                flash('Invalid amount value provided', 'danger')
+                return redirect(request.form.get('return_url') or url_for('transactions.index'))
         
         # Track affected accounts for balance recalculation
         affected_accounts = set()
@@ -728,6 +748,83 @@ def bulk_edit():
                             if linked_txn.account_id:
                                 affected_accounts.add(linked_txn.account_id)
                 
+                # Apply amount changes
+                if amount_operation and amount_operation_value is not None:
+                    current_amount = Decimal(str(transaction.amount))
+                    new_amount = current_amount
+                    
+                    if amount_operation == 'set':
+                        # Set to exact amount
+                        new_amount = amount_operation_value
+                    elif amount_operation == 'multiply':
+                        # Multiply by percentage (e.g., 110 means multiply by 1.1)
+                        multiplier = amount_operation_value / Decimal('100')
+                        new_amount = current_amount * multiplier
+                    elif amount_operation == 'add':
+                        # Add/subtract amount
+                        new_amount = current_amount + amount_operation_value
+                    
+                    transaction.amount = new_amount
+                    
+                    # If this is a linked transfer, update the linked transaction's amount too
+                    if transaction.linked_transaction_id:
+                        linked_txn = family_get(Transaction, transaction.linked_transaction_id)
+                        if linked_txn:
+                            linked_current = Decimal(str(linked_txn.amount))
+                            linked_new = linked_current
+                            
+                            if amount_operation == 'set':
+                                # For transfers, negate the amount
+                                linked_new = -amount_operation_value
+                            elif amount_operation == 'multiply':
+                                multiplier = amount_operation_value / Decimal('100')
+                                linked_new = linked_current * multiplier
+                            elif amount_operation == 'add':
+                                # For add operation on linked transactions, apply the same direction (both positive or both negative based on original)
+                                linked_new = linked_current + amount_operation_value
+                            
+                            linked_txn.amount = linked_new
+                            if linked_txn.account_id:
+                                affected_accounts.add(linked_txn.account_id)
+                    
+                    # Sync with linked credit card transaction if exists
+                    if transaction.credit_card_id:
+                        linked_cc_txn = family_query(CreditCardTransaction).filter_by(
+                            bank_transaction_id=transaction.id
+                        ).first()
+                        if linked_cc_txn:
+                            cc_current = Decimal(str(linked_cc_txn.amount))
+                            cc_new = cc_current
+                            
+                            if amount_operation == 'set':
+                                cc_new = amount_operation_value
+                            elif amount_operation == 'multiply':
+                                multiplier = amount_operation_value / Decimal('100')
+                                cc_new = cc_current * multiplier
+                            elif amount_operation == 'add':
+                                cc_new = cc_current + amount_operation_value
+                            
+                            linked_cc_txn.amount = cc_new
+                    
+                    # Sync with linked loan payment if exists
+                    if transaction.loan_id:
+                        linked_loan_payment = family_query(LoanPayment).filter_by(
+                            bank_transaction_id=transaction.id
+                        ).first()
+                        if linked_loan_payment:
+                            loan_current = Decimal(str(linked_loan_payment.amount))
+                            loan_new = loan_current
+                            
+                            if amount_operation == 'set':
+                                loan_new = amount_operation_value
+                            elif amount_operation == 'multiply':
+                                multiplier = amount_operation_value / Decimal('100')
+                                loan_new = loan_current * multiplier
+                            elif amount_operation == 'add':
+                                loan_new = loan_current + amount_operation_value
+                            
+                            linked_loan_payment.amount = loan_new
+                
                 transaction.updated_at = datetime.now()
                 update_count += 1
         
@@ -740,7 +837,7 @@ def bulk_edit():
         
         db.session.commit()
         
-        flash(f'{update_count} transactions updated successfully! Account balances recalculated.', 'success')
+        flash(f'{update_count} transactions updated successfully! All linked transfers, credit card transactions, and loan payments have been synced. Account balances recalculated.', 'success')
         
     except ValueError as e:
         db.session.rollback()
