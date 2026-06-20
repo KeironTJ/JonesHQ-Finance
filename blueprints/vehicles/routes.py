@@ -1,4 +1,5 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
+import logging
 from . import vehicles_bp
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
@@ -12,6 +13,8 @@ from decimal import Decimal
 from services.payday_service import PaydayService
 from sqlalchemy.orm import joinedload
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+
+log = logging.getLogger(__name__)
 
 
 @vehicles_bp.route('/vehicles')
@@ -36,6 +39,22 @@ def index():
         future = [p for p in predictions if p['date'] >= _date.today()]
         next_predicted_refills[vehicle.id] = future[0] if future else None
 
+    # Last fuel fill per vehicle — single batched query to pre-fill the Add Fuel modal
+    _subq = (
+        family_query(FuelRecord)
+        .with_entities(FuelRecord.vehicle_id, db.func.max(FuelRecord.id).label('last_id'))
+        .group_by(FuelRecord.vehicle_id)
+        .subquery()
+    )
+    _last_fills = family_query(FuelRecord).join(_subq, FuelRecord.id == _subq.c.last_id).all()
+    last_fill_by_vehicle = {
+        r.vehicle_id: {
+            'price_per_litre': float(r.price_per_litre) if r.price_per_litre else 0,
+            'mileage': r.mileage or 0,
+        }
+        for r in _last_fills
+    }
+
     return render_template(
         'vehicles/index.html',
         vehicles=active_vehicles,
@@ -44,6 +63,7 @@ def index():
         vehicle_stats=vehicle_stats,
         tank_statuses=tank_statuses,
         next_predicted_refills=next_predicted_refills,
+        last_fill_by_vehicle=last_fill_by_vehicle,
         active_tab=active_tab,
         today=date.today(),
     )
@@ -100,6 +120,22 @@ def fuel():
             pass
     fuel_records = fuel_query.order_by(FuelRecord.date.desc()).all()
 
+    # Last fuel fill per vehicle — single batched query to pre-fill the Add Fuel modal
+    _subq = (
+        family_query(FuelRecord)
+        .with_entities(FuelRecord.vehicle_id, db.func.max(FuelRecord.id).label('last_id'))
+        .group_by(FuelRecord.vehicle_id)
+        .subquery()
+    )
+    _last_fills = family_query(FuelRecord).join(_subq, FuelRecord.id == _subq.c.last_id).all()
+    last_fill_by_vehicle = {
+        r.vehicle_id: {
+            'price_per_litre': float(r.price_per_litre) if r.price_per_litre else 0,
+            'mileage': r.mileage or 0,
+        }
+        for r in _last_fills
+    }
+
     return render_template(
         'vehicles/fuel_log.html',
         fuel_records=fuel_records,
@@ -107,7 +143,8 @@ def fuel():
         accounts=accounts,
         payday_periods=payday_periods,
         selected_payday_period=selected_payday_period,
-        selected_vehicle_id=selected_vehicle_id
+        selected_vehicle_id=selected_vehicle_id,
+        last_fill_by_vehicle=last_fill_by_vehicle
     )
 
 
@@ -146,12 +183,14 @@ def trips():
     selected_vehicle_id_trip = request.args.get('vehicle_id_trip')
 
     # Get trip records
+    trip_start_date = None
+    trip_end_date = None
     trip_query = family_query(Trip).options(joinedload(Trip.fuel_record))
     if selected_payday_period_trip:
         try:
             year, month = map(int, selected_payday_period_trip.split('-'))
-            start_date, end_date, _ = PaydayService.get_payday_period(year, month)
-            trip_query = trip_query.filter(Trip.date >= start_date, Trip.date <= end_date)
+            trip_start_date, trip_end_date, _ = PaydayService.get_payday_period(year, month)
+            trip_query = trip_query.filter(Trip.date >= trip_start_date, Trip.date <= trip_end_date)
         except Exception:
             pass
     if selected_vehicle_id_trip:
@@ -161,29 +200,14 @@ def trips():
             pass
     trips = trip_query.order_by(Trip.date.desc(), Trip.id.desc()).all()
     
-    # Get all fuel records per vehicle (used for fill-by-trip mapping)
+    # Get all fuel records per vehicle for the timeline.
+    # Scoped to the active date range where possible to avoid loading full history.
     all_vehicle_fills = {}
     for vehicle in vehicles:
-        all_vehicle_fills[vehicle.id] = family_query(FuelRecord).filter_by(
-            vehicle_id=vehicle.id
-        ).order_by(FuelRecord.date.asc()).all()
-
-    # Build fill_by_last_trip_id: trip_id → FuelRecord
-    # For each fill, find the last filtered trip on or before that fill's date.
-    # This correctly handles fills that happen on non-trip days.
-    sorted_trips = sorted(trips, key=lambda t: t.date)
-    fill_by_last_trip_id = {}
-    for vehicle in vehicles:
-        vehicle_fills = all_vehicle_fills[vehicle.id]
-        vehicle_trips = [t for t in sorted_trips if t.vehicle_id == vehicle.id]
-        for fill in vehicle_fills:
-            last_trip = None
-            for trip in reversed(vehicle_trips):
-                if trip.date <= fill.date:
-                    last_trip = trip
-                    break
-            if last_trip and last_trip.id not in fill_by_last_trip_id:
-                fill_by_last_trip_id[last_trip.id] = fill
+        q = family_query(FuelRecord).filter_by(vehicle_id=vehicle.id)
+        if trip_start_date and trip_end_date:
+            q = q.filter(FuelRecord.date >= trip_start_date, FuelRecord.date <= trip_end_date)
+        all_vehicle_fills[vehicle.id] = q.order_by(FuelRecord.date.asc()).all()
 
     # Get forecasted fuel transactions (keyed by vehicle id → transaction_date → tx)
     from models.categories import Category
@@ -219,35 +243,133 @@ def trips():
     if selected_vehicle_id_trip:
         try:
             trip_tank_levels = FuelForecastingService.get_trip_tank_levels(int(selected_vehicle_id_trip))
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning('get_trip_tank_levels failed for vehicle %s: %s', selected_vehicle_id_trip, e)
     else:
         for vehicle in vehicles:
             try:
                 trip_tank_levels.update(FuelForecastingService.get_trip_tank_levels(vehicle.id))
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning('get_trip_tank_levels failed for vehicle %s: %s', vehicle.id, e)
 
-    # Only the last trip of each (vehicle, date) shows the forecasted refuel indicator
-    _last_per_day = {}
-    for trip in trips:
-        key = (trip.vehicle_id, trip.date)
-        if key not in _last_per_day or trip.id > _last_per_day[key]:
-            _last_per_day[key] = trip.id
-    last_trip_ids = set(_last_per_day.values())
+    # ── Build combined timeline events ──────────────────────────────────────
+    vid_filter = int(selected_vehicle_id_trip) if selected_vehicle_id_trip else None
+
+    # Fuel fills within the same date/vehicle range for the timeline
+    fills_for_timeline = []
+    for vehicle in vehicles:
+        if vid_filter and vehicle.id != vid_filter:
+            continue
+        for fill in all_vehicle_fills.get(vehicle.id, []):
+            if trip_start_date and trip_end_date:
+                if not (trip_start_date <= fill.date <= trip_end_date):
+                    continue
+            fills_for_timeline.append(fill)
+
+    vehicles_by_id = {v.id: v for v in vehicles}
+    # For 0-mile trips that get no entry in trip_tank_levels, carry forward
+    # the nearest previous trip's tank level so the bar still renders.
+    _sorted_for_fallback = sorted(trips, key=lambda t: (t.date, t.id))
+    _last_known_tank = None
+    _tank_fallback = {}  # trip_id → fallback pct
+    for _t in _sorted_for_fallback:
+        _pct = trip_tank_levels.get(_t.id)
+        if _pct is not None:
+            _last_known_tank = _pct
+        elif _last_known_tank is not None:
+            _tank_fallback[_t.id] = _last_known_tank
+
+    events = []
+    seen_checkbox = set()
+
+    for trip in sorted(trips, key=lambda t: (t.date, t.id), reverse=True):
+        _tank = trip_tank_levels.get(trip.id)
+        if _tank is None:
+            _tank = _tank_fallback.get(trip.id)
+        base = dict(
+            date=trip.date,
+            trip=trip,
+            tank_pct=_tank,
+            fuel_expense=fuel_expenses_by_trip.get(trip.id),
+        )
+        first_row = trip.id not in seen_checkbox
+        seen_checkbox.add(trip.id)
+        if trip.personal_miles:
+            events.append({**base, 'type': 'personal', 'miles': trip.personal_miles,
+                            'show_checkbox': first_row, 'is_continuation': False})
+            first_row = False
+        if trip.business_miles:
+            events.append({**base, 'type': 'business', 'miles': trip.business_miles,
+                            'show_checkbox': first_row, 'is_continuation': False})
+            first_row = False
+        if not trip.personal_miles and not trip.business_miles:
+            events.append({**base, 'type': 'personal', 'miles': 0,
+                           'show_checkbox': True, 'is_continuation': False})
+
+    for fill in fills_for_timeline:
+        # Calculate tank % after this fill:
+        # full fill → 100 %; partial → gallons added / tank_size × 100 (capped at 100)
+        fill_tank_pct = None
+        try:
+            tank_size = float(fill.vehicle.tank_size) if fill.vehicle and fill.vehicle.tank_size else None
+            if tank_size and tank_size > 0:
+                if not fill.is_partial_fill:
+                    fill_tank_pct = 100.0
+                elif fill.gallons:
+                    fill_tank_pct = min(100.0, float(fill.gallons) / tank_size * 100)
+        except Exception as e:
+            log.warning('fill tank_pct calc failed for fill %s: %s', fill.id, e)
+        events.append({
+            'type': 'fuel',
+            'date': fill.date,
+            'fill': fill,
+            'tank_pct': fill_tank_pct,
+            'show_checkbox': False,
+            'is_continuation': False,
+        })
+
+    for vid, date_map in forecasted_transactions.items():
+        if vid_filter and vid != vid_filter:
+            continue
+        for tx_date, tx in date_map.items():
+            if trip_start_date and trip_end_date:
+                if not (trip_start_date <= tx_date <= trip_end_date):
+                    continue
+            # Predicted fills always top up to full → 100 % (if vehicle has tank_size)
+            forecast_tank_pct = None
+            _fv = vehicles_by_id.get(vid)
+            if _fv and getattr(_fv, 'tank_size', None):
+                forecast_tank_pct = 100.0
+            events.append({
+                'type': 'forecasted',
+                'date': tx_date,
+                'tx': tx,
+                'vehicle': _fv,
+                'tank_pct': forecast_tank_pct,
+                'show_checkbox': False,
+                'is_continuation': False,
+            })
+
+    _type_order = {'fuel': 0, 'forecasted': 0, 'personal': 1, 'business': 1}
+    events.sort(key=lambda e: (e['date'], _type_order.get(e['type'], 1)), reverse=True)
+
+    # Mark business rows that immediately follow their personal counterpart
+    prev_trip_id = None
+    for ev in events:
+        t = ev.get('trip')
+        if ev['type'] == 'business' and t and t.id == prev_trip_id:
+            ev['is_continuation'] = True
+        prev_trip_id = t.id if t else None
+    # ────────────────────────────────────────────────────────────────────────
 
     return render_template(
         'vehicles/trip_log.html',
+        events=events,
         trips=trips,
         vehicles=vehicles,
         payday_periods=payday_periods,
         selected_payday_period_trip=selected_payday_period_trip,
         selected_vehicle_id_trip=selected_vehicle_id_trip,
-        fill_by_last_trip_id=fill_by_last_trip_id,
-        forecasted_transactions=forecasted_transactions,
-        fuel_expenses_by_trip=fuel_expenses_by_trip,
-        trip_tank_levels=trip_tank_levels,
-        last_trip_ids=last_trip_ids,
         today=date.today()
     )
 
@@ -530,9 +652,11 @@ def add_trip():
     try:
         vehicle_id = int(request.form.get('vehicle_id'))
         trip_date = datetime.strptime(request.form.get('date'), '%Y-%m-%d').date()
-        personal_miles = int(request.form.get('personal_miles', 0))
-        business_miles = int(request.form.get('business_miles', 0))
-        total_miles = personal_miles + business_miles
+        trip_type = request.form.get('trip_type', 'personal')
+        miles = int(request.form.get('miles', 0))
+        personal_miles = miles if trip_type == 'personal' else 0
+        business_miles = miles if trip_type == 'business' else 0
+        total_miles = miles
         journey_description = request.form.get('journey_description', '')
         school_holidays = request.form.get('school_holidays', '')
         
@@ -595,9 +719,11 @@ def update_trip(trip_id):
         trip = family_get_or_404(Trip, trip_id)
         
         trip.date = datetime.strptime(request.form.get('date'), '%Y-%m-%d').date()
-        trip.personal_miles = int(request.form.get('personal_miles', 0))
-        trip.business_miles = int(request.form.get('business_miles', 0))
-        trip.total_miles = trip.personal_miles + trip.business_miles
+        trip_type = request.form.get('trip_type', 'personal')
+        miles = int(request.form.get('miles', 0))
+        trip.personal_miles = miles if trip_type == 'personal' else 0
+        trip.business_miles = miles if trip_type == 'business' else 0
+        trip.total_miles = miles
         trip.journey_description = request.form.get('journey_description', '')
         trip.school_holidays = request.form.get('school_holidays', '')
         
@@ -671,8 +797,10 @@ def bulk_add_trips():
     try:
         vehicle_id = request.form.get('vehicle_id')
         journey_description = request.form.get('journey_description', '')
-        personal_miles = Decimal(request.form.get('personal_miles', 0))
-        business_miles = Decimal(request.form.get('business_miles', 0))
+        trip_type = request.form.get('trip_type', 'personal')
+        miles = Decimal(request.form.get('miles', 0))
+        personal_miles = miles if trip_type == 'personal' else Decimal('0')
+        business_miles = miles if trip_type == 'business' else Decimal('0')
         start_date_str = request.form.get('start_date')
         end_date_str = request.form.get('end_date')
         selected_days = request.form.getlist('days')  # List of weekday integers (0=Monday, 6=Sunday)
@@ -701,7 +829,7 @@ def bulk_add_trips():
             # Check if this day of the week is selected (0=Monday, 6=Sunday)
             if current_date.weekday() in selected_days:
                 # Calculate trip costs using the service
-                total_miles = personal_miles + business_miles
+                total_miles = miles
                 trip_cost, gallons_used, avg_mpg = VehicleService.calculate_trip_cost(
                     vehicle_id, total_miles, current_date
                 )
