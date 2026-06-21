@@ -10,8 +10,13 @@ label is YYYY-MM (the year and month of the *start* payday, not the end date).
 For example, if payday is the 15th, the January 2026 period runs 15 Jan → 14 Feb
 and is labelled "2026-01".
 
-Weekend adjustment conventions
--------------------------------
+Weekend / bank holiday adjustment
+-----------------------------------
+All working-day helpers (is_non_working_day, get_previous_working_day,
+get_next_working_day) treat both weekends *and* England & Wales bank holidays
+as non-working days.  Bank holiday data comes from the ``holidays`` package
+and is cached per year to avoid repeated object creation.
+
   get_payday_for_month()        — shifts to the *previous* working day
   get_payment_date_for_month()  — shifts to the *next* working day
 
@@ -26,10 +31,14 @@ Primary entry points
 """
 from datetime import date, timedelta
 from decimal import Decimal
+import holidays as holidays_lib
 from models.transactions import Transaction
 from models.settings import Settings
 from extensions import db
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+
+# Module-level cache: year -> set of bank holiday dates (England & Wales)
+_bank_holiday_cache: dict[int, set] = {}
 
 
 class PaydayService:
@@ -45,23 +54,58 @@ class PaydayService:
     def get_payday_setting():
         """Get the payday from settings (day of month)"""
         return Settings.get_value('payday_day', 15)  # Default to 15th
-    
+
+    # ------------------------------------------------------------------
+    # Bank holiday helpers
+    # ------------------------------------------------------------------
+
     @staticmethod
-    def is_weekend(date_obj):
-        """Check if a date falls on a weekend (Saturday=5, Sunday=6)"""
+    def _get_bank_holidays(year: int) -> set:
+        """Return the set of England & Wales bank holiday dates for *year*.
+
+        Results are cached in _bank_holiday_cache so that repeated calls
+        within the same process do not re-create the holidays object.
+        """
+        if year not in _bank_holiday_cache:
+            _bank_holiday_cache[year] = set(
+                holidays_lib.country_holidays('GB', subdiv='ENG', years=year).keys()
+            )
+        return _bank_holiday_cache[year]
+
+    @staticmethod
+    def is_bank_holiday(date_obj: date) -> bool:
+        """Return True if *date_obj* is an England & Wales bank holiday."""
+        return date_obj in PaydayService._get_bank_holidays(date_obj.year)
+
+    @staticmethod
+    def is_weekend(date_obj: date) -> bool:
+        """Return True if *date_obj* falls on a Saturday or Sunday."""
         return date_obj.weekday() >= 5
-    
+
     @staticmethod
-    def get_previous_working_day(date_obj):
-        """Get the previous working day if date is a weekend"""
-        while PaydayService.is_weekend(date_obj):
+    def is_non_working_day(date_obj: date) -> bool:
+        """Return True if *date_obj* is a weekend OR a bank holiday."""
+        return PaydayService.is_weekend(date_obj) or PaydayService.is_bank_holiday(date_obj)
+
+    @staticmethod
+    def get_previous_working_day(date_obj: date) -> date:
+        """Shift *date_obj* backwards until it lands on a working day.
+
+        A working day is any day that is neither a weekend nor an England &
+        Wales bank holiday.
+        """
+        while PaydayService.is_non_working_day(date_obj):
             date_obj = date_obj - timedelta(days=1)
         return date_obj
-    
+
     @staticmethod
-    def get_next_working_day(date_obj):
-        """Get the next working day if date is a weekend"""
-        while PaydayService.is_weekend(date_obj):
+    def get_next_working_day(date_obj: date) -> date:
+        """Shift *date_obj* forwards until it lands on a working day.
+
+        A working day is any day that is neither a weekend nor an England &
+        Wales bank holiday.
+        """
+        while PaydayService.is_non_working_day(date_obj):
             date_obj = date_obj + timedelta(days=1)
         return date_obj
     

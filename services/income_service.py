@@ -504,6 +504,12 @@ class IncomeService:
                 create_transaction=recurring_income.auto_create_transaction,
                 recurring_income_id=recurring_income.id
             )
+            # Template-generated records are forecasts, not actual payslips.
+            # is_manual_override is reset here so the status badge shows correctly.
+            # It will be set True again when the user enters their real payslip
+            # via the "Enter Actual Payslip" modal.
+            income.is_manual_override = False
+            db.session.flush()
         else:
             # Use automatic calculation
             income = IncomeService.create_income_record(
@@ -559,7 +565,9 @@ class IncomeService:
                 # Use the recurring income's end date
                 end_date = recurring.end_date
             else:
-                # No end date set - generate 20 years ahead
+                # No end date set — generate 20 years ahead (retirement planning horizon).
+                # The page-load auto-fill passes an explicit 13-month end_date so this
+                # path is only hit when generation is explicitly triggered.
                 end_date = date.today() + relativedelta(years=20)
         
         # Normalize to first of month for comparison
@@ -596,6 +604,78 @@ class IncomeService:
             all_generated.extend(generated)
         
         return all_generated
+
+    @staticmethod
+    def trim_future_forecasts(months_ahead=13):
+        """
+        Delete all unpaid, non-manual forecast Income records (and their linked
+        transactions) whose pay_date is more than *months_ahead* months from today.
+
+        After deleting, each affected RecurringIncome template's last_generated_date
+        is reset to the latest Income record that was *kept*, so the auto-generator
+        will correctly backfill from there on the next page load.
+
+        Returns a dict with 'deleted' (income records removed) and 'transactions'
+        (linked transactions removed).
+        """
+        from models.transactions import Transaction
+
+        cutoff = (date.today().replace(day=1) + relativedelta(months=months_ahead + 1))
+
+        # Find candidate records: future, unpaid, generated from a recurring template.
+        # We include is_manual_override=True here because templates with
+        # use_manual_deductions=True generate records with that flag set even though
+        # no actual payslip data has been entered.  One-off income records
+        # (recurring_income_id IS NULL) and paid records are never touched.
+        candidates = family_query(Income).filter(
+            Income.pay_date >= cutoff,
+            Income.is_paid == False,
+            Income.recurring_income_id != None,
+        ).all()
+
+        deleted_income = 0
+        deleted_txn = 0
+        affected_template_ids = set()
+
+        for income in candidates:
+            if income.recurring_income_id:
+                affected_template_ids.add(income.recurring_income_id)
+
+            # Break the circular FK before deleting
+            if income.transaction_id:
+                txn = family_query(Transaction).get(income.transaction_id)
+                if txn:
+                    txn.income_id = None
+                    income.transaction_id = None
+                    db.session.flush()
+                    db.session.delete(txn)
+                    deleted_txn += 1
+
+            db.session.delete(income)
+            deleted_income += 1
+
+        db.session.flush()
+
+        # Reset last_generated_date for each affected template to the latest
+        # record that was kept (so the generator knows where to resume from).
+        for tpl_id in affected_template_ids:
+            tpl = family_query(RecurringIncome).get(tpl_id)
+            if not tpl:
+                continue
+            latest_kept = (
+                family_query(Income)
+                .filter_by(recurring_income_id=tpl_id)
+                .order_by(Income.pay_date.desc())
+                .first()
+            )
+            if latest_kept:
+                tpl.last_generated_date = latest_kept.pay_date.replace(day=1)
+            else:
+                # No records remain — reset to just before start_date
+                tpl.last_generated_date = None
+
+        db.session.commit()
+        return {'deleted': deleted_income, 'transactions': deleted_txn}
 
     @staticmethod
     def sync_income_to_transaction(income):
@@ -652,6 +732,9 @@ class IncomeService:
         transaction.week_year = week_year
         transaction.day_name = day_name
         transaction.payday_period = payday_period
+        # Keep transaction paid/forecasted flags in step with the income record
+        transaction.is_paid = income.is_paid
+        transaction.is_forecasted = not income.is_paid and income.pay_date > date.today()
         
         db.session.flush()
         

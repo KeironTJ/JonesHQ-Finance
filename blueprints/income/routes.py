@@ -7,7 +7,8 @@ from models.categories import Category
 from models.users import User
 from services.income_service import IncomeService
 from extensions import db
-from datetime import datetime
+from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
@@ -37,33 +38,48 @@ def _get_income_people():
 
 @income_bp.route('/income')
 def index():
-    """List all income records"""
+    """List all income records — auto-generates missing records on load."""
+    # Silently auto-generate up to 13 months ahead
+    try:
+        end = (date.today().replace(day=1) + relativedelta(months=13))
+        IncomeService.generate_all_missing_income(end_date=end)
+    except Exception:
+        pass
+
     # Get filter parameters
     person = request.args.get('person', None)
     year = request.args.get('year', None)
-    
+
     # Get summary
     summary = IncomeService.get_income_summary(person=person, year=year)
-    
+
+    # Active recurring templates (shown as context on the page)
+    templates_query = family_query(RecurringIncome).filter_by(is_active=True)
+    if person:
+        templates_query = templates_query.filter_by(person=person)
+    recurring_templates = templates_query.order_by(RecurringIncome.person, RecurringIncome.source).all()
+
     # Get all accounts for the dropdown
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    
+
     # Get unique people and years for filters
     people = family_query(Income).with_entities(Income.person).distinct().order_by(Income.person).all()
     people = [p[0] for p in people] if people else ['Keiron']
-    
+
     years = family_query(Income).with_entities(db.func.substr(Income.tax_year, 1, 4).label('year')).distinct().all()
     years = sorted([y[0] for y in years], reverse=True) if years else []
-    
+
     return render_template('income/index.html',
-                         income_records=summary['records'],
-                         summary=summary,
-                         accounts=accounts,
-                         people=people,
-                         years=years,
-                         current_person=person,
-                         current_year=year,
-                         today_year=datetime.now().year)
+                           income_records=summary['records'],
+                           summary=summary,
+                           recurring_templates=recurring_templates,
+                           accounts=accounts,
+                           people=people,
+                           years=years,
+                           current_person=person,
+                           current_year=year,
+                           today=date.today(),
+                           today_year=datetime.now().year)
 
 
 @income_bp.route('/income/add', methods=['GET', 'POST'])
@@ -119,58 +135,85 @@ def add():
 
 @income_bp.route('/income/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
-    """Edit an income record"""
+    """Edit an income record — supports both calculated and manual-override modes."""
     income = family_get_or_404(Income, id)
-    
+
     if request.method == 'POST':
         try:
-            # Update basic fields
-            income.person = request.form.get('person', income.person)
-            income.pay_date = datetime.strptime(request.form['pay_date'], '%Y-%m-%d').date()
-            income.gross_annual_income = Decimal(request.form['gross_annual'])
-            income.employer_pension_percent = Decimal(request.form.get('employer_pension_pct', 0))
-            income.employee_pension_percent = Decimal(request.form.get('employee_pension_pct', 0))
-            income.tax_code = request.form['tax_code']
-            income.avc = Decimal(request.form.get('avc', 0))
-            income.other_deductions = Decimal(request.form.get('other', 0))
-            income.source = request.form.get('source', '')
-            
-            # Update account
+            mode = request.form.get('edit_mode', 'calculated')
+
+            income.person     = request.form.get('person', income.person)
+            income.pay_date   = datetime.strptime(request.form['pay_date'], '%Y-%m-%d').date()
+            income.source     = request.form.get('source', '')
+            income.tax_code   = request.form.get('tax_code', income.tax_code)
+            income.avc        = Decimal(request.form.get('avc', 0) or 0)
+            income.other_deductions = Decimal(request.form.get('other', 0) or 0)
+
             deposit_account_id = request.form.get('deposit_account_id')
-            if deposit_account_id:
-                income.deposit_account_id = int(deposit_account_id)
+            income.deposit_account_id = int(deposit_account_id) if deposit_account_id else None
+
+            income.gross_annual_income  = Decimal(request.form['gross_annual'])
+            income.gross_monthly_income = (income.gross_annual_income / 12).quantize(Decimal('0.01'))
+
+            if mode == 'manual':
+                # User is entering actual payslip figures directly
+                income.employer_pension_amount = Decimal(request.form.get('employer_pension_amount', 0) or 0)
+                income.employee_pension_amount = Decimal(request.form.get('employee_pension_amount', 0) or 0)
+                income.total_pension           = income.employer_pension_amount + income.employee_pension_amount
+                income.income_tax              = Decimal(request.form.get('income_tax', 0) or 0)
+                income.national_insurance      = Decimal(request.form.get('national_insurance', 0) or 0)
+                income.take_home               = Decimal(request.form['take_home'])
+                # Clear % fields — not meaningful for manual records
+                income.employer_pension_percent = Decimal('0')
+                income.employee_pension_percent = Decimal('0')
+                income.adjusted_monthly_income  = (income.gross_monthly_income - income.employee_pension_amount).quantize(Decimal('0.01'))
+                income.adjusted_annual_income   = (income.gross_annual_income  - income.employee_pension_amount * 12).quantize(Decimal('0.01'))
+                income.is_manual_override       = True
+                income.is_paid                  = True
             else:
-                income.deposit_account_id = None
-            
-            # Recalculate all derived fields
-            result = IncomeService.calculate_tax_and_ni(
-                gross_annual=income.gross_annual_income,
-                tax_code=income.tax_code,
-                pension_amount=(income.employer_pension_percent + income.employee_pension_percent) * income.gross_annual_income / 100
-            )
-            
-            # Update calculated fields
-            income.gross_monthly_income = income.gross_annual_income / 12
-            income.employer_pension_amount = income.gross_monthly_income * income.employer_pension_percent / 100
-            income.employee_pension_amount = income.gross_monthly_income * income.employee_pension_percent / 100
-            income.total_pension = income.employer_pension_amount + income.employee_pension_amount
-            income.income_tax = result['tax'] / 12
-            income.national_insurance = result['ni'] / 12
-            income.take_home = income.gross_monthly_income - income.income_tax - income.national_insurance - income.employee_pension_amount - income.avc - income.other_deductions
-            
-            # Sync changes to linked transaction
+                # Calculated mode — recalculate from percentages using correct pay_date
+                income.employer_pension_percent = Decimal(request.form.get('employer_pension_pct', 0) or 0)
+                income.employee_pension_percent = Decimal(request.form.get('employee_pension_pct', 0) or 0)
+                income.employer_pension_amount  = (income.gross_monthly_income * income.employer_pension_percent / 100).quantize(Decimal('0.01'))
+                income.employee_pension_amount  = (income.gross_monthly_income * income.employee_pension_percent / 100).quantize(Decimal('0.01'))
+                income.total_pension            = income.employer_pension_amount + income.employee_pension_amount
+                income.adjusted_monthly_income  = (income.gross_monthly_income - income.employee_pension_amount).quantize(Decimal('0.01'))
+                income.adjusted_annual_income   = (income.gross_annual_income  - income.employee_pension_amount * 12).quantize(Decimal('0.01'))
+
+                calcs = IncomeService.calculate_tax_and_ni(
+                    gross_annual=income.adjusted_annual_income,
+                    tax_code=income.tax_code,
+                    pension_amount=income.employee_pension_amount * 12,
+                    pay_date=income.pay_date,
+                )
+                income.income_tax         = (calcs['tax'] / 12).quantize(Decimal('0.01'))
+                income.national_insurance = (calcs['ni']  / 12).quantize(Decimal('0.01'))
+                income.take_home          = (
+                    income.gross_monthly_income
+                    - income.employee_pension_amount
+                    - income.income_tax
+                    - income.national_insurance
+                    - income.avc
+                    - income.other_deductions
+                ).quantize(Decimal('0.01'))
+                income.is_manual_override = False
+
+            income.estimated_annual_take_home = (income.take_home * 12).quantize(Decimal('0.01'))
+
+            # Re-stamp tax year in case pay_date changed
+            y = income.pay_date.year
+            income.tax_year = f"{y}-{y+1}" if income.pay_date.month >= 4 else f"{y-1}-{y}"
+
             IncomeService.sync_income_to_transaction(income)
-            
             db.session.commit()
-            
-            flash('Income record updated successfully!', 'success')
+
+            flash(f'Income record updated — take home: £{income.take_home:,.2f}', 'success')
             return redirect(url_for('income.index'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error updating income: {str(e)}', 'danger')
-    
-    # GET request - show form
+
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     return render_template('income/edit.html', income=income, accounts=accounts, people=_get_income_people())
 
@@ -268,6 +311,35 @@ def toggle_paid(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@income_bp.route('/income/<int:id>/enter-actual', methods=['POST'])
+def enter_actual(id):
+    """Quick-entry of actual payslip figures for a generated income record."""
+    income = family_get_or_404(Income, id)
+
+    try:
+        income.income_tax = Decimal(request.form['tax'])
+        income.national_insurance = Decimal(request.form['ni'])
+        income.employer_pension_amount = Decimal(request.form.get('employer_pension', 0) or 0)
+        income.employee_pension_amount = Decimal(request.form.get('employee_pension', 0) or 0)
+        income.total_pension = income.employer_pension_amount + income.employee_pension_amount
+        income.avc = Decimal(request.form.get('avc', 0) or 0)
+        income.other_deductions = Decimal(request.form.get('other', 0) or 0)
+        income.take_home = Decimal(request.form['take_home'])
+        income.is_manual_override = True
+        # Only mark as paid once the pay date has actually passed
+        income.is_paid = income.pay_date <= date.today()
+
+        IncomeService.sync_income_to_transaction(income)
+        db.session.commit()
+
+        flash(f'Actual payslip for {income.pay_date.strftime("%B %Y")} recorded — transaction updated.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error recording payslip: {str(e)}', 'danger')
+
+    return redirect(url_for('income.index'))
 
 
 @income_bp.route('/income/calculate-preview', methods=['POST'])
@@ -464,18 +536,52 @@ def delete_recurring(id):
 
 @income_bp.route('/income/generate-missing', methods=['POST'])
 def generate_missing():
-    """Generate all missing income records from recurring templates"""
+    """Generate all missing income records from recurring templates (13-month window)."""
     try:
-        generated = IncomeService.generate_all_missing_income()
-        
+        end = date.today().replace(day=1) + relativedelta(months=13)
+        generated = IncomeService.generate_all_missing_income(end_date=end)
         if generated:
-            flash(f'Successfully generated {len(generated)} income record(s)!', 'success')
+            flash(f'Generated {len(generated)} income record(s).', 'success')
         else:
             flash('All income records are up to date.', 'info')
-            
     except Exception as e:
         flash(f'Error generating income: {str(e)}', 'danger')
-    
+    return redirect(url_for('income.index'))
+
+
+@income_bp.route('/income/generate-full-range', methods=['POST'])
+def generate_full_range():
+    """Generate the complete retirement-horizon range for all active templates (no end_date cap)."""
+    try:
+        generated = IncomeService.generate_all_missing_income()  # uses template end_date or 20-year default
+        if generated:
+            flash(f'Full range generated: {len(generated)} income record(s) added.', 'success')
+        else:
+            flash('All income records are already up to date across the full range.', 'info')
+    except Exception as e:
+        flash(f'Error generating full range: {str(e)}', 'danger')
+    return redirect(url_for('income.index'))
+
+
+@income_bp.route('/income/trim-forecasts', methods=['POST'])
+def trim_forecasts():
+    """Delete surplus far-future forecast records and reset last_generated_date."""
+    try:
+        months = int(request.form.get('months_ahead', 13))
+        result = IncomeService.trim_future_forecasts(months_ahead=months)
+        if result['deleted']:
+            flash(
+                f"Trimmed {result['deleted']} future forecast record(s) "
+                f"(+{result['transactions']} transaction(s)) beyond {months} months. "
+                f"Templates reset — auto-generate will fill forward from the next page load.",
+                'success'
+            )
+        else:
+            flash('No surplus forecast records found beyond that horizon.', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error trimming forecasts: {str(e)}', 'danger')
+
     return redirect(url_for('income.index'))
 
 

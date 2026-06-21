@@ -591,8 +591,17 @@ a:hover { color: var(--brand-hover); }
   transition: background var(--t-fast);
 }
 
-.table-hover tbody tr:hover {
-  background: var(--bg-surface-2) !important;
+/* Bootstrap 5.3 applies hover via box-shadow on td using --bs-table-bg-state.
+   Override the hover variable at the td level for both light and dark modes. */
+.table-hover > tbody > tr:hover > * {
+  --bs-table-color-state: var(--text-primary);
+  --bs-table-bg-state: var(--bg-surface-2);
+}
+
+/* Dark mode: deepen the hover and ensure variant rows also use theme colours. */
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
+  --bs-table-bg-state: var(--bg-surface-3) !important;
+  --bs-table-color-state: var(--text-primary) !important;
 }
 
 .table tbody td {
@@ -622,6 +631,43 @@ a:hover { color: var(--brand-hover); }
 /* Striped rows */
 .table-striped > tbody > tr:nth-of-type(odd) > td {
   background: var(--bg-surface-2);
+}
+
+/* ── Dark-mode Bootstrap table contextual variants ────────
+   Bootstrap 5 table-* classes use hardcoded light colours.
+   Override the BS CSS variables on the <tr> so they pick up
+   our theme tokens instead.
+───────────────────────────────────────────────────────── */
+[data-theme="dark"] tr.table-light,
+[data-theme="dark"] tr.table-secondary {
+  --bs-table-bg:           var(--bg-surface-2);
+  --bs-table-color:        var(--text-secondary);
+  --bs-table-border-color: var(--border-subtle);
+}
+[data-theme="dark"] tr.table-primary {
+  --bs-table-bg:           var(--brand-soft);
+  --bs-table-color:        var(--text-primary);
+  --bs-table-border-color: var(--brand-border);
+}
+[data-theme="dark"] tr.table-success {
+  --bs-table-bg:           var(--clr-success-bg);
+  --bs-table-color:        var(--clr-success);
+  --bs-table-border-color: rgba(52,211,153,0.2);
+}
+[data-theme="dark"] tr.table-warning {
+  --bs-table-bg:           var(--clr-warning-bg);
+  --bs-table-color:        var(--clr-warning);
+  --bs-table-border-color: rgba(251,191,36,0.2);
+}
+[data-theme="dark"] tr.table-danger {
+  --bs-table-bg:           var(--clr-danger-bg);
+  --bs-table-color:        var(--clr-danger);
+  --bs-table-border-color: rgba(248,113,113,0.2);
+}
+[data-theme="dark"] tr.table-info {
+  --bs-table-bg:           var(--clr-info-bg);
+  --bs-table-color:        var(--clr-info);
+  --bs-table-border-color: rgba(56,189,248,0.2);
 }
 
 /* ── Forms ───────────────────────────────────────────────── */
