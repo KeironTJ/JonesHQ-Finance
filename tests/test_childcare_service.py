@@ -117,3 +117,34 @@ def test_update_monthly_transaction_and_set_default_account(app, family, monkeyp
     assert summary.total_cost == Decimal('125')
     assert assigned is True
     assert child.default_account_id == account.id
+
+
+def test_bulk_monthly_transactions_skips_existing_summary(app, family, monkeypatch):
+    monkeypatch.setattr('services.childcare_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    child_one = ChildcareService.create_child({'name': 'Bulk Child One'})
+    child_two = ChildcareService.create_child({'name': 'Bulk Child Two'})
+    calls = []
+
+    existing = MonthlyChildcareSummary(
+        family_id=family.id, year_month='2026-01', child_id=child_one.id,
+        total_cost=Decimal('10'), transaction_id=123, account_id=None
+    )
+    db.session.add(existing)
+    db.session.commit()
+
+    def fake_create(year, month, child_id, account_id):
+        calls.append((year, month, child_id, account_id))
+        return object()
+
+    monkeypatch.setattr(
+        'services.childcare_service.ChildcareService.create_monthly_transaction',
+        staticmethod(fake_create),
+    )
+    created = ChildcareService.bulk_create_monthly_transactions(2026, 1, [
+        {'child_id': child_one.id, 'account_id': 1},
+        {'child_id': child_two.id, 'account_id': 2},
+    ])
+
+    assert len(created) == 1
+    assert calls == [(2026, 1, child_two.id, 2)]

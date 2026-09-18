@@ -631,63 +631,11 @@ def bulk_delete_trips():
 def bulk_add_trips():
     """Bulk add recurring trips based on date range and selected days of week"""
     try:
-        vehicle_id = request.form.get('vehicle_id')
-        journey_description = request.form.get('journey_description', '')
-        trip_type = request.form.get('trip_type', 'personal')
-        miles = Decimal(request.form.get('miles', 0))
-        personal_miles = miles if trip_type == 'personal' else Decimal('0')
-        business_miles = miles if trip_type == 'business' else Decimal('0')
-        start_date_str = request.form.get('start_date')
-        end_date_str = request.form.get('end_date')
-        selected_days = request.form.getlist('days')  # List of weekday integers (0=Monday, 6=Sunday)
-        
-        # Validate inputs
-        if not vehicle_id or not start_date_str or not end_date_str or not selected_days:
+        if not request.form.get('vehicle_id') or not request.form.get('start_date') or not request.form.get('end_date') or not request.form.getlist('days'):
             flash('Please fill in all required fields and select at least one day', 'danger')
             return redirect(request.referrer or url_for('vehicles.trips'))
-        
-        # Convert to integers
-        selected_days = [int(day) for day in selected_days]
-        
-        # Parse dates
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        
-        if start_date > end_date:
-            flash('Start date must be before or equal to end date', 'danger')
-            return redirect(request.referrer or url_for('vehicles.trips'))
-        
-        # Create trips for selected days in the date range
-        created_count = 0
-        current_date = start_date
-        
-        while current_date <= end_date:
-            # Check if this day of the week is selected (0=Monday, 6=Sunday)
-            if current_date.weekday() in selected_days:
-                # Calculate trip costs using the service
-                total_miles = miles
-                trip_cost, gallons_used, avg_mpg = VehicleService.calculate_trip_cost(
-                    vehicle_id, total_miles, current_date
-                )
-                
-                # Create new trip
-                new_trip = Trip(
-                    vehicle_id=vehicle_id,
-                    date=current_date,
-                    journey_description=journey_description,
-                    personal_miles=personal_miles,
-                    business_miles=business_miles,
-                    approx_mpg=avg_mpg,
-                    gallons_used=gallons_used,
-                    trip_cost=trip_cost
-                )
-                db.session.add(new_trip)
-                created_count += 1
-            
-            # Move to next day
-            current_date += timedelta(days=1)
-        
-        db.session.commit()
+        created = VehicleService.bulk_create_trips(request.form)
+        created_count = len(created)
         flash(f'Successfully created {created_count} trip(s)', 'success')
     except ValueError as ve:
         db.session.rollback()

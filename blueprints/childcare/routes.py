@@ -181,24 +181,10 @@ def bulk_create_transactions():
     transactions_data = data['transactions']
     
     try:
-        created_count = 0
-        for trans_data in transactions_data:
-            child_id = trans_data['child_id']
-            account_id = trans_data['account_id']
-            
-            # Check if transaction already exists
-            year_month = f"{year}-{month:02d}"
-            existing_summary = family_query(MonthlyChildcareSummary).filter_by(
-                year_month=year_month,
-                child_id=child_id
-            ).first()
-            
-            if not existing_summary or not existing_summary.transaction_id:
-                transaction = ChildcareService.create_monthly_transaction(year, month, child_id, account_id)
-                if transaction:
-                    created_count += 1
-        
-        db.session.commit()
+        created = ChildcareService.bulk_create_monthly_transactions(
+            year, month, transactions_data
+        )
+        created_count = len(created)
         return jsonify({
             'success': True,
             'created': created_count,

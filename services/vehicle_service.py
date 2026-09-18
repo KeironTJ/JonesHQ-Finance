@@ -228,6 +228,49 @@ class VehicleService:
         return vehicle_id
 
     @staticmethod
+    def bulk_create_trips(data):
+        vehicle_id = int(data['vehicle_id'])
+        start_date = date.fromisoformat(data['start_date'])
+        end_date = date.fromisoformat(data['end_date'])
+        if start_date > end_date:
+            raise ValueError('Start date must be before or equal to end date')
+        selected_days = {int(day) for day in data.getlist('days')}
+        if not selected_days:
+            raise ValueError('At least one day must be selected')
+
+        miles = Decimal(data.get('miles') or 0)
+        miles_int = int(miles)
+        trip_type = data.get('trip_type', 'personal')
+        created = []
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.weekday() in selected_days:
+                trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(
+                    vehicle_id, miles, current_date
+                )
+                trip = Trip(
+                    family_id=get_family_id(),
+                    vehicle_id=vehicle_id,
+                    date=current_date,
+                    month=current_date.strftime('%Y-%m'),
+                    week=f'{current_date.isocalendar()[1]:02d}-{current_date.year}',
+                    day_name=current_date.strftime('%A'),
+                    personal_miles=miles_int if trip_type == 'personal' else 0,
+                    business_miles=miles_int if trip_type == 'business' else 0,
+                    total_miles=miles_int,
+                    journey_description=data.get('journey_description', ''),
+                    approx_mpg=approx_mpg,
+                    gallons_used=gallons_used,
+                    trip_cost=trip_cost,
+                    fuel_cost=Decimal('0'),
+                )
+                db.session.add(trip)
+                created.append(trip)
+            current_date += timedelta(days=1)
+        db.session.commit()
+        return created
+
+    @staticmethod
     def calculate_fuel_metrics(vehicle_id, current_mileage, gallons, cost, fuel_date):
         """
         Derive fuel metrics for a new fill-up by comparing to the previous record.

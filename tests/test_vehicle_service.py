@@ -5,6 +5,7 @@ from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
 from services.vehicle_service import VehicleService
+from werkzeug.datastructures import MultiDict
 
 
 def test_vehicle_crud_assigns_family_and_normalizes_values(app, family, monkeypatch):
@@ -115,3 +116,27 @@ def test_trip_crud_assigns_family_and_tracks_cumulative_miles(app, family, monke
     assert updated.business_miles == 0
     assert deleted_vehicle_id == vehicle.id
     assert db.session.get(Trip, first.id) is None
+
+
+def test_bulk_create_trips_expands_selected_weekdays(app, family, monkeypatch):
+    monkeypatch.setattr('services.vehicle_service.get_family_id', lambda: family.id)
+    vehicle = VehicleService.create_vehicle({
+        'name': 'Bulk Car', 'make': 'Test', 'model': 'Bulk',
+        'registration': 'BU12 LKS', 'tank_size': '12', 'fuel_type': 'Petrol',
+    })
+
+    created = VehicleService.bulk_create_trips(MultiDict([
+        ('vehicle_id', str(vehicle.id)),
+        ('start_date', '2026-01-05'),
+        ('end_date', '2026-01-09'),
+        ('days', '0'),
+        ('days', '2'),
+        ('trip_type', 'business'),
+        ('miles', '20'),
+        ('journey_description', 'Regular route'),
+    ]))
+
+    assert len(created) == 2
+    assert [trip.date.isoformat() for trip in created] == ['2026-01-05', '2026-01-07']
+    assert all(trip.family_id == family.id for trip in created)
+    assert all(trip.business_miles == 20 for trip in created)

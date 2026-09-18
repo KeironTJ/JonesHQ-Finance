@@ -165,6 +165,26 @@ class ChildcareService:
         child.default_account_id = account_id
         db.session.commit()
         return True
+
+    @staticmethod
+    def bulk_create_monthly_transactions(year, month, transactions_data):
+        year_month = f'{year}-{month:02d}'
+        created = []
+        for transaction_data in transactions_data:
+            child_id = transaction_data['child_id']
+            account_id = transaction_data['account_id']
+            existing_summary = family_query(MonthlyChildcareSummary).filter_by(
+                year_month=year_month,
+                child_id=child_id,
+            ).first()
+            if not existing_summary or not existing_summary.transaction_id:
+                transaction = ChildcareService.create_monthly_transaction(
+                    year, month, child_id, account_id
+                )
+                if transaction:
+                    created.append(transaction)
+        db.session.commit()
+        return created
     
     @staticmethod
     def get_or_create_child(name, year_group=None):
