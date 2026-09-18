@@ -15,15 +15,22 @@ branch_labels = None
 depends_on = None
 
 
-def _copy_table_without_single_column_unique(table_name, columns):
+def _copy_table_without_single_column_unique(table_name, columns, key_column):
     metadata = sa.MetaData()
-    copy_from = sa.Table(table_name, metadata, *columns)
+    inspector = sa.inspect(op.get_bind())
+    has_family_id = 'family_id' in {
+        column['name'] for column in inspector.get_columns(table_name)
+    }
+    family_column = sa.Column(
+        'family_id', sa.Integer(), sa.ForeignKey('families.id'), nullable=True
+    )
+    source_columns = columns + [family_column] if has_family_id else columns
+    copy_from = sa.Table(table_name, metadata, *source_columns)
     with op.batch_alter_table(table_name, recreate='always', copy_from=copy_from) as batch:
-        batch.add_column(sa.Column(
-            'family_id', sa.Integer(), sa.ForeignKey('families.id'), nullable=True
-        ))
+        if not has_family_id:
+            batch.add_column(family_column)
         batch.create_index(f'ix_{table_name}_family_id', ['family_id'])
-        batch.create_unique_constraint(f'uq_{table_name}_family_key', ['family_id', columns[1].name])
+        batch.create_unique_constraint(f'uq_{table_name}_family_key', ['family_id', key_column])
 
 
 def upgrade():
@@ -57,8 +64,8 @@ def upgrade():
         sa.Column('updated_at', sa.DateTime()),
     ]
 
-    _copy_table_without_single_column_unique('settings', settings_columns)
-    _copy_table_without_single_column_unique('tax_settings', tax_columns)
+    _copy_table_without_single_column_unique('settings', settings_columns, 'key')
+    _copy_table_without_single_column_unique('tax_settings', tax_columns, 'tax_year')
 
     bind = op.get_bind()
     families = [row[0] for row in bind.execute(sa.text('SELECT id FROM families'))]

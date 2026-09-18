@@ -11,7 +11,17 @@ class AuthService:
 		db.session.add(family)
 		db.session.flush()
 
-		for template in TaxSettings.query.filter_by(family_id=None).all():
+		templates = TaxSettings.query.filter_by(family_id=None).all()
+		if not templates:
+			templates = TaxSettings.query.order_by(
+				TaxSettings.family_id.asc(), TaxSettings.tax_year.asc()
+			).all()
+
+		seen_tax_years = set()
+		for template in templates:
+			if template.tax_year in seen_tax_years:
+				continue
+			seen_tax_years.add(template.tax_year)
 			db.session.add(TaxSettings(
 				family_id=family.id,
 				tax_year=template.tax_year,
