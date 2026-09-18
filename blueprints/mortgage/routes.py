@@ -249,13 +249,6 @@ def delete_property(property_id):
     return redirect(url_for('mortgage.index'))
 
 
-@mortgage_bp.route('/mortgage/create', methods=['POST'])
-def create():
-    """Create a new mortgage (legacy endpoint)"""
-    # Implementation here
-    return redirect(url_for('mortgage.index'))
-
-
 # ---------------------------------------------------------------------------
 # Property Valuation Snapshots
 # ---------------------------------------------------------------------------

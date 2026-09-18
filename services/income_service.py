@@ -105,6 +105,45 @@ class IncomeService:
         db.session.add(recurring)
         db.session.commit()
         return recurring
+
+    @staticmethod
+    def update_recurring_income(recurring_id, data):
+        recurring = family_get_or_404(RecurringIncome, recurring_id)
+        recurring.person = data.get('person', recurring.person)
+        recurring.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        recurring.end_date = (
+            datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+            if data.get('end_date') else None
+        )
+        recurring.pay_day = int(data['pay_day'])
+        recurring.gross_annual_income = Decimal(data['gross_annual'])
+        recurring.employer_pension_percent = Decimal(data.get('employer_pension_pct') or 0)
+        recurring.employee_pension_percent = Decimal(data.get('employee_pension_pct') or 0)
+        recurring.tax_code = data['tax_code']
+        recurring.avc = Decimal(data.get('avc') or 0)
+        recurring.other_deductions = Decimal(data.get('other') or 0)
+        recurring.deposit_account_id = int(data['deposit_account_id']) if data.get('deposit_account_id') else None
+        recurring.category_id = int(data['category_id']) if data.get('category_id') else None
+        recurring.auto_create_transaction = data.get('auto_create_transaction') == 'on'
+        recurring.source = data.get('source', '')
+        recurring.description = data.get('description', '')
+        recurring.is_active = data.get('is_active') == 'on'
+        recurring.use_manual_deductions = data.get('use_manual_deductions') == 'on'
+        manual_fields = (
+            'manual_tax_monthly', 'manual_ni_monthly',
+            'manual_employee_pension', 'manual_employer_pension',
+            'manual_take_home',
+        )
+        for field in manual_fields:
+            setattr(recurring, field, Decimal(data[field]) if data.get(field) else None)
+        db.session.commit()
+        return recurring
+
+    @staticmethod
+    def delete_recurring_income(recurring_id):
+        recurring = family_get_or_404(RecurringIncome, recurring_id)
+        db.session.delete(recurring)
+        db.session.commit()
     
     @staticmethod
     def get_tax_settings_for_date(target_date):

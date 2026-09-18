@@ -445,40 +445,7 @@ def edit_recurring(id):
     
     if request.method == 'POST':
         try:
-            recurring.person = request.form.get('person', recurring.person)
-            recurring.start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
-            recurring.end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d').date() if request.form.get('end_date') else None
-            recurring.pay_day = int(request.form['pay_day'])
-            recurring.gross_annual_income = Decimal(request.form['gross_annual'])
-            recurring.employer_pension_percent = Decimal(request.form.get('employer_pension_pct', 0))
-            recurring.employee_pension_percent = Decimal(request.form.get('employee_pension_pct', 0))
-            recurring.tax_code = request.form['tax_code']
-            recurring.avc = Decimal(request.form.get('avc', 0))
-            recurring.other_deductions = Decimal(request.form.get('other', 0))
-            recurring.deposit_account_id = int(request.form['deposit_account_id']) if request.form.get('deposit_account_id') else None
-            recurring.category_id = int(request.form['category_id']) if request.form.get('category_id') else None
-            recurring.auto_create_transaction = request.form.get('auto_create_transaction') == 'on'
-            recurring.source = request.form.get('source', '')
-            recurring.description = request.form.get('description', '')
-            recurring.is_active = request.form.get('is_active') == 'on'
-            
-            # Manual override fields
-            recurring.use_manual_deductions = request.form.get('use_manual_deductions') == 'on'
-            if recurring.use_manual_deductions:
-                recurring.manual_tax_monthly = Decimal(request.form.get('manual_tax_monthly', 0)) if request.form.get('manual_tax_monthly') else None
-                recurring.manual_ni_monthly = Decimal(request.form.get('manual_ni_monthly', 0)) if request.form.get('manual_ni_monthly') else None
-                recurring.manual_employee_pension = Decimal(request.form.get('manual_employee_pension', 0)) if request.form.get('manual_employee_pension') else None
-                recurring.manual_employer_pension = Decimal(request.form.get('manual_employer_pension', 0)) if request.form.get('manual_employer_pension') else None
-                recurring.manual_take_home = Decimal(request.form.get('manual_take_home', 0)) if request.form.get('manual_take_home') else None
-            else:
-                # Clear manual values if not using manual mode
-                recurring.manual_tax_monthly = None
-                recurring.manual_ni_monthly = None
-                recurring.manual_employee_pension = None
-                recurring.manual_employer_pension = None
-                recurring.manual_take_home = None
-            
-            db.session.commit()
+            recurring = IncomeService.update_recurring_income(id, request.form)
             flash('Recurring income updated successfully!', 'success')
             return redirect(url_for('income.recurring'))
             
@@ -494,11 +461,8 @@ def edit_recurring(id):
 @income_bp.route('/income/recurring/<int:id>/delete', methods=['POST'])
 def delete_recurring(id):
     """Delete a recurring income template"""
-    recurring = family_get_or_404(RecurringIncome, id)
-    
     try:
-        db.session.delete(recurring)
-        db.session.commit()
+        IncomeService.delete_recurring_income(id)
         flash('Recurring income deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()
