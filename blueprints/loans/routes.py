@@ -298,7 +298,7 @@ def toggle_payment_paid(id, payment_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Unable to update the payment.'}), 500
 
 
 @loans_bp.route('/<int:id>/payment/<int:payment_id>/edit', methods=['POST'])

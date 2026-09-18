@@ -18,7 +18,12 @@ class Settings(db.Model):
     @staticmethod
     def get_value(key, default=None):
         """Get a setting value by key"""
-        setting = Settings.query.filter_by(key=key).first()
+        from utils.db_helpers import get_family_id
+
+        setting = Settings.query.filter_by(
+            key=key,
+            family_id=get_family_id(),
+        ).first()
         if not setting:
             return default
         
@@ -35,12 +40,18 @@ class Settings(db.Model):
     @staticmethod
     def set_value(key, value, description=None, setting_type='string'):
         """Set a setting value"""
-        setting = Settings.query.filter_by(key=key).first()
+        from utils.db_helpers import get_family_id
+
+        family_id = get_family_id()
+        setting = Settings.query.filter_by(key=key, family_id=family_id).first()
         if setting:
             setting.value = str(value)
+            setting.description = description or setting.description
+            setting.setting_type = setting_type
             setting.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             setting = Settings(
+                family_id=family_id,
                 key=key,
                 value=str(value),
                 description=description,

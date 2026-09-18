@@ -621,7 +621,7 @@ def toggle_expense_flag(expense_id, field):
         return jsonify({'id': expense.id, 'field': field, 'value': getattr(expense, field)})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Unable to calculate the expense summary.'}), 500
 
 
 @expenses_bp.route('/expenses/add', methods=['POST'])

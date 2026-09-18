@@ -39,7 +39,11 @@ class TaxSettings(db.Model):
     @staticmethod
     def get_for_date(target_date):
         """Get the tax settings applicable for a specific date"""
-        return TaxSettings.query.filter(
+        from utils.db_helpers import get_family_id
+
+        family_id = get_family_id()
+        setting = TaxSettings.query.filter(
+            TaxSettings.family_id == family_id,
             TaxSettings.effective_from <= target_date,
             db.or_(
                 TaxSettings.effective_to.is_(None),
@@ -47,6 +51,17 @@ class TaxSettings(db.Model):
             ),
             TaxSettings.is_active == True
         ).first()
+        if setting is None and family_id is not None:
+            setting = TaxSettings.query.filter(
+                TaxSettings.family_id.is_(None),
+                TaxSettings.effective_from <= target_date,
+                db.or_(
+                    TaxSettings.effective_to.is_(None),
+                    TaxSettings.effective_to >= target_date,
+                ),
+                TaxSettings.is_active == True,
+            ).first()
+        return setting
     
     @staticmethod
     def get_current():

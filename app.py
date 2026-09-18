@@ -171,10 +171,6 @@ def create_app(config_name=None):
         except RuntimeError:
             pass  # outside request context (e.g. db.create_all() at startup)
 
-    # Create database tables
-    with app.app_context():
-        db.create_all()
-
     # Register Flask-Admin (must come after db.init_app and all models are loaded)
     from admin_panel import init_admin
     init_admin(app, db)

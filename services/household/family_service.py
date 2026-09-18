@@ -32,10 +32,9 @@ class FamilyService:
 
     @staticmethod
     def delete_assignment_label(label_id, family_id):
-        label = FamilyAssignmentLabel.query.get_or_404(label_id)
-        if label.family_id != family_id:
-            from flask import abort
-            abort(403)
+        label = FamilyAssignmentLabel.query.filter_by(
+            id=label_id, family_id=family_id
+        ).first_or_404()
         name = label.name
         db.session.delete(label)
         db.session.commit()
@@ -57,19 +56,15 @@ class FamilyService:
 
     @staticmethod
     def revoke_invite(invite_id, family_id):
-        invite = FamilyInvite.query.get_or_404(invite_id)
-        if invite.family_id != family_id:
-            from flask import abort
-            abort(403)
+        invite = FamilyInvite.query.filter_by(
+            id=invite_id, family_id=family_id
+        ).first_or_404()
         db.session.delete(invite)
         db.session.commit()
 
     @staticmethod
     def update_member(member_id, family_id, current_user_id, role, member_name, sections):
-        member = User.query.get_or_404(member_id)
-        if member.family_id != family_id:
-            from flask import abort
-            abort(403)
+        member = User.query.filter_by(id=member_id, family_id=family_id).first_or_404()
         if member.id == current_user_id:
             return None
 
@@ -83,10 +78,7 @@ class FamilyService:
 
     @staticmethod
     def remove_member(member_id, family_id, current_user_id):
-        member = User.query.get_or_404(member_id)
-        if member.family_id != family_id:
-            from flask import abort
-            abort(403)
+        member = User.query.filter_by(id=member_id, family_id=family_id).first_or_404()
         if member.id == current_user_id:
             return None
 

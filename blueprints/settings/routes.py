@@ -13,6 +13,12 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 from services.platform.settings_service import SettingsService
 
 
+ALLOWED_PREFERENCE_KEYS = {
+    'categories.collapse_all_default',
+    'vendors.collapse_all_default',
+}
+
+
 @settings_bp.route('/settings')
 def index():
     """Display application settings"""
@@ -108,6 +114,7 @@ def update():
         expense_auto_sync = request.form.get('expense_auto_sync') == '1'
         
         if expense_reimburse_account:
+            family_get_or_404(Account, int(expense_reimburse_account))
             Settings.set_value(
                 'expenses.reimburse_account_id',
                 int(expense_reimburse_account),
@@ -116,6 +123,7 @@ def update():
             )
         
         if expense_payment_account:
+            family_get_or_404(Account, int(expense_payment_account))
             Settings.set_value(
                 'expenses.payment_account_id',
                 int(expense_payment_account),
@@ -132,10 +140,12 @@ def update():
 
         expense_reimburse_category = request.form.get('expense_reimburse_category')
         if expense_reimburse_category:
+            family_get_or_404(Category, int(expense_reimburse_category))
             Settings.set_value('expenses.reimburse_category_id', int(expense_reimburse_category),
                                'Category for reimbursement/bank-expense transactions', 'int')
         expense_reimburse_vendor = request.form.get('expense_reimburse_vendor')
         if expense_reimburse_vendor:
+            family_get_or_404(Vendor, int(expense_reimburse_vendor))
             Settings.set_value('expenses.reimburse_vendor_id', int(expense_reimburse_vendor),
                                'Vendor for reimbursement/bank-expense transactions', 'int')
 
@@ -232,7 +242,7 @@ def update():
         flash('Invalid value provided!', 'danger')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error updating settings: {str(e)}', 'danger')
+        flash('Unable to update settings. Please try again.', 'danger')
     
     return redirect(url_for('settings.index'))
 
@@ -244,11 +254,13 @@ def save_preference():
     key = data.get('key')
     value = data.get('value')
 
-    if not key:
-        return jsonify({'success': False, 'error': 'Missing preference key'}), 400
+    if key not in ALLOWED_PREFERENCE_KEYS:
+        return jsonify({'success': False, 'error': 'Unsupported preference key'}), 400
 
-    setting_type = 'boolean' if isinstance(value, bool) else 'string'
-    Settings.set_value(key, value, f'User preference: {key}', setting_type)
+    if not isinstance(value, bool):
+        return jsonify({'success': False, 'error': 'Preference value must be boolean'}), 400
+
+    Settings.set_value(key, value, f'User preference: {key}', 'boolean')
     db.session.commit()
 
     return jsonify({'success': True})
@@ -275,6 +287,6 @@ def edit_tax_settings(id):
             
         except Exception as e:
             db.session.rollback()
-            flash(f'Error updating tax settings: {str(e)}', 'danger')
+            flash('Unable to update tax settings. Please try again.', 'danger')
     
     return render_template('settings/edit_tax_settings.html', tax_year=tax_year)

@@ -3,13 +3,16 @@ from decimal import Decimal
 from extensions import db
 from models.tax_settings import TaxSettings
 from models.settings import Settings
-from utils.db_helpers import family_get_or_404
+from utils.db_helpers import family_get_or_404, get_family_id
 
 
 class SettingsService:
     @staticmethod
     def clear_networth_start_date():
-        setting = Settings.query.filter_by(key='networth.start_date').first()
+        setting = Settings.query.filter_by(
+            key='networth.start_date',
+            family_id=get_family_id(),
+        ).first()
         if setting:
             db.session.delete(setting)
         return setting

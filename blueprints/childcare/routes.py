@@ -154,7 +154,7 @@ def update_transaction():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': 'Unable to update the transaction.'})
 
 
 @childcare_bp.route('/childcare/set_default_account', methods=['POST'])
@@ -170,7 +170,7 @@ def set_default_account():
         return jsonify({'success': False, 'error': 'Child not found'})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': 'Unable to save the default account.'})
 
 
 @childcare_bp.route('/childcare/bulk_create_transactions', methods=['POST'])
@@ -194,7 +194,7 @@ def bulk_create_transactions():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': 'Unable to create transactions.'})
 
 
 @childcare_bp.route('/childcare/setup')

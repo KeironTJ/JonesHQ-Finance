@@ -281,7 +281,7 @@ def toggle_paid(id):
         })
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Unable to record the payslip.'}), 500
 
 
 @income_bp.route('/income/<int:id>/enter-actual', methods=['POST'])
@@ -358,7 +358,7 @@ def calculate_preview():
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        return jsonify({'success': False, 'error': 'Unable to calculate the income preview.'}), 400
 
 
 # ============= RECURRING INCOME ROUTES =============

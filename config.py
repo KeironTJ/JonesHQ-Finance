@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import timedelta
 
 
@@ -10,7 +11,7 @@ class Config:
         pass
 
     # Secret key for session management
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY')
     
     # Database configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
@@ -61,8 +62,9 @@ class Config:
 
 class DevelopmentConfig(Config):
     """Development configuration"""
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
     # Safe for localhost development, but disable before sharing/deploying
-    DEBUG = True  # Convenient for local development
+    DEBUG = os.environ.get('FLASK_DEBUG', '0') == '1'
     SQLALCHEMY_ECHO = False  # Set to True only when debugging SQL queries
     
     # SECURITY: Only safe because Flask binds to 127.0.0.1 by default
@@ -104,6 +106,7 @@ class ProductionConfig(Config):
 class TestingConfig(Config):
     """Testing configuration"""
     TESTING = True
+    SECRET_KEY = 'test-only-secret-key'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
 

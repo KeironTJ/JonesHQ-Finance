@@ -16,15 +16,31 @@ def test_settings_preference_route_persists_json_value(app, family, user):
     _login(client, user.id)
 
     response = client.post('/settings/save_preference', json={
-        'key': 'dashboard.test_expanded',
+        'key': 'categories.collapse_all_default',
         'value': True,
     })
 
     assert response.status_code == 200
     assert response.get_json() == {'success': True}
-    setting = Settings.query.filter_by(key='dashboard.test_expanded').one()
+    setting = Settings.query.filter_by(
+        key='categories.collapse_all_default',
+        family_id=family.id,
+    ).one()
     assert setting.value == 'True'
     assert setting.setting_type == 'boolean'
+
+
+def test_settings_preference_route_rejects_unknown_keys(app, family, user):
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post('/settings/save_preference', json={
+        'key': 'internal.setting',
+        'value': True,
+    })
+
+    assert response.status_code == 400
+    assert response.get_json()['success'] is False
 
 
 def test_income_add_route_creates_income_record(app, family, user):

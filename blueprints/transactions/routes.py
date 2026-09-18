@@ -581,7 +581,7 @@ def save_filter_preference():
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Unable to update the transaction.'}), 500
 
 
 @transactions_bp.route('/transactions/transfer', methods=['GET', 'POST'])
