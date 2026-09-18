@@ -9,7 +9,7 @@ from services.income_service import IncomeService
 def test_create_recurring_income_assigns_family_and_persists_overrides(
     app, family, monkeypatch
 ):
-    monkeypatch.setattr('services.income_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     recurring = IncomeService.create_recurring_income({
         'person': 'Household',
@@ -45,7 +45,7 @@ def test_create_recurring_income_assigns_family_and_persists_overrides(
 
 
 def test_update_and_delete_recurring_income(app, family, monkeypatch):
-    monkeypatch.setattr('services.income_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     recurring = IncomeService.create_recurring_income({
         'person': 'Household',

@@ -49,7 +49,8 @@ from models.transactions import Transaction
 from models.categories import Category
 from models.settings import Settings
 from services.payday_service import PaydayService
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class MortgageService:
@@ -69,7 +70,7 @@ class MortgageService:
             if data.get('purchase_date') else None
         )
         property_obj = Property(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             address=data.get('address'),
             purchase_date=purchase_date,
             purchase_price=(
@@ -113,7 +114,7 @@ class MortgageService:
     @staticmethod
     def create_product(property_id, data):
         product = MortgageProduct(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             property_id=property_id,
             **MortgageService._product_values(data),
         )
@@ -150,7 +151,7 @@ class MortgageService:
             is_projection=True,
         ).delete()
         snapshot = PropertyValuationSnapshot(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             property_id=property_id,
             valuation_date=valuation_date,
             value=value,

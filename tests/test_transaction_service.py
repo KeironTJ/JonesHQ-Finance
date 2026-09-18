@@ -12,7 +12,7 @@ from services.transaction_service import TransactionService
 def test_create_recurring_transactions_assigns_family_and_derives_fields(
     app, family, monkeypatch
 ):
-    monkeypatch.setattr('services.transaction_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
         'services.transaction_service.PaydayService.get_period_for_date',
@@ -256,7 +256,7 @@ def test_toggle_paid_syncs_linked_transfer_and_expense(app, family, monkeypatch)
 def test_create_transfer_creates_linked_family_scoped_transactions(
     app, family, monkeypatch
 ):
-    monkeypatch.setattr('services.transaction_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
         'services.transaction_service.PaydayService.get_period_for_date',

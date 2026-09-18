@@ -29,7 +29,8 @@ from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 import calendar
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class PensionService:
@@ -57,7 +58,7 @@ class PensionService:
     @staticmethod
     def create_pension(data):
         pension = Pension(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             person=data.get('person', 'Household'),
             provider=data['provider'],
             account_number=data.get('account_number', ''),
@@ -111,7 +112,7 @@ class PensionService:
             is_projection=True,
         ).delete()
         snapshot = PensionSnapshot(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             pension_id=pension_id,
             review_date=review_date,
             value=value,

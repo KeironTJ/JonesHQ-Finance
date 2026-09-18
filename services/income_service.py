@@ -42,7 +42,8 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 import calendar
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class IncomeService:
@@ -57,7 +58,7 @@ class IncomeService:
     @staticmethod
     def create_recurring_income(data):
         recurring = RecurringIncome(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             person=data.get('person', 'Household'),
             start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
             end_date=(

@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from extensions import db
 from models.categories import Category
 from models.transactions import Transaction
-from utils.db_helpers import family_get_or_404, family_query, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_get_or_404, family_query
 
 
 class CategoryService:
@@ -58,7 +59,7 @@ class CategoryService:
         normalized_sub_budget = sub_budget or None
         name = head_budget + (f' - {normalized_sub_budget}' if normalized_sub_budget else '')
         category = Category(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             name=name,
             head_budget=head_budget,
             sub_budget=normalized_sub_budget,

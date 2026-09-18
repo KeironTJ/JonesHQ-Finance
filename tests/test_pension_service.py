@@ -10,7 +10,7 @@ from services.pension_service import PensionService
 def test_add_actual_snapshot_calculates_growth_and_updates_pension(
     app, family, monkeypatch
 ):
-    monkeypatch.setattr('services.pension_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     pension = Pension(
         family_id=family.id,
@@ -42,7 +42,7 @@ def test_add_actual_snapshot_calculates_growth_and_updates_pension(
 
 
 def test_create_pension_assigns_family_and_converts_values(app, family, monkeypatch):
-    monkeypatch.setattr('services.pension_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     pension = PensionService.create_pension({
         'person': 'Household',
         'provider': 'Test Provider',
@@ -61,7 +61,7 @@ def test_create_pension_assigns_family_and_converts_values(app, family, monkeypa
 
 
 def test_update_and_delete_pension(app, family, monkeypatch):
-    monkeypatch.setattr('services.pension_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     pension = PensionService.create_pension({
         'person': 'Household',

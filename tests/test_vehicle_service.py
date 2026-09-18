@@ -9,7 +9,7 @@ from werkzeug.datastructures import MultiDict
 
 
 def test_vehicle_crud_assigns_family_and_normalizes_values(app, family, monkeypatch):
-    monkeypatch.setattr('services.vehicle_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     vehicle = VehicleService.create_vehicle({
@@ -50,7 +50,7 @@ def test_vehicle_crud_assigns_family_and_normalizes_values(app, family, monkeypa
 
 
 def test_fuel_crud_assigns_family_and_recalculates_metrics(app, family, monkeypatch):
-    monkeypatch.setattr('services.vehicle_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     vehicle = VehicleService.create_vehicle({
         'name': 'Fuel Car', 'make': 'Test', 'model': 'Fuel',
@@ -85,7 +85,7 @@ def test_fuel_crud_assigns_family_and_recalculates_metrics(app, family, monkeypa
 
 
 def test_trip_crud_assigns_family_and_tracks_cumulative_miles(app, family, monkeypatch):
-    monkeypatch.setattr('services.vehicle_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     vehicle = VehicleService.create_vehicle({
         'name': 'Trip Car', 'make': 'Test', 'model': 'Trip',
@@ -119,7 +119,7 @@ def test_trip_crud_assigns_family_and_tracks_cumulative_miles(app, family, monke
 
 
 def test_bulk_create_trips_expands_selected_weekdays(app, family, monkeypatch):
-    monkeypatch.setattr('services.vehicle_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     vehicle = VehicleService.create_vehicle({
         'name': 'Bulk Car', 'make': 'Test', 'model': 'Bulk',
         'registration': 'BU12 LKS', 'tank_size': '12', 'fuel_type': 'Petrol',

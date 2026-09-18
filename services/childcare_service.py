@@ -44,7 +44,8 @@ from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from calendar import monthrange
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class ChildcareService:
@@ -64,7 +65,7 @@ class ChildcareService:
         if not 1 <= transaction_day <= 28:
             transaction_day = 28
         child = Child(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             name=name,
             year_group=data.get('year_group'),
             transaction_day=transaction_day,
@@ -101,7 +102,7 @@ class ChildcareService:
     @staticmethod
     def create_activity_type(child_id, data):
         activity_type = ChildActivityType(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             child_id=child_id,
             name=data.get('name'),
             cost=Decimal(data.get('cost')),

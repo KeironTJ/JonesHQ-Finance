@@ -41,7 +41,7 @@ from models.trips import Trip
 from models.transactions import Transaction
 from models.categories import Category
 from services.payday_service import PaydayService
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class FuelForecastingService:

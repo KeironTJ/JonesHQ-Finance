@@ -4,7 +4,7 @@ from services.category_service import CategoryService
 
 
 def test_create_category_assigns_family_and_builds_name(app, family, monkeypatch):
-    monkeypatch.setattr('services.category_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     category = CategoryService.create_category('Home', 'Rent', 'expense')

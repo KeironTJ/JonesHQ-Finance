@@ -7,7 +7,7 @@ from services.loan_service import LoanService
 
 
 def test_create_loan_assigns_family_and_generates_schedule(app, family, monkeypatch):
-    monkeypatch.setattr('services.loan_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     loan, payments = LoanService.create_loan({

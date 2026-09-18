@@ -10,7 +10,7 @@ from services.account_service import AccountService
 
 def test_create_account_assigns_current_family(app, family, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
-    monkeypatch.setattr('services.account_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     account = AccountService.create_account('Current', 'Joint', 100, True)
 

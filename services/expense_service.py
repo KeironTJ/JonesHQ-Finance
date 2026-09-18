@@ -3,7 +3,8 @@ from decimal import Decimal
 
 from extensions import db
 from models.expenses import Expense
-from utils.db_helpers import family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_get_or_404
 
 
 class ExpenseService:
@@ -33,7 +34,7 @@ class ExpenseService:
         date_fields = ExpenseService._date_fields(expense_date)
         total_cost = Decimal(data.get('total_cost') or '0')
         expense = Expense(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             date=expense_date,
             **date_fields,
             description=data.get('description'),

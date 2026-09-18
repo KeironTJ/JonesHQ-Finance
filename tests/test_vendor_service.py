@@ -4,7 +4,7 @@ from services.vendor_service import VendorService
 
 
 def test_vendor_type_and_vendor_creation_assign_family(app, family, monkeypatch):
-    monkeypatch.setattr('services.vendor_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     vendor_type = VendorService.create_type('Grocery', 1, True)

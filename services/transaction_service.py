@@ -12,7 +12,8 @@ from models.accounts import Account
 from models.categories import Category
 from models.vendors import Vendor
 from services.payday_service import PaydayService
-from utils.db_helpers import family_get, family_get_or_404, family_query, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_get, family_get_or_404, family_query
 
 
 class TransactionService:
@@ -73,7 +74,7 @@ class TransactionService:
                 )
 
             transactions.append(Transaction(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 account_id=TransactionService._int_value(data, 'account_id'),
                 category_id=TransactionService._int_value(data, 'category_id'),
                 vendor_id=(
@@ -239,12 +240,12 @@ class TransactionService:
 
         from_vendor = family_query(Vendor).filter_by(name=to_account.name).first()
         if not from_vendor:
-            from_vendor = Vendor(family_id=get_family_id(), name=to_account.name)
+            from_vendor = Vendor(family_id=db_helpers.get_family_id(), name=to_account.name)
             db.session.add(from_vendor)
             db.session.flush()
         to_vendor = family_query(Vendor).filter_by(name=from_account.name).first()
         if not to_vendor:
-            to_vendor = Vendor(family_id=get_family_id(), name=from_account.name)
+            to_vendor = Vendor(family_id=db_helpers.get_family_id(), name=from_account.name)
             db.session.add(to_vendor)
             db.session.flush()
 
@@ -259,7 +260,7 @@ class TransactionService:
             ).first()
             if not category:
                 category = Category(
-                    family_id=get_family_id(),
+                    family_id=db_helpers.get_family_id(),
                     name='Account Transfer',
                     head_budget='Transfer',
                     sub_budget='Account Transfer',
@@ -278,7 +279,7 @@ class TransactionService:
             }
             current_date = transfer_date + relativedelta(**offsets.get(frequency, {}))
             fields = {
-                'family_id': get_family_id(),
+                'family_id': db_helpers.get_family_id(),
                 'category_id': category.id,
                 'item': data.get('description', 'Transfer'),
                 'payment_type': 'Transfer',

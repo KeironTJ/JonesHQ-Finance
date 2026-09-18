@@ -3,7 +3,8 @@ from decimal import Decimal
 from extensions import db
 from models.accounts import Account
 from models.transactions import Transaction
-from utils.db_helpers import family_get_or_404, family_query, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_get_or_404, family_query
 
 
 class AccountService:
@@ -62,7 +63,7 @@ class AccountService:
     @staticmethod
     def create_account(name, account_type, balance, is_active):
         account = Account(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             name=name,
             account_type=account_type,
             balance=float(balance),

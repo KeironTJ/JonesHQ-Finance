@@ -35,7 +35,7 @@ import holidays as holidays_lib
 from models.transactions import Transaction
 from models.settings import Settings
 from extensions import db
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 # Module-level cache: year -> set of bank holiday dates (England & Wales)
 _bank_holiday_cache: dict[int, set] = {}

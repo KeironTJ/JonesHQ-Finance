@@ -34,7 +34,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
 import calendar
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class MonthlyBalanceService:

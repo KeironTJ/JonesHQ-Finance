@@ -4,7 +4,8 @@ from extensions import db
 from models.vendors import Vendor, VendorType
 from models.transactions import Transaction
 from sqlalchemy import func
-from utils.db_helpers import family_get_or_404, family_query, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_get_or_404, family_query
 
 
 DEFAULT_VENDOR_TYPES = [
@@ -57,7 +58,7 @@ class VendorService:
     @staticmethod
     def create_type(name, sort_order, is_active):
         vendor_type = VendorType(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             name=name,
             is_active=is_active,
             sort_order=sort_order,
@@ -101,7 +102,7 @@ class VendorService:
             return False
         for index, name in enumerate(DEFAULT_VENDOR_TYPES, start=1):
             db.session.add(VendorType(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 name=name,
                 is_active=True,
                 sort_order=index,
@@ -112,7 +113,7 @@ class VendorService:
     @staticmethod
     def create_vendor(name, vendor_type, default_category_id, website, notes):
         vendor = Vendor(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             name=name,
             vendor_type_id=int(vendor_type) if vendor_type else None,
             vendor_type=vendor_type if vendor_type else None,
@@ -154,7 +155,7 @@ class VendorService:
         existing = family_query(Vendor).filter_by(name=name).first()
         if existing:
             return existing, True
-        vendor = Vendor(family_id=get_family_id(), name=name)
+        vendor = Vendor(family_id=db_helpers.get_family_id(), name=name)
         db.session.add(vendor)
         db.session.commit()
         return vendor, False

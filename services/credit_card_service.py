@@ -58,7 +58,8 @@ from models.transactions import Transaction
 from models.vendors import Vendor
 from services.payday_service import PaydayService
 from extensions import db
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class CreditCardService:
@@ -105,7 +106,7 @@ class CreditCardService:
 
     @staticmethod
     def create_card(data):
-        card = CreditCard(family_id=get_family_id(), **CreditCardService._card_values(data))
+        card = CreditCard(family_id=db_helpers.get_family_id(), **CreditCardService._card_values(data))
         card.available_credit = float(card.credit_limit) - float(card.current_balance)
         db.session.add(card)
         db.session.commit()
@@ -178,7 +179,7 @@ class CreditCardService:
             }
             current_date = transaction_date + relativedelta(**offsets.get(frequency, {}))
             transaction = CreditCardTransaction(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 credit_card_id=card_id,
                 category_id=category_id,
                 date=current_date,
@@ -204,11 +205,11 @@ class CreditCardService:
                 ).first()
                 vendor = family_query(Vendor).filter_by(name=card.card_name).first()
                 if not vendor:
-                    vendor = Vendor(family_id=get_family_id(), name=card.card_name)
+                    vendor = Vendor(family_id=db_helpers.get_family_id(), name=card.card_name)
                     db.session.add(vendor)
                     db.session.flush()
                 bank_transaction = Transaction(
-                    family_id=get_family_id(),
+                    family_id=db_helpers.get_family_id(),
                     account_id=account_id,
                     category_id=payment_category.id if payment_category else None,
                     vendor_id=vendor.id,
@@ -441,7 +442,7 @@ class CreditCardService:
         
         if not credit_card_category:
             credit_card_category = Category(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 name=card.card_name,
                 head_budget='Credit Cards',
                 sub_budget=card.card_name,
@@ -543,7 +544,7 @@ class CreditCardService:
         
         if not credit_card_category:
             credit_card_category = Category(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 name=card.card_name,
                 head_budget='Credit Cards',
                 sub_budget=card.card_name,

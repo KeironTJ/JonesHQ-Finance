@@ -11,7 +11,7 @@ from services.childcare_service import ChildcareService
 
 
 def test_childcare_setup_crud_assigns_family_and_normalizes_day(app, family, monkeypatch):
-    monkeypatch.setattr('services.childcare_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     child = ChildcareService.create_child({
@@ -51,7 +51,7 @@ def test_childcare_setup_crud_assigns_family_and_normalizes_day(app, family, mon
 
 
 def test_update_activity_type_changes_schedule_and_delete_name(app, family, monkeypatch):
-    monkeypatch.setattr('services.childcare_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     child = ChildcareService.create_child({'name': 'Child Two'})
     activity = ChildcareService.create_activity_type(child.id, {
@@ -78,7 +78,7 @@ def test_update_activity_type_changes_schedule_and_delete_name(app, family, monk
 
 
 def test_update_monthly_transaction_and_set_default_account(app, family, monkeypatch):
-    monkeypatch.setattr('services.childcare_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     child = ChildcareService.create_child({'name': 'Child Three'})
     account = Account(
@@ -120,7 +120,7 @@ def test_update_monthly_transaction_and_set_default_account(app, family, monkeyp
 
 
 def test_bulk_monthly_transactions_skips_existing_summary(app, family, monkeypatch):
-    monkeypatch.setattr('services.childcare_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     child_one = ChildcareService.create_child({'name': 'Bulk Child One'})
     child_two = ChildcareService.create_child({'name': 'Bulk Child Two'})

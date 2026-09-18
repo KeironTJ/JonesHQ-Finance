@@ -9,7 +9,7 @@ from services.mortgage_service import MortgageService
 
 
 def test_create_property_assigns_family_and_converts_values(app, family, monkeypatch):
-    monkeypatch.setattr('services.mortgage_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     property_obj = MortgageService.create_property({
         'address': '1 Test Street',
@@ -32,7 +32,7 @@ def test_create_property_assigns_family_and_converts_values(app, family, monkeyp
 def test_create_and_update_product_assign_family_and_financial_values(
     app, family, monkeypatch
 ):
-    monkeypatch.setattr('services.mortgage_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     property_obj = MortgageService.create_property({'address': '1 Test Street'})
     product_data = {
@@ -66,7 +66,7 @@ def test_create_and_update_product_assign_family_and_financial_values(
 
 
 def test_add_valuation_calculates_change_and_updates_property(app, family, monkeypatch):
-    monkeypatch.setattr('services.mortgage_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     property_obj = MortgageService.create_property({
         'address': '1 Test Street',

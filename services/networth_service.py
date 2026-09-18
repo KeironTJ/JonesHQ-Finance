@@ -49,7 +49,7 @@ from models.pensions import Pension
 from extensions import db
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class NetWorthService:

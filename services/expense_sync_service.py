@@ -67,7 +67,8 @@ from models.settings import Settings
 from services.payday_service import PaydayService
 from flask import current_app
 from sqlalchemy import func
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class ExpenseSyncService:
@@ -250,7 +251,7 @@ class ExpenseSyncService:
             return {}
 
         try:
-            fid = get_family_id()
+            fid = db_helpers.get_family_id()
             current_app.logger.info(
                 f'reconcile_credit_card_payments: start  year_month={year_month!r}  family_id={fid}'
             )
@@ -538,7 +539,7 @@ class ExpenseSyncService:
             reimburse_vendor_id = int(vendor_id_setting) if vendor_id_setting else None
 
             partial_txn = Transaction(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 account_id=account.id,
                 category_id=reimburse_cat.id if reimburse_cat else None,
                 vendor_id=reimburse_vendor_id,
@@ -632,7 +633,7 @@ class ExpenseSyncService:
         else:
             # Create new credit card purchase
             cc_txn = CreditCardTransaction(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 credit_card_id=cc.id,
                 category_id=None,
                 date=exp.date,
@@ -736,7 +737,7 @@ class ExpenseSyncService:
             # Always derive date-related fields from exp.date directly — Expense.month/week/day_name
             # can be NULL on older or freshly-created records before the route populates them.
             txn = Transaction(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 account_id=account.id,
                 category_id=expense_cat.id if expense_cat else None,
                 vendor_id=expense_vendor_id,
@@ -936,7 +937,7 @@ class ExpenseSyncService:
         reimburse_vendor_id = int(vendor_id_setting) if vendor_id_setting else None
 
         reimburse_txn = Transaction(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             account_id=account.id,
             category_id=reimburse_cat.id,
             vendor_id=reimburse_vendor_id,
@@ -1048,7 +1049,7 @@ class ExpenseSyncService:
         ).first()
         if not cat:
             cat = Category(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 head_budget='Credit Cards',
                 sub_budget=cc.card_name,
                 category_type='expense'
@@ -1068,7 +1069,7 @@ class ExpenseSyncService:
             # Vendor: use the card's own name (create if missing)
             vendor = family_query(Vendor).filter_by(name=cc.card_name).first()
             if not vendor:
-                vendor = Vendor(name=cc.card_name, family_id=get_family_id())
+                vendor = Vendor(name=cc.card_name, family_id=db_helpers.get_family_id())
                 db.session.add(vendor)
                 db.session.flush()
 
@@ -1077,7 +1078,7 @@ class ExpenseSyncService:
             day_name   = payment_date.strftime('%A')
 
             bank_txn = Transaction(
-                family_id=get_family_id(),
+                family_id=db_helpers.get_family_id(),
                 account_id=payment_account_id,
                 category_id=cat.id,
                 vendor_id=vendor.id,
@@ -1098,7 +1099,7 @@ class ExpenseSyncService:
             Transaction.recalculate_account_balance(payment_account_id)
 
         payment_txn = CreditCardTransaction(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             credit_card_id=card_id,
             category_id=cat.id,
             date=payment_date,

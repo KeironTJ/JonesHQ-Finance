@@ -49,7 +49,8 @@ from extensions import db
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class LoanService:
@@ -86,7 +87,7 @@ class LoanService:
         annual_apr = Decimal(data['annual_apr'])
 
         loan = Loan(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             name=data['name'],
             loan_value=loan_value,
             principal=loan_value,

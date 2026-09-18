@@ -190,7 +190,7 @@ def test_toggle_transaction_fixed_updates_service_owned_state(
 
 
 def test_create_recurring_credit_card_transactions(app, card, family_id, patch_family, monkeypatch):
-    monkeypatch.setattr('services.credit_card_service.get_family_id', lambda: family_id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family_id)
     category = Category(
         family_id=family_id,
         name='Purchase',
@@ -224,7 +224,7 @@ def test_create_recurring_credit_card_transactions(app, card, family_id, patch_f
 def test_create_credit_card_payment_links_bank_transaction(
     app, card, family_id, patch_family, monkeypatch
 ):
-    monkeypatch.setattr('services.credit_card_service.get_family_id', lambda: family_id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family_id)
     account = Account(
         family_id=family_id,
         name='Current',
@@ -266,7 +266,7 @@ def test_create_credit_card_payment_links_bank_transaction(
 def test_credit_card_crud_assigns_family_and_updates_available_credit(
     app, family_id, patch_family, monkeypatch
 ):
-    monkeypatch.setattr('services.credit_card_service.get_family_id', lambda: family_id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family_id)
     card = CreditCardService.create_card({
         'card_name': 'CRUD Card',
         'annual_apr': '24',

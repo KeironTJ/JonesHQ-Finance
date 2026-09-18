@@ -26,7 +26,7 @@ def _expense_data(**overrides):
 
 
 def test_create_expense_assigns_family_and_date_fields(app, family, monkeypatch):
-    monkeypatch.setattr('services.expense_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
 
     expense = ExpenseService.create_expense(_expense_data())
 
@@ -39,7 +39,7 @@ def test_create_expense_assigns_family_and_date_fields(app, family, monkeypatch)
 
 def test_update_expense_rederives_finance_year(app, family, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
-    monkeypatch.setattr('services.expense_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     expense = ExpenseService.create_expense(_expense_data())
 
     updated = ExpenseService.update_expense(
@@ -55,7 +55,7 @@ def test_update_expense_rederives_finance_year(app, family, monkeypatch):
 
 def test_delete_expense_is_family_scoped(app, family, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
-    monkeypatch.setattr('services.expense_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     expense = ExpenseService.create_expense(_expense_data())
 
     ExpenseService.delete_expense(expense.id)

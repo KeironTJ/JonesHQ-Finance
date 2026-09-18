@@ -27,7 +27,8 @@ from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from sqlalchemy import func
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils import db_helpers
+from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class VehicleService:
@@ -41,7 +42,7 @@ class VehicleService:
     @staticmethod
     def create_vehicle(data):
         vehicle = Vehicle(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             name=data.get('name'),
             make=data.get('make'),
             model=data.get('model'),
@@ -107,7 +108,7 @@ class VehicleService:
             vehicle_id, mileage, gallons, cost, fuel_date
         )
         fuel_record = FuelRecord(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             vehicle_id=vehicle_id,
             date=fuel_date,
             price_per_litre=price_per_litre,
@@ -179,7 +180,7 @@ class VehicleService:
             if previous_trip else gallons_used
         )
         trip = Trip(
-            family_id=get_family_id(),
+            family_id=db_helpers.get_family_id(),
             vehicle_id=vehicle_id,
             date=trip_date,
             month=trip_date.strftime('%Y-%m'),
@@ -249,7 +250,7 @@ class VehicleService:
                     vehicle_id, miles, current_date
                 )
                 trip = Trip(
-                    family_id=get_family_id(),
+                    family_id=db_helpers.get_family_id(),
                     vehicle_id=vehicle_id,
                     date=current_date,
                     month=current_date.strftime('%Y-%m'),
