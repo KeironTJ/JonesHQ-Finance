@@ -383,3 +383,26 @@ def test_toggle_credit_card_paid_locks_and_syncs_links(app, card, family_id, pat
     assert updated.is_fixed is True
     assert bank_transaction.is_paid is True
     assert expense.paid_for is True
+
+
+def test_update_credit_card_transaction_rederives_date_fields(
+    app, card, family_id, patch_family
+):
+    transaction = _add_purchase(card, Decimal('-50.00'), date(2026, 1, 1), family_id)
+
+    updated = CreditCardService.update_transaction(transaction.id, {
+        'txn_date': '2026-02-15',
+        'txn_type': 'Purchase',
+        'txn_item': 'Updated purchase',
+        'txn_amount': '-75.00',
+        'txn_fixed': '1',
+        'txn_paid': '1',
+    })
+
+    assert updated.date == date(2026, 2, 15)
+    assert updated.month == '2026-02'
+    assert updated.day_name == 'Sunday'
+    assert updated.amount == Decimal('-75.00')
+    assert updated.item == 'Updated purchase'
+    assert updated.is_fixed is True
+    assert updated.is_paid is True

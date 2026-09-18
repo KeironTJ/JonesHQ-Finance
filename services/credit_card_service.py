@@ -170,6 +170,26 @@ class CreditCardService:
         return transaction
 
     @staticmethod
+    def update_transaction(transaction_id, data):
+        transaction = family_get_or_404(CreditCardTransaction, transaction_id)
+        if data.get('txn_date'):
+            transaction.date = datetime.strptime(
+                data['txn_date'], '%Y-%m-%d'
+            ).date()
+            transaction.day_name = transaction.date.strftime('%A')
+            transaction.week = (
+                f'{transaction.date.isocalendar()[1]:02d}-{transaction.date.year}'
+            )
+            transaction.month = transaction.date.strftime('%Y-%m')
+        transaction.transaction_type = data.get('txn_type')
+        transaction.item = data.get('txn_item')
+        transaction.amount = float(data.get('txn_amount'))
+        transaction.is_fixed = data.get('txn_fixed') == '1'
+        transaction.is_paid = data.get('txn_paid') == '1'
+        db.session.commit()
+        return transaction
+
+    @staticmethod
     def create_transactions(card_id, data):
         card = family_get_or_404(CreditCard, card_id)
         transaction_date = date.fromisoformat(data['txn_date'])
