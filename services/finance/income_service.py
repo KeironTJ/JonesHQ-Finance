@@ -152,7 +152,6 @@ class IncomeService:
         if income.transaction_id:
             transaction = family_get(Transaction, income.transaction_id)
             if transaction:
-                transaction.income_id = None
                 income.transaction_id = None
                 db.session.flush()
                 if not keep_transaction:
@@ -170,7 +169,6 @@ class IncomeService:
             if income.transaction_id:
                 transaction = family_get(Transaction, income.transaction_id)
                 if transaction:
-                    transaction.income_id = None
                     income.transaction_id = None
                     db.session.flush()
                     db.session.delete(transaction)
@@ -510,8 +508,7 @@ class IncomeService:
             year_month=year_month,
             week_year=week_year,
             day_name=day_name,
-            payday_period=payday_period,
-            income_id=income.id
+            payday_period=payday_period
         )
         
         db.session.add(transaction)
@@ -770,7 +767,6 @@ class IncomeService:
             if income.transaction_id:
                 txn = family_query(Transaction).get(income.transaction_id)
                 if txn:
-                    txn.income_id = None
                     income.transaction_id = None
                     db.session.flush()
                     db.session.delete(txn)
@@ -917,16 +913,12 @@ class IncomeService:
                 else:
                     # Force mode: break the link before deletion (even for paid)
                     transaction = family_get(Transaction, income.transaction_id)
-                    if transaction:
-                        transaction.income_id = None
                     income.transaction_id = None
                     db.session.flush()
             else:
                 # Unpaid or no transaction - safe to delete, break link if exists
                 if income.transaction_id:
                     transaction = family_get(Transaction, income.transaction_id)
-                    if transaction:
-                        transaction.income_id = None
                     income.transaction_id = None
                     db.session.flush()
             
@@ -1032,7 +1024,6 @@ class IncomeService:
 
             # Break circular references before deletion
             if txn:
-                txn.income_id = None
                 income.transaction_id = None
                 db.session.flush()
                 db.session.delete(txn)

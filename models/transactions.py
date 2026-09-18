@@ -25,9 +25,6 @@ class Transaction(db.Model):
     credit_card_id = db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=True)
     loan_id = db.Column(db.Integer, db.ForeignKey('loans.id'), nullable=True)
     
-    # Link to income record if this is an income transaction
-    income_id = db.Column(db.Integer, db.ForeignKey('income.id'), nullable=True)
-    
     # Link to paired transfer transaction (for account-to-account transfers)
     linked_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
     
@@ -49,8 +46,6 @@ class Transaction(db.Model):
     
     # Relationships
     vendor = db.relationship('Vendor', back_populates='transactions')
-    income = db.relationship('Income', foreign_keys=[income_id], backref='linked_transaction', uselist=False)
-    
     def __repr__(self):
         return f'<Transaction {self.transaction_date}: {self.description} - £{self.amount}>'
     

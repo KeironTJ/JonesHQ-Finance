@@ -25,10 +25,8 @@ with app.app_context():
     for income in incomes_with_txn:
         transaction = Transaction.query.get(income.transaction_id)
         if transaction:
-            # Set bidirectional link
-            transaction.income_id = income.id
             synced += 1
-            print(f"  Synced: Income {income.id} <-> Transaction {transaction.id}")
+            print(f"  Verified: Income {income.id} -> Transaction {transaction.id}")
     
     db.session.commit()
     print(f"\nCompleted! Synced {synced} income-transaction pairs.")

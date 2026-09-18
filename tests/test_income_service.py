@@ -138,5 +138,5 @@ def test_income_deletion_cleans_or_keeps_linked_transactions(app, family, monkey
 
     assert deleted_count == 1
     assert db.session.get(Transaction, kept_transaction.id) is not None
-    assert db.session.get(Transaction, kept_transaction.id).income_id is None
+    assert db.session.get(Income, first.id) is None
     assert db.session.get(Transaction, deleted_transaction.id) is None
