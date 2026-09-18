@@ -350,85 +350,10 @@ def edit_payment(id, txn_id):
             flash('Cannot edit a paid transaction!', 'danger')
             return redirect(url_for('credit_cards.detail', id=id))
         
-        # Get form data
-        payment_date_str = request.form.get('payment_date')
-        payment_amount = float(request.form.get('payment_amount'))
-        account_id = request.form.get('account_id', type=int)
-        
-        # Update transaction
-        if payment_date_str:
-            txn.date = datetime.strptime(payment_date_str, '%Y-%m-%d').date()
-            # Update day/week/month for date
-            txn.day_name = txn.date.strftime('%A')
-            txn.week = f"{txn.date.isocalendar()[1]:02d}-{txn.date.year}"
-            txn.month = txn.date.strftime('%Y-%m')
-        
-        # Store as positive amount (reduces debt)
-        txn.amount = abs(payment_amount)
-        
-        # Automatically lock when edited
-        txn.is_fixed = True
-        
-        # Handle account linking
-        if account_id:
-            # Find Credit Cards category matching this specific card
-            credit_card_category = family_query(Category).filter_by(
-                head_budget='Credit Cards',
-                sub_budget=card.card_name
-            ).first()
-            
-            # If not found, try to find any Credit Cards category as fallback
-            if not credit_card_category:
-                credit_card_category = family_query(Category).filter_by(
-                    head_budget='Credit Cards'
-                ).first()
-            
-            # Find or create vendor matching card name
-            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
-            if not vendor:
-                vendor = Vendor(name=card.card_name)
-                db.session.add(vendor)
-                db.session.flush()
-            
-            # If there's an existing linked transaction, update it
-            if txn.bank_transaction_id:
-                bank_txn = family_get(Transaction, txn.bank_transaction_id)
-                if bank_txn:
-                    bank_txn.transaction_date = txn.date
-                    bank_txn.amount = -abs(payment_amount)  # Negative = expense from bank account (money out)
-                    bank_txn.account_id = account_id
-                    bank_txn.vendor_id = vendor.id
-                    bank_txn.description = f'Payment to {card.card_name}'
-                    bank_txn.item = f'Credit Card Payment'
-                    if credit_card_category:
-                        bank_txn.category_id = credit_card_category.id
-                    bank_txn.updated_at = datetime.now()
-            else:
-                # Create new linked bank transaction
-                bank_txn = Transaction(
-                    account_id=account_id,
-                    category_id=credit_card_category.id if credit_card_category else None,
-                    vendor_id=vendor.id,
-                    amount=-abs(payment_amount),  # Negative = expense from bank account (money out)
-                    transaction_date=txn.date,
-                    description=f'Payment to {card.card_name}',
-                    item='Credit Card Payment',
-                    payment_type='Card Payment',
-                    is_paid=txn.is_paid,
-                    is_fixed=True,
-                    credit_card_id=card.id,
-                    year_month=txn.date.strftime('%Y-%m'),
-                    week_year=f"{txn.date.isocalendar()[1]:02d}-{txn.date.year}",
-                    day_name=txn.date.strftime('%A'),
-                    payday_period=PaydayService.get_period_for_date(txn.date)
-                )
-                db.session.add(bank_txn)
-                db.session.flush()  # Get the ID
-                
-                # Link back to credit card transaction
-                txn.bank_transaction_id = bank_txn.id
-        
-        # Recalculate balances (commits internally)
+        txn, account_id = CreditCardService.update_payment_transaction(
+            txn_id, request.form
+        )
+        payment_amount = float(txn.amount)
         CreditCardTransaction.recalculate_card_balance(card.id, commit=True)
         
         # Recalculate bank account balance if linked

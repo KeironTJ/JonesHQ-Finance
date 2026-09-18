@@ -190,6 +190,77 @@ class CreditCardService:
         return transaction
 
     @staticmethod
+    def update_payment_transaction(transaction_id, data):
+        transaction = family_get_or_404(CreditCardTransaction, transaction_id)
+        card = family_get_or_404(CreditCard, transaction.credit_card_id)
+        payment_amount = abs(float(data.get('payment_amount')))
+        if data.get('payment_date'):
+            transaction.date = datetime.strptime(
+                data['payment_date'], '%Y-%m-%d'
+            ).date()
+            transaction.day_name = transaction.date.strftime('%A')
+            transaction.week = (
+                f'{transaction.date.isocalendar()[1]:02d}-{transaction.date.year}'
+            )
+            transaction.month = transaction.date.strftime('%Y-%m')
+        transaction.amount = payment_amount
+        transaction.is_fixed = True
+
+        account_id = data.get('account_id')
+        if account_id:
+            payment_category = family_query(Category).filter_by(
+                head_budget='Credit Cards', sub_budget=card.card_name
+            ).first() or family_query(Category).filter_by(
+                head_budget='Credit Cards'
+            ).first()
+            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
+            if not vendor:
+                vendor = Vendor(
+                    family_id=db_helpers.get_family_id(), name=card.card_name
+                )
+                db.session.add(vendor)
+                db.session.flush()
+            bank_transaction = None
+            if transaction.bank_transaction_id:
+                bank_transaction = family_get(Transaction, transaction.bank_transaction_id)
+            if bank_transaction:
+                bank_transaction.transaction_date = transaction.date
+                bank_transaction.amount = -payment_amount
+                bank_transaction.account_id = int(account_id)
+                bank_transaction.vendor_id = vendor.id
+                bank_transaction.description = f'Payment to {card.card_name}'
+                bank_transaction.item = 'Credit Card Payment'
+                if payment_category:
+                    bank_transaction.category_id = payment_category.id
+                bank_transaction.updated_at = datetime.now()
+            else:
+                bank_transaction = Transaction(
+                    family_id=db_helpers.get_family_id(),
+                    account_id=int(account_id),
+                    category_id=payment_category.id if payment_category else None,
+                    vendor_id=vendor.id,
+                    amount=-payment_amount,
+                    transaction_date=transaction.date,
+                    description=f'Payment to {card.card_name}',
+                    item='Credit Card Payment',
+                    payment_type='Card Payment',
+                    is_paid=transaction.is_paid,
+                    is_fixed=True,
+                    credit_card_id=card.id,
+                    year_month=transaction.date.strftime('%Y-%m'),
+                    week_year=(
+                        f'{transaction.date.isocalendar()[1]:02d}-{transaction.date.year}'
+                    ),
+                    day_name=transaction.date.strftime('%A'),
+                    payday_period=PaydayService.get_period_for_date(transaction.date),
+                )
+                db.session.add(bank_transaction)
+                db.session.flush()
+                transaction.bank_transaction_id = bank_transaction.id
+        db.session.commit()
+        return transaction, int(account_id) if account_id else None
+
+    @staticmethod
     def create_transactions(card_id, data):
         card = family_get_or_404(CreditCard, card_id)
         transaction_date = date.fromisoformat(data['txn_date'])

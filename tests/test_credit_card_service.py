@@ -406,3 +406,40 @@ def test_update_credit_card_transaction_rederives_date_fields(
     assert updated.item == 'Updated purchase'
     assert updated.is_fixed is True
     assert updated.is_paid is True
+
+
+def test_update_payment_transaction_creates_linked_bank_transaction(
+    app, card, family_id, patch_family
+):
+    account = Account(
+        family_id=family_id, name='Payment Account', account_type='Joint',
+        balance=0, is_active=True
+    )
+    category = Category(
+        family_id=family_id, name='Card Payment', head_budget='Credit Cards',
+        sub_budget=card.card_name, category_type='expense'
+    )
+    db.session.add_all([account, category])
+    db.session.commit()
+    payment = CreditCardService.create_transactions(card.id, {
+        'txn_date': '2026-01-15', 'txn_type': 'Payment',
+        'txn_item': 'Scheduled payment', 'txn_amount': '100',
+        'category_id': '', 'txn_fixed': '0', 'txn_paid': '0',
+        'is_recurring': '', 'occurrences': '1', 'account_id': '',
+    })[0]
+
+    updated, account_id = CreditCardService.update_payment_transaction(
+        payment.id,
+        {
+            'payment_date': '2026-02-15',
+            'payment_amount': '125',
+            'account_id': str(account.id),
+        },
+    )
+
+    bank_transaction = db.session.get(Transaction, updated.bank_transaction_id)
+    assert account_id == account.id
+    assert updated.amount == Decimal('125')
+    assert updated.is_fixed is True
+    assert bank_transaction.amount == Decimal('-125')
+    assert bank_transaction.account_id == account.id
