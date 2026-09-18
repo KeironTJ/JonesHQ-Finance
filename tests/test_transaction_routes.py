@@ -1,9 +1,11 @@
 from decimal import Decimal
+from datetime import date
 
 from extensions import db
 from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
+from models.family import Family
 
 
 def _login(client, user_id):
@@ -68,3 +70,103 @@ def test_transaction_routes_create_edit_delete(app, family, user):
     response = client.post(f'/{transaction_id}/delete')
     assert response.status_code == 302
     assert db.session.get(Transaction, transaction_id) is None
+
+
+def test_transaction_create_rejects_references_from_another_family(app, family, user):
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint',
+        balance=0, is_active=True
+    )
+    other_family = Family(name='Other Family')
+    db.session.add_all([account, other_family])
+    db.session.flush()
+    foreign_category = Category(
+        family_id=other_family.id, name='Bills', head_budget='Home',
+        sub_budget='Bills', category_type='expense'
+    )
+    db.session.add(foreign_category)
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post('/transactions/create', data={
+        'account_id': str(account.id),
+        'category_id': str(foreign_category.id),
+        'amount': '-25.50',
+        'transaction_date': '2026-01-15',
+    })
+
+    assert response.status_code == 302
+    assert Transaction.query.count() == 0
+
+
+def test_transaction_edit_rejects_references_from_another_family(app, family, user):
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint',
+        balance=0, is_active=True
+    )
+    category = Category(
+        family_id=family.id, name='Bills', head_budget='Home',
+        sub_budget='Bills', category_type='expense'
+    )
+    other_family = Family(name='Other Family')
+    db.session.add_all([account, category, other_family])
+    db.session.flush()
+    foreign_category = Category(
+        family_id=other_family.id, name='Other Bills', head_budget='Other',
+        sub_budget='Bills', category_type='expense'
+    )
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=-25, transaction_date=date(2026, 1, 15), description='Original'
+    )
+    db.session.add_all([foreign_category, transaction])
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post(f'/transactions/{transaction.id}/edit', data={
+        'account_id': str(account.id),
+        'category_id': str(foreign_category.id),
+        'amount': '-30.00',
+        'transaction_date': '2026-01-16',
+        'description': 'Changed',
+    })
+
+    assert response.status_code == 302
+    assert transaction.category_id == category.id
+    assert transaction.description == 'Original'
+
+
+def test_transaction_bulk_edit_rejects_references_from_another_family(app, family, user):
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint',
+        balance=0, is_active=True
+    )
+    category = Category(
+        family_id=family.id, name='Bills', head_budget='Home',
+        sub_budget='Bills', category_type='expense'
+    )
+    other_family = Family(name='Other Family')
+    db.session.add_all([account, category, other_family])
+    db.session.flush()
+    foreign_category = Category(
+        family_id=other_family.id, name='Other Bills', head_budget='Other',
+        sub_budget='Bills', category_type='expense'
+    )
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=-25, transaction_date=date(2026, 1, 15), description='Original'
+    )
+    db.session.add_all([foreign_category, transaction])
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post('/transactions/bulk-edit', data={
+        'transaction_ids': str(transaction.id),
+        'bulk_category_id': str(foreign_category.id),
+    })
+
+    assert response.status_code == 302
+    assert transaction.category_id == category.id

@@ -58,18 +58,22 @@ class Transaction(db.Model):
         """
         from models.accounts import Account
 
-        account = db.session.get(Account, account_id)
+        try:
+            from utils.db_helpers import get_family_id
+            family_id = get_family_id()
+        except RuntimeError:
+            family_id = None
+
+        account_query = Account.query.filter_by(id=account_id)
+        if family_id is not None:
+            account_query = account_query.filter_by(family_id=family_id)
+        account = account_query.first()
         if not account:
             return
 
         q = Transaction.query.filter(Transaction.account_id == account_id)
-        try:
-            from utils.db_helpers import get_family_id
-            fid = get_family_id()
-            if fid is not None:
-                q = q.filter(Transaction.family_id == fid)
-        except RuntimeError:
-            pass  # Outside request context (CLI, tests) — run unscoped
+        if family_id is not None:
+            q = q.filter(Transaction.family_id == family_id)
 
         balance = sum((Decimal(str(t.amount)) for t in q.all()), Decimal('0'))
         account.balance = balance

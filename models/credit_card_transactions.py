@@ -59,16 +59,29 @@ class CreditCardTransaction(db.Model):
     def recalculate_card_balance(credit_card_id, commit=True):
         """Recalculate balance for a credit card based on PAID transactions only"""
         from models.credit_cards import CreditCard
-        from sqlalchemy.orm import Session
-        
-        card = db.session.get(CreditCard, credit_card_id)
+
+        try:
+            from utils.db_helpers import get_family_id
+            family_id = get_family_id()
+        except RuntimeError:
+            family_id = None
+
+        card_query = CreditCard.query.filter_by(id=credit_card_id)
+        if family_id is not None:
+            card_query = card_query.filter_by(family_id=family_id)
+        card = card_query.first()
         if not card:
             return
-        
+
         # Get all transactions ordered by date (then by ID for stability)
-        transactions = CreditCardTransaction.query.filter_by(
+        transactions_query = CreditCardTransaction.query.filter_by(
             credit_card_id=credit_card_id
-        ).order_by(CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()).all()
+        )
+        if family_id is not None:
+            transactions_query = transactions_query.filter_by(family_id=family_id)
+        transactions = transactions_query.order_by(
+            CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()
+        ).all()
         
         running_balance = 0.0
         for txn in transactions:
@@ -89,10 +102,17 @@ class CreditCardTransaction(db.Model):
         
         # Update card's current balance using ONLY PAID transactions
         paid_balance = 0.0
-        paid_transactions = CreditCardTransaction.query.filter_by(
+        paid_transactions_query = CreditCardTransaction.query.filter_by(
             credit_card_id=credit_card_id,
             is_paid=True
-        ).order_by(CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()).all()
+        )
+        if family_id is not None:
+            paid_transactions_query = paid_transactions_query.filter_by(
+                family_id=family_id
+            )
+        paid_transactions = paid_transactions_query.order_by(
+            CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()
+        ).all()
         
         for txn in paid_transactions:
             paid_balance += float(txn.amount)

@@ -61,6 +61,14 @@ class ChildcareService:
         name = data.get('name')
         if family_query(Child).filter_by(name=name).first():
             return None
+        category_id = int(data['category_id']) if data.get('category_id') else None
+        vendor_id = int(data['vendor_id']) if data.get('vendor_id') else None
+        if category_id is not None and not family_get(Category, category_id):
+            raise ValueError('Invalid category selected')
+        if vendor_id is not None:
+            from models.vendors import Vendor
+            if not family_get(Vendor, vendor_id):
+                raise ValueError('Invalid vendor selected')
         transaction_day = int(data.get('transaction_day') or 28)
         if not 1 <= transaction_day <= 28:
             transaction_day = 28
@@ -69,8 +77,8 @@ class ChildcareService:
             name=name,
             year_group=data.get('year_group'),
             transaction_day=transaction_day,
-            category_id=int(data['category_id']) if data.get('category_id') else None,
-            vendor_id=int(data['vendor_id']) if data.get('vendor_id') else None,
+            category_id=category_id,
+            vendor_id=vendor_id,
         )
         db.session.add(child)
         db.session.commit()
@@ -79,6 +87,14 @@ class ChildcareService:
     @staticmethod
     def update_child(child_id, data):
         child = family_get_or_404(Child, child_id)
+        category_id = int(data['category_id']) if data.get('category_id') else None
+        vendor_id = int(data['vendor_id']) if data.get('vendor_id') else None
+        if category_id is not None and not family_get(Category, category_id):
+            raise ValueError('Invalid category selected')
+        if vendor_id is not None:
+            from models.vendors import Vendor
+            if not family_get(Vendor, vendor_id):
+                raise ValueError('Invalid vendor selected')
         child.name = data.get('name', child.name)
         child.year_group = data.get('year_group', child.year_group)
         child.is_active = data.get('is_active') == 'on'
@@ -86,8 +102,8 @@ class ChildcareService:
             transaction_day = int(data['transaction_day'])
             if 1 <= transaction_day <= 28:
                 child.transaction_day = transaction_day
-        child.category_id = int(data['category_id']) if data.get('category_id') else None
-        child.vendor_id = int(data['vendor_id']) if data.get('vendor_id') else None
+        child.category_id = category_id
+        child.vendor_id = vendor_id
         db.session.commit()
         return child
 
@@ -161,7 +177,8 @@ class ChildcareService:
     @staticmethod
     def set_default_account(child_id, account_id):
         child = family_get(Child, child_id)
-        if not child:
+        account = family_get(Account, account_id) if account_id is not None else None
+        if not child or not account:
             return False
         child.default_account_id = account_id
         db.session.commit()
@@ -354,9 +371,9 @@ class ChildcareService:
         
         if total_cost <= 0:
             return None
-        
-        # Get child
-        child = family_get(Child, child_id)
+
+        child = family_get_or_404(Child, child_id)
+        account = family_get_or_404(Account, account_id)
         
         # Use configured category or create default Childcare category
         if child.category_id:
@@ -370,6 +387,7 @@ class ChildcareService:
             
             if not category:
                 category = Category(
+                    family_id=db_helpers.get_family_id(),
                     name='Childcare',
                     category_type='Expense',
                     head_budget='Childcare',
@@ -392,6 +410,7 @@ class ChildcareService:
         
         # Create transaction (negative amount = expense in new convention)
         transaction = Transaction(
+            family_id=db_helpers.get_family_id(),
             transaction_date=transaction_date,
             account_id=account_id,
             category_id=category_id,
@@ -417,6 +436,7 @@ class ChildcareService:
         
         if not summary:
             summary = MonthlyChildcareSummary(
+                family_id=db_helpers.get_family_id(),
                 year_month=year_month,
                 child_id=child_id,
                 total_cost=total_cost,

@@ -152,6 +152,9 @@ def edit(id):
             default_payment_account_id = request.form.get('default_payment_account_id')
             if default_payment_account_id == '':
                 default_payment_account_id = None
+            elif default_payment_account_id is not None:
+                default_payment_account_id = int(default_payment_account_id)
+                family_get_or_404(Account, default_payment_account_id)
 
             # Always-editable metadata fields
             loan.name = request.form['name']

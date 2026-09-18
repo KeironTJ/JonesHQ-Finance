@@ -138,6 +138,17 @@ class TransactionService:
         return int(value) if value not in (None, '') else None
 
     @staticmethod
+    def _validate_family_references(account_id=None, category_id=None, vendor_id=None):
+        references = (
+            (Account, account_id, 'account'),
+            (Category, category_id, 'category'),
+            (Vendor, vendor_id, 'vendor'),
+        )
+        for model, record_id, label in references:
+            if record_id is not None and not family_get(model, record_id):
+                raise ValueError(f'Invalid {label} selected')
+
+    @staticmethod
     def _adjust_working_day(transaction_date, direction):
         while transaction_date.weekday() >= 5:
             transaction_date += timedelta(days=1 if direction == 'next' else -1)
@@ -145,6 +156,12 @@ class TransactionService:
 
     @staticmethod
     def create_transactions(data):
+        account_id = TransactionService._int_value(data, 'account_id')
+        category_id = TransactionService._int_value(data, 'category_id')
+        vendor_id = TransactionService._int_value(data, 'vendor_id')
+        TransactionService._validate_family_references(
+            account_id, category_id, vendor_id
+        )
         transaction_date = datetime.strptime(
             data['transaction_date'], '%Y-%m-%d'
         ).date()
@@ -190,11 +207,9 @@ class TransactionService:
 
             transactions.append(Transaction(
                 family_id=db_helpers.get_family_id(),
-                account_id=TransactionService._int_value(data, 'account_id'),
-                category_id=TransactionService._int_value(data, 'category_id'),
-                vendor_id=(
-                    int(data['vendor_id']) if data.get('vendor_id') else None
-                ),
+                account_id=account_id,
+                category_id=category_id,
+                vendor_id=vendor_id,
                 amount=amount,
                 transaction_date=current_date,
                 description=data.get('description', ''),
@@ -215,10 +230,16 @@ class TransactionService:
     @staticmethod
     def update_transaction(transaction_id, data):
         transaction = family_get_or_404(Transaction, transaction_id)
+        account_id = TransactionService._int_value(data, 'account_id')
+        category_id = TransactionService._int_value(data, 'category_id')
+        vendor_id = TransactionService._int_value(data, 'vendor_id')
+        TransactionService._validate_family_references(
+            account_id, category_id, vendor_id
+        )
         old_account_id = transaction.account_id
-        transaction.account_id = TransactionService._int_value(data, 'account_id')
-        transaction.category_id = TransactionService._int_value(data, 'category_id')
-        transaction.vendor_id = TransactionService._int_value(data, 'vendor_id')
+        transaction.account_id = account_id
+        transaction.category_id = category_id
+        transaction.vendor_id = vendor_id
         transaction.amount = float(data.get('amount'))
         transaction.transaction_date = datetime.strptime(
             data.get('transaction_date'), '%Y-%m-%d'
@@ -423,8 +444,11 @@ class TransactionService:
 
     @staticmethod
     def bulk_edit(transaction_ids, data):
-        category_id = data.get('bulk_category_id')
-        vendor_id = data.get('bulk_vendor_id')
+        category_id = TransactionService._int_value(data, 'bulk_category_id')
+        vendor_id = TransactionService._int_value(data, 'bulk_vendor_id')
+        TransactionService._validate_family_references(
+            category_id=category_id, vendor_id=vendor_id
+        )
         payment_type = data.get('bulk_payment_type')
         assigned_to = data.get('bulk_assigned_to')
         paid_value = data.get('bulk_is_paid')
@@ -442,9 +466,9 @@ class TransactionService:
                 continue
             affected_accounts.add(transaction.account_id)
             if category_id:
-                transaction.category_id = int(category_id)
+                transaction.category_id = category_id
             if vendor_id:
-                transaction.vendor_id = int(vendor_id)
+                transaction.vendor_id = vendor_id
             if payment_type:
                 transaction.payment_type = payment_type
             if assigned_to:

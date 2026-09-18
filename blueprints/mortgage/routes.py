@@ -7,6 +7,7 @@ from models.mortgage_payments import MortgagePayment, MortgageSnapshot
 from models.accounts import Account
 from models.vendors import Vendor
 from models.categories import Category
+from models.transactions import Transaction
 from services.planning.mortgage_service import MortgageService
 from extensions import db
 from decimal import Decimal
@@ -306,7 +307,8 @@ def mark_snapshot_paid(snapshot_id):
     transaction_id = request.form.get('transaction_id')
     
     if transaction_id:
-        snapshot.transaction_id = int(transaction_id)
+        transaction = family_get_or_404(Transaction, int(transaction_id))
+        snapshot.transaction_id = transaction.id
         db.session.commit()
         flash('Snapshot linked to transaction!', 'success')
     else:

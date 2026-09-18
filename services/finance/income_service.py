@@ -56,7 +56,24 @@ class IncomeService:
     """
 
     @staticmethod
+    def _validate_family_references(deposit_account_id=None, category_id=None):
+        if deposit_account_id is not None and not family_get(
+            Account, deposit_account_id
+        ):
+            raise ValueError('Invalid deposit account selected')
+        if category_id is not None and not family_get(Category, category_id):
+            raise ValueError('Invalid category selected')
+
+    @staticmethod
     def create_recurring_income(data):
+        deposit_account_id = (
+            int(data['deposit_account_id'])
+            if data.get('deposit_account_id') else None
+        )
+        category_id = int(data['category_id']) if data.get('category_id') else None
+        IncomeService._validate_family_references(
+            deposit_account_id, category_id
+        )
         recurring = RecurringIncome(
             family_id=db_helpers.get_family_id(),
             person=data.get('person', 'Household'),
@@ -72,11 +89,8 @@ class IncomeService:
             tax_code=data['tax_code'],
             avc=Decimal(data.get('avc') or 0),
             other_deductions=Decimal(data.get('other') or 0),
-            deposit_account_id=(
-                int(data['deposit_account_id'])
-                if data.get('deposit_account_id') else None
-            ),
-            category_id=int(data['category_id']) if data.get('category_id') else None,
+            deposit_account_id=deposit_account_id,
+            category_id=category_id,
             auto_create_transaction=data.get('auto_create_transaction') == 'on',
             source=data.get('source', ''),
             description=data.get('description', ''),
@@ -110,6 +124,14 @@ class IncomeService:
     @staticmethod
     def update_recurring_income(recurring_id, data):
         recurring = family_get_or_404(RecurringIncome, recurring_id)
+        deposit_account_id = (
+            int(data['deposit_account_id'])
+            if data.get('deposit_account_id') else None
+        )
+        category_id = int(data['category_id']) if data.get('category_id') else None
+        IncomeService._validate_family_references(
+            deposit_account_id, category_id
+        )
         recurring.person = data.get('person', recurring.person)
         recurring.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
         recurring.end_date = (
@@ -123,8 +145,8 @@ class IncomeService:
         recurring.tax_code = data['tax_code']
         recurring.avc = Decimal(data.get('avc') or 0)
         recurring.other_deductions = Decimal(data.get('other') or 0)
-        recurring.deposit_account_id = int(data['deposit_account_id']) if data.get('deposit_account_id') else None
-        recurring.category_id = int(data['category_id']) if data.get('category_id') else None
+        recurring.deposit_account_id = deposit_account_id
+        recurring.category_id = category_id
         recurring.auto_create_transaction = data.get('auto_create_transaction') == 'on'
         recurring.source = data.get('source', '')
         recurring.description = data.get('description', '')
@@ -296,6 +318,9 @@ class IncomeService:
             create_transaction: Whether to create linked transaction
             recurring_income_id: ID of recurring income template that generated this
         """
+        IncomeService._validate_family_references(
+            deposit_account_id=deposit_account_id
+        )
         # Convert to Decimal
         gross_annual = Decimal(str(gross_annual))
         employer_pension_pct = Decimal(str(employer_pension_pct))
@@ -336,6 +361,7 @@ class IncomeService:
         
         # Create income record
         income = Income(
+            family_id=db_helpers.get_family_id(),
             person=person,
             pay_date=pay_date,
             tax_year=tax_year,
@@ -396,6 +422,9 @@ class IncomeService:
             create_transaction: Whether to create linked transaction
             recurring_income_id: ID of recurring income template that generated this
         """
+        IncomeService._validate_family_references(
+            deposit_account_id=deposit_account_id
+        )
         # Convert to Decimal
         gross_annual = Decimal(str(gross_annual))
         employer_pension = Decimal(str(employer_pension))
@@ -419,6 +448,7 @@ class IncomeService:
         
         # Create income record with manual values
         income = Income(
+            family_id=db_helpers.get_family_id(),
             person=person,
             pay_date=pay_date,
             tax_year=tax_year,
@@ -479,7 +509,10 @@ class IncomeService:
         if not category_id:
             salary_category = family_query(Category).filter_by(name='Salary', category_type='Income').first()
             if not salary_category:
-                salary_category = Category(name='Salary', category_type='Income')
+                salary_category = Category(
+                    family_id=db_helpers.get_family_id(), name='Salary',
+                    category_type='Income'
+                )
                 db.session.add(salary_category)
                 db.session.flush()
             category_id = salary_category.id
@@ -496,6 +529,7 @@ class IncomeService:
         
         # Create transaction
         transaction = Transaction(
+            family_id=db_helpers.get_family_id(),
             account_id=income.deposit_account_id,
             category_id=category_id,
             amount=income.take_home,
@@ -819,6 +853,9 @@ class IncomeService:
         transaction = family_get(Transaction, income.transaction_id)
         if not transaction:
             return None
+        IncomeService._validate_family_references(
+            deposit_account_id=income.deposit_account_id
+        )
         
         # Determine category to use
         category_id = None
@@ -831,7 +868,10 @@ class IncomeService:
         if not category_id:
             salary_category = family_query(Category).filter_by(name='Salary', category_type='Income').first()
             if not salary_category:
-                salary_category = Category(name='Salary', category_type='Income')
+                salary_category = Category(
+                    family_id=db_helpers.get_family_id(), name='Salary',
+                    category_type='Income'
+                )
                 db.session.add(salary_category)
                 db.session.flush()
             category_id = salary_category.id

@@ -119,6 +119,7 @@ def create_transaction(child_id):
     year = int(request.form.get('year'))
     month = int(request.form.get('month'))
     account_id = int(request.form.get('account_id'))
+    family_get_or_404(Account, account_id)
     
     transaction = ChildcareService.create_monthly_transaction(year, month, child_id, account_id)
     

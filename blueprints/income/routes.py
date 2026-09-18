@@ -103,6 +103,7 @@ def add():
             # Convert empty account_id to None
             if deposit_account_id:
                 deposit_account_id = int(deposit_account_id)
+                family_get_or_404(Account, deposit_account_id)
             else:
                 deposit_account_id = None
             
@@ -150,7 +151,10 @@ def edit(id):
             income.other_deductions = Decimal(request.form.get('other', 0) or 0)
 
             deposit_account_id = request.form.get('deposit_account_id')
-            income.deposit_account_id = int(deposit_account_id) if deposit_account_id else None
+            if deposit_account_id:
+                deposit_account_id = int(deposit_account_id)
+                family_get_or_404(Account, deposit_account_id)
+            income.deposit_account_id = deposit_account_id or None
 
             income.gross_annual_income  = Decimal(request.form['gross_annual'])
             income.gross_monthly_income = (income.gross_annual_income / 12).quantize(Decimal('0.01'))
