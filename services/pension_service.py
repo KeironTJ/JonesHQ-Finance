@@ -6,24 +6,6 @@ Pension projection generation and retirement income estimates.
 Projection model
 ----------------
 Starting from the most recent actual PensionSnapshot (or pension.current_value if none
-
-    @staticmethod
-    def create_pension(data):
-        pension = Pension(
-            family_id=get_family_id(),
-            person=data.get('person', 'Household'),
-            provider=data['provider'],
-            account_number=data.get('account_number', ''),
-            current_value=Decimal(data.get('current_value') or 0),
-            contribution_rate=Decimal(data.get('contribution_rate') or 0),
-            employer_contribution=Decimal(data.get('employer_contribution') or 0),
-            is_active=data.get('is_active') == 'on',
-            retirement_age=int(data.get('retirement_age') or 65),
-            monthly_contribution=Decimal(data.get('monthly_contribution') or 0),
-        )
-        db.session.add(pension)
-        db.session.commit()
-        return pension
 historic projection chart doesn't lose data when a regen runs.
 
 Retirement income estimate
@@ -89,6 +71,27 @@ class PensionService:
         db.session.add(pension)
         db.session.commit()
         return pension
+
+    @staticmethod
+    def update_pension(pension_id, data):
+        pension = family_get_or_404(Pension, pension_id)
+        pension.person = data.get('person', pension.person)
+        pension.provider = data['provider']
+        pension.account_number = data.get('account_number', '')
+        pension.current_value = Decimal(data.get('current_value') or 0)
+        pension.contribution_rate = Decimal(data.get('contribution_rate') or 0)
+        pension.employer_contribution = Decimal(data.get('employer_contribution') or 0)
+        pension.is_active = data.get('is_active') == 'on'
+        pension.retirement_age = int(data.get('retirement_age') or 65)
+        pension.monthly_contribution = Decimal(data.get('monthly_contribution') or 0)
+        db.session.commit()
+        return pension
+
+    @staticmethod
+    def delete_pension(pension_id):
+        pension = family_get_or_404(Pension, pension_id)
+        db.session.delete(pension)
+        db.session.commit()
 
     @staticmethod
     def add_actual_snapshot(pension_id, review_date, value):

@@ -58,3 +58,36 @@ def test_create_pension_assigns_family_and_converts_values(app, family, monkeypa
     assert pension.family_id == family.id
     assert pension.current_value == Decimal('5000')
     assert pension.monthly_contribution == Decimal('100')
+
+
+def test_update_and_delete_pension(app, family, monkeypatch):
+    monkeypatch.setattr('services.pension_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    pension = PensionService.create_pension({
+        'person': 'Household',
+        'provider': 'Old Provider',
+        'current_value': '5000',
+        'contribution_rate': '2',
+        'employer_contribution': '2',
+        'is_active': 'on',
+        'retirement_age': '65',
+        'monthly_contribution': '100',
+    })
+
+    updated = PensionService.update_pension(pension.id, {
+        'person': 'Household',
+        'provider': 'New Provider',
+        'account_number': 'ABC',
+        'current_value': '6000',
+        'contribution_rate': '5',
+        'employer_contribution': '3',
+        'is_active': 'on',
+        'retirement_age': '67',
+        'monthly_contribution': '150',
+    })
+    PensionService.delete_pension(pension.id)
+
+    assert updated.provider == 'New Provider'
+    assert updated.current_value == Decimal('6000')
+    assert updated.retirement_age == 67
+    assert db.session.get(Pension, pension.id) is None

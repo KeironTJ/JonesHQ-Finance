@@ -82,17 +82,7 @@ def edit(id):
     
     if request.method == 'POST':
         try:
-            pension.person = request.form.get('person', pension.person)
-            pension.provider = request.form['provider']
-            pension.account_number = request.form.get('account_number', '')
-            pension.current_value = Decimal(request.form.get('current_value', 0))
-            pension.contribution_rate = Decimal(request.form.get('contribution_rate', 0))
-            pension.employer_contribution = Decimal(request.form.get('employer_contribution', 0))
-            pension.is_active = request.form.get('is_active') == 'on'
-            pension.retirement_age = int(request.form.get('retirement_age', 65))
-            pension.monthly_contribution = Decimal(request.form.get('monthly_contribution', 0))
-            
-            db.session.commit()
+            pension = PensionService.update_pension(id, request.form)
             
             # Regenerate projections if auto-enabled
             if Settings.get_value('auto_regenerate_projections', True):
@@ -111,11 +101,8 @@ def edit(id):
 @pensions_bp.route('/pensions/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete a pension"""
-    pension = family_get_or_404(Pension, id)
-    
     try:
-        db.session.delete(pension)
-        db.session.commit()
+        PensionService.delete_pension(id)
         flash('Pension deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()
