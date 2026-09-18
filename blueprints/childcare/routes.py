@@ -133,32 +133,17 @@ def create_transaction(child_id):
 @childcare_bp.route('/childcare/update_transaction', methods=['POST'])
 def update_transaction():
     """Update an existing transaction amount when childcare schedule changes"""
-    from models.transactions import Transaction
-    
     data = request.get_json()
     transaction_id = int(data['transaction_id'])
     child_id = int(data['child_id'])
     new_amount = Decimal(str(data['new_amount']))
     
     try:
-        # Get the transaction
-        transaction = family_get(Transaction, transaction_id)
-        if not transaction:
+        updated_amount = ChildcareService.update_monthly_transaction(
+            transaction_id, child_id, new_amount
+        )
+        if updated_amount is None:
             return jsonify({'success': False, 'error': 'Transaction not found'})
-        
-        # Update the amount (negative because it's an expense)
-        transaction.amount = -new_amount
-        
-        # Update the monthly summary
-        summary = family_query(MonthlyChildcareSummary).filter_by(
-            transaction_id=transaction_id,
-            child_id=child_id
-        ).first()
-        
-        if summary:
-            summary.total_cost = new_amount
-        
-        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -179,10 +164,7 @@ def set_default_account():
     account_id = int(data['account_id'])
     
     try:
-        child = family_get(Child, child_id)
-        if child:
-            child.default_account_id = account_id
-            db.session.commit()
+        if ChildcareService.set_default_account(child_id, account_id):
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Child not found'})
     except Exception as e:

@@ -1,7 +1,12 @@
+from datetime import date
 from decimal import Decimal
 
 from extensions import db
 from models.childcare import Child, ChildActivityType
+from models.accounts import Account
+from models.transactions import Transaction
+from models.childcare import MonthlyChildcareSummary
+from models.categories import Category
 from services.childcare_service import ChildcareService
 
 
@@ -70,3 +75,45 @@ def test_update_activity_type_changes_schedule_and_delete_name(app, family, monk
     assert updated.occurs_monday is False
     assert updated.occurs_tuesday is True
     assert deleted_name == 'Late Club'
+
+
+def test_update_monthly_transaction_and_set_default_account(app, family, monkeypatch):
+    monkeypatch.setattr('services.childcare_service.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    child = ChildcareService.create_child({'name': 'Child Three'})
+    account = Account(
+        family_id=family.id, name='Childcare Account', account_type='Joint',
+        balance=0, is_active=True
+    )
+    db.session.add(account)
+    db.session.flush()
+    category = Category(
+        family_id=family.id, name='Childcare', head_budget='Childcare',
+        sub_budget='Childcare', category_type='expense'
+    )
+    db.session.add(category)
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=-100, transaction_date=date(2026, 1, 28)
+    )
+    db.session.add(transaction)
+    db.session.flush()
+    summary = MonthlyChildcareSummary(
+        family_id=family.id, year_month='2026-01', child_id=child.id,
+        total_cost=Decimal('100'), transaction_id=transaction.id,
+        account_id=account.id
+    )
+    db.session.add(summary)
+    db.session.commit()
+
+    updated_amount = ChildcareService.update_monthly_transaction(
+        transaction.id, child.id, Decimal('125')
+    )
+    assigned = ChildcareService.set_default_account(child.id, account.id)
+
+    assert updated_amount == Decimal('125')
+    assert transaction.amount == Decimal('-125')
+    assert summary.total_cost == Decimal('125')
+    assert assigned is True
+    assert child.default_account_id == account.id

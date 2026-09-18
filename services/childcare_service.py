@@ -141,6 +141,30 @@ class ChildcareService:
         db.session.delete(activity_type)
         db.session.commit()
         return name
+
+    @staticmethod
+    def update_monthly_transaction(transaction_id, child_id, new_amount):
+        transaction = family_get(Transaction, transaction_id)
+        if not transaction:
+            return None
+        transaction.amount = -new_amount
+        summary = family_query(MonthlyChildcareSummary).filter_by(
+            transaction_id=transaction_id,
+            child_id=child_id,
+        ).first()
+        if summary:
+            summary.total_cost = new_amount
+        db.session.commit()
+        return new_amount
+
+    @staticmethod
+    def set_default_account(child_id, account_id):
+        child = family_get(Child, child_id)
+        if not child:
+            return False
+        child.default_account_id = account_id
+        db.session.commit()
+        return True
     
     @staticmethod
     def get_or_create_child(name, year_group=None):
