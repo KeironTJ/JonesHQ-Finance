@@ -277,8 +277,7 @@ def delete_snapshot(pension_id, snapshot_id):
         return redirect(url_for('pensions.snapshots', id=pension_id))
     
     try:
-        db.session.delete(snapshot)
-        db.session.commit()
+        PensionService.delete_snapshot(snapshot_id)
         flash('Snapshot deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()

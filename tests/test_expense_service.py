@@ -61,3 +61,15 @@ def test_delete_expense_is_family_scoped(app, family, monkeypatch):
     ExpenseService.delete_expense(expense.id)
 
     assert db.session.get(Expense, expense.id) is None
+
+
+def test_bulk_delete_expenses_returns_deleted_count(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    first = ExpenseService.create_expense(_expense_data())
+    second = ExpenseService.create_expense(_expense_data(description='Second'))
+
+    deleted = ExpenseService.bulk_delete_expenses([first.id, second.id, 99999])
+
+    assert deleted == 2
+    assert db.session.get(Expense, first.id) is None
+    assert db.session.get(Expense, second.id) is None

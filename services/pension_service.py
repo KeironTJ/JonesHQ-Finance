@@ -95,6 +95,12 @@ class PensionService:
         db.session.commit()
 
     @staticmethod
+    def delete_snapshot(snapshot_id):
+        snapshot = family_get_or_404(PensionSnapshot, snapshot_id)
+        db.session.delete(snapshot)
+        db.session.commit()
+
+    @staticmethod
     def add_actual_snapshot(pension_id, review_date, value):
         pension = family_get_or_404(Pension, pension_id)
         previous = family_query(PensionSnapshot).filter_by(

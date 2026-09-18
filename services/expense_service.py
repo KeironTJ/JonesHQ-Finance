@@ -4,7 +4,7 @@ from decimal import Decimal
 from extensions import db
 from models.expenses import Expense
 from utils import db_helpers
-from utils.db_helpers import family_get_or_404
+from utils.db_helpers import family_get_or_404, family_query
 
 
 class ExpenseService:
@@ -85,3 +85,14 @@ class ExpenseService:
         expense = family_get_or_404(Expense, expense_id)
         db.session.delete(expense)
         db.session.commit()
+
+    @staticmethod
+    def bulk_delete_expenses(expense_ids):
+        deleted = 0
+        for expense_id in expense_ids:
+            expense = family_query(Expense).filter_by(id=expense_id).first()
+            if expense:
+                db.session.delete(expense)
+                deleted += 1
+        db.session.commit()
+        return deleted

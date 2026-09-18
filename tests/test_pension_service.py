@@ -91,3 +91,23 @@ def test_update_and_delete_pension(app, family, monkeypatch):
     assert updated.current_value == Decimal('6000')
     assert updated.retirement_age == 67
     assert db.session.get(Pension, pension.id) is None
+
+
+def test_delete_pension_snapshot_is_service_owned(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    pension = PensionService.create_pension({
+        'person': 'Household', 'provider': 'Snapshot Provider',
+        'current_value': '1000', 'contribution_rate': '0',
+        'employer_contribution': '0', 'is_active': 'on',
+        'retirement_age': '65', 'monthly_contribution': '0',
+    })
+    snapshot = PensionSnapshot(
+        family_id=family.id, pension_id=pension.id,
+        review_date=date(2026, 1, 1), value=Decimal('1000'),
+    )
+    db.session.add(snapshot)
+    db.session.commit()
+
+    PensionService.delete_snapshot(snapshot.id)
+
+    assert db.session.get(PensionSnapshot, snapshot.id) is None

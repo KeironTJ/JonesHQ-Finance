@@ -176,6 +176,23 @@ class MortgageService:
         snapshot = family_get_or_404(PropertyValuationSnapshot, snapshot_id)
         db.session.delete(snapshot)
         db.session.commit()
+
+    @staticmethod
+    def delete_product(product_id):
+        product = family_get_or_404(MortgageProduct, product_id)
+        property_id = product.property_id
+        label = f'{product.lender} - {product.product_name}'
+        db.session.delete(product)
+        db.session.commit()
+        return property_id, label
+
+    @staticmethod
+    def delete_property(property_id):
+        property_obj = family_get_or_404(Property, property_id)
+        address = property_obj.address
+        db.session.delete(property_obj)
+        db.session.commit()
+        return address
     
     @staticmethod
     def generate_projections(property_id, scenarios=None):

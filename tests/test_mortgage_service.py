@@ -92,3 +92,24 @@ def test_add_valuation_calculates_change_and_updates_property(app, family, monke
     assert second_change == Decimal('10')
     assert property_obj.current_valuation == Decimal('330000')
     assert PropertyValuationSnapshot.query.count() == 2
+
+
+def test_delete_product_and_property_are_service_owned(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    property_obj = MortgageService.create_property({'address': 'Delete Street'})
+    product = MortgageService.create_product(property_obj.id, {
+        'lender': 'Delete Bank', 'product_name': 'Fixed',
+        'start_date': '2026-01-01', 'end_date': '2028-01-01',
+        'term_months': '24', 'initial_balance': '100000',
+        'current_balance': '95000', 'annual_rate': '4',
+        'monthly_payment': '600', 'payment_day': '1',
+        'account_id': '', 'vendor_id': '', 'category_id': '',
+        'is_active': 'on', 'is_current': 'on', 'ltv_ratio': '',
+    })
+
+    property_id, label = MortgageService.delete_product(product.id)
+    address = MortgageService.delete_property(property_id)
+
+    assert label == 'Delete Bank - Fixed'
+    assert address == 'Delete Street'
+    assert db.session.get(Property, property_id) is None

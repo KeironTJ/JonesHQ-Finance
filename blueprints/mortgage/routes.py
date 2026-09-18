@@ -203,14 +203,9 @@ def edit_product(product_id):
 @mortgage_bp.route('/mortgage/product/<int:product_id>/delete', methods=['POST'])
 def delete_product(product_id):
     """Delete a mortgage product"""
-    product = family_get_or_404(MortgageProduct, product_id)
-    property_id = product.property_id
+    property_id, label = MortgageService.delete_product(product_id)
     
-    # The cascade delete will automatically remove all snapshots
-    db.session.delete(product)
-    db.session.commit()
-    
-    flash(f'Product "{product.lender} - {product.product_name}" deleted successfully!', 'success')
+    flash(f'Product "{label}" deleted successfully!', 'success')
     return redirect(url_for('mortgage.property_detail', property_id=property_id))
 
 
@@ -239,13 +234,9 @@ def edit_property(property_id):
 @mortgage_bp.route('/mortgage/property/<int:property_id>/delete', methods=['POST'])
 def delete_property(property_id):
     """Delete a property and all associated mortgage products"""
-    prop = family_get_or_404(Property, property_id)
+    address = MortgageService.delete_property(property_id)
     
-    # The cascade delete will automatically remove all mortgage products and snapshots
-    db.session.delete(prop)
-    db.session.commit()
-    
-    flash(f'Property "{prop.address}" deleted successfully!', 'success')
+    flash(f'Property "{address}" deleted successfully!', 'success')
     return redirect(url_for('mortgage.index'))
 
 

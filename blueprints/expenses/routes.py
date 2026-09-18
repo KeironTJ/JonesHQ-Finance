@@ -726,14 +726,7 @@ def bulk_delete_expenses():
         except Exception as e:
             current_app.logger.exception('Error deleting linked transactions before expense delete')
 
-        deleted_count = 0
-        for eid in expense_ids:
-            exp = family_get(Expense, eid)
-            if exp:
-                db.session.delete(exp)
-                deleted_count += 1
-
-        db.session.commit()
+        deleted_count = ExpenseService.bulk_delete_expenses(expense_ids)
         flash(f'Deleted {deleted_count} expense(s).', 'success')
     except Exception as e:
         db.session.rollback()
