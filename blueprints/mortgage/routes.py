@@ -215,15 +215,7 @@ def edit_property(property_id):
     prop = family_get_or_404(Property, property_id)
     
     if request.method == 'POST':
-        prop.address = request.form.get('address')
-        prop.purchase_date = datetime.strptime(request.form.get('purchase_date'), '%Y-%m-%d').date() if request.form.get('purchase_date') else None
-        prop.purchase_price = Decimal(request.form.get('purchase_price')) if request.form.get('purchase_price') else None
-        prop.current_valuation = Decimal(request.form.get('current_valuation')) if request.form.get('current_valuation') else None
-        prop.annual_appreciation_rate = Decimal(request.form.get('annual_appreciation_rate', '3.0'))
-        prop.is_primary_residence = request.form.get('is_primary_residence') == 'on'
-        prop.is_active = request.form.get('is_active') == 'on'
-        
-        db.session.commit()
+        prop = MortgageService.update_property(property_id, request.form)
         
         flash('Property updated successfully!', 'success')
         return redirect(url_for('mortgage.property_detail', property_id=property_id))

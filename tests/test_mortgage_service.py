@@ -113,3 +113,22 @@ def test_delete_product_and_property_are_service_owned(app, family, monkeypatch)
     assert label == 'Delete Bank - Fixed'
     assert address == 'Delete Street'
     assert db.session.get(Property, property_id) is None
+
+
+def test_update_property_converts_form_values(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    property_obj = MortgageService.create_property({'address': 'Old Address'})
+
+    updated = MortgageService.update_property(property_obj.id, {
+        'address': 'New Address',
+        'purchase_date': '2020-01-02',
+        'purchase_price': '200000',
+        'current_valuation': '250000',
+        'annual_appreciation_rate': '3.5',
+        'is_primary_residence': 'on',
+        'is_active': 'on',
+    })
+
+    assert updated.address == 'New Address'
+    assert updated.purchase_price == Decimal('200000')
+    assert updated.current_valuation == Decimal('250000')

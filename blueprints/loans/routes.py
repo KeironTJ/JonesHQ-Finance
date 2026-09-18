@@ -285,20 +285,10 @@ def regenerate_schedule(id):
 @loans_bp.route('/<int:id>/payment/<int:payment_id>/toggle-paid', methods=['POST'])
 def toggle_payment_paid(id, payment_id):
     """Toggle payment paid status and sync with bank transaction"""
-    payment = family_get_or_404(LoanPayment, payment_id)
-    
     try:
-        payment.is_paid = not payment.is_paid
-        
-        # Sync bank transaction if it exists
-        if payment.bank_transaction_id:
-            bank_txn = family_get(Transaction, payment.bank_transaction_id)
-            if bank_txn:
-                bank_txn.is_paid = payment.is_paid
-                # Recalculate account balance
-                Transaction.recalculate_account_balance(bank_txn.account_id)
-        
-        db.session.commit()
+        payment, account_id = LoanService.toggle_payment_paid(payment_id)
+        if account_id:
+            Transaction.recalculate_account_balance(account_id)
         
         status = 'paid' if payment.is_paid else 'unpaid'
         return jsonify({'success': True, 'is_paid': payment.is_paid, 'status': status})
@@ -395,19 +385,9 @@ def delete_payment(id, payment_id):
             flash('Payment does not belong to this loan!', 'danger')
             return redirect(url_for('loans.detail', id=id))
         
-        # Delete linked bank transaction if exists
-        if payment.bank_transaction_id:
-            bank_txn = family_get(Transaction, payment.bank_transaction_id)
-            if bank_txn:
-                account_id = bank_txn.account_id
-                db.session.delete(bank_txn)
-                # Recalculate bank account balance
-                if account_id:
-                    Transaction.recalculate_account_balance(account_id)
-        
-        # Delete the loan payment
-        db.session.delete(payment)
-        db.session.commit()
+        account_id = LoanService.delete_payment(payment_id)
+        if account_id:
+            Transaction.recalculate_account_balance(account_id)
         
         flash('Payment deleted successfully!', 'success')
         return redirect(url_for('loans.detail', id=id))
@@ -431,25 +411,9 @@ def bulk_delete_payments(id):
         
         payment_ids = [int(pid) for pid in payment_ids_str.split(',') if pid]
         
-        deleted_count = 0
-        accounts_to_recalc = set()
-        
-        for payment_id in payment_ids:
-            payment = family_get(LoanPayment, payment_id)
-            if payment and payment.loan_id == loan.id:
-                # Delete linked bank transaction if exists
-                if payment.bank_transaction_id:
-                    bank_txn = family_get(Transaction, payment.bank_transaction_id)
-                    if bank_txn:
-                        accounts_to_recalc.add(bank_txn.account_id)
-                        db.session.delete(bank_txn)
-                
-                db.session.delete(payment)
-                deleted_count += 1
-        
-        db.session.commit()
-        
-        # Recalculate balances for affected accounts
+        deleted_count, accounts_to_recalc = LoanService.bulk_delete_payments(
+            loan.id, payment_ids
+        )
         for account_id in accounts_to_recalc:
             if account_id:
                 Transaction.recalculate_account_balance(account_id)

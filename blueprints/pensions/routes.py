@@ -153,63 +153,6 @@ def add_snapshot(id):
                   (f', Growth: {growth_percent:.2f}%' if growth_percent else ''), 'success')
             return redirect(url_for('pensions.snapshots', id=id))
             
-            # Get previous snapshot
-            previous = family_query(PensionSnapshot).filter_by(pension_id=id)\
-                .filter(PensionSnapshot.review_date < review_date)\
-                .order_by(PensionSnapshot.review_date.desc())\
-                .first()
-
-            # Calculate growth
-            growth_percent = None
-            if previous and previous.value > 0:
-                growth_percent = ((value - previous.value) / previous.value) * 100
-
-            # Create snapshot
-            snapshot = PensionSnapshot(
-                pension_id=id,
-                review_date=review_date,
-                value=value,
-                growth_percent=growth_percent
-            )
-
-            # Remove any existing projection for this exact date (now superseded by actual)
-            family_query(PensionSnapshot).filter_by(
-                pension_id=id,
-                review_date=review_date,
-                is_projection=True
-            ).delete()
-
-            db.session.add(snapshot)
-
-            # Derive current_value from the most recent actual snapshot.
-            # Autoflush ensures the snapshot just added is visible to this query,
-            # so the result is always correct regardless of insertion order.
-            most_recent_actual = family_query(PensionSnapshot).filter(
-                PensionSnapshot.pension_id == id,
-                PensionSnapshot.is_projection == False
-            ).order_by(PensionSnapshot.review_date.desc()).first()
-            if most_recent_actual:
-                pension.current_value = most_recent_actual.value
-
-            # If inserting a historic actual, the snapshot immediately after it now has
-            # a new "previous" — recalculate its growth_percent so it doesn't stay stale.
-            next_snapshot = family_query(PensionSnapshot).filter_by(pension_id=id)\
-                .filter(PensionSnapshot.review_date > review_date)\
-                .order_by(PensionSnapshot.review_date.asc())\
-                .first()
-            if next_snapshot is not None and value > 0:
-                next_snapshot.growth_percent = ((next_snapshot.value - value) / value) * 100
-
-            db.session.commit()
-            
-            # Auto-regenerate projections if enabled
-            if Settings.get_value('auto_regenerate_projections', True):
-                PensionService.save_projections(pension, scenario='default')
-            
-            flash(f'Snapshot added successfully! Value: £{value:,.2f}' + 
-                  (f', Growth: {growth_percent:.2f}%' if growth_percent else ''), 'success')
-            return redirect(url_for('pensions.snapshots', id=id))
-            
         except Exception as e:
             db.session.rollback()
             flash(f'Error adding snapshot: {str(e)}', 'danger')
@@ -231,28 +174,10 @@ def confirm_snapshot(pension_id, snapshot_id):
         # Get the new actual value from form
         new_value = Decimal(request.form['value'])
         
-        # Convert projection to actual
-        snapshot.is_projection = False
-        snapshot.value = new_value
-        snapshot.scenario_name = None
-        snapshot.growth_rate_used = None
-        
-        # Recalculate growth percentage based on actual previous snapshot
-        previous = family_query(PensionSnapshot).filter(
-            PensionSnapshot.pension_id == pension_id,
-            PensionSnapshot.review_date < snapshot.review_date,
-            PensionSnapshot.is_projection == False
-        ).order_by(PensionSnapshot.review_date.desc()).first()
-        
-        if previous and previous.value > 0:
-            snapshot.growth_percent = ((new_value - previous.value) / previous.value) * 100
-        else:
-            snapshot.growth_percent = None
-        
-        # Update pension current value
-        pension.current_value = new_value
-        
-        db.session.commit()
+        pension = PensionService.confirm_snapshot(pension_id, snapshot_id, new_value)
+        if pension is None:
+            flash('Invalid snapshot for this pension.', 'danger')
+            return redirect(url_for('pensions.snapshots', id=pension_id))
         
         # Regenerate future projections
         if Settings.get_value('auto_regenerate_projections', True):

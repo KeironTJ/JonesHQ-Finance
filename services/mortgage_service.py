@@ -193,6 +193,29 @@ class MortgageService:
         db.session.delete(property_obj)
         db.session.commit()
         return address
+
+    @staticmethod
+    def update_property(property_id, data):
+        property_obj = family_get_or_404(Property, property_id)
+        property_obj.address = data.get('address')
+        property_obj.purchase_date = (
+            date.fromisoformat(data['purchase_date'])
+            if data.get('purchase_date') else None
+        )
+        property_obj.purchase_price = (
+            Decimal(data['purchase_price']) if data.get('purchase_price') else None
+        )
+        property_obj.current_valuation = (
+            Decimal(data['current_valuation'])
+            if data.get('current_valuation') else None
+        )
+        property_obj.annual_appreciation_rate = Decimal(
+            data.get('annual_appreciation_rate', '3.0')
+        )
+        property_obj.is_primary_residence = data.get('is_primary_residence') == 'on'
+        property_obj.is_active = data.get('is_active') == 'on'
+        db.session.commit()
+        return property_obj
     
     @staticmethod
     def generate_projections(property_id, scenarios=None):

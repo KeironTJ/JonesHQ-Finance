@@ -101,6 +101,29 @@ class PensionService:
         db.session.commit()
 
     @staticmethod
+    def confirm_snapshot(pension_id, snapshot_id, value):
+        pension = family_get_or_404(Pension, pension_id)
+        snapshot = family_get_or_404(PensionSnapshot, snapshot_id)
+        if snapshot.pension_id != pension_id:
+            return None
+        snapshot.is_projection = False
+        snapshot.value = value
+        snapshot.scenario_name = None
+        snapshot.growth_rate_used = None
+        previous = family_query(PensionSnapshot).filter(
+            PensionSnapshot.pension_id == pension_id,
+            PensionSnapshot.review_date < snapshot.review_date,
+            PensionSnapshot.is_projection == False,
+        ).order_by(PensionSnapshot.review_date.desc()).first()
+        snapshot.growth_percent = (
+            ((value - previous.value) / previous.value) * 100
+            if previous and previous.value > 0 else None
+        )
+        pension.current_value = value
+        db.session.commit()
+        return pension
+
+    @staticmethod
     def add_actual_snapshot(pension_id, review_date, value):
         pension = family_get_or_404(Pension, pension_id)
         previous = family_query(PensionSnapshot).filter_by(

@@ -561,6 +561,50 @@ class LoanService:
         return updated
 
     @staticmethod
+    def toggle_payment_paid(payment_id):
+        payment = family_get_or_404(LoanPayment, payment_id)
+        payment.is_paid = not payment.is_paid
+        account_id = None
+        if payment.bank_transaction_id:
+            bank_transaction = family_get(Transaction, payment.bank_transaction_id)
+            if bank_transaction:
+                bank_transaction.is_paid = payment.is_paid
+                account_id = bank_transaction.account_id
+        db.session.commit()
+        return payment, account_id
+
+    @staticmethod
+    def delete_payment(payment_id):
+        payment = family_get_or_404(LoanPayment, payment_id)
+        account_id = None
+        if payment.bank_transaction_id:
+            bank_transaction = family_get(Transaction, payment.bank_transaction_id)
+            if bank_transaction:
+                account_id = bank_transaction.account_id
+                db.session.delete(bank_transaction)
+        db.session.delete(payment)
+        db.session.commit()
+        return account_id
+
+    @staticmethod
+    def bulk_delete_payments(loan_id, payment_ids):
+        deleted = 0
+        accounts = set()
+        for payment_id in payment_ids:
+            payment = family_get(LoanPayment, payment_id)
+            if not payment or payment.loan_id != loan_id:
+                continue
+            if payment.bank_transaction_id:
+                bank_transaction = family_get(Transaction, payment.bank_transaction_id)
+                if bank_transaction:
+                    accounts.add(bank_transaction.account_id)
+                    db.session.delete(bank_transaction)
+            db.session.delete(payment)
+            deleted += 1
+        db.session.commit()
+        return deleted, accounts
+
+    @staticmethod
     def get_payment_statistics(loan_id):
         """Get statistics about loan payments"""
         payments = family_query(LoanPayment).filter_by(loan_id=loan_id).all()

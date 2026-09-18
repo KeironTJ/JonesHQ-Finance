@@ -111,3 +111,32 @@ def test_delete_pension_snapshot_is_service_owned(app, family, monkeypatch):
     PensionService.delete_snapshot(snapshot.id)
 
     assert db.session.get(PensionSnapshot, snapshot.id) is None
+
+
+def test_confirm_snapshot_updates_actual_value_and_growth(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    pension = PensionService.create_pension({
+        'person': 'Household', 'provider': 'Confirm Provider',
+        'current_value': '1000', 'contribution_rate': '0',
+        'employer_contribution': '0', 'is_active': 'on',
+        'retirement_age': '65', 'monthly_contribution': '0',
+    })
+    previous = PensionSnapshot(
+        family_id=family.id, pension_id=pension.id,
+        review_date=date(2025, 1, 1), value=Decimal('1000'),
+    )
+    projected = PensionSnapshot(
+        family_id=family.id, pension_id=pension.id,
+        review_date=date(2026, 1, 1), value=Decimal('1100'),
+        is_projection=True, scenario_name='default',
+    )
+    db.session.add_all([previous, projected])
+    db.session.commit()
+
+    updated_pension = PensionService.confirm_snapshot(
+        pension.id, projected.id, Decimal('1200')
+    )
+
+    assert updated_pension.current_value == Decimal('1200')
+    assert projected.is_projection is False
+    assert projected.growth_percent == Decimal('20')
