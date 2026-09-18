@@ -62,6 +62,153 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 
 class CreditCardService:
+    @staticmethod
+    def _card_values(data, existing=None):
+        values = {
+            'card_name': data.get('card_name'),
+            'annual_apr': float(data.get('annual_apr', 0)),
+            'monthly_apr': float(data.get('monthly_apr', 0)),
+            'min_payment_percent': float(data.get('min_payment_percent', 1.0)),
+            'credit_limit': float(data.get('credit_limit', 0)),
+            'set_payment': float(data['set_payment']) if data.get('set_payment') else None,
+            'statement_date': int(data['statement_date']) if data.get('statement_date') else None,
+            'current_balance': float(data.get('current_balance', 0)),
+            'is_active': data.get('is_active') == 'on',
+            'default_payment_account_id': (
+                int(data['default_payment_account_id'])
+                if data.get('default_payment_account_id') else None
+            ),
+        }
+        if data.get('start_date'):
+            values['start_date'] = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        elif existing is not None:
+            values['start_date'] = existing.start_date
+        values['purchase_0_percent_until'] = (
+            datetime.strptime(data['purchase_0_percent_until'], '%Y-%m-%d').date()
+            if data.get('purchase_0_percent_until') else None
+        )
+        values['balance_transfer_0_percent_until'] = (
+            datetime.strptime(data['balance_transfer_0_percent_until'], '%Y-%m-%d').date()
+            if data.get('balance_transfer_0_percent_until') else None
+        )
+        return values
+
+    @staticmethod
+    def create_card(data):
+        card = CreditCard(family_id=get_family_id(), **CreditCardService._card_values(data))
+        card.available_credit = float(card.credit_limit) - float(card.current_balance)
+        db.session.add(card)
+        db.session.commit()
+        return card
+
+    @staticmethod
+    def update_card(card_id, data):
+        card = family_get_or_404(CreditCard, card_id)
+        for field, value in CreditCardService._card_values(data, card).items():
+            setattr(card, field, value)
+        card.available_credit = float(card.credit_limit) - float(card.current_balance)
+        card.updated_at = datetime.now()
+        db.session.commit()
+        return card
+
+    @staticmethod
+    def delete_card(card_id):
+        card = family_get_or_404(CreditCard, card_id)
+        name = card.card_name
+        db.session.delete(card)
+        db.session.commit()
+        return name
+
+    @staticmethod
+    def toggle_transaction_fixed(transaction_id):
+        transaction = family_get_or_404(CreditCardTransaction, transaction_id)
+        transaction.is_fixed = not transaction.is_fixed
+        db.session.commit()
+        return transaction
+
+    @staticmethod
+    def create_transactions(card_id, data):
+        card = family_get_or_404(CreditCard, card_id)
+        transaction_date = date.fromisoformat(data['txn_date'])
+        transaction_type = data['txn_type']
+        item = data['txn_item']
+        amount = Decimal(str(data.get('txn_amount') or '0'))
+        category_id = int(data['category_id']) if data.get('category_id') else None
+        account_id = int(data['account_id']) if data.get('account_id') else None
+        is_fixed = data.get('txn_fixed') == '1'
+        is_paid = data.get('txn_paid') == '1'
+        recurring = data.get('is_recurring') == 'on'
+        occurrences = int(data.get('occurrences') or 1) if recurring else 1
+        if occurrences < 1:
+            raise ValueError('Number of occurrences must be at least 1')
+
+        category = family_get(Category, category_id) if category_id else None
+        frequency = data.get('frequency', 'monthly')
+        transactions = []
+        for occurrence in range(occurrences):
+            offsets = {
+                'weekly': {'weeks': occurrence},
+                'monthly': {'months': occurrence},
+                'yearly': {'years': occurrence},
+            }
+            current_date = transaction_date + relativedelta(**offsets.get(frequency, {}))
+            transaction = CreditCardTransaction(
+                family_id=get_family_id(),
+                credit_card_id=card_id,
+                category_id=category_id,
+                date=current_date,
+                day_name=current_date.strftime('%A'),
+                week=f'{current_date.isocalendar()[1]:02d}-{current_date.year}',
+                month=current_date.strftime('%Y-%m'),
+                head_budget=category.head_budget if category else None,
+                sub_budget=category.sub_budget if category else None,
+                item=item,
+                transaction_type=transaction_type,
+                amount=amount,
+                is_paid=is_paid,
+                is_fixed=is_fixed,
+            )
+            db.session.add(transaction)
+            db.session.flush()
+
+            if transaction_type == 'Payment' and account_id:
+                payment_category = family_query(Category).filter_by(
+                    head_budget='Credit Cards', sub_budget=card.card_name
+                ).first() or family_query(Category).filter_by(
+                    head_budget='Credit Cards'
+                ).first()
+                vendor = family_query(Vendor).filter_by(name=card.card_name).first()
+                if not vendor:
+                    vendor = Vendor(family_id=get_family_id(), name=card.card_name)
+                    db.session.add(vendor)
+                    db.session.flush()
+                bank_transaction = Transaction(
+                    family_id=get_family_id(),
+                    account_id=account_id,
+                    category_id=payment_category.id if payment_category else None,
+                    vendor_id=vendor.id,
+                    amount=-abs(amount),
+                    transaction_date=current_date,
+                    description=f'Payment to {card.card_name}',
+                    item='Credit Card Payment',
+                    payment_type='Card Payment',
+                    is_paid=is_paid,
+                    is_fixed=is_fixed,
+                    credit_card_id=card_id,
+                    year_month=current_date.strftime('%Y-%m'),
+                    week_year=f'{current_date.isocalendar()[1]:02d}-{current_date.year}',
+                    day_name=current_date.strftime('%A'),
+                    payday_period=PaydayService.get_period_for_date(current_date),
+                )
+                db.session.add(bank_transaction)
+                db.session.flush()
+                transaction.bank_transaction_id = bank_transaction.id
+            transactions.append(transaction)
+
+        db.session.commit()
+        CreditCardTransaction.recalculate_card_balance(card_id, commit=True)
+        return transactions
+
     
     @staticmethod
     def generate_monthly_statement(card_id, statement_date, payment_offset_days=14, commit=True):

@@ -13,6 +13,7 @@ from .forms import LoginForm, RegisterForm
 from models.users import User
 from models.family import Family
 from extensions import db
+from services.auth_service import AuthService
 
 # Initialize rate limiter
 limiter = Limiter(
@@ -104,21 +105,12 @@ def register():
             return render_template('auth/register.html', form=form)
 
         try:
-            # Create the family first
-            family = Family(name=form.household_name.data.strip())
-            db.session.add(family)
-            db.session.flush()  # Get the family ID without committing
-
-            # Create the admin user
-            user = User(
-                email=form.email.data.strip().lower(),
-                name=form.name.data.strip(),
-                family_id=family.id,
-                role='admin'
+            family, user = AuthService.register_user(
+                form.household_name.data,
+                form.email.data,
+                form.name.data,
+                form.password.data,
             )
-            user.set_password(form.password.data)
-            db.session.add(user)
-            db.session.commit()
 
             # Log the new user in
             login_user(user)

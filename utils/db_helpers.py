@@ -30,7 +30,7 @@ from flask_login import current_user
 
 def get_family_id():
     """Return ``current_user.family_id``, or ``None`` if not authenticated."""
-    if current_user.is_authenticated:
+    if getattr(current_user, 'is_authenticated', False):
         try:
             return current_user.family_id
         except Exception:

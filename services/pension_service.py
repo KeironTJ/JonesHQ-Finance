@@ -6,23 +6,24 @@ Pension projection generation and retirement income estimates.
 Projection model
 ----------------
 Starting from the most recent actual PensionSnapshot (or pension.current_value if none
-exists), the service compounds forward month by month:
 
-    projected_value = prev_value × (1 + monthly_growth_rate) + monthly_contribution
-
-Three named scenarios are supported (growth rates read from Settings):
-  'default'     — moderate growth (pension_default_monthly_growth_rate, default 0.12%/mo)
-  'optimistic'  — higher growth  (pension_optimistic_monthly_growth_rate, default 0.5%/mo)
-  'pessimistic' — lower growth   (pension_pessimistic_monthly_growth_rate, default 0.05%/mo)
-
-Inactive pensions still receive growth; contributions are set to £0.
-
-PensionSnapshot rows
---------------------
-  is_projection=False  → confirmed actual values (entered via review).
-  is_projection=True   → computed projection; deleted and recreated on each regen.
-
-Past projection rows (review_date < today) are intentionally preserved so the
+    @staticmethod
+    def create_pension(data):
+        pension = Pension(
+            family_id=get_family_id(),
+            person=data.get('person', 'Household'),
+            provider=data['provider'],
+            account_number=data.get('account_number', ''),
+            current_value=Decimal(data.get('current_value') or 0),
+            contribution_rate=Decimal(data.get('contribution_rate') or 0),
+            employer_contribution=Decimal(data.get('employer_contribution') or 0),
+            is_active=data.get('is_active') == 'on',
+            retirement_age=int(data.get('retirement_age') or 65),
+            monthly_contribution=Decimal(data.get('monthly_contribution') or 0),
+        )
+        db.session.add(pension)
+        db.session.commit()
+        return pension
 historic projection chart doesn't lose data when a regen runs.
 
 Retirement income estimate
@@ -56,6 +57,67 @@ class PensionService:
     Growth rates and retirement ages are read from the Settings model, allowing
     them to be updated without code changes.  All monetary values use Decimal.
     """
+
+    @staticmethod
+    def create_pension(data):
+        pension = Pension(
+            family_id=get_family_id(),
+            person=data.get('person', 'Household'),
+            provider=data['provider'],
+            account_number=data.get('account_number', ''),
+            current_value=Decimal(data.get('current_value') or 0),
+            contribution_rate=Decimal(data.get('contribution_rate') or 0),
+            employer_contribution=Decimal(data.get('employer_contribution') or 0),
+            is_active=data.get('is_active') == 'on',
+            retirement_age=int(data.get('retirement_age') or 65),
+            monthly_contribution=Decimal(data.get('monthly_contribution') or 0),
+        )
+        db.session.add(pension)
+        db.session.commit()
+        return pension
+
+    @staticmethod
+    def add_actual_snapshot(pension_id, review_date, value):
+        pension = family_get_or_404(Pension, pension_id)
+        previous = family_query(PensionSnapshot).filter_by(
+            pension_id=pension_id
+        ).filter(
+            PensionSnapshot.review_date < review_date
+        ).order_by(PensionSnapshot.review_date.desc()).first()
+        growth_percent = None
+        if previous and previous.value > 0:
+            growth_percent = ((value - previous.value) / previous.value) * 100
+
+        family_query(PensionSnapshot).filter_by(
+            pension_id=pension_id,
+            review_date=review_date,
+            is_projection=True,
+        ).delete()
+        snapshot = PensionSnapshot(
+            family_id=get_family_id(),
+            pension_id=pension_id,
+            review_date=review_date,
+            value=value,
+            growth_percent=growth_percent,
+        )
+        db.session.add(snapshot)
+        most_recent_actual = family_query(PensionSnapshot).filter(
+            PensionSnapshot.pension_id == pension_id,
+            PensionSnapshot.is_projection == False,
+        ).order_by(PensionSnapshot.review_date.desc()).first()
+        if most_recent_actual:
+            pension.current_value = most_recent_actual.value
+
+        next_snapshot = family_query(PensionSnapshot).filter_by(
+            pension_id=pension_id
+        ).filter(
+            PensionSnapshot.review_date > review_date
+        ).order_by(PensionSnapshot.review_date.asc()).first()
+        if next_snapshot is not None and value > 0:
+            next_snapshot.growth_percent = ((next_snapshot.value - value) / value) * 100
+
+        db.session.commit()
+        return snapshot, growth_percent, pension
 
     @staticmethod
     def get_person_age(person):
@@ -339,23 +401,7 @@ class PensionService:
                 )
             )
         
-        query = query.order_by(PensionSnapshot.review_date, Pension.provider)
-        
-        results = query.all()
-        
-        # Group by date
-        grouped = {}
-        for snapshot, pension in results:
-            date_key = snapshot.review_date
-            if date_key not in grouped:
-                grouped[date_key] = {
-                    'review_date': date_key,
-                    'is_projection': snapshot.is_projection,
-                    'pensions': {},
-                    'total_value': Decimal('0'),
-                    'total_growth_percent': None
-                }
-            
+    
             grouped[date_key]['pensions'][pension.provider] = {
                 'value': snapshot.value,
                 'growth_percent': snapshot.growth_percent,

@@ -274,25 +274,10 @@ def add_child():
         flash('Child name is required', 'danger')
         return redirect(url_for('childcare.setup'))
     
-    # Check if child already exists
-    existing = family_query(Child).filter_by(name=name).first()
-    if existing:
+    child = ChildcareService.create_child(request.form)
+    if child is None:
         flash(f'{name} already exists', 'warning')
         return redirect(url_for('childcare.setup'))
-    
-    child = Child(name=name, year_group=year_group, transaction_day=transaction_day)
-    
-    # Add category and vendor if provided
-    category_id = request.form.get('category_id')
-    vendor_id = request.form.get('vendor_id')
-    
-    if category_id:
-        child.category_id = int(category_id)
-    if vendor_id:
-        child.vendor_id = int(vendor_id)
-    
-    db.session.add(child)
-    db.session.commit()
     
     flash(f'Added child: {name}', 'success')
     return redirect(url_for('childcare.setup'))
@@ -301,29 +286,7 @@ def add_child():
 @childcare_bp.route('/childcare/update_child/<int:child_id>', methods=['POST'])
 def update_child(child_id):
     """Update child details"""
-    child = family_get_or_404(Child, child_id)
-    
-    child.name = request.form.get('name', child.name)
-    child.year_group = request.form.get('year_group', child.year_group)
-    child.is_active = request.form.get('is_active') == 'on'
-    
-    # Update transaction day
-    transaction_day = request.form.get('transaction_day')
-    if transaction_day:
-        transaction_day = int(transaction_day)
-        if 1 <= transaction_day <= 28:
-            child.transaction_day = transaction_day
-    
-    # Update category and vendor
-    category_id = request.form.get('category_id')
-    vendor_id = request.form.get('vendor_id')
-    
-    if category_id:
-        child.category_id = int(category_id) if category_id else None
-    if vendor_id:
-        child.vendor_id = int(vendor_id) if vendor_id else None
-    
-    db.session.commit()
+    child = ChildcareService.update_child(child_id, request.form)
     flash(f'Updated {child.name}', 'success')
     return redirect(url_for('childcare.setup'))
 
@@ -331,11 +294,7 @@ def update_child(child_id):
 @childcare_bp.route('/childcare/delete_child/<int:child_id>', methods=['POST'])
 def delete_child(child_id):
     """Delete a child (and all their data)"""
-    child = family_get_or_404(Child, child_id)
-    name = child.name
-    
-    db.session.delete(child)
-    db.session.commit()
+    name = ChildcareService.delete_child(child_id)
     
     flash(f'Deleted {name} and all associated data', 'success')
     return redirect(url_for('childcare.setup'))
@@ -354,21 +313,7 @@ def add_activity_type(child_id):
         flash('Activity name and cost are required', 'danger')
         return redirect(url_for('childcare.setup'))
     
-    activity_type = ChildActivityType(
-        child_id=child_id,
-        name=name,
-        cost=cost,
-        provider=provider,
-        occurs_monday=request.form.get('occurs_monday') == 'on',
-        occurs_tuesday=request.form.get('occurs_tuesday') == 'on',
-        occurs_wednesday=request.form.get('occurs_wednesday') == 'on',
-        occurs_thursday=request.form.get('occurs_thursday') == 'on',
-        occurs_friday=request.form.get('occurs_friday') == 'on',
-        occurs_saturday=request.form.get('occurs_saturday') == 'on',
-        occurs_sunday=request.form.get('occurs_sunday') == 'on'
-    )
-    db.session.add(activity_type)
-    db.session.commit()
+    ChildcareService.create_activity_type(child_id, request.form)
     
     flash(f'Added activity: {name} for {child.name}', 'success')
     return redirect(url_for('childcare.setup'))
@@ -377,21 +322,7 @@ def add_activity_type(child_id):
 @childcare_bp.route('/childcare/update_activity_type/<int:activity_type_id>', methods=['POST'])
 def update_activity_type(activity_type_id):
     """Update an activity type"""
-    activity_type = family_get_or_404(ChildActivityType, activity_type_id)
-    
-    activity_type.name = request.form.get('name', activity_type.name)
-    activity_type.cost = request.form.get('cost', type=float, default=activity_type.cost)
-    activity_type.provider = request.form.get('provider', activity_type.provider)
-    activity_type.is_active = request.form.get('is_active') == 'on'
-    activity_type.occurs_monday = request.form.get('occurs_monday') == 'on'
-    activity_type.occurs_tuesday = request.form.get('occurs_tuesday') == 'on'
-    activity_type.occurs_wednesday = request.form.get('occurs_wednesday') == 'on'
-    activity_type.occurs_thursday = request.form.get('occurs_thursday') == 'on'
-    activity_type.occurs_friday = request.form.get('occurs_friday') == 'on'
-    activity_type.occurs_saturday = request.form.get('occurs_saturday') == 'on'
-    activity_type.occurs_sunday = request.form.get('occurs_sunday') == 'on'
-    
-    db.session.commit()
+    activity_type = ChildcareService.update_activity_type(activity_type_id, request.form)
     flash(f'Updated activity type: {activity_type.name}', 'success')
     return redirect(url_for('childcare.setup'))
 
@@ -399,11 +330,7 @@ def update_activity_type(activity_type_id):
 @childcare_bp.route('/childcare/delete_activity_type/<int:activity_type_id>', methods=['POST'])
 def delete_activity_type(activity_type_id):
     """Delete an activity type"""
-    activity_type = family_get_or_404(ChildActivityType, activity_type_id)
-    name = activity_type.name
-    
-    db.session.delete(activity_type)
-    db.session.commit()
+    name = ChildcareService.delete_activity_type(activity_type_id)
     
     flash(f'Deleted activity type: {name}', 'success')
     return redirect(url_for('childcare.setup'))

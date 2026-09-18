@@ -94,9 +94,7 @@ def create_snapshot():
 def delete_snapshot(id):
     """Delete a net worth snapshot"""
     try:
-        snapshot = family_get_or_404(NetWorth, id)
-        db.session.delete(snapshot)
-        db.session.commit()
+        NetWorthService.delete_networth_snapshot(id)
         flash('Snapshot deleted successfully', 'success')
     except Exception as e:
         flash(f'Error deleting snapshot: {str(e)}', 'danger')

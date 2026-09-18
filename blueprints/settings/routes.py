@@ -10,6 +10,7 @@ from extensions import db
 from decimal import Decimal
 from datetime import datetime
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from services.settings_service import SettingsService
 
 
 @settings_bp.route('/settings')
@@ -270,24 +271,7 @@ def edit_tax_settings(id):
     
     if request.method == 'POST':
         try:
-            # Update tax settings
-            tax_year.personal_allowance = Decimal(request.form['personal_allowance'])
-            tax_year.basic_rate_limit = Decimal(request.form['basic_rate_limit'])
-            tax_year.higher_rate_limit = Decimal(request.form['higher_rate_limit'])
-            tax_year.basic_rate = Decimal(request.form['basic_rate']) / 100  # Convert % to decimal
-            tax_year.higher_rate = Decimal(request.form['higher_rate']) / 100
-            tax_year.additional_rate = Decimal(request.form['additional_rate']) / 100
-            
-            # Update NI settings
-            tax_year.ni_threshold = Decimal(request.form['ni_threshold'])
-            tax_year.ni_upper_earnings = Decimal(request.form['ni_upper_earnings'])
-            tax_year.ni_basic_rate = Decimal(request.form['ni_basic_rate']) / 100
-            tax_year.ni_additional_rate = Decimal(request.form['ni_additional_rate']) / 100
-            
-            tax_year.notes = request.form.get('notes', '')
-            tax_year.is_active = request.form.get('is_active') == 'on'
-            
-            db.session.commit()
+            tax_year = SettingsService.update_tax_settings(id, request.form)
             flash(f'Tax settings for {tax_year.tax_year} updated successfully!', 'success')
             return redirect(url_for('settings.tax_settings'))
             

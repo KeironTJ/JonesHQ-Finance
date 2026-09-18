@@ -42,6 +42,7 @@ from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 from extensions import db
 from models.property import Property
+from models.property_valuation_snapshot import PropertyValuationSnapshot
 from models.mortgage import MortgageProduct
 from models.mortgage_payments import MortgageSnapshot
 from models.transactions import Transaction
@@ -60,6 +61,120 @@ class MortgageService:
     assumed variable rate continuation is appended (rate = last product rate + 2%,
     capped at 30 years).
     """
+    
+    @staticmethod
+    def create_property(data):
+        purchase_date = (
+            date.fromisoformat(data['purchase_date'])
+            if data.get('purchase_date') else None
+        )
+        property_obj = Property(
+            family_id=get_family_id(),
+            address=data.get('address'),
+            purchase_date=purchase_date,
+            purchase_price=(
+                Decimal(data['purchase_price'])
+                if data.get('purchase_price') else None
+            ),
+            current_valuation=(
+                Decimal(data['current_valuation'])
+                if data.get('current_valuation') else None
+            ),
+            annual_appreciation_rate=Decimal(
+                data.get('annual_appreciation_rate', '3.0')
+            ),
+            is_primary_residence=data.get('is_primary_residence') == 'on',
+        )
+        db.session.add(property_obj)
+        db.session.commit()
+        return property_obj
+
+    @staticmethod
+    def _product_values(data):
+        return {
+            'account_id': int(data['account_id']) if data.get('account_id') else None,
+            'vendor_id': int(data['vendor_id']) if data.get('vendor_id') else None,
+            'category_id': int(data['category_id']) if data.get('category_id') else None,
+            'lender': data.get('lender'),
+            'product_name': data.get('product_name'),
+            'start_date': date.fromisoformat(data['start_date']),
+            'end_date': date.fromisoformat(data['end_date']),
+            'term_months': int(data['term_months']),
+            'initial_balance': Decimal(data['initial_balance']),
+            'current_balance': Decimal(data['current_balance']),
+            'annual_rate': Decimal(data['annual_rate']),
+            'monthly_payment': Decimal(data['monthly_payment']),
+            'payment_day': int(data.get('payment_day', 1)),
+            'is_active': data.get('is_active') == 'on',
+            'is_current': data.get('is_current') == 'on',
+            'ltv_ratio': Decimal(data['ltv_ratio']) if data.get('ltv_ratio') else None,
+        }
+
+    @staticmethod
+    def create_product(property_id, data):
+        product = MortgageProduct(
+            family_id=get_family_id(),
+            property_id=property_id,
+            **MortgageService._product_values(data),
+        )
+        db.session.add(product)
+        db.session.commit()
+        return product
+
+    @staticmethod
+    def update_product(product_id, data):
+        product = family_get_or_404(MortgageProduct, product_id)
+        for field, value in MortgageService._product_values(data).items():
+            setattr(product, field, value)
+        db.session.commit()
+        return product
+
+    @staticmethod
+    def add_valuation(property_id, data):
+        property_obj = family_get_or_404(Property, property_id)
+        valuation_date = date.fromisoformat(data['valuation_date'])
+        value = Decimal(data['value'])
+        previous = family_query(PropertyValuationSnapshot).filter(
+            PropertyValuationSnapshot.property_id == property_id,
+            PropertyValuationSnapshot.valuation_date < valuation_date,
+            PropertyValuationSnapshot.is_projection == False,
+        ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+
+        change_percent = None
+        if previous and previous.value and previous.value > 0:
+            change_percent = ((value - previous.value) / previous.value) * 100
+
+        family_query(PropertyValuationSnapshot).filter_by(
+            property_id=property_id,
+            valuation_date=valuation_date,
+            is_projection=True,
+        ).delete()
+        snapshot = PropertyValuationSnapshot(
+            family_id=get_family_id(),
+            property_id=property_id,
+            valuation_date=valuation_date,
+            value=value,
+            change_percent=change_percent,
+            source=data.get('source', 'manual'),
+            notes=data.get('notes', ''),
+        )
+        db.session.add(snapshot)
+
+        latest_actual = family_query(PropertyValuationSnapshot).filter(
+            PropertyValuationSnapshot.property_id == property_id,
+            PropertyValuationSnapshot.is_projection == False,
+        ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
+        if latest_actual is None or valuation_date >= latest_actual.valuation_date:
+            property_obj.current_valuation = value
+
+        db.session.commit()
+        return snapshot, change_percent
+
+    @staticmethod
+    def delete_valuation(snapshot_id):
+        snapshot = family_get_or_404(PropertyValuationSnapshot, snapshot_id)
+        db.session.delete(snapshot)
+        db.session.commit()
     
     @staticmethod
     def generate_projections(property_id, scenarios=None):

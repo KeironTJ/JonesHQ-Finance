@@ -157,17 +157,7 @@ def confirm_snapshot(snapshot_id):
 def create_property():
     """Create a new property"""
     if request.method == 'POST':
-        prop = Property(
-            address=request.form.get('address'),
-            purchase_date=datetime.strptime(request.form.get('purchase_date'), '%Y-%m-%d').date() if request.form.get('purchase_date') else None,
-            purchase_price=Decimal(request.form.get('purchase_price')) if request.form.get('purchase_price') else None,
-            current_valuation=Decimal(request.form.get('current_valuation')) if request.form.get('current_valuation') else None,
-            annual_appreciation_rate=Decimal(request.form.get('annual_appreciation_rate', '3.0')),
-            is_primary_residence=request.form.get('is_primary_residence') == 'on'
-        )
-        
-        db.session.add(prop)
-        db.session.commit()
+        prop = MortgageService.create_property(request.form)
         
         flash('Property created successfully!', 'success')
         return redirect(url_for('mortgage.property_detail', property_id=prop.id))
@@ -181,32 +171,7 @@ def create_product(property_id):
     prop = family_get_or_404(Property, property_id)
     
     if request.method == 'POST':
-        account_id = request.form.get('account_id')
-        vendor_id = request.form.get('vendor_id')
-        category_id = request.form.get('category_id')
-        
-        product = MortgageProduct(
-            property_id=property_id,
-            account_id=int(account_id) if account_id else None,
-            vendor_id=int(vendor_id) if vendor_id else None,
-            category_id=int(category_id) if category_id else None,
-            lender=request.form.get('lender'),
-            product_name=request.form.get('product_name'),
-            start_date=datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date(),
-            end_date=datetime.strptime(request.form.get('end_date'), '%Y-%m-%d').date(),
-            term_months=int(request.form.get('term_months')),
-            initial_balance=Decimal(request.form.get('initial_balance')),
-            current_balance=Decimal(request.form.get('current_balance')),
-            annual_rate=Decimal(request.form.get('annual_rate')),
-            monthly_payment=Decimal(request.form.get('monthly_payment')),
-            payment_day=int(request.form.get('payment_day', 1)),
-            is_active=request.form.get('is_active') == 'on',
-            is_current=request.form.get('is_current') == 'on',
-            ltv_ratio=Decimal(request.form.get('ltv_ratio')) if request.form.get('ltv_ratio') else None
-        )
-        
-        db.session.add(product)
-        db.session.commit()
+        product = MortgageService.create_product(property_id, request.form)
         
         flash('Mortgage product created successfully!', 'success')
         return redirect(url_for('mortgage.property_detail', property_id=property_id))
@@ -224,28 +189,7 @@ def edit_product(product_id):
     prop = product.property
     
     if request.method == 'POST':
-        account_id = request.form.get('account_id')
-        vendor_id = request.form.get('vendor_id')
-        category_id = request.form.get('category_id')
-        
-        product.account_id = int(account_id) if account_id else None
-        product.vendor_id = int(vendor_id) if vendor_id else None
-        product.category_id = int(category_id) if category_id else None
-        product.lender = request.form.get('lender')
-        product.product_name = request.form.get('product_name')
-        product.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
-        product.end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d').date()
-        product.term_months = int(request.form.get('term_months'))
-        product.initial_balance = Decimal(request.form.get('initial_balance'))
-        product.current_balance = Decimal(request.form.get('current_balance'))
-        product.annual_rate = Decimal(request.form.get('annual_rate'))
-        product.monthly_payment = Decimal(request.form.get('monthly_payment'))
-        product.payment_day = int(request.form.get('payment_day', 1))
-        product.is_active = request.form.get('is_active') == 'on'
-        product.is_current = request.form.get('is_current') == 'on'
-        product.ltv_ratio = Decimal(request.form.get('ltv_ratio')) if request.form.get('ltv_ratio') else None
-        
-        db.session.commit()
+        product = MortgageService.update_product(product_id, request.form)
         
         flash('Mortgage product updated successfully!', 'success')
         return redirect(url_for('mortgage.property_detail', property_id=prop.id))
@@ -333,51 +277,11 @@ def add_valuation(property_id):
 
     if request.method == 'POST':
         try:
-            valuation_date = datetime.strptime(request.form['valuation_date'], '%Y-%m-%d').date()
-            value = Decimal(request.form['value'])
-            source = request.form.get('source', 'manual')
-            notes = request.form.get('notes', '')
-
-            # Calculate change % vs previous actual
-            previous = family_query(PropertyValuationSnapshot).filter(
-                PropertyValuationSnapshot.property_id == property_id,
-                PropertyValuationSnapshot.valuation_date < valuation_date,
-                PropertyValuationSnapshot.is_projection == False,
-            ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
-
-            change_percent = None
-            if previous and previous.value and previous.value > 0:
-                change_percent = ((value - previous.value) / previous.value) * 100
-
-            # Remove any projection for this exact date (superseded by actual)
-            family_query(PropertyValuationSnapshot).filter_by(
-                property_id=property_id,
-                valuation_date=valuation_date,
-                is_projection=True,
-            ).delete()
-
-            snapshot = PropertyValuationSnapshot(
-                property_id=property_id,
-                valuation_date=valuation_date,
-                value=value,
-                change_percent=change_percent,
-                source=source,
-                notes=notes,
+            snapshot, change_percent = MortgageService.add_valuation(
+                property_id, request.form
             )
-            db.session.add(snapshot)
 
-            # Keep Property.current_valuation in sync with the latest actual
-            latest_actual = family_query(PropertyValuationSnapshot).filter(
-                PropertyValuationSnapshot.property_id == property_id,
-                PropertyValuationSnapshot.is_projection == False,
-            ).order_by(PropertyValuationSnapshot.valuation_date.desc()).first()
-
-            if latest_actual is None or valuation_date >= latest_actual.valuation_date:
-                prop.current_valuation = value
-
-            db.session.commit()
-
-            flash(f'Valuation saved: £{value:,.2f}' +
+            flash(f'Valuation saved: £{snapshot.value:,.2f}' +
                   (f' ({change_percent:+.1f}% vs previous)' if change_percent else ''), 'success')
             return redirect(url_for('mortgage.valuations', property_id=property_id))
 
@@ -391,11 +295,8 @@ def add_valuation(property_id):
 @mortgage_bp.route('/mortgage/property/<int:property_id>/valuations/<int:snapshot_id>/delete', methods=['POST'])
 def delete_valuation(property_id, snapshot_id):
     """Delete a valuation snapshot"""
-    snapshot = family_get_or_404(PropertyValuationSnapshot, snapshot_id)
-
     try:
-        db.session.delete(snapshot)
-        db.session.commit()
+        MortgageService.delete_valuation(snapshot_id)
         flash('Valuation deleted.', 'success')
     except Exception as e:
         db.session.rollback()

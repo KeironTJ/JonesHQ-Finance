@@ -8,6 +8,7 @@ from models import Category
 from models.settings import Settings
 from models.transactions import Transaction
 from services.payday_service import PaydayService
+from services.category_service import CategoryService
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
@@ -17,37 +18,10 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 @bp.route('/')
 def index():
     """List all categories grouped by head budget"""
-    from models.transactions import Transaction
-    
-    # Get all head budgets
-    head_budgets = family_query(Category).with_entities(Category.head_budget).distinct().order_by(Category.head_budget).all()
-    
-    # Organize categories by head budget with transaction counts
-    categories_by_head = {}
-    for (head_budget,) in head_budgets:
-        categories = family_query(Category).filter_by(head_budget=head_budget).order_by(Category.sub_budget).all()
-        
-        # Add transaction count to each category
-        for category in categories:
-            category.transaction_count = family_query(Transaction).filter_by(category_id=category.id).count()
-        
-        # Calculate total for head budget
-        head_transaction_count = sum(c.transaction_count for c in categories)
-        
-        categories_by_head[head_budget] = {
-            'categories': categories,
-            'total_count': head_transaction_count
-        }
-    
-    # Sort by transaction count (descending)
-    categories_by_head = dict(sorted(categories_by_head.items(), 
-                                     key=lambda x: x[1]['total_count'], 
-                                     reverse=True))
-
     collapse_all_default = Settings.get_value('categories.collapse_all_default', False)
     
     return render_template('categories/categories.html', 
-                         categories_by_head=categories_by_head,
+                         categories_by_head=CategoryService.get_categories_by_head(),
                          collapse_all_default=collapse_all_default)
 
 @bp.route('/add', methods=['GET', 'POST'])
@@ -58,36 +32,17 @@ def add():
         sub_budget = request.form.get('sub_budget')
         category_type = request.form.get('category_type')
         
-        # Check if category already exists
-        existing = family_query(Category).filter_by(
-            head_budget=head_budget,
-            sub_budget=sub_budget if sub_budget else None
-        ).first()
+        existing = CategoryService.find_conflict(head_budget, sub_budget)
         
         if existing:
             flash(f'Category "{head_budget} - {sub_budget}" already exists!', 'warning')
         else:
-            # Create new category
-            name = f"{head_budget}"
-            if sub_budget:
-                name += f" - {sub_budget}"
-            
-            category = Category(
-                name=name,
-                head_budget=head_budget,
-                sub_budget=sub_budget if sub_budget else None,
-                category_type=category_type
-            )
-            
-            db.session.add(category)
-            db.session.commit()
-            
-            flash(f'Category "{name}" added successfully!', 'success')
+            category = CategoryService.create_category(head_budget, sub_budget, category_type)
+            flash(f'Category "{category.name}" added successfully!', 'success')
             return redirect(url_for('categories.index'))
     
     # Get existing head budgets for dropdown
-    head_budgets = family_query(Category).with_entities(Category.head_budget).distinct().order_by(Category.head_budget).all()
-    existing_heads = [h[0] for h in head_budgets]
+    existing_heads = CategoryService.get_existing_heads()
     
     return render_template('categories/add.html', existing_heads=existing_heads)
 
@@ -101,58 +56,36 @@ def edit(id):
         sub_budget = request.form.get('sub_budget')
         category_type = request.form.get('category_type')
         
-        # Check if updated category conflicts with existing
-        existing = family_query(Category).filter(
-            Category.id != id,
-            Category.head_budget == head_budget,
-            Category.sub_budget == (sub_budget if sub_budget else None)
-        ).first()
+        existing = CategoryService.find_conflict(head_budget, sub_budget, exclude_id=id)
         
         if existing:
             flash(f'Category "{head_budget} - {sub_budget}" already exists!', 'warning')
         else:
-            # Update category
-            category.head_budget = head_budget
-            category.sub_budget = sub_budget if sub_budget else None
-            category.category_type = category_type
-            category.name = f"{head_budget}" + (f" - {sub_budget}" if sub_budget else "")
-            category.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            
-            db.session.commit()
-            
+            category = CategoryService.update_category(id, head_budget, sub_budget, category_type)
             flash(f'Category "{category.name}" updated successfully!', 'success')
             return redirect(url_for('categories.index'))
     
     # Get existing head budgets for dropdown
-    head_budgets = family_query(Category).with_entities(Category.head_budget).distinct().order_by(Category.head_budget).all()
-    existing_heads = [h[0] for h in head_budgets]
+    existing_heads = CategoryService.get_existing_heads()
     
     return render_template('categories/edit.html', category=category, existing_heads=existing_heads)
 
 @bp.route('/delete/<int:id>', methods=['POST'])
 def delete(id):
     """Delete a category"""
-    category = family_get_or_404(Category, id)
-    
-    # Check if category is being used
-    if category.transactions:
-        flash(f'Cannot delete "{category.name}" - it has {len(category.transactions)} transactions!', 'danger')
-    elif category.budgets:
-        flash(f'Cannot delete "{category.name}" - it has {len(category.budgets)} budgets!', 'danger')
+    result = CategoryService.delete_category(id)
+    if not result['deleted']:
+        label = 'transactions' if result['reason'] == 'transactions' else 'budgets'
+        flash(f"Cannot delete \"{result['name']}\" - it has {result['count']} {label}!", 'danger')
     else:
-        name = category.name
-        db.session.delete(category)
-        db.session.commit()
-        flash(f'Category "{name}" deleted successfully!', 'success')
+        flash(f"Category \"{result['name']}\" deleted successfully!", 'success')
     
     return redirect(url_for('categories.index'))
 
 @bp.route('/api/subcategories/<head_budget>')
 def get_subcategories(head_budget):
     """API endpoint to get sub-categories for a head budget"""
-    categories = family_query(Category).filter_by(head_budget=head_budget).all()
-    subcategories = [cat.sub_budget for cat in categories if cat.sub_budget]
-    return jsonify(subcategories)
+    return jsonify(CategoryService.get_subcategories(head_budget))
 
 
 @bp.route('/analytics')

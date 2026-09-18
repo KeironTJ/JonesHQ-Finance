@@ -50,7 +50,8 @@ def test_parse_finance_year_invalid():
         assert True
 
 
-def test_build_report_and_csv(app, family):
+def test_build_report_and_csv(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     _add_expense(family.id, date(2025, 4, 15), 'Trip A', miles=10, rate='0.45', days=2, vehicle='AAA 111')
     _add_expense(family.id, date(2025, 5, 10), 'Trip B', miles=20, rate='0.50', days=1, vehicle='BBB 222', submitted=True)
     _add_expense(family.id, date(2025, 5, 18), 'Trip C', miles=5, rate='0.50', days=1, vehicle='AAA 111', reimbursed=True)

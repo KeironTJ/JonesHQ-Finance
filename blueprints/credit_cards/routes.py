@@ -65,35 +65,7 @@ def add():
     """Add a new credit card"""
     if request.method == 'POST':
         try:
-            card = CreditCard(
-                card_name=request.form.get('card_name'),
-                annual_apr=float(request.form.get('annual_apr', 0)),
-                monthly_apr=float(request.form.get('monthly_apr', 0)),
-                min_payment_percent=float(request.form.get('min_payment_percent', 1.0)),
-                credit_limit=float(request.form.get('credit_limit', 0)),
-                set_payment=float(request.form.get('set_payment', 0)) if request.form.get('set_payment') else None,
-                statement_date=int(request.form.get('statement_date')) if request.form.get('statement_date') else None,
-                current_balance=float(request.form.get('current_balance', 0)),
-                is_active=request.form.get('is_active') == 'on',
-                default_payment_account_id=int(request.form.get('default_payment_account_id')) if request.form.get('default_payment_account_id') else None
-            )
-            
-            # Handle start date
-            if request.form.get('start_date'):
-                card.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
-            
-            # Handle promotional periods
-            if request.form.get('purchase_0_percent_until'):
-                card.purchase_0_percent_until = datetime.strptime(request.form.get('purchase_0_percent_until'), '%Y-%m-%d').date()
-            
-            if request.form.get('balance_transfer_0_percent_until'):
-                card.balance_transfer_0_percent_until = datetime.strptime(request.form.get('balance_transfer_0_percent_until'), '%Y-%m-%d').date()
-            
-            # Calculate available credit
-            card.available_credit = float(card.credit_limit) - float(card.current_balance)
-            
-            db.session.add(card)
-            db.session.commit()
+            card = CreditCardService.create_card(request.form)
             
             flash(f'Credit card "{card.card_name}" added successfully!', 'success')
             return redirect(url_for('credit_cards.index'))
@@ -114,39 +86,7 @@ def edit(id):
     
     if request.method == 'POST':
         try:
-            card.card_name = request.form.get('card_name')
-            card.annual_apr = float(request.form.get('annual_apr', 0))
-            card.monthly_apr = float(request.form.get('monthly_apr', 0))
-            card.min_payment_percent = float(request.form.get('min_payment_percent', 1.0))
-            card.credit_limit = float(request.form.get('credit_limit', 0))
-            card.set_payment = float(request.form.get('set_payment', 0)) if request.form.get('set_payment') else None
-            card.statement_date = int(request.form.get('statement_date')) if request.form.get('statement_date') else None
-            card.current_balance = float(request.form.get('current_balance', 0))
-            card.is_active = request.form.get('is_active') == 'on'
-            card.default_payment_account_id = int(request.form.get('default_payment_account_id')) if request.form.get('default_payment_account_id') else None
-            card.default_payment_account_id = int(request.form.get('default_payment_account_id')) if request.form.get('default_payment_account_id') else None
-            card.default_payment_account_id = int(request.form.get('default_payment_account_id')) if request.form.get('default_payment_account_id') else None
-            
-            # Handle start date
-            if request.form.get('start_date'):
-                card.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
-            
-            # Handle promotional periods
-            if request.form.get('purchase_0_percent_until'):
-                card.purchase_0_percent_until = datetime.strptime(request.form.get('purchase_0_percent_until'), '%Y-%m-%d').date()
-            else:
-                card.purchase_0_percent_until = None
-            
-            if request.form.get('balance_transfer_0_percent_until'):
-                card.balance_transfer_0_percent_until = datetime.strptime(request.form.get('balance_transfer_0_percent_until'), '%Y-%m-%d').date()
-            else:
-                card.balance_transfer_0_percent_until = None
-            
-            # Calculate available credit
-            card.available_credit = float(card.credit_limit) - float(card.current_balance)
-            card.updated_at = datetime.now()
-            
-            db.session.commit()
+            card = CreditCardService.update_card(id, request.form)
             
             flash(f'Credit card "{card.card_name}" updated successfully!', 'success')
             return redirect(url_for('credit_cards.index'))
@@ -164,11 +104,7 @@ def edit(id):
 def delete(id):
     """Delete a credit card"""
     try:
-        card = family_get_or_404(CreditCard, id)
-        card_name = card.card_name
-        
-        db.session.delete(card)
-        db.session.commit()
+        card_name = CreditCardService.delete_card(id)
         
         flash(f'Credit card "{card_name}" deleted successfully!', 'success')
     except Exception as e:
@@ -304,110 +240,12 @@ def add_transaction(id):
         except ValueError:
             flash('Invalid date format', 'danger')
             return redirect(url_for('credit_cards.detail', id=id))
-        
-        # Get category info if provided
-        head_budget = None
-        sub_budget = None
-        if category_id:
-            category = family_get(Category, int(category_id))
-            if category:
-                head_budget = category.head_budget
-                sub_budget = category.sub_budget
-        
-        # Create transactions (single or multiple if recurring)
-        transactions_created = 0
-        current_date = txn_date
-        
-        for i in range(occurrences if is_recurring else 1):
-            # Calculate date for this occurrence
-            if i > 0:
-                if frequency == 'weekly':
-                    from dateutil.relativedelta import relativedelta
-                    current_date = txn_date + relativedelta(weeks=i)
-                elif frequency == 'monthly':
-                    from dateutil.relativedelta import relativedelta
-                    current_date = txn_date + relativedelta(months=i)
-                elif frequency == 'yearly':
-                    from dateutil.relativedelta import relativedelta
-                    current_date = txn_date + relativedelta(years=i)
-            
-            # Create new credit card transaction
-            new_txn = CreditCardTransaction(
-                credit_card_id=id,
-                category_id=int(category_id) if category_id else None,
-                date=current_date,
-                day_name=current_date.strftime('%A'),
-                week=f"{current_date.isocalendar()[1]:02d}-{current_date.year}",
-                month=current_date.strftime('%Y-%m'),
-                head_budget=head_budget,
-                sub_budget=sub_budget,
-                item=txn_item,
-                transaction_type=txn_type,
-                amount=Decimal(str(txn_amount)),  # Convert to Decimal
-                is_paid=txn_paid,  # Use the value from the form
-                is_fixed=txn_fixed
-            )
-            
-            db.session.add(new_txn)
-            db.session.flush()
-            
-            # If it's a payment and an account is selected, create linked bank transaction
-            if txn_type == 'Payment' and account_id:
-                # Find Credit Cards category matching this specific card
-                credit_card_category = family_query(Category).filter_by(
-                    head_budget='Credit Cards',
-                    sub_budget=card.card_name
-                ).first()
-                
-                # If not found, try to find any Credit Cards category as fallback
-                if not credit_card_category:
-                    credit_card_category = family_query(Category).filter_by(
-                        head_budget='Credit Cards'
-                    ).first()
-                
-                # Find or create vendor matching card name
-                vendor = family_query(Vendor).filter_by(name=card.card_name).first()
-                if not vendor:
-                    vendor = Vendor(name=card.card_name)
-                    db.session.add(vendor)
-                    db.session.flush()
-                
-                # Create linked bank transaction (payment from account)
-                bank_txn = Transaction(
-                    account_id=account_id,
-                    category_id=credit_card_category.id if credit_card_category else None,
-                    vendor_id=vendor.id,
-                    amount=Decimal(str(-abs(txn_amount))),  # Negative = expense from bank account (money out)
-                    transaction_date=current_date,
-                    description=f'Payment to {card.card_name}',
-                    item='Credit Card Payment',
-                    payment_type='Card Payment',
-                    is_paid=txn_paid,  # Same as CC transaction
-                    is_fixed=txn_fixed,
-                    credit_card_id=card.id,
-                    year_month=current_date.strftime('%Y-%m'),
-                    week_year=f"{current_date.isocalendar()[1]:02d}-{current_date.year}",
-                    day_name=current_date.strftime('%A'),
-                    payday_period=PaydayService.get_period_for_date(current_date)
-                )
-                db.session.add(bank_txn)
-                db.session.flush()
-                
-                # Link back to credit card transaction
-                new_txn.bank_transaction_id = bank_txn.id
-                
-                # Recalculate bank account balance
-                Transaction.recalculate_account_balance(account_id)
-            
-            transactions_created += 1
-        
-        # Recalculate card balance (will commit internally)
-        CreditCardTransaction.recalculate_card_balance(id, commit=True)
-        
+
+        transactions = CreditCardService.create_transactions(id, request.form)
         if is_recurring:
-            flash(f'{transactions_created} transactions created successfully!', 'success')
+            flash(f'{len(transactions)} transactions created successfully!', 'success')
         else:
-            flash(f'Transaction added successfully!', 'success')
+            flash('Transaction added successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
     except Exception as e:
         db.session.rollback()
@@ -419,9 +257,7 @@ def add_transaction(id):
 def toggle_fixed(txn_id):
     """Toggle is_fixed flag on a transaction"""
     try:
-        txn = family_get_or_404(CreditCardTransaction, txn_id)
-        txn.is_fixed = not txn.is_fixed
-        db.session.commit()
+        txn = CreditCardService.toggle_transaction_fixed(txn_id)
         
         status = "locked" if txn.is_fixed else "unlocked"
         flash(f'Transaction {status} successfully!', 'success')

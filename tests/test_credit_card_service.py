@@ -16,6 +16,8 @@ from extensions import db
 from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
 from models.categories import Category
+from models.accounts import Account
+from models.transactions import Transaction
 from models.family import Family
 from services.credit_card_service import CreditCardService
 
@@ -173,3 +175,133 @@ class TestGenerateMonthlyStatement:
 
         assert result['payment_txn'] is not None
         assert float(result['payment_txn'].amount) <= 51.0  # at most balance + interest
+
+
+def test_toggle_transaction_fixed_updates_service_owned_state(
+    app, card, family_id, patch_family
+):
+    transaction = _add_purchase(card, Decimal('-50.00'), date(2026, 2, 1), family_id)
+
+    updated = CreditCardService.toggle_transaction_fixed(transaction.id)
+
+    assert updated.is_fixed is True
+    db.session.refresh(transaction)
+    assert transaction.is_fixed is True
+
+
+def test_create_recurring_credit_card_transactions(app, card, family_id, patch_family, monkeypatch):
+    monkeypatch.setattr('services.credit_card_service.get_family_id', lambda: family_id)
+    category = Category(
+        family_id=family_id,
+        name='Purchase',
+        head_budget='Work',
+        sub_budget='Travel',
+        category_type='expense',
+    )
+    db.session.add(category)
+    db.session.commit()
+
+    transactions = CreditCardService.create_transactions(card.id, {
+        'txn_date': '2026-01-15',
+        'txn_type': 'Purchase',
+        'txn_item': 'Travel',
+        'txn_amount': '-25.00',
+        'category_id': str(category.id),
+        'txn_fixed': '0',
+        'txn_paid': '0',
+        'is_recurring': 'on',
+        'frequency': 'monthly',
+        'occurrences': '2',
+        'account_id': '',
+    })
+
+    assert len(transactions) == 2
+    assert transactions[0].family_id == family_id
+    assert transactions[0].head_budget == 'Work'
+    assert transactions[1].month == '2026-02'
+
+
+def test_create_credit_card_payment_links_bank_transaction(
+    app, card, family_id, patch_family, monkeypatch
+):
+    monkeypatch.setattr('services.credit_card_service.get_family_id', lambda: family_id)
+    account = Account(
+        family_id=family_id,
+        name='Current',
+        account_type='Joint',
+        balance=0,
+        is_active=True,
+    )
+    payment_category = Category(
+        family_id=family_id,
+        name='Card Payment',
+        head_budget='Credit Cards',
+        sub_budget=card.card_name,
+        category_type='expense',
+    )
+    db.session.add_all([account, payment_category])
+    db.session.commit()
+
+    transactions = CreditCardService.create_transactions(card.id, {
+        'txn_date': '2026-02-15',
+        'txn_type': 'Payment',
+        'txn_item': 'Payment',
+        'txn_amount': '200.00',
+        'category_id': '',
+        'txn_fixed': '1',
+        'txn_paid': '1',
+        'is_recurring': '',
+        'frequency': 'monthly',
+        'occurrences': '1',
+        'account_id': str(account.id),
+    })
+
+    bank_transaction = db.session.get(Transaction, transactions[0].bank_transaction_id)
+    assert bank_transaction is not None
+    assert bank_transaction.family_id == family_id
+    assert bank_transaction.amount == Decimal('-200.00')
+    assert bank_transaction.account_id == account.id
+
+
+def test_credit_card_crud_assigns_family_and_updates_available_credit(
+    app, family_id, patch_family, monkeypatch
+):
+    monkeypatch.setattr('services.credit_card_service.get_family_id', lambda: family_id)
+    card = CreditCardService.create_card({
+        'card_name': 'CRUD Card',
+        'annual_apr': '24',
+        'monthly_apr': '2',
+        'min_payment_percent': '2',
+        'credit_limit': '5000',
+        'set_payment': '200',
+        'statement_date': '15',
+        'current_balance': '-1000',
+        'is_active': 'on',
+        'default_payment_account_id': '',
+        'start_date': '2026-01-01',
+        'purchase_0_percent_until': '2026-06-30',
+        'balance_transfer_0_percent_until': '',
+    })
+    assert card.family_id == family_id
+    assert card.available_credit == 6000
+
+    updated = CreditCardService.update_card(card.id, {
+        'card_name': 'Updated Card',
+        'annual_apr': '25',
+        'monthly_apr': '2.1',
+        'min_payment_percent': '2',
+        'credit_limit': '6000',
+        'set_payment': '250',
+        'statement_date': '20',
+        'current_balance': '-1500',
+        'is_active': 'on',
+        'default_payment_account_id': '',
+        'start_date': '2026-01-01',
+        'purchase_0_percent_until': '',
+        'balance_transfer_0_percent_until': '',
+    })
+    deleted_name = CreditCardService.delete_card(card.id)
+
+    assert updated.card_name == 'Updated Card'
+    assert updated.available_credit == 7500
+    assert deleted_name == 'Updated Card'

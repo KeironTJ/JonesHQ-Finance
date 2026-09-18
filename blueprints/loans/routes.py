@@ -73,46 +73,9 @@ def index():
 @loans_bp.route('/add', methods=['GET', 'POST'])
 def add():
     """Add a new loan — saves the loan and immediately generates the full amortization schedule."""
-    from models.accounts import Account
-    
     if request.method == 'POST':
         try:
-            # Parse dates
-            start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
-            term_months = int(request.form['term_months'])
-            end_date = start_date + relativedelta(months=term_months)
-            
-            # Get default payment account
-            default_payment_account_id = request.form.get('default_payment_account_id')
-            if default_payment_account_id == '':
-                default_payment_account_id = None
-            
-            loan = Loan(
-                name=request.form['name'],
-                loan_value=float(request.form['loan_value']),
-                principal=float(request.form['loan_value']),
-                current_balance=float(request.form.get('current_balance', request.form['loan_value'])),
-                annual_apr=float(request.form['annual_apr']),
-                monthly_apr=float(request.form['annual_apr']) / 12,
-                monthly_payment=float(request.form['monthly_payment']),
-                start_date=start_date,
-                end_date=end_date,
-                term_months=term_months,
-                default_payment_account_id=default_payment_account_id,
-                weekend_adjustment=request.form.get('weekend_adjustment', 'none'),
-                is_active=request.form.get('is_active') == 'on'
-            )
-            
-            db.session.add(loan)
-            db.session.commit()
-
-            # Auto-generate amortization schedule immediately
-            payments = LoanService.generate_amortization_schedule(
-                loan_id=loan.id,
-                start_date=loan.start_date,
-                end_date=loan.end_date,
-                commit=True
-            )
+            loan, payments = LoanService.create_loan(request.form)
             
             flash(f'Loan "{loan.name}" created with {len(payments)} payment records.', 'success')
             return redirect(url_for('loans.detail', id=loan.id))

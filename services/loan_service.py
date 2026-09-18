@@ -67,6 +67,43 @@ class LoanService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def create_loan(data):
+        start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        term_months = int(data['term_months'])
+        end_date = start_date + relativedelta(months=term_months)
+        loan_value = Decimal(data['loan_value'])
+        annual_apr = Decimal(data['annual_apr'])
+
+        loan = Loan(
+            family_id=get_family_id(),
+            name=data['name'],
+            loan_value=loan_value,
+            principal=loan_value,
+            current_balance=Decimal(data.get('current_balance') or data['loan_value']),
+            annual_apr=annual_apr,
+            monthly_apr=annual_apr / Decimal('12'),
+            monthly_payment=Decimal(data['monthly_payment']),
+            start_date=start_date,
+            end_date=end_date,
+            term_months=term_months,
+            default_payment_account_id=(
+                int(data['default_payment_account_id'])
+                if data.get('default_payment_account_id') else None
+            ),
+            weekend_adjustment=data.get('weekend_adjustment', 'none'),
+            is_active=data.get('is_active') == 'on',
+        )
+        db.session.add(loan)
+        db.session.commit()
+        payments = LoanService.generate_amortization_schedule(
+            loan_id=loan.id,
+            start_date=loan.start_date,
+            end_date=loan.end_date,
+            commit=True,
+        )
+        return loan, payments
+
+    @staticmethod
     def _adjust_for_weekend(date_obj, adjustment):
         """
         Adjust a date if it falls on a weekend, according to the loan's rule.

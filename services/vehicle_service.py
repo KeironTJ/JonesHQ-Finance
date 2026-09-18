@@ -39,6 +39,195 @@ class VehicleService:
     """
 
     @staticmethod
+    def create_vehicle(data):
+        vehicle = Vehicle(
+            family_id=get_family_id(),
+            name=data.get('name'),
+            make=data.get('make'),
+            model=data.get('model'),
+            registration=data.get('registration', '').upper(),
+            tank_size=Decimal(data['tank_size']) if data.get('tank_size') else None,
+            fuel_type=data.get('fuel_type'),
+            year=int(data['year']) if data.get('year') else None,
+            starting_mileage=(
+                int(data['starting_mileage'])
+                if data.get('starting_mileage') else None
+            ),
+            fuel_account_id=(
+                int(data['fuel_account_id'])
+                if data.get('fuel_account_id') else None
+            ),
+            refuel_threshold_pct=Decimal(
+                data.get('refuel_threshold_pct') or '95'
+            ),
+            is_active=True,
+        )
+        db.session.add(vehicle)
+        db.session.commit()
+        return vehicle
+
+    @staticmethod
+    def update_vehicle(vehicle_id, data):
+        vehicle = family_get_or_404(Vehicle, vehicle_id)
+        vehicle.name = data.get('name', vehicle.name)
+        vehicle.make = data.get('make', vehicle.make)
+        vehicle.model = data.get('model', vehicle.model)
+        vehicle.registration = data.get('registration', vehicle.registration).upper()
+        vehicle.fuel_type = data.get('fuel_type', vehicle.fuel_type)
+        vehicle.is_active = data.get('is_active') == 'on'
+        if data.get('tank_size'):
+            vehicle.tank_size = Decimal(data['tank_size'])
+        if data.get('refuel_threshold_pct'):
+            vehicle.refuel_threshold_pct = Decimal(data['refuel_threshold_pct'])
+        if data.get('year'):
+            vehicle.year = int(data['year'])
+        vehicle.fuel_account_id = (
+            int(data['fuel_account_id']) if data.get('fuel_account_id') else None
+        )
+        db.session.commit()
+        return vehicle
+
+    @staticmethod
+    def delete_vehicle(vehicle_id):
+        vehicle = family_get_or_404(Vehicle, vehicle_id)
+        name = vehicle.name
+        db.session.delete(vehicle)
+        db.session.commit()
+        return name
+
+    @staticmethod
+    def create_fuel_record(data):
+        vehicle_id = int(data['vehicle_id'])
+        fuel_date = date.fromisoformat(data['date'])
+        price_per_litre = Decimal(data['price_per_litre'])
+        mileage = int(data['mileage'])
+        cost = Decimal(data['cost'])
+        gallons = Decimal(data['gallons'])
+        metrics = VehicleService.calculate_fuel_metrics(
+            vehicle_id, mileage, gallons, cost, fuel_date
+        )
+        fuel_record = FuelRecord(
+            family_id=get_family_id(),
+            vehicle_id=vehicle_id,
+            date=fuel_date,
+            price_per_litre=price_per_litre,
+            mileage=mileage,
+            cost=cost,
+            gallons=gallons,
+            actual_miles=metrics[0],
+            mpg=metrics[1],
+            price_per_mile=metrics[2],
+            last_fill_date=metrics[3],
+            actual_cumulative_miles=metrics[4],
+            is_partial_fill=data.get('is_partial_fill') == '1',
+        )
+        db.session.add(fuel_record)
+        db.session.commit()
+        return fuel_record
+
+    @staticmethod
+    def update_fuel_record(fuel_id, data):
+        fuel_record = family_get_or_404(FuelRecord, fuel_id)
+        fuel_record.date = date.fromisoformat(data['date'])
+        fuel_record.price_per_litre = Decimal(data['price_per_litre'])
+        fuel_record.mileage = int(data['mileage'])
+        fuel_record.cost = Decimal(data['cost'])
+        fuel_record.gallons = Decimal(data['gallons'])
+        fuel_record.is_partial_fill = data.get('is_partial_fill') == '1'
+        metrics = VehicleService.calculate_fuel_metrics(
+            fuel_record.vehicle_id,
+            fuel_record.mileage,
+            fuel_record.gallons,
+            fuel_record.cost,
+            fuel_record.date,
+        )
+        fuel_record.actual_miles = metrics[0]
+        fuel_record.mpg = metrics[1]
+        fuel_record.price_per_mile = metrics[2]
+        fuel_record.last_fill_date = metrics[3]
+        fuel_record.actual_cumulative_miles = metrics[4]
+        db.session.commit()
+        return fuel_record
+
+    @staticmethod
+    def delete_fuel_record(fuel_id):
+        fuel_record = family_get_or_404(FuelRecord, fuel_id)
+        vehicle_id = fuel_record.vehicle_id
+        db.session.delete(fuel_record)
+        db.session.commit()
+        return vehicle_id
+
+    @staticmethod
+    def create_trip(data):
+        vehicle_id = int(data['vehicle_id'])
+        trip_date = date.fromisoformat(data['date'])
+        trip_type = data.get('trip_type', 'personal')
+        miles = int(data.get('miles') or 0)
+        trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(
+            vehicle_id, miles, trip_date
+        )
+        latest_fuel = VehicleService.get_latest_fuel_record(vehicle_id)
+        previous_trip = family_query(Trip).filter(
+            Trip.vehicle_id == vehicle_id, Trip.date < trip_date
+        ).order_by(Trip.date.desc()).first()
+        cumulative_miles = (
+            (previous_trip.cumulative_total_miles or 0) + miles
+            if previous_trip else miles
+        )
+        cumulative_gallons = (
+            (previous_trip.cumulative_gallons or Decimal('0')) + gallons_used
+            if previous_trip else gallons_used
+        )
+        trip = Trip(
+            family_id=get_family_id(),
+            vehicle_id=vehicle_id,
+            date=trip_date,
+            month=trip_date.strftime('%Y-%m'),
+            week=f'{trip_date.isocalendar()[1]:02d}-{trip_date.year}',
+            day_name=trip_date.strftime('%A'),
+            personal_miles=miles if trip_type == 'personal' else 0,
+            business_miles=miles if trip_type == 'business' else 0,
+            total_miles=miles,
+            cumulative_total_miles=cumulative_miles,
+            journey_description=data.get('journey_description', ''),
+            school_holidays=data.get('school_holidays', ''),
+            approx_mpg=approx_mpg,
+            gallons_used=gallons_used,
+            cumulative_gallons=cumulative_gallons,
+            trip_cost=trip_cost,
+            fuel_cost=Decimal('0'),
+            vehicle_last_fill=latest_fuel.date if latest_fuel else None,
+        )
+        db.session.add(trip)
+        db.session.commit()
+        return trip
+
+    @staticmethod
+    def update_trip(trip_id, data):
+        trip = family_get_or_404(Trip, trip_id)
+        trip.date = date.fromisoformat(data['date'])
+        trip_type = data.get('trip_type', 'personal')
+        miles = int(data.get('miles') or 0)
+        trip.personal_miles = miles if trip_type == 'personal' else 0
+        trip.business_miles = miles if trip_type == 'business' else 0
+        trip.total_miles = miles
+        trip.journey_description = data.get('journey_description', '')
+        trip.school_holidays = data.get('school_holidays', '')
+        trip.trip_cost, trip.gallons_used, trip.approx_mpg = VehicleService.calculate_trip_cost(
+            trip.vehicle_id, miles, trip.date
+        )
+        db.session.commit()
+        return trip
+
+    @staticmethod
+    def delete_trip(trip_id):
+        trip = family_get_or_404(Trip, trip_id)
+        vehicle_id = trip.vehicle_id
+        db.session.delete(trip)
+        db.session.commit()
+        return vehicle_id
+
+    @staticmethod
     def calculate_fuel_metrics(vehicle_id, current_mileage, gallons, cost, fuel_date):
         """
         Derive fuel metrics for a new fill-up by comparing to the previous record.

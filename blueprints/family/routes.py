@@ -25,6 +25,7 @@ from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
 from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTIONS
 from utils.db_helpers import family_query, get_family_id
+from services.family_service import FamilyService
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,25 +107,10 @@ def create_assignment_label():
         flash('Label name is required.', 'danger')
         return redirect(url_for('family.index'))
 
-    existing = FamilyAssignmentLabel.query.filter_by(
-        family_id=family.id,
-        name=name,
-        is_active=True,
-    ).first()
-    if existing:
+    label = FamilyService.create_assignment_label(family.id, name)
+    if label is None:
         flash('That assignment label already exists.', 'warning')
         return redirect(url_for('family.index'))
-
-    max_sort = FamilyAssignmentLabel.query.filter_by(family_id=family.id).with_entities(db.func.max(FamilyAssignmentLabel.sort_order)).scalar()
-    next_sort = (max_sort or 0) + 1
-
-    db.session.add(FamilyAssignmentLabel(
-        family_id=family.id,
-        name=name,
-        is_active=True,
-        sort_order=next_sort,
-    ))
-    db.session.commit()
 
     flash(f'Added assignment label: {name}', 'success')
     return redirect(url_for('family.index'))
@@ -136,13 +122,8 @@ def delete_assignment_label(label_id):
     """Delete a custom family assignment label."""
     _require_admin()
 
-    label = FamilyAssignmentLabel.query.get_or_404(label_id)
-    if label.family_id != current_user.family_id:
-        abort(403)
-
-    db.session.delete(label)
-    db.session.commit()
-    flash(f'Removed assignment label: {label.name}', 'success')
+    name = FamilyService.delete_assignment_label(label_id, current_user.family_id)
+    flash(f'Removed assignment label: {name}', 'success')
     return redirect(url_for('family.index'))
 
 
@@ -167,18 +148,13 @@ def create_invite():
     if role not in ('admin', 'member'):
         role = 'member'
 
-    # Admins get no section restriction; members get the chosen list
-    sections_json = None if role == 'admin' else json.dumps(sorted(selected_sections))
-
-    invite = FamilyInvite(
-        family_id=family.id,
-        member_name=member_name,
-        role=role,
-        allowed_sections=sections_json,
-        created_by_id=current_user.id,
+    invite = FamilyService.create_invite(
+        family.id,
+        current_user.id,
+        member_name,
+        role,
+        selected_sections,
     )
-    db.session.add(invite)
-    db.session.commit()
 
     flash(f'Invite link created for {member_name}.', 'success')
     return redirect(url_for('family.index'))
@@ -189,12 +165,7 @@ def create_invite():
 def revoke_invite(invite_id):
     _require_admin()
 
-    invite = FamilyInvite.query.get_or_404(invite_id)
-    if invite.family_id != current_user.family_id:
-        abort(403)
-
-    db.session.delete(invite)
-    db.session.commit()
+    FamilyService.revoke_invite(invite_id, current_user.family_id)
     flash('Invite revoked.', 'success')
     return redirect(url_for('family.index'))
 
@@ -204,28 +175,20 @@ def revoke_invite(invite_id):
 def update_member(member_id):
     _require_admin()
 
-    member = User.query.get_or_404(member_id)
-    if member.family_id != current_user.family_id:
-        abort(403)
-    if member.id == current_user.id:
+    member_name = request.form.get('member_name', '').strip()
+    selected_sections = request.form.getlist('sections')
+    role = request.form.get('role', 'member')
+    member = FamilyService.update_member(
+        member_id,
+        current_user.family_id,
+        current_user.id,
+        role,
+        member_name,
+        selected_sections,
+    )
+    if member is None:
         flash('You cannot edit your own permissions here.', 'warning')
         return redirect(url_for('family.index'))
-
-    selected_sections = request.form.getlist('sections')
-    role = request.form.get('role', member.role)
-    member_name = request.form.get('member_name', member.member_name or '').strip()
-
-    if role not in ('admin', 'member'):
-        role = 'member'
-
-    member.role = role
-    member.member_name = member_name or member.name
-    if role == 'admin':
-        member.allowed_sections = None
-    else:
-        member.set_allowed_sections(selected_sections)
-
-    db.session.commit()
     flash(f'Updated permissions for {member.name}.', 'success')
     return redirect(url_for('family.index'))
 
@@ -235,18 +198,15 @@ def update_member(member_id):
 def remove_member(member_id):
     _require_admin()
 
-    member = User.query.get_or_404(member_id)
-    if member.family_id != current_user.family_id:
-        abort(403)
-    if member.id == current_user.id:
+    name = FamilyService.remove_member(
+        member_id,
+        current_user.family_id,
+        current_user.id,
+    )
+    if name is None:
         flash('You cannot remove yourself from the family.', 'warning')
         return redirect(url_for('family.index'))
-
-    member.family_id = None
-    member.role = 'member'
-    member.allowed_sections = None
-    db.session.commit()
-    flash(f'{member.name} has been removed from the family.', 'success')
+    flash(f'{name} has been removed from the family.', 'success')
     return redirect(url_for('family.index'))
 
 

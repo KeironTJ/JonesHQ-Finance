@@ -63,20 +63,7 @@ def add():
     """Add a new pension"""
     if request.method == 'POST':
         try:
-            pension = Pension(
-                person=request.form.get('person', 'Keiron'),
-                provider=request.form['provider'],
-                account_number=request.form.get('account_number', ''),
-                current_value=Decimal(request.form.get('current_value', 0)),
-                contribution_rate=Decimal(request.form.get('contribution_rate', 0)),
-                employer_contribution=Decimal(request.form.get('employer_contribution', 0)),
-                is_active=request.form.get('is_active') == 'on',
-                retirement_age=int(request.form.get('retirement_age', 65)),
-                monthly_contribution=Decimal(request.form.get('monthly_contribution', 0))
-            )
-            
-            db.session.add(pension)
-            db.session.commit()
+            pension = PensionService.create_pension(request.form)
             
             flash(f'Pension added successfully: {pension.provider}', 'success')
             return redirect(url_for('pensions.index'))
@@ -169,6 +156,15 @@ def add_snapshot(id):
         try:
             review_date = datetime.strptime(request.form['review_date'], '%Y-%m-%d').date()
             value = Decimal(request.form['value'])
+
+            snapshot, growth_percent, pension = PensionService.add_actual_snapshot(
+                id, review_date, value
+            )
+            if Settings.get_value('auto_regenerate_projections', True):
+                PensionService.save_projections(pension, scenario='default')
+            flash(f'Snapshot added successfully! Value: £{value:,.2f}' +
+                  (f', Growth: {growth_percent:.2f}%' if growth_percent else ''), 'success')
+            return redirect(url_for('pensions.snapshots', id=id))
             
             # Get previous snapshot
             previous = family_query(PensionSnapshot).filter_by(pension_id=id)\

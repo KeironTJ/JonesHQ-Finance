@@ -16,6 +16,7 @@ from models.family_assignment_labels import FamilyAssignmentLabel
 from models.settings import Settings
 from models.users import User
 from services.payday_service import PaydayService
+from services.transaction_service import TransactionService
 from extensions import db
 from models.expenses import Expense
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
@@ -303,118 +304,12 @@ def create():
     """Create a new transaction"""
     if request.method == 'POST':
         try:
-            # Get basic form data
-            account_id = request.form.get('account_id', type=int)
-            category_id = request.form.get('category_id', type=int)
-            vendor_id = request.form.get('vendor_id', type=int) if request.form.get('vendor_id') else None
-            amount = float(request.form.get('amount'))
-            transaction_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d').date()
-            description = request.form.get('description', '')
-            item = request.form.get('item', '')
-            assigned_to = request.form.get('assigned_to', '')
-            payment_type = request.form.get('payment_type', '')
-            is_paid = request.form.get('is_paid') == '1'
-            
-            # Recurring options
             is_recurring = request.form.get('is_recurring') == 'on'
-            frequency = request.form.get('frequency', 'monthly')
-            occurrences = request.form.get('occurrences', type=int, default=1)
-            adjust_working_days = request.form.get('adjust_working_days') == 'on'
-            weekend_adjustment = request.form.get('weekend_adjustment', 'previous')  # 'previous' or 'next'
-            
-            if is_recurring and occurrences < 1:
-                flash('Number of occurrences must be at least 1', 'danger')
-                return redirect(url_for('transactions.create'))
-            
-            # Helper functions for working day adjustment
-            def is_weekend(date_obj):
-                """Check if date falls on Saturday (5) or Sunday (6)"""
-                return date_obj.weekday() >= 5
-            
-            def adjust_to_working_day(date_obj, direction='previous'):
-                """Adjust date to working day if it falls on weekend"""
-                if not is_weekend(date_obj):
-                    return date_obj
-                
-                if direction == 'previous':
-                    # Move to previous Friday
-                    while is_weekend(date_obj):
-                        date_obj = date_obj - timedelta(days=1)
-                else:  # 'next'
-                    # Move to next Monday
-                    while is_weekend(date_obj):
-                        date_obj = date_obj + timedelta(days=1)
-                return date_obj
-            
-            # Create transactions
-            transactions_created = 0
-            current_date = transaction_date
-            
-            for i in range(occurrences if is_recurring else 1):
-                # Calculate date for this occurrence
-                if i > 0:
-                    if frequency == 'weekly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transaction_date + relativedelta(weeks=i)
-                    elif frequency == '4weekly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transaction_date + relativedelta(weeks=i*4)
-                    elif frequency == 'monthly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transaction_date + relativedelta(months=i)
-                    elif frequency == 'quarterly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transaction_date + relativedelta(months=i*3)
-                    elif frequency == 'yearly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transaction_date + relativedelta(years=i)
-                
-                # Adjust for working days if enabled
-                if adjust_working_days:
-                    current_date = adjust_to_working_day(current_date, weekend_adjustment)
-                
-                # Calculate computed fields — use form overrides if provided, else auto-calculate
-                year_month = current_date.strftime('%Y-%m')
-                week_year = f"{current_date.isocalendar()[1]:02d}-{current_date.year}"
-                day_name = current_date.strftime('%a')
-                payday_period = PaydayService.get_period_for_date(current_date)
-
-                # Apply manual overrides (only for first occurrence on recurring; always for single)
-                if i == 0:
-                    if request.form.get('year_month', '').strip():
-                        year_month = request.form.get('year_month').strip()
-                    if request.form.get('week_year', '').strip():
-                        week_year = request.form.get('week_year').strip()
-                    if request.form.get('day_name', '').strip():
-                        day_name = request.form.get('day_name').strip()
-                    if request.form.get('payday_period_override', '').strip():
-                        payday_period = request.form.get('payday_period_override').strip()
-                
-                # Create transaction
-                transaction = Transaction(
-                    account_id=account_id,
-                    category_id=category_id,
-                    vendor_id=vendor_id,
-                    amount=amount,
-                    transaction_date=current_date,
-                    description=description,
-                    item=item,
-                    assigned_to=assigned_to,
-                    payment_type=payment_type,
-                    is_paid=is_paid,
-                    year_month=year_month,
-                    week_year=week_year,
-                    day_name=day_name,
-                    payday_period=payday_period
-                )
-                
-                db.session.add(transaction)
-                transactions_created += 1
-            
-            db.session.commit()
+            transactions = TransactionService.create_transactions(request.form)
+            transactions_created = len(transactions)
             
             # Recalculate account balance
-            Transaction.recalculate_account_balance(account_id)
+            Transaction.recalculate_account_balance(transactions[0].account_id)
             db.session.commit()
             
             if is_recurring:
@@ -454,59 +349,9 @@ def edit(id):
     
     if request.method == 'POST':
         try:
-            # Store old account_id before changes
-            old_account_id = transaction.account_id
-            
-            # Update transaction fields
-            transaction.account_id = request.form.get('account_id', type=int)
-            transaction.category_id = request.form.get('category_id', type=int)
-            transaction.vendor_id = request.form.get('vendor_id', type=int) if request.form.get('vendor_id') else None
-            transaction.amount = float(request.form.get('amount'))
-            transaction.transaction_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d').date()
-            transaction.description = request.form.get('description', '')
-            transaction.item = request.form.get('item', '')
-            transaction.assigned_to = request.form.get('assigned_to', '')
-            transaction.payment_type = request.form.get('payment_type', '')
-            transaction.is_paid = request.form.get('is_paid') == '1'
-            transaction.is_fixed = request.form.get('txn_fixed') == '1'
-            
-            # Recalculate computed fields — use form overrides if provided, else auto-calculate
-            date = transaction.transaction_date
-            transaction.year_month = request.form.get('year_month', '').strip() or date.strftime('%Y-%m')
-            transaction.week_year = request.form.get('week_year', '').strip() or f"{date.isocalendar()[1]:02d}-{date.year}"
-            transaction.day_name = request.form.get('day_name', '').strip() or date.strftime('%a')
-            transaction.payday_period = request.form.get('payday_period_override', '').strip() or PaydayService.get_period_for_date(date)
-            transaction.updated_at = datetime.now()
-            
-            # Sync changes to linked transfer transaction if exists (BEFORE commit)
-            linked_account_id = None
-            if transaction.linked_transaction_id:
-                linked_txn = family_get(Transaction, transaction.linked_transaction_id)
-                if linked_txn:
-                    linked_account_id = linked_txn.account_id
-                    
-                    # Update the linked transaction with opposite amount
-                    linked_txn.amount = -transaction.amount
-                    linked_txn.transaction_date = transaction.transaction_date
-                    linked_txn.item = transaction.item
-                    linked_txn.is_paid = transaction.is_paid
-                    
-                    # Update description to reflect the correct direction
-                    if transaction.amount < 0:  # Current txn is expense (money leaving)
-                        # This is the "from" account, linked is the "to" account
-                        linked_txn.description = f"Transfer from {transaction.account.name if transaction.account else 'Unknown'}"
-                    else:  # Current txn is income (money arriving)
-                        # This is the "to" account, linked is the "from" account
-                        linked_txn.description = f"Transfer to {transaction.account.name if transaction.account else 'Unknown'}"
-                    
-                    # Recalculate computed fields for linked transaction
-                    linked_txn.year_month = transaction.transaction_date.strftime('%Y-%m')
-                    linked_txn.week_year = f"{transaction.transaction_date.isocalendar()[1]:02d}-{transaction.transaction_date.year}"
-                    linked_txn.day_name = transaction.transaction_date.strftime('%a')
-                    linked_txn.payday_period = PaydayService.get_period_for_date(transaction.transaction_date)
-                    linked_txn.updated_at = datetime.now()
-            
-            db.session.commit()
+            transaction, old_account_id, linked_account_id = TransactionService.update_transaction(
+                id, request.form
+            )
             
             # Sync changes to linked credit card payment if exists
             if transaction.credit_card_id:
@@ -568,54 +413,15 @@ def edit(id):
 @transactions_bp.route('/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete a transaction"""
-    transaction = family_get_or_404(Transaction, id)
-    
     try:
-        account_id = transaction.account_id
-        account_name = transaction.account.name if transaction.account else 'Unknown'
-        linked_cc_payment = None
-        linked_transfer_account_id = None
-        
-        # Delete linked credit card payment if exists
-        if transaction.credit_card_id:
-            from models.credit_card_transactions import CreditCardTransaction
-            linked_cc_payment = family_query(CreditCardTransaction).filter_by(
-                bank_transaction_id=transaction.id
-            ).first()
-            if linked_cc_payment:
-                db.session.delete(linked_cc_payment)
-        
-        # Delete linked transfer transaction if exists
-        if transaction.linked_transaction_id:
-            linked_transfer = family_get(Transaction, transaction.linked_transaction_id)
-            if linked_transfer:
-                linked_transfer_account_id = linked_transfer.account_id
-                db.session.delete(linked_transfer)
-        
-        db.session.delete(transaction)
-        db.session.commit()
-
-        # Clear any Expense links pointing to this deleted transaction to avoid automatic recreation
-        try:
-            linked_expenses = family_query(Expense).filter(
-                (Expense.bank_transaction_id == id) | (Expense.credit_card_transaction_id == id)
-            ).all()
-            for exp in linked_expenses:
-                if getattr(exp, 'bank_transaction_id', None) == id:
-                    exp.bank_transaction_id = None
-                if getattr(exp, 'credit_card_transaction_id', None) == id:
-                    exp.credit_card_transaction_id = None
-                db.session.add(exp)
-            if linked_expenses:
-                db.session.commit()
-                current_app.logger.info(f"Cleared expense links for deleted transaction {id}: {[e.id for e in linked_expenses]}")
-        except Exception:
-            db.session.rollback()
+        account_id, account_name, linked_card_id, linked_transfer_account_id = (
+            TransactionService.delete_transaction(id)
+        )
         
         # Recalculate credit card balance if payment was deleted
-        if linked_cc_payment:
+        if linked_card_id:
             from models.credit_card_transactions import CreditCardTransaction
-            CreditCardTransaction.recalculate_card_balance(linked_cc_payment.credit_card_id)
+            CreditCardTransaction.recalculate_card_balance(linked_card_id)
         
         # Recalculate balance for the account
         if account_id:
@@ -642,44 +448,8 @@ def delete(id):
 @transactions_bp.route('/transactions/<int:id>/toggle_paid', methods=['POST'])
 def toggle_paid(id):
     """Toggle the paid status of a transaction and sync with linked loan/credit card payments"""
-    transaction = family_get_or_404(Transaction, id)
-    
     try:
-        transaction.is_paid = not transaction.is_paid
-        transaction.updated_at = datetime.now()
-        
-        # Sync with linked loan payment if exists
-        if transaction.loan_id:
-            from models.loan_payments import LoanPayment
-            loan_payment = family_query(LoanPayment).filter_by(
-                bank_transaction_id=transaction.id
-            ).first()
-            if loan_payment:
-                loan_payment.is_paid = transaction.is_paid
-        
-        # Sync with linked credit card payment if exists
-        if transaction.credit_card_id:
-            from models.credit_card_transactions import CreditCardTransaction
-            cc_payment = family_query(CreditCardTransaction).filter_by(
-                bank_transaction_id=transaction.id
-            ).first()
-            if cc_payment:
-                cc_payment.is_paid = transaction.is_paid
-        
-        # Sync with linked transfer transaction if exists
-        if transaction.linked_transaction_id:
-            linked_txn = family_get(Transaction, transaction.linked_transaction_id)
-            if linked_txn:
-                linked_txn.is_paid = transaction.is_paid
-                linked_txn.updated_at = datetime.now()
-        
-        # Sync with linked expense if exists
-        from models.expenses import Expense
-        expense = family_query(Expense).filter_by(bank_transaction_id=transaction.id).first()
-        if expense:
-            expense.paid_for = transaction.is_paid
-        
-        db.session.commit()
+        transaction = TransactionService.toggle_paid(id)
         
         status_text = "paid" if transaction.is_paid else "pending"
         flash(f'Transaction marked as {status_text}.', 'success')
@@ -729,153 +499,16 @@ def bulk_edit():
             return redirect(request.form.get('return_url') or url_for('transactions.index'))
         
         transaction_ids = [int(tid) for tid in transaction_ids_str.split(',') if tid]
-        
-        # Get update values
-        category_id = request.form.get('bulk_category_id', type=int)
-        vendor_id = request.form.get('bulk_vendor_id', type=int)
-        payment_type = request.form.get('bulk_payment_type')
-        assigned_to = request.form.get('bulk_assigned_to')
-        is_paid_str = request.form.get('bulk_is_paid')
-        
-        # Bulk amount change parameters
-        amount_operation = request.form.get('bulk_amount_operation')
-        amount_value_str = request.form.get('bulk_amount_value')
-        
-        # Convert is_paid to boolean if provided
-        is_paid = None
-        if is_paid_str == '1':
-            is_paid = True
-        elif is_paid_str == '0':
-            is_paid = False
-        
-        # Parse amount operation
-        amount_operation_value = None
-        if amount_operation and amount_value_str:
-            try:
-                amount_operation_value = Decimal(str(amount_value_str))
-            except:
-                flash('Invalid amount value provided', 'danger')
-                return redirect(request.form.get('return_url') or url_for('transactions.index'))
-        
-        # Track affected accounts for balance recalculation
-        affected_accounts = set()
-        update_count = 0
-        
-        # Update each transaction
-        for transaction_id in transaction_ids:
-            transaction = family_get(Transaction, transaction_id)
-            if transaction:
-                affected_accounts.add(transaction.account_id)
-                
-                # Apply updates only if value is provided
-                if category_id:
-                    transaction.category_id = category_id
-                if vendor_id:
-                    transaction.vendor_id = vendor_id
-                if payment_type:
-                    transaction.payment_type = payment_type
-                if assigned_to:
-                    transaction.assigned_to = assigned_to
-                if is_paid is not None:
-                    transaction.is_paid = is_paid
-                    # Sync with linked transfer if exists
-                    if transaction.linked_transaction_id:
-                        linked_txn = family_get(Transaction, transaction.linked_transaction_id)
-                        if linked_txn:
-                            linked_txn.is_paid = is_paid
-                            if linked_txn.account_id:
-                                affected_accounts.add(linked_txn.account_id)
-                
-                # Apply amount changes
-                if amount_operation and amount_operation_value is not None:
-                    current_amount = Decimal(str(transaction.amount))
-                    new_amount = current_amount
-                    
-                    if amount_operation == 'set':
-                        # Set to exact amount
-                        new_amount = amount_operation_value
-                    elif amount_operation == 'multiply':
-                        # Multiply by percentage (e.g., 110 means multiply by 1.1)
-                        multiplier = amount_operation_value / Decimal('100')
-                        new_amount = current_amount * multiplier
-                    elif amount_operation == 'add':
-                        # Add/subtract amount
-                        new_amount = current_amount + amount_operation_value
-                    
-                    transaction.amount = new_amount
-                    
-                    # If this is a linked transfer, update the linked transaction's amount too
-                    if transaction.linked_transaction_id:
-                        linked_txn = family_get(Transaction, transaction.linked_transaction_id)
-                        if linked_txn:
-                            linked_current = Decimal(str(linked_txn.amount))
-                            linked_new = linked_current
-                            
-                            if amount_operation == 'set':
-                                # For transfers, negate the amount
-                                linked_new = -amount_operation_value
-                            elif amount_operation == 'multiply':
-                                multiplier = amount_operation_value / Decimal('100')
-                                linked_new = linked_current * multiplier
-                            elif amount_operation == 'add':
-                                # For add operation on linked transactions, apply the same direction (both positive or both negative based on original)
-                                linked_new = linked_current + amount_operation_value
-                            
-                            linked_txn.amount = linked_new
-                            if linked_txn.account_id:
-                                affected_accounts.add(linked_txn.account_id)
-                    
-                    # Sync with linked credit card transaction if exists
-                    if transaction.credit_card_id:
-                        linked_cc_txn = family_query(CreditCardTransaction).filter_by(
-                            bank_transaction_id=transaction.id
-                        ).first()
-                        if linked_cc_txn:
-                            cc_current = Decimal(str(linked_cc_txn.amount))
-                            cc_new = cc_current
-                            
-                            if amount_operation == 'set':
-                                cc_new = amount_operation_value
-                            elif amount_operation == 'multiply':
-                                multiplier = amount_operation_value / Decimal('100')
-                                cc_new = cc_current * multiplier
-                            elif amount_operation == 'add':
-                                cc_new = cc_current + amount_operation_value
-                            
-                            linked_cc_txn.amount = cc_new
-                    
-                    # Sync with linked loan payment if exists
-                    if transaction.loan_id:
-                        linked_loan_payment = family_query(LoanPayment).filter_by(
-                            bank_transaction_id=transaction.id
-                        ).first()
-                        if linked_loan_payment:
-                            loan_current = Decimal(str(linked_loan_payment.amount))
-                            loan_new = loan_current
-                            
-                            if amount_operation == 'set':
-                                loan_new = amount_operation_value
-                            elif amount_operation == 'multiply':
-                                multiplier = amount_operation_value / Decimal('100')
-                                loan_new = loan_current * multiplier
-                            elif amount_operation == 'add':
-                                loan_new = loan_current + amount_operation_value
-                            
-                            linked_loan_payment.amount = loan_new
-                
-                transaction.updated_at = datetime.now()
-                update_count += 1
-        
-        db.session.commit()
-        
-        # Recalculate balances for affected accounts
+
+        update_count, affected_accounts = TransactionService.bulk_edit(
+            transaction_ids, request.form
+        )
         for account_id in affected_accounts:
             if account_id:
                 Transaction.recalculate_account_balance(account_id)
-        
         db.session.commit()
-        
-        flash(f'{update_count} transactions updated successfully! All linked transfers, credit card transactions, and loan payments have been synced. Account balances recalculated.', 'success')
+        flash(f'{update_count} transactions updated successfully! All linked records have been synced. Account balances recalculated.', 'success')
+        return redirect(request.form.get('return_url') or url_for('transactions.index'))
         
     except ValueError as e:
         db.session.rollback()
@@ -900,66 +533,25 @@ def bulk_delete():
             return redirect(request.form.get('return_url') or url_for('transactions.index'))
         
         transaction_ids = [int(tid) for tid in transaction_ids_str.split(',') if tid]
-        # Inspect which transactions exist before deletion
-        existing_before = family_query(Transaction).filter(Transaction.id.in_(transaction_ids)).all()
-        existing_before_ids = [t.id for t in existing_before]
-        current_app.logger.info(f"Bulk delete - existing before: {existing_before_ids}")
-
-        deleted_count = 0
-        accounts_to_recalc = set()
-        cards_to_recalc = set()
-        
-        for txn_id in transaction_ids:
-            transaction = family_get(Transaction, txn_id)
-            if transaction:
-                accounts_to_recalc.add(transaction.account_id)
-                
-                # Delete linked credit card payment if exists
-                if transaction.credit_card_id:
-                    linked_cc_payment = family_query(CreditCardTransaction).filter_by(
-                        bank_transaction_id=transaction.id
-                    ).first()
-                    if linked_cc_payment:
-                        cards_to_recalc.add(linked_cc_payment.credit_card_id)
-                        db.session.delete(linked_cc_payment)
-                
-                db.session.delete(transaction)
-                deleted_count += 1
-                # Clear any Expense links pointing to this deleted transaction
-                try:
-                    linked_expenses = family_query(Expense).filter(
-                        (Expense.bank_transaction_id == txn_id) | (Expense.credit_card_transaction_id == txn_id)
-                    ).all()
-                    for exp in linked_expenses:
-                        if getattr(exp, 'bank_transaction_id', None) == txn_id:
-                            exp.bank_transaction_id = None
-                        if getattr(exp, 'credit_card_transaction_id', None) == txn_id:
-                            exp.credit_card_transaction_id = None
-                        db.session.add(exp)
-                    if linked_expenses:
-                        current_app.logger.info(f"Cleared expense links for deleted transaction {txn_id}: {[e.id for e in linked_expenses]}")
-                except Exception:
-                    db.session.rollback()
-        
-        db.session.commit()
-        # Recalculate balances for affected accounts and credit cards
+        deleted_count, accounts_to_recalc, cards_to_recalc = TransactionService.bulk_delete(
+            transaction_ids
+        )
         for account_id in accounts_to_recalc:
             if account_id:
                 Transaction.recalculate_account_balance(account_id)
-        
         for card_id in cards_to_recalc:
             CreditCardTransaction.recalculate_card_balance(card_id)
-        # Check which of the requested IDs still exist after deletion
-        remaining = family_query(Transaction).filter(Transaction.id.in_(transaction_ids)).all()
-        remaining_ids = [t.id for t in remaining]
-        current_app.logger.info(f"Bulk delete - remaining after: {remaining_ids}")
-
+        db.session.commit()
+        remaining_ids = [
+            transaction.id for transaction in family_query(Transaction).filter(
+                Transaction.id.in_(transaction_ids)
+            ).all()
+        ]
         if remaining_ids:
             flash(f'Deleted {deleted_count} transaction(s). However {len(remaining_ids)} could not be deleted: {remaining_ids}', 'warning')
         else:
             flash(f'Successfully deleted {deleted_count} transaction(s)', 'success')
-        current_app.logger.info(f"Bulk delete removed {deleted_count} transactions. IDs requested: {transaction_ids}")
-        
+        return redirect(request.form.get('return_url') or url_for('transactions.index'))
     except ValueError as e:
         db.session.rollback()
         flash(f'Invalid transaction IDs: {str(e)}', 'danger')
@@ -1039,128 +631,18 @@ def create_transfer():
             if is_recurring and occurrences < 1:
                 flash('Number of occurrences must be at least 1', 'danger')
                 return redirect(url_for('transactions.create_transfer'))
-            
-            # Get accounts
-            from_account = family_get(Account, from_account_id)
-            to_account = family_get(Account, to_account_id)
-            
-            # Get or create vendor entries for accounts (for filtering)
-            from_vendor = family_query(Vendor).filter_by(name=to_account.name).first()
-            if not from_vendor:
-                from_vendor = Vendor(name=to_account.name)
-                db.session.add(from_vendor)
-                db.session.flush()
-            
-            to_vendor = family_query(Vendor).filter_by(name=from_account.name).first()
-            if not to_vendor:
-                to_vendor = Vendor(name=from_account.name)
-                db.session.add(to_vendor)
-                db.session.flush()
-            
-            # Get category (use selected or default to Transfer)
-            if category_id:
-                transfer_category = family_get(Category, category_id)
-                if not transfer_category:
-                    flash('Invalid category selected', 'danger')
-                    accounts = family_query(Account).order_by(Account.name).all()
-                    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
-                    return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
-            else:
-                # Get or create default Transfer category
-                transfer_category = family_query(Category).filter_by(
-                    head_budget='Transfer',
-                    sub_budget='Account Transfer'
-                ).first()
-                
-                if not transfer_category:
-                    transfer_category = Category(
-                        name='Account Transfer',
-                        head_budget='Transfer',
-                        sub_budget='Account Transfer',
-                        category_type='Transfer'
-                    )
-                    db.session.add(transfer_category)
-                    db.session.flush()
-            
-            # Create transfers (single or multiple)
-            transfers_created = 0
-            current_date = transfer_date
-            
-            for i in range(occurrences if is_recurring else 1):
-                # Calculate date for this occurrence
-                if i > 0:
-                    if frequency == 'weekly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transfer_date + relativedelta(weeks=i)
-                    elif frequency == 'monthly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transfer_date + relativedelta(months=i)
-                    elif frequency == 'yearly':
-                        from dateutil.relativedelta import relativedelta
-                        current_date = transfer_date + relativedelta(years=i)
-                
-                # Calculate computed fields
-                year_month = current_date.strftime('%Y-%m')
-                week_year = f"{current_date.isocalendar()[1]:02d}-{current_date.year}"
-                day_name = current_date.strftime('%a')
-                payday_period = PaydayService.get_period_for_date(current_date)
-                
-                # Create transaction in FROM account (money leaving - negative amount)
-                from_transaction = Transaction(
-                    account_id=from_account_id,
-                    category_id=transfer_category.id,
-                    vendor_id=from_vendor.id,  # Vendor = destination account
-                    amount=-amount,  # Negative = expense/debit (money out)
-                    transaction_date=current_date,
-                    description=f"Transfer to {to_account.name}",
-                    item=description,
-                    payment_type='Transfer',
-                    is_paid=is_paid,
-                    year_month=year_month,
-                    week_year=week_year,
-                    day_name=day_name,
-                    payday_period=payday_period
-                )
-                
-                # Create transaction in TO account (money arriving - positive amount)
-                to_transaction = Transaction(
-                    account_id=to_account_id,
-                    category_id=transfer_category.id,
-                    vendor_id=to_vendor.id,  # Vendor = source account
-                    amount=amount,  # Positive = income/credit (money in)
-                    transaction_date=current_date,
-                    description=f"Transfer from {from_account.name}",
-                    item=description,
-                    payment_type='Transfer',
-                    is_paid=is_paid,
-                    year_month=year_month,
-                    week_year=week_year,
-                    day_name=day_name,
-                    payday_period=payday_period
-                )
-                
-                db.session.add(from_transaction)
-                db.session.add(to_transaction)
-                db.session.flush()  # Get IDs assigned
-                
-                # Link the transactions together
-                from_transaction.linked_transaction_id = to_transaction.id
-                to_transaction.linked_transaction_id = from_transaction.id
-                
-                transfers_created += 1
-            
-            db.session.commit()
-            
-            # Recalculate both account balances
+
+            transactions, from_account, to_account = TransactionService.create_transfer(
+                request.form
+            )
             Transaction.recalculate_account_balance(from_account_id)
             Transaction.recalculate_account_balance(to_account_id)
             db.session.commit()
-            
+            transfers_created = len(transactions) // 2
             if is_recurring:
                 flash(f'{transfers_created} transfers created: £{amount:.2f} {frequency} from {from_account.name} to {to_account.name}. Both account balances updated.', 'success')
             else:
                 flash(f'Transfer created: £{amount:.2f} from {from_account.name} to {to_account.name}. Both account balances updated.', 'success')
-            # Preserve filters from referrer
             return redirect(request.referrer or url_for('transactions.index'))
             
         except ValueError as e:

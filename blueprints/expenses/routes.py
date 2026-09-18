@@ -16,6 +16,7 @@ import io
 import re
 import base64
 from services.expense_sync_service import ExpenseSyncService
+from services.expense_service import ExpenseService
 from services.work_expense_mileage_service import WorkExpenseMileageService
 from flask import current_app
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
@@ -626,43 +627,7 @@ def toggle_expense_flag(expense_id, field):
 @expenses_bp.route('/expenses/add', methods=['POST'])
 def add_expense():
     try:
-        date_str = request.form.get('date')
-        date_val = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else None
-        description = request.form.get('description')
-        expense_type = request.form.get('expense_type')
-        credit_card_id = request.form.get('credit_card_id') or None
-        account_id = request.form.get('account_id') or None
-        covered_miles = request.form.get('covered_miles') or None
-        rate_per_mile = request.form.get('rate_per_mile') or None
-        days = request.form.get('days') or 1
-        total_cost = request.form.get('total_cost') or 0
-        vehicle_registration = request.form.get('vehicle_registration') or None
-
-        expense = Expense(
-            date=date_val,
-            month=date_val.strftime('%Y-%m') if date_val else None,
-            week=f"{date_val.isocalendar()[1]:02d}-{date_val.year}" if date_val else None,
-            day_name=date_val.strftime('%A') if date_val else None,
-            finance_year=(
-                f"{date_val.year}-{date_val.year + 1}" if date_val and date_val.month >= 4
-                else (f"{date_val.year - 1}-{date_val.year}" if date_val else None)
-            ),
-            description=description,
-            expense_type=expense_type,
-            credit_card_id=int(credit_card_id) if credit_card_id else None,
-            account_id=int(account_id) if account_id else None,
-            covered_miles=int(covered_miles) if covered_miles else None,
-            rate_per_mile=Decimal(rate_per_mile) if rate_per_mile else None,
-            days=int(days) if days else 1,
-            cost=Decimal(total_cost) if total_cost else Decimal('0.00'),
-            total_cost=Decimal(total_cost) if total_cost else Decimal('0.00'),
-            vehicle_registration=vehicle_registration,
-            paid_for=request.form.get('paid_for') == 'on',
-            submitted=request.form.get('submitted') == 'on',
-            reimbursed=request.form.get('reimbursed') == 'on'
-        )
-        db.session.add(expense)
-        db.session.commit()
+        expense = ExpenseService.create_expense(request.form)
         # Reconcile linked transaction, then run full period sync for this expense's period
         try:
             ExpenseSyncService.reconcile(expense.id)
@@ -683,39 +648,7 @@ def add_expense():
 @expenses_bp.route('/expenses/update/<int:expense_id>', methods=['POST'])
 def update_expense(expense_id):
     try:
-        expense = family_get_or_404(Expense, expense_id)
-        date_str = request.form.get('date')
-        expense.date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else expense.date
-        # Re-derive date-based fields whenever the date may have changed
-        d = expense.date
-        if d:
-            expense.month        = d.strftime('%Y-%m')
-            expense.week         = f"{d.isocalendar()[1]:02d}-{d.year}"
-            expense.day_name     = d.strftime('%A')
-            expense.finance_year = (
-                f"{d.year}-{d.year + 1}" if d.month >= 4
-                else f"{d.year - 1}-{d.year}"
-            )
-        expense.description = request.form.get('description', expense.description)
-        expense.expense_type = request.form.get('expense_type', expense.expense_type)
-        credit_card_id = request.form.get('credit_card_id') or None
-        expense.credit_card_id = int(credit_card_id) if credit_card_id else None
-        account_id = request.form.get('account_id') or None
-        expense.account_id = int(account_id) if account_id else None
-        cm = request.form.get('covered_miles')
-        expense.covered_miles = int(cm) if cm else None
-        rpm = request.form.get('rate_per_mile')
-        expense.rate_per_mile = Decimal(rpm) if rpm else None
-        expense.days = int(request.form.get('days') or expense.days or 1)
-        tc = request.form.get('total_cost')
-        expense.cost = Decimal(tc) if tc else expense.cost
-        expense.total_cost = Decimal(tc) if tc else expense.total_cost
-        expense.vehicle_registration = request.form.get('vehicle_registration') or expense.vehicle_registration
-        expense.paid_for = request.form.get('paid_for') == 'on'
-        expense.submitted = request.form.get('submitted') == 'on'
-        expense.reimbursed = request.form.get('reimbursed') == 'on'
-
-        db.session.commit()
+        expense = ExpenseService.update_expense(expense_id, request.form)
         # Reconcile linked transaction, then run full period sync for this expense's period
         try:
             ExpenseSyncService.reconcile(expense.id)
@@ -745,8 +678,7 @@ def delete_expense(expense_id):
         # Delete the auto-created trip row for fuel expenses
         if expense.expense_type == 'Fuel':
             ExpenseSyncService.delete_fuel_trip_for_expense(expense)
-        db.session.delete(expense)
-        db.session.commit()
+        ExpenseService.delete_expense(expense_id)
         flash('Expense deleted', 'success')
     except Exception as e:
         db.session.rollback()

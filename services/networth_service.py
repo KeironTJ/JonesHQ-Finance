@@ -557,6 +557,12 @@ class NetWorthService:
         
         db.session.commit()
         return snapshot
+
+    @staticmethod
+    def delete_networth_snapshot(snapshot_id):
+        snapshot = family_get_or_404(NetWorth, snapshot_id)
+        db.session.delete(snapshot)
+        db.session.commit()
     
     @staticmethod
     def _calculate_tracking(snapshot):

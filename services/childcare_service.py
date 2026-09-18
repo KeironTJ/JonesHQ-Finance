@@ -54,6 +54,93 @@ class ChildcareService:
     Activity costs: the actual_cost property on DailyChildcareActivity returns
     cost_override if set, otherwise falls back to the activity_type's base cost.
     """
+
+    @staticmethod
+    def create_child(data):
+        name = data.get('name')
+        if family_query(Child).filter_by(name=name).first():
+            return None
+        transaction_day = int(data.get('transaction_day') or 28)
+        if not 1 <= transaction_day <= 28:
+            transaction_day = 28
+        child = Child(
+            family_id=get_family_id(),
+            name=name,
+            year_group=data.get('year_group'),
+            transaction_day=transaction_day,
+            category_id=int(data['category_id']) if data.get('category_id') else None,
+            vendor_id=int(data['vendor_id']) if data.get('vendor_id') else None,
+        )
+        db.session.add(child)
+        db.session.commit()
+        return child
+
+    @staticmethod
+    def update_child(child_id, data):
+        child = family_get_or_404(Child, child_id)
+        child.name = data.get('name', child.name)
+        child.year_group = data.get('year_group', child.year_group)
+        child.is_active = data.get('is_active') == 'on'
+        if data.get('transaction_day'):
+            transaction_day = int(data['transaction_day'])
+            if 1 <= transaction_day <= 28:
+                child.transaction_day = transaction_day
+        child.category_id = int(data['category_id']) if data.get('category_id') else None
+        child.vendor_id = int(data['vendor_id']) if data.get('vendor_id') else None
+        db.session.commit()
+        return child
+
+    @staticmethod
+    def delete_child(child_id):
+        child = family_get_or_404(Child, child_id)
+        name = child.name
+        db.session.delete(child)
+        db.session.commit()
+        return name
+
+    @staticmethod
+    def create_activity_type(child_id, data):
+        activity_type = ChildActivityType(
+            family_id=get_family_id(),
+            child_id=child_id,
+            name=data.get('name'),
+            cost=Decimal(data.get('cost')),
+            provider=data.get('provider'),
+            occurs_monday=data.get('occurs_monday') == 'on',
+            occurs_tuesday=data.get('occurs_tuesday') == 'on',
+            occurs_wednesday=data.get('occurs_wednesday') == 'on',
+            occurs_thursday=data.get('occurs_thursday') == 'on',
+            occurs_friday=data.get('occurs_friday') == 'on',
+            occurs_saturday=data.get('occurs_saturday') == 'on',
+            occurs_sunday=data.get('occurs_sunday') == 'on',
+        )
+        db.session.add(activity_type)
+        db.session.commit()
+        return activity_type
+
+    @staticmethod
+    def update_activity_type(activity_type_id, data):
+        activity_type = family_get_or_404(ChildActivityType, activity_type_id)
+        activity_type.name = data.get('name', activity_type.name)
+        if data.get('cost') is not None:
+            activity_type.cost = Decimal(data['cost'])
+        activity_type.provider = data.get('provider', activity_type.provider)
+        activity_type.is_active = data.get('is_active') == 'on'
+        for weekday in (
+            'monday', 'tuesday', 'wednesday', 'thursday',
+            'friday', 'saturday', 'sunday'
+        ):
+            setattr(activity_type, f'occurs_{weekday}', data.get(f'occurs_{weekday}') == 'on')
+        db.session.commit()
+        return activity_type
+
+    @staticmethod
+    def delete_activity_type(activity_type_id):
+        activity_type = family_get_or_404(ChildActivityType, activity_type_id)
+        name = activity_type.name
+        db.session.delete(activity_type)
+        db.session.commit()
+        return name
     
     @staticmethod
     def get_or_create_child(name, year_group=None):
