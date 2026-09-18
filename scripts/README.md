@@ -115,6 +115,13 @@ python scripts\checks\check_paid_status.py
 python scripts\checks\check_vendors.py
 ```
 
+**Check Family IDs:**
+```powershell
+python scripts\checks\check_family_id_integrity.py
+```
+
+Exits with a non-zero status when tenant-owned rows are missing `family_id`.
+
 ### Maintenance Scripts
 
 **Recalculate Balances:**
