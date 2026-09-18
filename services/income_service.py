@@ -53,6 +53,58 @@ class IncomeService:
     All monetary values use Decimal throughout; results are quantized to 2dp
     before being stored.
     """
+
+    @staticmethod
+    def create_recurring_income(data):
+        recurring = RecurringIncome(
+            family_id=get_family_id(),
+            person=data.get('person', 'Household'),
+            start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
+            end_date=(
+                datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+                if data.get('end_date') else None
+            ),
+            pay_day=int(data['pay_day']),
+            gross_annual_income=Decimal(data['gross_annual']),
+            employer_pension_percent=Decimal(data.get('employer_pension_pct') or 0),
+            employee_pension_percent=Decimal(data.get('employee_pension_pct') or 0),
+            tax_code=data['tax_code'],
+            avc=Decimal(data.get('avc') or 0),
+            other_deductions=Decimal(data.get('other') or 0),
+            deposit_account_id=(
+                int(data['deposit_account_id'])
+                if data.get('deposit_account_id') else None
+            ),
+            category_id=int(data['category_id']) if data.get('category_id') else None,
+            auto_create_transaction=data.get('auto_create_transaction') == 'on',
+            source=data.get('source', ''),
+            description=data.get('description', ''),
+            is_active=True,
+            use_manual_deductions=data.get('use_manual_deductions') == 'on',
+            manual_tax_monthly=(
+                Decimal(data['manual_tax_monthly'])
+                if data.get('manual_tax_monthly') else None
+            ),
+            manual_ni_monthly=(
+                Decimal(data['manual_ni_monthly'])
+                if data.get('manual_ni_monthly') else None
+            ),
+            manual_employee_pension=(
+                Decimal(data['manual_employee_pension'])
+                if data.get('manual_employee_pension') else None
+            ),
+            manual_employer_pension=(
+                Decimal(data['manual_employer_pension'])
+                if data.get('manual_employer_pension') else None
+            ),
+            manual_take_home=(
+                Decimal(data['manual_take_home'])
+                if data.get('manual_take_home') else None
+            ),
+        )
+        db.session.add(recurring)
+        db.session.commit()
+        return recurring
     
     @staticmethod
     def get_tax_settings_for_date(target_date):

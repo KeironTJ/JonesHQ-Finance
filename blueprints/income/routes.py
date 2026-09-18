@@ -421,34 +421,7 @@ def add_recurring():
     """Add a new recurring income template"""
     if request.method == 'POST':
         try:
-            recurring = RecurringIncome(
-                person=request.form.get('person', 'Keiron'),
-                start_date=datetime.strptime(request.form['start_date'], '%Y-%m-%d').date(),
-                end_date=datetime.strptime(request.form['end_date'], '%Y-%m-%d').date() if request.form.get('end_date') else None,
-                pay_day=int(request.form['pay_day']),
-                gross_annual_income=Decimal(request.form['gross_annual']),
-                employer_pension_percent=Decimal(request.form.get('employer_pension_pct', 0)),
-                employee_pension_percent=Decimal(request.form.get('employee_pension_pct', 0)),
-                tax_code=request.form['tax_code'],
-                avc=Decimal(request.form.get('avc', 0)),
-                other_deductions=Decimal(request.form.get('other', 0)),
-                deposit_account_id=int(request.form['deposit_account_id']) if request.form.get('deposit_account_id') else None,
-                category_id=int(request.form['category_id']) if request.form.get('category_id') else None,
-                auto_create_transaction=request.form.get('auto_create_transaction') == 'on',
-                source=request.form.get('source', ''),
-                description=request.form.get('description', ''),
-                is_active=True,
-                # Manual override fields
-                use_manual_deductions=request.form.get('use_manual_deductions') == 'on',
-                manual_tax_monthly=Decimal(request.form.get('manual_tax_monthly', 0)) if request.form.get('manual_tax_monthly') else None,
-                manual_ni_monthly=Decimal(request.form.get('manual_ni_monthly', 0)) if request.form.get('manual_ni_monthly') else None,
-                manual_employee_pension=Decimal(request.form.get('manual_employee_pension', 0)) if request.form.get('manual_employee_pension') else None,
-                manual_employer_pension=Decimal(request.form.get('manual_employer_pension', 0)) if request.form.get('manual_employer_pension') else None,
-                manual_take_home=Decimal(request.form.get('manual_take_home', 0)) if request.form.get('manual_take_home') else None
-            )
-            
-            db.session.add(recurring)
-            db.session.commit()
+            recurring = IncomeService.create_recurring_income(request.form)
             
             # Generate missing income records
             generated = IncomeService.generate_missing_income(recurring.id)
