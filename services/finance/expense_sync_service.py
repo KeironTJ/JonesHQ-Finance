@@ -397,29 +397,22 @@ class ExpenseSyncService:
             'cards_recalced': list(cards_to_recalc)
         }
 
+        # Clear foreign keys before deleting the rows they reference.
+        for exp in linked_expenses:
+            exp.bank_transaction_id = None
+            exp.credit_card_transaction_id = None
+        db.session.flush()
+
         # Delete credit card transactions
         if cc_txn_ids:
             family_query(CreditCardTransaction).filter(CreditCardTransaction.id.in_(list(cc_txn_ids))).delete(synchronize_session=False)
-            db.session.commit()
             summary['deleted_cc_txns'] = len(cc_txn_ids)
 
         # Delete bank transactions
         if bank_txn_ids:
             family_query(Transaction).filter(Transaction.id.in_(list(bank_txn_ids))).delete(synchronize_session=False)
-            db.session.commit()
             summary['deleted_bank_txns'] = len(bank_txn_ids)
 
-        # Clear expense links
-        for exp in linked_expenses:
-            changed = False
-            if exp.bank_transaction_id:
-                exp.bank_transaction_id = None
-                changed = True
-            if exp.credit_card_transaction_id:
-                exp.credit_card_transaction_id = None
-                changed = True
-            if changed:
-                db.session.add(exp)
         db.session.commit()
 
         # Recalculate balances

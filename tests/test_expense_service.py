@@ -1,8 +1,14 @@
 from decimal import Decimal
+from datetime import date
 
 from extensions import db
+from sqlalchemy import event
+from models.accounts import Account
+from models.categories import Category
 from models.expenses import Expense
+from models.transactions import Transaction
 from services.finance.expense_service import ExpenseService
+from services.finance.expense_sync_service import ExpenseSyncService
 
 
 def _expense_data(**overrides):
@@ -73,3 +79,54 @@ def test_bulk_delete_expenses_returns_deleted_count(app, family, monkeypatch):
     assert deleted == 2
     assert db.session.get(Expense, first.id) is None
     assert db.session.get(Expense, second.id) is None
+
+
+def test_delete_linked_transaction_clears_expense_foreign_key_first(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account = Account(name='Current Account', account_type='Current', family_id=family.id)
+    category = Category(name='Travel', category_type='Expense', family_id=family.id)
+    db.session.add_all([account, category])
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id,
+        account_id=account.id,
+        category_id=category.id,
+        amount=Decimal('-18.00'),
+        transaction_date=date(2026, 4, 15),
+    )
+    db.session.add(transaction)
+    db.session.flush()
+    expense = Expense(
+        family_id=family.id,
+        date=date(2026, 4, 15),
+        description='Client travel',
+        expense_type='Mileage',
+        cost=Decimal('18.00'),
+        total_cost=Decimal('18.00'),
+        bank_transaction_id=transaction.id,
+    )
+    db.session.add(expense)
+    db.session.commit()
+
+    statements = []
+
+    def capture_statement(_connection, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement.lower())
+
+    event.listen(db.engine, 'before_cursor_execute', capture_statement)
+    try:
+        ExpenseSyncService.bulk_delete_linked_transactions([expense.id])
+    finally:
+        event.remove(db.engine, 'before_cursor_execute', capture_statement)
+
+    update_index = next(
+        index for index, statement in enumerate(statements)
+        if statement.startswith('update expenses')
+    )
+    delete_index = next(
+        index for index, statement in enumerate(statements)
+        if statement.startswith('delete from transactions')
+    )
+    assert update_index < delete_index
+    assert Transaction.query.filter_by(id=transaction.id).first() is None
+    assert db.session.get(Expense, expense.id).bank_transaction_id is None
