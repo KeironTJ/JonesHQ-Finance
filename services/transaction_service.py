@@ -11,12 +11,127 @@ from models.loan_payments import LoanPayment
 from models.accounts import Account
 from models.categories import Category
 from models.vendors import Vendor
+from models.credit_cards import CreditCard
+from models.loans import Loan
 from services.payday_service import PaydayService
 from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
 
 
 class TransactionService:
+    @staticmethod
+    def get_consolidated_data(start_date=None, end_date=None, category_id=None,
+                               source=None, payday_period=None, is_paid_filter=None):
+        period_start = period_end = None
+        if payday_period:
+            try:
+                year, month = map(int, payday_period.split('-'))
+                period_start, period_end, _ = PaydayService.get_payday_period(year, month)
+            except (ValueError, AttributeError):
+                payday_period = None
+
+        transactions = []
+        def paid_filter(query, model):
+            if is_paid_filter == 'paid':
+                return query.filter(model.is_paid.is_(True))
+            if is_paid_filter == 'pending':
+                return query.filter(model.is_paid.is_(False))
+            return query
+
+        if not source or source in ('all', 'bank'):
+            query = family_query(Transaction)
+            if payday_period:
+                query = query.filter(Transaction.payday_period == payday_period)
+            else:
+                if start_date:
+                    query = query.filter(Transaction.transaction_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
+                if end_date:
+                    query = query.filter(Transaction.transaction_date <= datetime.strptime(end_date, '%Y-%m-%d').date())
+            if category_id:
+                query = query.filter(Transaction.category_id == category_id)
+            for txn in paid_filter(query, Transaction).all():
+                transactions.append({
+                    'id': f'bank_{txn.id}', 'raw_id': txn.id, 'source': 'Bank Account',
+                    'source_type': 'bank', 'source_id': txn.account_id,
+                    'source_name': txn.account.name if txn.account else 'Unknown',
+                    'date': txn.transaction_date, 'description': txn.description,
+                    'category': f'{txn.category.head_budget} > {txn.category.sub_budget}' if txn.category else '',
+                    'amount': float(txn.amount),
+                    'balance': float(txn.running_balance) if txn.running_balance else None,
+                    'vendor': txn.vendor.name if txn.vendor else '',
+                    'type': 'Income' if txn.amount > 0 else 'Expense', 'is_paid': txn.is_paid,
+                })
+
+        if not source or source in ('all', 'credit_card'):
+            query = family_query(CreditCardTransaction)
+            cc_start = period_start if payday_period else (datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None)
+            cc_end = period_end if payday_period else (datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None)
+            if cc_start:
+                query = query.filter(CreditCardTransaction.date >= cc_start)
+            if cc_end:
+                query = query.filter(CreditCardTransaction.date <= cc_end)
+            if category_id:
+                query = query.filter(CreditCardTransaction.category_id == category_id)
+            for txn in paid_filter(query, CreditCardTransaction).all():
+                transactions.append({
+                    'id': f'cc_{txn.id}', 'raw_id': txn.id, 'source': 'Credit Card',
+                    'source_type': 'credit_card', 'source_id': txn.credit_card_id,
+                    'source_name': txn.credit_card.card_name if txn.credit_card else 'Unknown',
+                    'date': txn.date, 'description': txn.item,
+                    'category': f'{txn.head_budget} > {txn.sub_budget}' if txn.head_budget else '',
+                    'amount': float(txn.amount),
+                    'balance': float(txn.balance) if txn.balance else None,
+                    'vendor': '', 'type': txn.transaction_type, 'is_paid': txn.is_paid,
+                })
+
+        if not source or source in ('all', 'loan'):
+            query = family_query(LoanPayment)
+            loan_start = period_start if payday_period else (datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None)
+            loan_end = period_end if payday_period else (datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None)
+            if loan_start:
+                query = query.filter(LoanPayment.date >= loan_start)
+            if loan_end:
+                query = query.filter(LoanPayment.date <= loan_end)
+            for txn in paid_filter(query, LoanPayment).all():
+                transactions.append({
+                    'id': f'loan_{txn.id}', 'raw_id': txn.id, 'source': 'Loan',
+                    'source_type': 'loan', 'source_id': txn.loan_id,
+                    'source_name': txn.loan.name if txn.loan else 'Unknown',
+                    'date': txn.date,
+                    'description': f'Payment (Principal: £{txn.amount_paid_off:.2f}, Interest: £{txn.interest_charge:.2f})',
+                    'category': 'Loans > Payment', 'amount': float(txn.payment_amount),
+                    'balance': float(txn.closing_balance) if txn.closing_balance else None,
+                    'vendor': '', 'type': 'Loan Payment', 'is_paid': txn.is_paid,
+                })
+
+        transactions.sort(key=lambda item: item['date'], reverse=True)
+        inflows = sum(item['amount'] for item in transactions if item['amount'] > 0)
+        outflows = sum(abs(item['amount']) for item in transactions if item['amount'] < 0)
+        min_date = family_query(Transaction).with_entities(db.func.min(Transaction.transaction_date)).scalar()
+        max_date = family_query(Transaction).with_entities(db.func.max(Transaction.transaction_date)).scalar()
+        if min_date and max_date:
+            months = (max_date.year - min_date.year) * 12 + max_date.month - min_date.month + 2
+            periods = PaydayService.get_recent_periods(
+                num_periods=months, include_future=False,
+                start_year=min_date.year, start_month=min_date.month
+            )
+        else:
+            periods = PaydayService.get_recent_periods(num_periods=24, include_future=True)
+        previous = next_period = None
+        if payday_period:
+            year, month = map(int, payday_period.split('-'))
+            previous = PaydayService.get_payday_period(year - (month == 1), 12 if month == 1 else month - 1)[2]
+            next_period = PaydayService.get_payday_period(year + (month == 12), 1 if month == 12 else month + 1)[2]
+        return {
+            'transactions': transactions,
+            'total_inflows': inflows,
+            'total_outflows': outflows,
+            'net_position': inflows - outflows,
+            'payday_periods': periods,
+            'prev_payday_period': previous,
+            'next_payday_period': next_period,
+            'selected_payday_period': payday_period,
+        }
     @staticmethod
     def _int_value(data, key):
         value = data.get(key)

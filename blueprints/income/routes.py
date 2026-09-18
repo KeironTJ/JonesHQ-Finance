@@ -221,23 +221,10 @@ def edit(id):
 @income_bp.route('/income/<int:id>/delete', methods=['POST'])
 def delete(id):
     """Delete an income record"""
-    income = family_get_or_404(Income, id)
     keep_transaction = request.form.get('keep_transaction') == '1'
 
     try:
-        from models.transactions import Transaction
-
-        if income.transaction_id:
-            transaction = family_get(Transaction, income.transaction_id)
-            if transaction:
-                transaction.income_id = None
-                income.transaction_id = None
-                db.session.flush()
-                if not keep_transaction:
-                    db.session.delete(transaction)
-
-        db.session.delete(income)
-        db.session.commit()
+        IncomeService.delete_income_record(id, keep_transaction=keep_transaction)
         flash('Income record deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()
@@ -256,27 +243,7 @@ def delete_multiple():
         return redirect(url_for('income.index'))
     
     try:
-        deleted_count = 0
-        from models.transactions import Transaction
-        
-        for income_id in income_ids:
-            income = family_get(Income, income_id)
-            if income:
-                # Break circular reference first
-                if income.transaction_id:
-                    transaction = family_get(Transaction, income.transaction_id)
-                    if transaction:
-                        # Clear both sides of the relationship
-                        transaction.income_id = None
-                        income.transaction_id = None
-                        db.session.flush()
-                        # Now delete the transaction
-                        db.session.delete(transaction)
-                
-                db.session.delete(income)
-                deleted_count += 1
-        
-        db.session.commit()
+        deleted_count = IncomeService.delete_income_records(income_ids)
         flash(f'Successfully deleted {deleted_count} income record(s) and their linked transactions.', 'success')
     except Exception as e:
         db.session.rollback()

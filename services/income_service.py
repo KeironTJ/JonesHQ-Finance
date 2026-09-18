@@ -145,6 +145,39 @@ class IncomeService:
         recurring = family_get_or_404(RecurringIncome, recurring_id)
         db.session.delete(recurring)
         db.session.commit()
+
+    @staticmethod
+    def delete_income_record(income_id, keep_transaction=False):
+        income = family_get_or_404(Income, income_id)
+        if income.transaction_id:
+            transaction = family_get(Transaction, income.transaction_id)
+            if transaction:
+                transaction.income_id = None
+                income.transaction_id = None
+                db.session.flush()
+                if not keep_transaction:
+                    db.session.delete(transaction)
+        db.session.delete(income)
+        db.session.commit()
+
+    @staticmethod
+    def delete_income_records(income_ids):
+        deleted = 0
+        for income_id in income_ids:
+            income = family_query(Income).filter_by(id=income_id).first()
+            if not income:
+                continue
+            if income.transaction_id:
+                transaction = family_get(Transaction, income.transaction_id)
+                if transaction:
+                    transaction.income_id = None
+                    income.transaction_id = None
+                    db.session.flush()
+                    db.session.delete(transaction)
+            db.session.delete(income)
+            deleted += 1
+        db.session.commit()
+        return deleted
     
     @staticmethod
     def get_tax_settings_for_date(target_date):

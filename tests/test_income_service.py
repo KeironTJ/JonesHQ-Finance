@@ -3,6 +3,10 @@ from decimal import Decimal
 
 from extensions import db
 from models.recurring_income import RecurringIncome
+from models.income import Income
+from models.accounts import Account
+from models.categories import Category
+from models.transactions import Transaction
 from services.income_service import IncomeService
 
 
@@ -90,3 +94,49 @@ def test_update_and_delete_recurring_income(app, family, monkeypatch):
     assert updated.pay_day == 20
     assert updated.source == 'New Employer'
     assert db.session.get(RecurringIncome, recurring.id) is None
+
+
+def test_income_deletion_cleans_or_keeps_linked_transactions(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account = Account(
+        family_id=family.id, name='Income Account', account_type='Joint',
+        balance=0, is_active=True
+    )
+    category = Category(
+        family_id=family.id, name='Salary', head_budget='Income',
+        sub_budget='Salary', category_type='income'
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    kept_transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=Decimal('1000'), transaction_date=date(2026, 1, 15)
+    )
+    deleted_transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=Decimal('1000'), transaction_date=date(2026, 2, 15)
+    )
+    db.session.add_all([kept_transaction, deleted_transaction])
+    db.session.flush()
+    first = Income(
+        family_id=family.id, person='Household', pay_date=date(2026, 1, 15),
+        tax_year='2025-2026', gross_annual_income=12000,
+        gross_monthly_income=1000, take_home=1000,
+        transaction_id=kept_transaction.id
+    )
+    second = Income(
+        family_id=family.id, person='Household', pay_date=date(2026, 2, 15),
+        tax_year='2025-2026', gross_annual_income=12000,
+        gross_monthly_income=1000, take_home=1000,
+        transaction_id=deleted_transaction.id
+    )
+    db.session.add_all([first, second])
+    db.session.commit()
+
+    IncomeService.delete_income_record(first.id, keep_transaction=True)
+    deleted_count = IncomeService.delete_income_records([second.id])
+
+    assert deleted_count == 1
+    assert db.session.get(Transaction, kept_transaction.id) is not None
+    assert db.session.get(Transaction, kept_transaction.id).income_id is None
+    assert db.session.get(Transaction, deleted_transaction.id) is None
