@@ -21,6 +21,7 @@ def app():
     application = create_app('testing')
     ctx = application.app_context()
     ctx.push()
+    _db.session.configure(expire_on_commit=False)
     _db.create_all()
     yield application
     _db.session.remove()
@@ -36,7 +37,7 @@ def clean_db(app):
     for table in reversed(_db.metadata.sorted_tables):
         _db.session.execute(table.delete())
     _db.session.commit()
-    _db.session.expunge_all()
+    _db.session.remove()
 
 
 # ---------------------------------------------------------------------------

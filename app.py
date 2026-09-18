@@ -77,7 +77,10 @@ def create_app(config_name=None):
     @login_manager.user_loader
     def load_user(user_id):
         from models.users import User
-        return User.query.get(int(user_id))
+        user = db.session.get(User, int(user_id))
+        if user is not None:
+            user = db.session.merge(user)
+        return user
     
     # Import models to ensure they're registered with SQLAlchemy
     with app.app_context():
