@@ -473,24 +473,7 @@ def edit_payment(id, txn_id):
 def toggle_paid(txn_id):
     """Toggle is_paid flag on a transaction and lock it when paid"""
     try:
-        txn = family_get_or_404(CreditCardTransaction, txn_id)
-        txn.is_paid = not txn.is_paid
-        
-        # When marking as paid, also lock it to prevent regeneration
-        if txn.is_paid:
-            txn.is_fixed = True
-        
-        # Sync with linked bank transaction if exists
-        if txn.bank_transaction_id and txn.bank_transaction:
-            txn.bank_transaction.is_paid = txn.is_paid
-
-        # Sync with linked expense if exists
-        from models.expenses import Expense
-        expense = family_query(Expense).filter_by(credit_card_transaction_id=txn.id).first()
-        if expense:
-            expense.paid_for = txn.is_paid
-
-        db.session.commit()
+        txn = CreditCardService.toggle_transaction_paid(txn_id)
         
         status = "paid and locked" if txn.is_paid else "unpaid"
         flash(f'Transaction marked as {status} successfully!', 'success')

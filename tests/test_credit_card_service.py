@@ -18,6 +18,7 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.categories import Category
 from models.accounts import Account
 from models.transactions import Transaction
+from models.expenses import Expense
 from models.family import Family
 from services.credit_card_service import CreditCardService
 
@@ -342,3 +343,43 @@ def test_delete_credit_card_transaction_removes_linked_bank_transaction(
     assert account_id == account.id
     assert db.session.get(CreditCardTransaction, card_transaction.id) is None
     assert db.session.get(Transaction, bank_transaction.id) is None
+
+
+def test_toggle_credit_card_paid_locks_and_syncs_links(app, card, family_id, patch_family):
+    account = Account(
+        family_id=family_id, name='Current', account_type='Joint',
+        balance=0, is_active=True
+    )
+    category = Category(
+        family_id=family_id, name='Card Payment', head_budget='Credit Cards',
+        sub_budget='Payment', category_type='expense'
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    bank_transaction = Transaction(
+        family_id=family_id, account_id=account.id, category_id=category.id,
+        amount=Decimal('-100'), transaction_date=date(2026, 1, 15), is_paid=False
+    )
+    db.session.add(bank_transaction)
+    db.session.flush()
+    card_transaction = CreditCardTransaction(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 15),
+        item='Purchase', transaction_type='Purchase', amount=Decimal('-100'),
+        is_paid=False, bank_transaction_id=bank_transaction.id
+    )
+    db.session.add(card_transaction)
+    db.session.flush()
+    expense = Expense(
+        family_id=family_id, date=date(2026, 1, 15), description='Card expense',
+        expense_type='Work', cost=100, total_cost=100,
+        credit_card_transaction_id=card_transaction.id, paid_for=False
+    )
+    db.session.add(expense)
+    db.session.commit()
+
+    updated = CreditCardService.toggle_transaction_paid(card_transaction.id)
+
+    assert updated.is_paid is True
+    assert updated.is_fixed is True
+    assert bank_transaction.is_paid is True
+    assert expense.paid_for is True

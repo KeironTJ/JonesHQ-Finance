@@ -46,7 +46,7 @@ from models.transactions import Transaction
 from models.vendors import Vendor
 from services.payday_service import PaydayService
 from extensions import db
-from datetime import datetime
+from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 from utils import db_helpers
@@ -603,6 +603,48 @@ class LoanService:
             deleted += 1
         db.session.commit()
         return deleted, accounts
+
+    @staticmethod
+    def update_payment(payment_id, data):
+        payment = family_get_or_404(LoanPayment, payment_id)
+        if payment.is_paid and payment.period > 0:
+            raise ValueError('Cannot edit a paid payment!')
+        if data.get('payment_date'):
+            payment.date = datetime.strptime(
+                data['payment_date'], '%Y-%m-%d'
+            ).date()
+            payment.year_month = payment.date.strftime('%Y-%m')
+        if data.get('payment_amount'):
+            payment.payment_amount = Decimal(data['payment_amount'])
+        if data.get('interest_charge'):
+            payment.interest_charge = Decimal(data['interest_charge'])
+        if data.get('amount_paid_off'):
+            payment.amount_paid_off = Decimal(data['amount_paid_off'])
+        payment.closing_balance = payment.opening_balance - payment.amount_paid_off
+
+        account_id = None
+        if payment.bank_transaction_id:
+            bank_transaction = family_get(Transaction, payment.bank_transaction_id)
+            if bank_transaction:
+                account_id = bank_transaction.account_id
+                loan = family_get(Loan, payment.loan_id)
+                bank_transaction.transaction_date = payment.date
+                bank_transaction.amount = -payment.payment_amount
+                bank_transaction.description = f'Loan Payment - {loan.name}'
+                bank_transaction.item = f'Period {payment.period}'
+                bank_transaction.year_month = payment.date.strftime('%Y-%m')
+                bank_transaction.week_year = (
+                    f'{payment.date.isocalendar()[1]:02d}-{payment.date.year}'
+                )
+                bank_transaction.day_name = payment.date.strftime('%a')
+                bank_transaction.payday_period = PaydayService.get_period_for_date(
+                    payment.date
+                )
+                bank_transaction.updated_at = datetime.now(timezone.utc).replace(
+                    tzinfo=None
+                )
+        db.session.commit()
+        return payment, account_id
 
     @staticmethod
     def get_payment_statistics(loan_id):

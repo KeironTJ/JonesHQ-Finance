@@ -153,6 +153,23 @@ class CreditCardService:
         return card_id, account_id
 
     @staticmethod
+    def toggle_transaction_paid(transaction_id):
+        transaction = family_get_or_404(CreditCardTransaction, transaction_id)
+        transaction.is_paid = not transaction.is_paid
+        if transaction.is_paid:
+            transaction.is_fixed = True
+        if transaction.bank_transaction_id and transaction.bank_transaction:
+            transaction.bank_transaction.is_paid = transaction.is_paid
+        from models.expenses import Expense
+        expense = family_query(Expense).filter_by(
+            credit_card_transaction_id=transaction.id
+        ).first()
+        if expense:
+            expense.paid_for = transaction.is_paid
+        db.session.commit()
+        return transaction
+
+    @staticmethod
     def create_transactions(card_id, data):
         card = family_get_or_404(CreditCard, card_id)
         transaction_date = date.fromisoformat(data['txn_date'])

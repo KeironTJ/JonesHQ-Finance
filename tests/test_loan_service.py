@@ -81,3 +81,53 @@ def test_loan_payment_mutations_sync_and_delete_bank_transactions(app, family, m
     assert deleted_account_id == account.id
     assert db.session.get(LoanPayment, payment.id) is None
     assert db.session.get(Transaction, bank_transaction.id) is None
+
+
+def test_update_loan_payment_syncs_bank_transaction(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account = Account(
+        family_id=family.id, name='Loan Account', account_type='Joint',
+        balance=0, is_active=True
+    )
+    category = Category(
+        family_id=family.id, name='Loan Payment', head_budget='Loans',
+        sub_budget='Payment', category_type='expense'
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    loan = Loan(
+        family_id=family.id, name='Editable Loan', loan_value=1000,
+        principal=1000, current_balance=1000, annual_apr=12,
+        monthly_apr=1, monthly_payment=100, start_date=date(2026, 1, 1),
+        end_date=date(2027, 1, 1), term_months=12
+    )
+    db.session.add(loan)
+    db.session.flush()
+    bank_transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=Decimal('-100'), transaction_date=date(2026, 1, 15)
+    )
+    db.session.add(bank_transaction)
+    db.session.flush()
+    payment = LoanPayment(
+        family_id=family.id, loan_id=loan.id, date=date(2026, 1, 15),
+        year_month='2026-01', period=1, opening_balance=1000,
+        payment_amount=100, interest_charge=10, amount_paid_off=90,
+        closing_balance=910, bank_transaction_id=bank_transaction.id,
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    updated, account_id = LoanService.update_payment(payment.id, {
+        'payment_date': '2026-02-15',
+        'payment_amount': '120',
+        'interest_charge': '10',
+        'amount_paid_off': '110',
+    })
+
+    assert account_id == account.id
+    assert updated.payment_amount == Decimal('120')
+    assert updated.closing_balance == Decimal('890')
+    assert bank_transaction.transaction_date == date(2026, 2, 15)
+    assert bank_transaction.amount == Decimal('-120')
+    assert bank_transaction.description == 'Loan Payment - Editable Loan'
