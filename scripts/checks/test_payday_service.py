@@ -7,7 +7,7 @@ from datetime import date
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app import create_app
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 
 app = create_app()
 

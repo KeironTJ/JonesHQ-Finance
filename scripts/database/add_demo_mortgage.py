@@ -5,7 +5,7 @@ from app import create_app
 from extensions import db
 from models.property import Property
 from models.mortgage import MortgageProduct
-from services.mortgage_service import MortgageService
+from services.planning.mortgage_service import MortgageService
 from datetime import date
 from decimal import Decimal
 

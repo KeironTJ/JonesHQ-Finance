@@ -1,7 +1,7 @@
 from flask import render_template, request, redirect, url_for
 from flask_login import current_user
 from . import dashboard_bp
-from services.dashboard_service import DashboardService
+from services.analytics.dashboard_service import DashboardService
 from models.settings import Settings
 from datetime import date
 

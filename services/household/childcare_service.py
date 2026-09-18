@@ -39,7 +39,7 @@ from models.childcare import Child, ChildActivityType, DailyChildcareActivity, M
 from models.transactions import Transaction
 from models.categories import Category
 from models.accounts import Account
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal

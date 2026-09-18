@@ -7,8 +7,8 @@ from extensions import db
 from models import Category
 from models.settings import Settings
 from models.transactions import Transaction
-from services.payday_service import PaydayService
-from services.category_service import CategoryService
+from services.finance.payday_service import PaydayService
+from services.finance.category_service import CategoryService
 from datetime import datetime, timezone
 from decimal import Decimal
 import json

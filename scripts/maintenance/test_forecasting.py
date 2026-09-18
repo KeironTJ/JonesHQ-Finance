@@ -9,7 +9,7 @@ from app import create_app
 from extensions import db
 from models.vehicles import Vehicle
 from models.transactions import Transaction
-from services.fuel_forecasting_service import FuelForecastingService
+from services.vehicles.fuel_forecasting_service import FuelForecastingService
 
 app = create_app()
 

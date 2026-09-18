@@ -10,8 +10,8 @@ from models.transactions import Transaction
 from models.categories import Category
 from models.vendors import Vendor
 from models.settings import Settings
-from services.credit_card_service import CreditCardService
-from services.payday_service import PaydayService
+from services.finance.credit_card_service import CreditCardService
+from services.finance.payday_service import PaydayService
 from extensions import db
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 

@@ -12,7 +12,7 @@ from app import create_app
 from models.transactions import Transaction
 from models.fuel import FuelRecord
 from models.categories import Category
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from extensions import db
 
 app = create_app()

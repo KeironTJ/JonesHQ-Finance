@@ -4,7 +4,7 @@ from decimal import Decimal
 from extensions import db
 from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
-from services.pension_service import PensionService
+from services.planning.pension_service import PensionService
 
 
 def test_add_actual_snapshot_calculates_growth_and_updates_pension(

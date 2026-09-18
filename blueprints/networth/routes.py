@@ -1,7 +1,7 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from . import networth_bp
 from models.networth import NetWorth
-from services.networth_service import NetWorthService
+from services.analytics.networth_service import NetWorthService
 from extensions import db
 from datetime import date
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
@@ -113,7 +113,7 @@ def api_current():
 def refresh_cache():
     """Manually refresh the monthly account balance cache"""
     try:
-        from services.monthly_balance_service import MonthlyBalanceService
+        from services.finance.monthly_balance_service import MonthlyBalanceService
         
         # Get optional future_months parameter (default 24)
         future_months = request.form.get('future_months', type=int, default=24)

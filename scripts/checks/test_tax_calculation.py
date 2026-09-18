@@ -9,7 +9,7 @@ from datetime import date
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from app import create_app
-from services.income_service import IncomeService
+from services.finance.income_service import IncomeService
 
 app = create_app()
 

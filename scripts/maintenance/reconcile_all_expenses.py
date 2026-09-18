@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app import create_app
 from extensions import db
 from models.expenses import Expense
-from services.expense_sync_service import ExpenseSyncService
+from services.finance.expense_sync_service import ExpenseSyncService
 
 def reconcile_all_expenses():
     """Reconcile all existing expenses to create payment transactions"""

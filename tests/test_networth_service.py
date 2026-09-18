@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from extensions import db
 from models.networth import NetWorth
-from services.networth_service import NetWorthService
+from services.analytics.networth_service import NetWorthService
 
 
 def test_delete_networth_snapshot_is_service_owned(app, family, monkeypatch):

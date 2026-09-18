@@ -3,12 +3,12 @@ from decimal import Decimal
 from models.accounts import Account
 from models.mortgage import MortgageProduct
 from models.settings import Settings
-from services.account_service import AccountService
-from services.credit_card_service import CreditCardService
-from services.loan_service import LoanService
-from services.networth_service import NetWorthService
-from services.payday_service import PaydayService
-from services.pension_service import PensionService
+from services.finance.account_service import AccountService
+from services.finance.credit_card_service import CreditCardService
+from services.planning.loan_service import LoanService
+from services.analytics.networth_service import NetWorthService
+from services.finance.payday_service import PaydayService
+from services.planning.pension_service import PensionService
 from utils.db_helpers import family_get, family_query
 
 

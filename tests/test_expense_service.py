@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from extensions import db
 from models.expenses import Expense
-from services.expense_service import ExpenseService
+from services.finance.expense_service import ExpenseService
 
 
 def _expense_data(**overrides):

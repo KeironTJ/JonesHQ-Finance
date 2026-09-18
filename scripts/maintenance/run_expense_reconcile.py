@@ -1,5 +1,5 @@
 from app import create_app
-from services.expense_sync_service import ExpenseSyncService
+from services.finance.expense_sync_service import ExpenseSyncService
 from models.expenses import Expense
 
 app = create_app()

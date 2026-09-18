@@ -429,7 +429,7 @@ class VehicleService:
     @staticmethod
     def create_fuel_transaction(fuel_record, account_id):
         """Create a transaction for a fuel purchase"""
-        from services.payday_service import PaydayService
+        from services.finance.payday_service import PaydayService
         
         # Get or create Fuel category
         category = family_query(Category).filter(

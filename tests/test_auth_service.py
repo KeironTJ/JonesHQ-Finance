@@ -1,7 +1,7 @@
 from extensions import db
 from models.family import Family
 from models.users import User
-from services.auth_service import AuthService
+from services.platform.auth_service import AuthService
 
 
 def test_register_user_creates_family_and_admin(app):

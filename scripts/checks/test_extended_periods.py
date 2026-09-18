@@ -4,8 +4,8 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from app import create_app
-from services.networth_service import NetWorthService
-from services.monthly_balance_service import MonthlyBalanceService
+from services.analytics.networth_service import NetWorthService
+from services.finance.monthly_balance_service import MonthlyBalanceService
 from datetime import date
 
 app = create_app()

@@ -13,7 +13,7 @@ from .forms import LoginForm, RegisterForm
 from models.users import User
 from models.family import Family
 from extensions import db
-from services.auth_service import AuthService
+from services.platform.auth_service import AuthService
 
 # Initialize rate limiter
 limiter = Limiter(

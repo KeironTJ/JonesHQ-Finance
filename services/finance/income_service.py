@@ -36,7 +36,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from models.categories import Category
 from models.tax_settings import TaxSettings
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from extensions import db
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta

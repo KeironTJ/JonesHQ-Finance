@@ -5,12 +5,12 @@ from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
 from models.accounts import Account
-from services.vehicle_service import VehicleService
-from services.fuel_forecasting_service import FuelForecastingService
+from services.vehicles.vehicle_service import VehicleService
+from services.vehicles.fuel_forecasting_service import FuelForecastingService
 from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from sqlalchemy.orm import joinedload
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
@@ -419,7 +419,7 @@ def refresh_forecasts(vehicle_id):
         FuelForecastingService.sync_forecasted_transactions(vehicle_id)
         
         # Update monthly balance cache for fuel account
-        from services.monthly_balance_service import MonthlyBalanceService
+        from services.finance.monthly_balance_service import MonthlyBalanceService
         from datetime import date
         if vehicle.fuel_account_id:
             MonthlyBalanceService.handle_transaction_change(
@@ -491,7 +491,7 @@ def add_fuel():
         db.session.commit()
         
         # Update cache after commit (manually since we disabled the event handler)
-        from services.monthly_balance_service import MonthlyBalanceService
+        from services.finance.monthly_balance_service import MonthlyBalanceService
         from models.transactions import Transaction
         if fuel_record.linked_transaction_id:
             txn = family_get(Transaction, fuel_record.linked_transaction_id)

@@ -4,7 +4,7 @@ from extensions import db
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
-from services.vehicle_service import VehicleService
+from services.vehicles.vehicle_service import VehicleService
 from werkzeug.datastructures import MultiDict
 
 

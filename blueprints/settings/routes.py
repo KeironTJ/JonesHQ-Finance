@@ -10,7 +10,7 @@ from extensions import db
 from decimal import Decimal
 from datetime import datetime
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
-from services.settings_service import SettingsService
+from services.platform.settings_service import SettingsService
 
 
 @settings_bp.route('/settings')

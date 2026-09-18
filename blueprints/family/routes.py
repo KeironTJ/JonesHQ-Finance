@@ -25,7 +25,7 @@ from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
 from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTIONS
 from utils.db_helpers import family_query, get_family_id
-from services.family_service import FamilyService
+from services.household.family_service import FamilyService
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

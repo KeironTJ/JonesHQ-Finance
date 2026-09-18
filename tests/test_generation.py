@@ -4,7 +4,7 @@ from app import create_app
 from extensions import db
 from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
-from services.credit_card_service import CreditCardService
+from services.finance.credit_card_service import CreditCardService
 
 app = create_app()
 

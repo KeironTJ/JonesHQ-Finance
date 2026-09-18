@@ -4,7 +4,7 @@ from decimal import Decimal
 from extensions import db
 from models.tax_settings import TaxSettings
 from models.settings import Settings
-from services.settings_service import SettingsService
+from services.platform.settings_service import SettingsService
 
 
 def test_update_tax_settings_converts_percentages_and_preserves_family(

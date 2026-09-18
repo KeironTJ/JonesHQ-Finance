@@ -7,7 +7,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from models.childcare import MonthlyChildcareSummary
 from models.categories import Category
-from services.childcare_service import ChildcareService
+from services.household.childcare_service import ChildcareService
 
 
 def test_childcare_setup_crud_assigns_family_and_normalizes_day(app, family, monkeypatch):
@@ -138,7 +138,7 @@ def test_bulk_monthly_transactions_skips_existing_summary(app, family, monkeypat
         return object()
 
     monkeypatch.setattr(
-        'services.childcare_service.ChildcareService.create_monthly_transaction',
+        'services.household.childcare_service.ChildcareService.create_monthly_transaction',
         staticmethod(fake_create),
     )
     created = ChildcareService.bulk_create_monthly_transactions(2026, 1, [

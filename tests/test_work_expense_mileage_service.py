@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from extensions import db
 from models.expenses import Expense
-from services.work_expense_mileage_service import WorkExpenseMileageService
+from services.vehicles.work_expense_mileage_service import WorkExpenseMileageService
 
 
 def _add_expense(family_id, d, desc, miles, rate, days=1, vehicle='AB12 CDE', submitted=False, reimbursed=False):

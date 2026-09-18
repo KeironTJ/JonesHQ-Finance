@@ -15,8 +15,8 @@ from models.loans import Loan
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.settings import Settings
 from models.users import User
-from services.payday_service import PaydayService
-from services.transaction_service import TransactionService
+from services.finance.payday_service import PaydayService
+from services.finance.transaction_service import TransactionService
 from extensions import db
 from models.expenses import Expense
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
@@ -355,7 +355,7 @@ def edit(id):
             
             # Sync changes to linked credit card payment if exists
             if transaction.credit_card_id:
-                from services.credit_card_service import CreditCardService
+                from services.finance.credit_card_service import CreditCardService
                 CreditCardService.sync_bank_transaction_to_payment(transaction)
             
             # Sync changes to linked loan payment if exists

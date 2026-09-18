@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from app import create_app
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from datetime import date
 
 app = create_app()

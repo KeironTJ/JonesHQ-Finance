@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 from app import create_app
 from extensions import db
 from models.transactions import Transaction
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from datetime import date
 
 

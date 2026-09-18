@@ -7,7 +7,7 @@ from models.income import Income
 from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
-from services.income_service import IncomeService
+from services.finance.income_service import IncomeService
 
 
 def test_create_recurring_income_assigns_family_and_persists_overrides(

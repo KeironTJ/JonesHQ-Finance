@@ -6,7 +6,7 @@ from extensions import db
 from models.family import Family, FamilyInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
-from services.family_service import FamilyService
+from services.household.family_service import FamilyService
 
 
 def test_assignment_label_creation_is_ordered_and_unique(app, family):

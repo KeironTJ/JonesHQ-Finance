@@ -73,7 +73,7 @@ class NetWorthService:
           account_details, pension_details, cc_details, loan_details,
           mortgage_balance, property_details.
         """
-        from services.monthly_balance_service import MonthlyBalanceService
+        from services.finance.monthly_balance_service import MonthlyBalanceService
 
         today = date.today()
 
@@ -172,7 +172,7 @@ class NetWorthService:
         """
         # ASSETS - Accounts
         # Use monthly balance cache for efficient lookups
-        from services.monthly_balance_service import MonthlyBalanceService
+        from services.finance.monthly_balance_service import MonthlyBalanceService
         
         active_accounts = family_query(Account).filter_by(is_active=True).all()
         cash = 0.00

@@ -20,7 +20,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from models.expenses import Expense
 from models.family import Family
-from services.credit_card_service import CreditCardService
+from services.finance.credit_card_service import CreditCardService
 
 
 # ---------------------------------------------------------------------------

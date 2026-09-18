@@ -5,7 +5,7 @@ from models.recurring_income import RecurringIncome
 from models.accounts import Account
 from models.categories import Category
 from models.users import User
-from services.income_service import IncomeService
+from services.finance.income_service import IncomeService
 from extensions import db
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
@@ -553,7 +553,7 @@ def end_job(id):
 @income_bp.route('/income/reperiod-transactions', methods=['POST'])
 def reperiod_transactions():
     """Re-stamp payday_period on all transactions, optionally updating the payday_day setting first."""
-    from services.payday_service import PaydayService
+    from services.finance.payday_service import PaydayService
     from models.settings import Settings
 
     try:

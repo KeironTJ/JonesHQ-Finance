@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash
 from . import accounts_bp
-from services.account_service import AccountService
+from services.finance.account_service import AccountService
 from extensions import db
 
 

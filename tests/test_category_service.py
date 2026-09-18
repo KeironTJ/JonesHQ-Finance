@@ -1,6 +1,6 @@
 from extensions import db
 from models.categories import Category
-from services.category_service import CategoryService
+from services.finance.category_service import CategoryService
 
 
 def test_create_category_assigns_family_and_builds_name(app, family, monkeypatch):

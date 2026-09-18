@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from app import create_app
 from extensions import db
 from models.vehicles import Vehicle
-from services.fuel_forecasting_service import FuelForecastingService
+from services.vehicles.fuel_forecasting_service import FuelForecastingService
 
 app = create_app()
 

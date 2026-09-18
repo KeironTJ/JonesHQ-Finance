@@ -1,6 +1,6 @@
 from extensions import db
 from models.vendors import Vendor, VendorType
-from services.vendor_service import VendorService
+from services.finance.vendor_service import VendorService
 
 
 def test_vendor_type_and_vendor_creation_assign_family(app, family, monkeypatch):

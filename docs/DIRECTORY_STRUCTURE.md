@@ -62,20 +62,15 @@ SQLAlchemy database models
 - `monthly_account_balance.py` - Monthly account balances
 
 ### `/services/`
-Business logic layer
-- `childcare_service.py` - Childcare logic
-- `credit_card_service.py` - Credit card automation
-- `expense_sync_service.py` - Expense synchronization
-- `fuel_forecasting_service.py` - Fuel forecasting
-- `income_service.py` - Income workflows
-- `loan_service.py` - Loan calculations
-- `monthly_balance_service.py` - Monthly balance workflows
-- `mortgage_service.py` - Mortgage operations
-- `networth_service.py` - Net worth calculations
-- `payday_service.py` - Payday calculations and filtering
-- `pension_service.py` - Pension projections
-- `vehicle_service.py` - Vehicle tracking
-- `work_expense_mileage_service.py` - Work expense mileage
+Domain-oriented business logic layer. See [`services/README.md`](../services/README.md)
+for the package map and compatibility-import policy.
+- `finance/` - Accounts, categories, transactions, payday, balances, income, vendors, credit cards, and expenses
+- `household/` - Family and childcare workflows
+- `planning/` - Loans, mortgages, and pensions
+- `vehicles/` - Vehicles, fuel forecasting, and mileage
+- `platform/` - Authentication and settings
+- `analytics/` - Dashboard and net-worth read models
+- Top-level `*_service.py` files - Compatibility shims for existing imports
 
 ### `/templates/`
 Jinja2 HTML templates

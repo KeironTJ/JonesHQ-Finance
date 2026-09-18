@@ -6,7 +6,7 @@ from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
 from models.expenses import Expense
-from services.transaction_service import TransactionService
+from services.finance.transaction_service import TransactionService
 
 
 def test_create_recurring_transactions_assigns_family_and_derives_fields(
@@ -15,7 +15,7 @@ def test_create_recurring_transactions_assigns_family_and_derives_fields(
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.transaction_service.PaydayService.get_period_for_date',
+        'services.finance.transaction_service.PaydayService.get_period_for_date',
         lambda value: value.strftime('%Y-%m'),
     )
     account = Account(
@@ -72,7 +72,7 @@ def test_create_recurring_transactions_assigns_family_and_derives_fields(
 def test_update_transaction_syncs_linked_transfer(app, family, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.transaction_service.PaydayService.get_period_for_date',
+        'services.finance.transaction_service.PaydayService.get_period_for_date',
         lambda value: value.strftime('%Y-%m'),
     )
     from_account = Account(
@@ -259,7 +259,7 @@ def test_create_transfer_creates_linked_family_scoped_transactions(
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.transaction_service.PaydayService.get_period_for_date',
+        'services.finance.transaction_service.PaydayService.get_period_for_date',
         lambda value: value.strftime('%Y-%m'),
     )
     from_account = Account(

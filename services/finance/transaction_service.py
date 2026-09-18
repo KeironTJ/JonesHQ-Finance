@@ -13,7 +13,7 @@ from models.categories import Category
 from models.vendors import Vendor
 from models.credit_cards import CreditCard
 from models.loans import Loan
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
 

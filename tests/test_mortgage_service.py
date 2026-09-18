@@ -5,7 +5,7 @@ from extensions import db
 from models.property import Property
 from models.mortgage import MortgageProduct
 from models.property_valuation_snapshot import PropertyValuationSnapshot
-from services.mortgage_service import MortgageService
+from services.planning.mortgage_service import MortgageService
 
 
 def test_create_property_assigns_family_and_converts_values(app, family, monkeypatch):

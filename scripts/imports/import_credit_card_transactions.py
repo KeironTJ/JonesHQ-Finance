@@ -160,7 +160,7 @@ def import_credit_card_transactions(csv_file_path):
         print("=" * 70)
         print("Deleting non-fixed future transactions and regenerating...")
         
-        from services.credit_card_service import CreditCardService
+        from services.finance.credit_card_service import CreditCardService
         from datetime import date
         from dateutil.relativedelta import relativedelta
         

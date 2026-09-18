@@ -1,6 +1,6 @@
 from extensions import db
 from models.accounts import Account
-from services.dashboard_service import DashboardService
+from services.analytics.dashboard_service import DashboardService
 
 
 def test_dashboard_data_scopes_accounts_and_builds_empty_summaries(
@@ -8,11 +8,11 @@ def test_dashboard_data_scopes_accounts_and_builds_empty_summaries(
 ):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.dashboard_service.NetWorthService.calculate_current_networth',
+        'services.analytics.dashboard_service.NetWorthService.calculate_current_networth',
         lambda: {'total': 100},
     )
     monkeypatch.setattr(
-        'services.dashboard_service.PaydayService.get_payday_summary_for_year',
+        'services.analytics.dashboard_service.PaydayService.get_payday_summary_for_year',
         lambda account_id, year, include_unpaid: [{'account_id': account_id, 'year': year}],
     )
     account = Account(

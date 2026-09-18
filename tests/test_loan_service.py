@@ -7,7 +7,7 @@ from models.loans import Loan
 from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
-from services.loan_service import LoanService
+from services.planning.loan_service import LoanService
 
 
 def test_create_loan_assigns_family_and_generates_schedule(app, family, monkeypatch):

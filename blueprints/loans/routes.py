@@ -6,7 +6,7 @@ from models.loan_term_changes import LoanTermChange
 from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
-from services.loan_service import LoanService
+from services.planning.loan_service import LoanService
 from datetime import datetime, date, timezone
 from dateutil.relativedelta import relativedelta
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id

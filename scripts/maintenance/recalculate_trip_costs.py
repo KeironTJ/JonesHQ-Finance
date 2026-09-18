@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app import create_app
 from extensions import db
 from models.trips import Trip
-from services.vehicle_service import VehicleService
+from services.vehicles.vehicle_service import VehicleService
 from decimal import Decimal
 
 

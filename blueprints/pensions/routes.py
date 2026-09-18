@@ -4,7 +4,7 @@ from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
 from models.settings import Settings
 from models.users import User
-from services.pension_service import PensionService
+from services.planning.pension_service import PensionService
 from extensions import db
 from datetime import datetime
 from decimal import Decimal

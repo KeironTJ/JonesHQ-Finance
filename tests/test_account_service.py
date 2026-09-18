@@ -5,7 +5,7 @@ from extensions import db
 from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
-from services.account_service import AccountService
+from services.finance.account_service import AccountService
 
 
 def test_create_account_assigns_current_family(app, family, monkeypatch):

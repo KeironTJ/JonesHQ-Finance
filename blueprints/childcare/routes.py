@@ -3,7 +3,7 @@ from . import childcare_bp
 from models.childcare import Child, ChildActivityType, DailyChildcareActivity, MonthlyChildcareSummary
 from models.accounts import Account
 from models.transactions import Transaction
-from services.childcare_service import ChildcareService
+from services.household.childcare_service import ChildcareService
 from extensions import db
 from datetime import datetime, date
 from decimal import Decimal

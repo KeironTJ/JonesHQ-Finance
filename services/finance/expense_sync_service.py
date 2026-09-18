@@ -64,7 +64,7 @@ from models.vendors import Vendor
 from models.trips import Trip
 from models.vehicles import Vehicle
 from models.settings import Settings
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from flask import current_app
 from sqlalchemy import func
 from utils import db_helpers
@@ -1142,7 +1142,7 @@ class ExpenseSyncService:
 
         miles = int(exp.covered_miles) if exp.covered_miles else 0
 
-        from services.vehicle_service import VehicleService
+        from services.vehicles.vehicle_service import VehicleService
         trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(vehicle.id, miles, exp.date)
 
         if existing:

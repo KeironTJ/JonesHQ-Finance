@@ -6,8 +6,8 @@ from blueprints.vendors import bp
 from extensions import db
 from models import Vendor, Category, VendorType
 from models.settings import Settings
-from services.payday_service import PaydayService
-from services.vendor_service import DEFAULT_VENDOR_TYPES, VendorService
+from services.finance.payday_service import PaydayService
+from services.finance.vendor_service import DEFAULT_VENDOR_TYPES, VendorService
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json

@@ -7,7 +7,7 @@ from models.mortgage_payments import MortgagePayment, MortgageSnapshot
 from models.accounts import Account
 from models.vendors import Vendor
 from models.categories import Category
-from services.mortgage_service import MortgageService
+from services.planning.mortgage_service import MortgageService
 from extensions import db
 from decimal import Decimal
 from datetime import datetime

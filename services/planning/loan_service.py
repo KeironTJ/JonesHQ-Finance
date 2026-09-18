@@ -44,7 +44,7 @@ from models.loan_payments import LoanPayment
 from models.loan_term_changes import LoanTermChange
 from models.transactions import Transaction
 from models.vendors import Vendor
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from extensions import db
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
@@ -499,7 +499,7 @@ class LoanService:
             int — number of payment records updated.
         """
         import calendar as cal_mod
-        from services.payday_service import PaydayService
+        from services.finance.payday_service import PaydayService
 
         if from_date is None:
             from_date = datetime.now().date()

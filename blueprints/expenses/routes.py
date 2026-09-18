@@ -15,9 +15,9 @@ import csv
 import io
 import re
 import base64
-from services.expense_sync_service import ExpenseSyncService
-from services.expense_service import ExpenseService
-from services.work_expense_mileage_service import WorkExpenseMileageService
+from services.finance.expense_sync_service import ExpenseSyncService
+from services.finance.expense_service import ExpenseService
+from services.vehicles.work_expense_mileage_service import WorkExpenseMileageService
 from flask import current_app
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
@@ -600,7 +600,7 @@ def toggle_expense_flag(expense_id, field):
 
         # When reimbursed is toggled, mark the CC payment transaction for this period as paid/unpaid
         if field == 'reimbursed' and expense.credit_card_id:
-            from services.expense_sync_service import ExpenseSyncService as _ESS
+            from services.finance.expense_sync_service import ExpenseSyncService as _ESS
             period_key = _ESS.get_period_key_for_expense(expense)
             if period_key:
                 cc_payment_txn = family_query(CreditCardTransaction).filter(

@@ -48,7 +48,7 @@ from models.mortgage_payments import MortgageSnapshot
 from models.transactions import Transaction
 from models.categories import Category
 from models.settings import Settings
-from services.payday_service import PaydayService
+from services.finance.payday_service import PaydayService
 from utils import db_helpers
 from utils.db_helpers import family_query, family_get, family_get_or_404
 
