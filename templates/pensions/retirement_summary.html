@@ -17,7 +17,7 @@
     </div>
 
     <!-- Financial Summary Cards -->
-    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3">
+    <div class="row mb-4 row-cols-2 row-cols-md-5 g-3">
         <div class="col">
             <div class="card bg-primary text-white h-100">
                 <div class="card-body text-center">
@@ -33,6 +33,15 @@
                     <h6 class="card-title opacity-75">Projected @ 65</h6>
                     <h3 class="mb-0">£{{ "{:,.0f}".format(summary.total_projected_value) }}</h3>
                     <small>At retirement age</small>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card bg-secondary text-white h-100">
+                <div class="card-body text-center">
+                    <h6 class="card-title opacity-75">Current Savings</h6>
+                    <h3 class="mb-0">£{{ "{:,.0f}".format(summary.current_savings) }}</h3>
+                    <small>Across savings accounts</small>
                 </div>
             </div>
         </div>

@@ -413,9 +413,13 @@ class PensionService:
         
         total_annual_income = total_annuity + gov_pension
         total_monthly_income = total_annual_income / 12
+
+        from services.analytics.networth_service import NetWorthService
+        current_savings = NetWorthService.calculate_current_networth()['savings']
         
         return {
             'total_current_value': total_current,
+            'current_savings': Decimal(str(current_savings)),
             'total_projected_value': total_projected,
             'total_annuity': total_annuity,
             'government_pension': gov_pension,

@@ -442,6 +442,25 @@
             </div>
         </div>
 
+        <!-- Savings Summary -->
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card border-primary h-100">
+                <a href="{{ url_for('accounts.index') }}" class="card-header bg-primary text-white text-decoration-none summary-card-header">
+                    <h6 class="mb-0"><i class="bi bi-safe"></i> Savings <i class="bi bi-arrow-right-circle ms-1 summary-header-arrow"></i></h6>
+                </a>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Savings Balance</small>
+                        <h5 class="mb-0 text-primary">£{{ "{:,.2f}".format(networth.savings) }}</h5>
+                    </div>
+                    <div>
+                        <small class="text-muted">Total Cash &amp; Savings</small>
+                        <div>£{{ "{:,.2f}".format(networth.cash + networth.savings) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Pensions Summary -->
         <div class="col-md-6 col-lg-3 mb-3">
             <div class="card border-success h-100">
