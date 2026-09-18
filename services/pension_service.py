@@ -59,6 +59,20 @@ class PensionService:
     """
 
     @staticmethod
+    def get_summary():
+        pensions = family_query(Pension).filter_by(is_active=True).all()
+        return {
+            'count': len(pensions),
+            'total_current_value': sum(
+                Decimal(str(pension.current_value or 0)) for pension in pensions
+            ),
+            'total_projected_value': sum(
+                Decimal(str(pension.projected_value_at_retirement or 0))
+                for pension in pensions
+            ),
+        }
+
+    @staticmethod
     def create_pension(data):
         pension = Pension(
             family_id=get_family_id(),

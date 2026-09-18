@@ -8,6 +8,22 @@ from utils.db_helpers import family_get_or_404, family_query, get_family_id
 
 class AccountService:
     @staticmethod
+    def get_active_accounts_with_balances():
+        accounts = family_query(Account).filter_by(
+            is_active=True
+        ).order_by(Account.name).all()
+        for account in accounts:
+            paid_transactions = family_query(Transaction).filter_by(
+                account_id=account.id,
+                is_paid=True,
+            ).all()
+            account.calculated_balance = float(sum(
+                (Decimal(str(transaction.amount)) for transaction in paid_transactions),
+                Decimal('0.00'),
+            ))
+        return accounts
+
+    @staticmethod
     def get_overview():
         """Return accounts grouped with balances calculated from paid transactions."""
         accounts = family_query(Account).all()

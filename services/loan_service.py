@@ -62,6 +62,17 @@ class LoanService:
     bank Transaction is created per payment period (>= 1).
     """
 
+    @staticmethod
+    def get_summary():
+        loans = family_query(Loan).filter_by(is_active=True).all()
+        return {
+            'count': len(loans),
+            'total_balance': sum(Decimal(str(loan.current_balance or 0)) for loan in loans),
+            'total_monthly_payment': sum(
+                Decimal(str(loan.monthly_payment or 0)) for loan in loans
+            ),
+        }
+
     # ------------------------------------------------------------------
     # Weekend adjustment
     # ------------------------------------------------------------------

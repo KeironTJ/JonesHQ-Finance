@@ -63,6 +63,16 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 
 class CreditCardService:
     @staticmethod
+    def get_summary():
+        cards = family_query(CreditCard).filter_by(is_active=True).all()
+        return {
+            'count': len(cards),
+            'total_balance': sum(Decimal(str(card.current_balance or 0)) for card in cards),
+            'total_limit': sum(Decimal(str(card.credit_limit or 0)) for card in cards),
+            'total_available': sum(Decimal(str(card.available_credit or 0)) for card in cards),
+        }
+
+    @staticmethod
     def _card_values(data, existing=None):
         values = {
             'card_name': data.get('card_name'),
