@@ -137,6 +137,21 @@ class CreditCardService:
         return transaction
 
     @staticmethod
+    def delete_transaction(transaction_id):
+        transaction = family_get_or_404(CreditCardTransaction, transaction_id)
+        card_id = transaction.credit_card_id
+        account_id = None
+        if transaction.bank_transaction_id:
+            bank_transaction = family_get(Transaction, transaction.bank_transaction_id)
+            if bank_transaction:
+                account_id = bank_transaction.account_id
+                db.session.delete(bank_transaction)
+        db.session.delete(transaction)
+        db.session.commit()
+        CreditCardTransaction.recalculate_card_balance(card_id, commit=True)
+        return card_id, account_id
+
+    @staticmethod
     def create_transactions(card_id, data):
         card = family_get_or_404(CreditCard, card_id)
         transaction_date = date.fromisoformat(data['txn_date'])

@@ -336,23 +336,9 @@ def delete_transaction(id, txn_id):
             flash('Transaction does not belong to this card!', 'danger')
             return redirect(url_for('credit_cards.detail', id=id))
         
-        # Delete linked bank transaction if exists
-        if txn.bank_transaction_id:
-            from models.transactions import Transaction
-            bank_txn = family_get(Transaction, txn.bank_transaction_id)
-            if bank_txn:
-                account_id = bank_txn.account_id
-                db.session.delete(bank_txn)
-                # Recalculate bank account balance
-                if account_id:
-                    from models.transactions import Transaction
-                    Transaction.recalculate_account_balance(account_id)
-        
-        # Delete the credit card transaction
-        db.session.delete(txn)
-        
-        # Recalculate credit card balance (commits internally including the delete)
-        CreditCardTransaction.recalculate_card_balance(card.id, commit=True)
+        deleted_card_id, account_id = CreditCardService.delete_transaction(txn_id)
+        if account_id:
+            Transaction.recalculate_account_balance(account_id)
         
         flash('Transaction deleted successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))

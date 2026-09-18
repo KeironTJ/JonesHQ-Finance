@@ -305,3 +305,40 @@ def test_credit_card_crud_assigns_family_and_updates_available_credit(
     assert updated.card_name == 'Updated Card'
     assert updated.available_credit == 7500
     assert deleted_name == 'Updated Card'
+
+
+def test_delete_credit_card_transaction_removes_linked_bank_transaction(
+    app, card, family_id, patch_family
+):
+    account = Account(
+        family_id=family_id, name='Current', account_type='Joint',
+        balance=0, is_active=True
+    )
+    category = Category(
+        family_id=family_id, name='Card Payment', head_budget='Credit Cards',
+        sub_budget='Payment', category_type='expense'
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    bank_transaction = Transaction(
+        family_id=family_id, account_id=account.id, category_id=category.id,
+        amount=Decimal('-100'), transaction_date=date(2026, 1, 15)
+    )
+    db.session.add(bank_transaction)
+    db.session.flush()
+    card_transaction = CreditCardTransaction(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 15),
+        item='Payment', transaction_type='Payment', amount=Decimal('100'),
+        bank_transaction_id=bank_transaction.id
+    )
+    db.session.add(card_transaction)
+    db.session.commit()
+
+    deleted_card_id, account_id = CreditCardService.delete_transaction(
+        card_transaction.id
+    )
+
+    assert deleted_card_id == card.id
+    assert account_id == account.id
+    assert db.session.get(CreditCardTransaction, card_transaction.id) is None
+    assert db.session.get(Transaction, bank_transaction.id) is None
