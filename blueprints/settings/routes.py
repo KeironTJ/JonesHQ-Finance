@@ -183,9 +183,7 @@ def update():
             )
         else:
             # Blank = clear the setting (revert to 5-year default)
-            existing = Settings.query.filter_by(key='networth.start_date').first()
-            if existing:
-                db.session.delete(existing)
+            SettingsService.clear_networth_start_date()
 
         # Dashboard Preferences
         networth_expanded = request.form.get('dashboard_networth_expanded') == '1'

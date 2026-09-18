@@ -2,10 +2,18 @@ from decimal import Decimal
 
 from extensions import db
 from models.tax_settings import TaxSettings
+from models.settings import Settings
 from utils.db_helpers import family_get_or_404
 
 
 class SettingsService:
+    @staticmethod
+    def clear_networth_start_date():
+        setting = Settings.query.filter_by(key='networth.start_date').first()
+        if setting:
+            db.session.delete(setting)
+        return setting
+
     @staticmethod
     def update_tax_settings(tax_settings_id, form_data):
         tax_year = family_get_or_404(TaxSettings, tax_settings_id)
