@@ -9,6 +9,7 @@ rows so tests are fully independent.
 import pytest
 from app import create_app
 from extensions import db as _db
+from sqlalchemy import text
 
 
 # ---------------------------------------------------------------------------
@@ -34,8 +35,10 @@ def clean_db(app):
     """Wipe every table after each test so tests never share state."""
     yield
     _db.session.rollback()
-    for table in reversed(_db.metadata.sorted_tables):
+    _db.session.execute(text('PRAGMA foreign_keys = OFF'))
+    for table in reversed(list(_db.metadata.tables.values())):
         _db.session.execute(table.delete())
+    _db.session.execute(text('PRAGMA foreign_keys = ON'))
     _db.session.commit()
     _db.session.remove()
 
