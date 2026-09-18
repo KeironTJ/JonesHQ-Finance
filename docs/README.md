@@ -2,7 +2,7 @@
 
 Complete documentation for the JonesHQ Finance personal finance management system.
 
-## 📖 Documentation Index
+## Documentation Index
 
 ### Getting Started
 - **[Quick Start Guide](QUICKSTART.md)** - Installation and first steps
@@ -11,6 +11,12 @@ Complete documentation for the JonesHQ Finance personal finance management syste
 - **[Database Schema](DATABASE_SCHEMA.md)** - Complete database structure and relationships
 - **[Category Mapping](CATEGORY_MAPPING.md)** - Excel to database category mapping reference
 - **[Vendor System](VENDOR_SYSTEM.md)** - Vendor tracking and management implementation
+- **[Authentication Setup](AUTHENTICATION_SETUP.md)** - Users, families, permissions, and login setup
+- **[Security](SECURITY.md)** - Security controls and deployment expectations
+- **[Transaction Editing](TRANSACTION_EDITING.md)** - Transaction editing behavior
+- **[Integrated Transactions](INTEGRATED_TRANSACTIONS.md)** - Transaction and related-domain integration
+- **[Deployment](DEPLOYMENT.md)** - Deployment guidance
+- **[Directory Structure](DIRECTORY_STRUCTURE.md)** - Current repository layout
 
 ## 📂 Project Structure
 
@@ -26,7 +32,9 @@ JonesHQ Finance/
 │   ├── transactions.py
 │   ├── categories.py
 │   ├── vendors.py
-│   └── ... (22 models total)
+│   ├── family.py
+│   ├── users.py
+│   └── ...
 │
 ├── blueprints/          # Flask blueprints (routes)
 │   ├── dashboard/
@@ -34,7 +42,9 @@ JonesHQ Finance/
 │   ├── transactions/
 │   ├── categories/
 │   ├── vendors/
-│   └── ... (11 blueprints total)
+│   ├── auth/
+│   ├── family/
+│   └── ... (17 registered feature blueprints)
 │
 ├── templates/           # Jinja2 templates
 │   ├── base.html
@@ -42,14 +52,14 @@ JonesHQ Finance/
 │   ├── vendors/
 │   └── ...
 │
-├── static/             # CSS, JS, images
+├── static/             # CSS, JS, and favicon
 │   ├── css/
 │   ├── js/
-│   └── images/
+│   └── favicon.svg
 │
 ├── services/           # Business logic
-│   ├── account_service.py
-│   ├── budget_service.py
+│   ├── income_service.py
+│   ├── loan_service.py
 │   └── ...
 │
 ├── migrations/         # Database migrations
@@ -88,7 +98,10 @@ Vendors normalize merchant names across transactions to prevent duplicates like 
 
 ## 🗂️ Database Overview
 
-The application uses SQLite with 23 tables:
+The application uses SQLite by default in development. Production should use
+the database URL configured through `DATABASE_URL` or
+`SQLALCHEMY_DATABASE_URI`. The schema is defined by the SQLAlchemy models and
+managed through Flask-Migrate migrations.
 
 **Core Financial:**
 - `accounts` - Bank accounts
@@ -120,6 +133,12 @@ The application uses SQLite with 23 tables:
 - `planned_transactions` - Future planned transactions
 - `balances` - Account balance history
 
+The schema also includes users and families, recurring income, family labels,
+tax and application settings, monthly account balances, loan term changes,
+properties and property valuation snapshots, mortgage products and snapshots,
+credit-card promotions, vendor types, and other supporting records. See the
+model modules in [`models/`](../models/) for the authoritative current list.
+
 ## 🚀 Quick Links
 
 - [Back to Main README](../README.md)
@@ -136,6 +155,8 @@ When adding new features, please update the relevant documentation:
 3. Document new systems (like vendor management) in their own files
 4. Update this index with new documentation files
 
-## 📅 Last Updated
+## Maintenance
 
-January 25, 2026
+Update this index when adding a new subsystem or documentation guide. Keep
+counts and directory listings qualitative unless they are generated or
+verified against the source tree.

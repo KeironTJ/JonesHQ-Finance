@@ -62,15 +62,17 @@ notepad .env
 ### 4. Initialize Database
 
 ```powershell
-# Initialize Flask-Migrate
-flask db init
-
-# Create initial migration
-flask db migrate -m "Initial migration"
-
-# Apply migration to create tables
+# Apply the checked-in migrations
 flask db upgrade
+
+# For model changes, generate and review a migration before applying it:
+# flask db migrate -m "Describe the schema change"
+# flask db upgrade
 ```
+
+The application currently also calls `db.create_all()` during application
+startup. Flask-Migrate remains the source of truth for schema changes; review
+the migration history before deploying to an existing database.
 
 ### 5. Run the Application
 
@@ -103,9 +105,10 @@ JonesHQ Finance/
 │   ├── loans.py
 │   ├── vehicles.py
 │   └── ...
-├── services/              # Business logic layer
-│   ├── account_service.py
-│   ├── budget_service.py
+├── services/              # Business logic and domain workflows
+│   ├── income_service.py
+│   ├── loan_service.py
+│   ├── mortgage_service.py
 │   └── ...
 ├── blueprints/            # Route blueprints
 │   ├── dashboard/
@@ -118,7 +121,7 @@ JonesHQ Finance/
 ├── static/                # Static assets
 │   ├── css/
 │   ├── js/
-│   └── images/
+│   └── favicon.svg
 └── migrations/            # Database migrations
 ```
 
@@ -202,7 +205,6 @@ with app.app_context():
 
 ## Future Enhancements
 
-- [ ] User authentication and authorization
 - [ ] Data visualization with charts (Chart.js/Plotly)
 - [ ] Export to Excel/PDF reports
 - [ ] Budget alerts and notifications
@@ -211,6 +213,11 @@ with app.app_context():
 - [ ] Automated data import from bank feeds
 - [ ] Multi-currency support
 - [ ] Tax reporting features
+
+Authentication, family membership, section permissions, CSRF protection,
+rate limiting, and password policy are already implemented. See
+[`docs/SECURITY.md`](docs/SECURITY.md) and
+[`docs/AUTHENTICATION_SETUP.md`](docs/AUTHENTICATION_SETUP.md).
 
 ## License
 

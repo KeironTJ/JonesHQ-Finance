@@ -4,8 +4,6 @@
 - `app.py` - Flask application factory
 - `config.py` - Application configuration
 - `extensions.py` - Flask extensions initialization
-- `init_db.py` - Database initialization script
-- `populate_sample_data.py` - Sample data generator
 - `requirements.txt` - Python dependencies
 - `run.bat` / `run.ps1` - Launch scripts
 - `README.md` - Project documentation
@@ -27,6 +25,11 @@ Flask blueprints for modular route organization
 - `transactions/` - Transaction management
 - `vehicles/` - Vehicle expense tracking
 - `vendors/` - Vendor management
+- `auth/` - Authentication and login
+- `expenses/` - General and work expense management
+- `family/` - Family membership and assignments
+- `income/` - Income and payslip tracking
+- `settings/` - User and application settings
 
 ### `/models/`
 SQLAlchemy database models
@@ -34,7 +37,7 @@ SQLAlchemy database models
 - `balances.py` - Balance history
 - `budgets.py` - Budget model
 - `categories.py` - Category model
-- `childcare.py` - Childcare records
+- `childcare.py` - Childcare records and related entities
 - `credit_cards.py` - Credit card model
 - `credit_card_transactions.py` - Credit card transactions
 - `expenses.py` - Expense tracking
@@ -52,19 +55,27 @@ SQLAlchemy database models
 - `trips.py` - Trip tracking
 - `vehicles.py` - Vehicle model
 - `vendors.py` - Vendor model
+- `family.py` / `users.py` - Family and user identity models
+- `settings.py` / `tax_settings.py` - User configuration
+- `property.py` / `property_valuation_snapshot.py` - Property assets and valuations
+- `recurring_income.py` - Recurring income
+- `monthly_account_balance.py` - Monthly account balances
 
 ### `/services/`
 Business logic layer
-- `account_service.py` - Account operations
-- `budget_service.py` - Budget calculations
 - `childcare_service.py` - Childcare logic
 - `credit_card_service.py` - Credit card automation
-- `forecasting_service.py` - Financial forecasting
+- `expense_sync_service.py` - Expense synchronization
+- `fuel_forecasting_service.py` - Fuel forecasting
+- `income_service.py` - Income workflows
 - `loan_service.py` - Loan calculations
+- `monthly_balance_service.py` - Monthly balance workflows
 - `mortgage_service.py` - Mortgage operations
 - `networth_service.py` - Net worth calculations
+- `payday_service.py` - Payday calculations and filtering
 - `pension_service.py` - Pension projections
 - `vehicle_service.py` - Vehicle tracking
+- `work_expense_mileage_service.py` - Work expense mileage
 
 ### `/templates/`
 Jinja2 HTML templates
@@ -79,25 +90,16 @@ Jinja2 HTML templates
 ### `/static/`
 Static assets
 - `css/` - Stylesheets
-- `images/` - Images and logos
 - `js/` - JavaScript files
+- `favicon.svg` - Application favicon
 
 ### `/scripts/`
 Database management and import scripts
-- `check_vendors.py` - Vendor validation
-- `import_accounts_ACTUAL.py` - Import accounts
-- `import_categories.py` - Import categories
-- `import_credit_cards_ACTUAL.py` - Import credit cards
-- `import_loans_ACTUAL.py` - Import loans
-- `import_transactions_csv.py` - CSV transaction import
-- `import_transactions_nationwide.py` - Nationwide bank import
-- `import_vendors.py` - Vendor import
-- `migrate_credit_cards.py` - Credit card migration
-- `recalculate_balances.py` - Balance recalculation
-- `sync_transfer_transactions.py` - Transfer sync
-- `update_account_balance.py` - Account balance updates
-- `update_savings_balances.py` - Savings updates
-- `data/` - Import data files
+- `checks/` - Repository and data checks
+- `database/` - Database setup and sample-data scripts
+- `imports/` - Import and migration scripts
+- `maintenance/` - Maintenance and recalculation scripts
+- `README.md` - Script conventions and inventory
 
 ### `/docs/`
 Documentation
@@ -123,26 +125,26 @@ Flask-Migrate database migrations
 - `env.py` - Migration environment
 - `versions/` - Migration versions
 
-### `/data/`
-Data files and outputs
-- `transfer_output.txt` - Transfer processing output
-
 ## Environment Files
 - `.env` - Environment variables (gitignored)
 - `.env.example` - Environment template
-- `.venv/` - Python virtual environment (gitignored)
+- `venv/` - Python virtual environment (gitignored; local development)
 
 ## Git Files
 - `.git/` - Git repository
 - `.gitignore` - Git ignore rules
 - `.gitattributes` - Git attributes
 
-## Clean Directory Principles
+## Application Boundaries
 1. **Documentation** → `/docs/`
-2. **Data files** → `/data/`
-3. **Database** → `/instance/`
-4. **Source code** → `/blueprints/`, `/models/`, `/services/`
-5. **Frontend** → `/templates/`, `/static/`
-6. **Utilities** → `/scripts/`
-7. **No `__pycache__`** - Cleaned automatically
-8. **Single venv** - `.venv` (not `venv`)
+2. **Database and instance state** → `/instance/`
+3. **Source code** → `/blueprints/`, `/models/`, `/services/`, `/utils/`
+4. **Frontend** → `/templates/`, `/static/`
+5. **Utilities and operational scripts** → `/scripts/`
+6. **Schema history** → `/migrations/`
+
+The application uses the Flask application-factory pattern in `app.py`.
+Blueprints own HTTP routes and templates, models define persistence, services
+hold reusable domain workflows, and utilities hold cross-cutting helpers.
+Authentication and family permissions are enforced centrally while feature
+routes remain organized by blueprint.

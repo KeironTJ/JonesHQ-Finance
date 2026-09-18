@@ -1,7 +1,16 @@
 # Database Schema Design for JonesHQ Finance
 
 ## Overview
-This document outlines the database schema designed to migrate your Excel-based personal finance tracking system to a Flask web application with SQLAlchemy ORM.
+This document summarizes the implemented SQLAlchemy schema for the Flask
+application. The model modules and Flask-Migrate revision history are
+authoritative; this guide is a domain-oriented reference rather than a
+complete generated table catalog.
+
+The application uses SQLite by default for development. Configure
+`DATABASE_URL` or `SQLALCHEMY_DATABASE_URI` for another database, especially
+in production. Most domain records support family ownership so authenticated
+users can share a financial workspace while permissions remain enforced by the
+application.
 
 ## Core Financial Models
 
@@ -235,16 +244,20 @@ From your INCOME sheet - comprehensive payslip tracking
 - `take_home`: Net pay
 - `estimated_annual_take_home`: Estimated annual
 
-## Childcare Model
+## Childcare Models
 
 ### 15. **ChildcareRecord** (childcare.py)
-From your CHILDCARE sheet
+Legacy-compatible childcare record
 - `date`: Date
 - `child_name`: Michael, Emily, Ivy, Brian
 - `service_type`: AM, PM1, PM2, Lunch, Breakfast Club, School Dinner
 - `cost`: Cost for service
 - `year_group`: Year 4, Nursery, etc.
 - `provider`: Childcare provider
+
+The same module also contains the current `Child`, `ChildActivityType`,
+`DailyChildcareActivity`, and `MonthlyChildcareSummary` models used by the
+childcare workflows.
 
 ## Pension & Net Worth Models
 
@@ -331,7 +344,7 @@ Boolean fields for status (`is_paid`, `is_active`, `submitted`, `reimbursed`) to
 - `description` and `item` fields separate for better categorization
 - Optional foreign keys (nullable) for flexibility
 
-## Migration Strategy
+## Historical Import Strategy
 
 ### Phase 1: Core Data
 1. Create accounts
@@ -366,11 +379,10 @@ Boolean fields for status (`is_paid`, `is_active`, `submitted`, `reimbursed`) to
 7. **Validation**: Model-level validation before saving
 8. **Relationships**: Automatic handling of related data
 
-## Next Steps
+## Maintenance Notes
 
-1. Review and approve the schema design
-2. Create database migration files (using Flask-Migrate/Alembic)
-3. Build data import scripts from Excel
-4. Create service layer for business logic
-5. Build REST API endpoints
-6. Create UI for data entry and reporting
+1. Update the relevant model module when changing a domain entity.
+2. Generate and review a Flask-Migrate revision for schema changes.
+3. Keep import and maintenance scripts under `scripts/`.
+4. Add or update service logic before duplicating domain rules in routes.
+5. Update this guide when a new domain or relationship changes the conceptual model.
