@@ -53,7 +53,12 @@ class Income(db.Model):
     
     # Manual override flag (if true, values were entered manually not calculated)
     is_manual_override = db.Column(db.Boolean, default=False)
-    
+
+    # Sum of expenses folded into this payslip's deposit (see ExpenseReimbursementGroup
+    # mode='folded'). The linked Transaction.amount = take_home + expense_reimbursement_total.
+    # Kept in sync by ExpenseSyncService whenever folded expenses change.
+    expense_reimbursement_total = db.Column(db.Numeric(10, 2), default=0)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     

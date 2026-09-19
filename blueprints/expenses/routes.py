@@ -17,6 +17,8 @@ import re
 import base64
 from services.finance.expense_sync_service import ExpenseSyncService
 from services.finance.expense_service import ExpenseService
+from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
+from models.recurring_income import RecurringIncome
 from services.vehicles.work_expense_mileage_service import WorkExpenseMileageService
 from flask import current_app
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
@@ -395,6 +397,8 @@ def index():
 
     period_options = _build_period_options(set(expense_period_keys.values()) | set(expense_claim_groups.values()))
 
+    reimbursement_groups = ExpenseReimbursementGroupService.list_groups()
+
     return render_template(
         'expenses/index.html',
         expenses=expenses,
@@ -421,6 +425,7 @@ def index():
         mileage_finance_years=mileage_finance_years,
         mileage_view=mileage_view,
         mileage_vehicle=mileage_vehicle,
+        reimbursement_groups=reimbursement_groups,
     )
 
 
@@ -898,3 +903,57 @@ def generate_all():
         flash('Sync failed — check the server log for details.', 'danger')
 
     return redirect(url_for('expenses.index'))
+
+
+@expenses_bp.route('/expenses/groups')
+def groups():
+    """Manage reimbursement groups: 'separate' (own transaction) vs 'folded' (added to a payslip)."""
+    reimbursement_groups = ExpenseReimbursementGroupService.list_groups()
+    recurring_incomes = family_query(RecurringIncome).filter_by(is_active=True).order_by(RecurringIncome.person).all()
+    return render_template(
+        'expenses/groups.html',
+        reimbursement_groups=reimbursement_groups,
+        recurring_incomes=recurring_incomes,
+    )
+
+
+@expenses_bp.route('/expenses/groups/add', methods=['POST'])
+def add_group():
+    try:
+        ExpenseReimbursementGroupService.create_group(request.form)
+        flash('Reimbursement group created', 'success')
+    except ValueError as ve:
+        flash(str(ve), 'warning')
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error creating reimbursement group')
+        flash('Error creating reimbursement group — check the server log for details.', 'danger')
+    return redirect(url_for('expenses.groups'))
+
+
+@expenses_bp.route('/expenses/groups/<int:group_id>/update', methods=['POST'])
+def update_group(group_id):
+    try:
+        ExpenseReimbursementGroupService.update_group(group_id, request.form)
+        flash('Reimbursement group updated', 'success')
+    except ValueError as ve:
+        flash(str(ve), 'warning')
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error updating reimbursement group')
+        flash('Error updating reimbursement group — check the server log for details.', 'danger')
+    return redirect(url_for('expenses.groups'))
+
+
+@expenses_bp.route('/expenses/groups/<int:group_id>/delete', methods=['POST'])
+def delete_group(group_id):
+    try:
+        ExpenseReimbursementGroupService.delete_group(group_id)
+        flash('Reimbursement group deleted', 'success')
+    except ValueError as ve:
+        flash(str(ve), 'warning')
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error deleting reimbursement group')
+        flash('Error deleting reimbursement group — check the server log for details.', 'danger')
+    return redirect(url_for('expenses.groups'))

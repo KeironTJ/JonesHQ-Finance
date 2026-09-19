@@ -10,6 +10,19 @@
         <div class="col">
             <h1 class="mb-0"><i class="bi bi-cash-coin me-2"></i>Income</h1>
         </div>
+        <div class="col-auto">
+            <button type="button"
+                    class="btn btn-link p-0 text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="focus"
+                    data-bs-placement="bottom"
+                    data-bs-html="true"
+                    data-bs-title="<i class='bi bi-info-circle'></i> Income &amp; Expenses"
+                    data-bs-content="Turn on <strong>'Add work expense reimbursements to this payslip'</strong> when editing a recurring income (<i class='bi bi-gear'></i> Manage Templates) to fold a job's expenses into its take-home pay. Click the '+ £X expenses' badge below any payslip to see exactly which expenses were folded in."
+                    title="How income &amp; expenses link up">
+                <i class="bi bi-info-circle fs-5"></i>
+            </button>
+        </div>
         <div class="col-auto d-flex gap-2 flex-wrap">
             <button id="deleteSelectedBtn" class="btn btn-danger" style="display:none">
                 <i class="bi bi-trash"></i> Delete Selected
@@ -245,7 +258,23 @@
                                     </td>
                                     <td>£{{ "{:,.2f}".format(income.income_tax or 0) }}</td>
                                     <td>£{{ "{:,.2f}".format(income.national_insurance or 0) }}</td>
-                                    <td class="fw-bold text-success">£{{ "{:,.2f}".format(income.take_home) }}</td>
+                                    <td class="fw-bold text-success">
+                                        £{{ "{:,.2f}".format(income.take_home) }}
+                                        {% set linked_expenses = linked_expenses_by_income.get(income.id, []) %}
+                                        {% if income.expense_reimbursement_total %}
+                                        <br>
+                                        <button type="button" class="badge bg-info-subtle text-info-emphasis border-0"
+                                            data-bs-toggle="collapse" data-bs-target="#expenses-{{ income.id }}"
+                                            title="Show the expenses folded into this payslip">
+                                            + £{{ "{:,.2f}".format(income.expense_reimbursement_total) }} expenses
+                                            <i class="bi bi-chevron-down"></i>
+                                        </button>
+                                        {% elif income.recurring_income_id in folded_recurring_income_ids %}
+                                        <br><span class="badge bg-light text-muted border" title="This job folds expenses into its payslip, but none are linked to this pay period yet">
+                                            no expenses linked yet
+                                        </span>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         {% if income.deposit_account %}
                                         <span class="badge bg-primary">{{ income.deposit_account.name }}</span>
@@ -291,6 +320,33 @@
                                         </button>
                                     </td>
                                 </tr>
+                                {% if linked_expenses %}
+                                <tr class="collapse" id="expenses-{{ income.id }}">
+                                    <td></td>
+                                    <td colspan="11">
+                                        <div class="card card-body bg-light py-2 my-1">
+                                            <div class="small text-muted mb-1">Expenses folded into this payslip:</div>
+                                            <table class="table table-sm mb-0">
+                                                <tbody>
+                                                    {% for exp in linked_expenses %}
+                                                    <tr>
+                                                        <td class="text-nowrap">{{ exp.date.strftime('%d %b %Y') if exp.date else '—' }}</td>
+                                                        <td>{{ exp.description }}</td>
+                                                        <td><span class="badge bg-secondary">{{ exp.expense_type }}</span></td>
+                                                        <td class="text-end">£{{ "{:,.2f}".format(exp.total_cost or 0) }}</td>
+                                                        <td class="text-end">
+                                                            <a href="{{ url_for('expenses.index', id=exp.id) }}" class="small">
+                                                                <i class="bi bi-box-arrow-up-right"></i> View
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
                                 {% endfor %}
                             </tbody>
                         </table>

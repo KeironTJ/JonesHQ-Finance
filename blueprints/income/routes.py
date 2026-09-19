@@ -69,6 +69,22 @@ def index():
     years = family_query(Income).with_entities(db.func.substr(Income.tax_year, 1, 4).label('year')).distinct().all()
     years = sorted([y[0] for y in years], reverse=True) if years else []
 
+    # Expenses folded into each payslip's deposit, so the page can show what
+    # actually makes up "take home + expenses" instead of just the total.
+    from models.expenses import Expense
+    from models.expense_reimbursement_group import ExpenseReimbursementGroup
+    income_ids = [inc.id for inc in summary['records']]
+    linked_expenses_by_income = {}
+    if income_ids:
+        for exp in family_query(Expense).filter(Expense.income_id.in_(income_ids)).order_by(Expense.date).all():
+            linked_expenses_by_income.setdefault(exp.income_id, []).append(exp)
+
+    folded_recurring_income_ids = {
+        g.recurring_income_id
+        for g in family_query(ExpenseReimbursementGroup).filter_by(mode='folded').all()
+        if g.recurring_income_id
+    }
+
     return render_template('income/index.html',
                            income_records=summary['records'],
                            summary=summary,
@@ -79,7 +95,9 @@ def index():
                            current_person=person,
                            current_year=year,
                            today=date.today(),
-                           today_year=datetime.now().year)
+                           today_year=datetime.now().year,
+                           linked_expenses_by_income=linked_expenses_by_income,
+                           folded_recurring_income_ids=folded_recurring_income_ids)
 
 
 @income_bp.route('/income/add', methods=['GET', 'POST'])
@@ -273,6 +291,8 @@ def toggle_paid(id):
                 transaction.is_paid = income.is_paid
         
         db.session.commit()
+        # Folded expenses are only "reimbursed" once the payslip is actually paid
+        IncomeService._sync_folded_expenses(income)
         
         return jsonify({
             'id': income.id,
@@ -417,6 +437,10 @@ def edit_recurring(id):
     if request.method == 'POST':
         try:
             recurring = IncomeService.update_recurring_income(id, request.form)
+            from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
+            ExpenseReimbursementGroupService.set_folding_for_recurring_income(
+                recurring.id, request.form.get('fold_expenses') == 'on'
+            )
             flash('Recurring income updated successfully!', 'success')
             return redirect(url_for('income.recurring'))
             
@@ -426,7 +450,9 @@ def edit_recurring(id):
     
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     categories = family_query(Category).filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
-    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories, people=_get_income_people())
+    from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
+    fold_group = ExpenseReimbursementGroupService.get_folded_group_for_recurring_income(recurring.id)
+    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories, people=_get_income_people(), fold_group=fold_group)
 
 
 @income_bp.route('/income/recurring/<int:id>/delete', methods=['POST'])

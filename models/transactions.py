@@ -41,6 +41,11 @@ class Transaction(db.Model):
     # NULL for all non-expense transactions.
     claim_group = db.Column(db.String(20), nullable=True, index=True)
 
+    # Which ExpenseReimbursementGroup this 'Expense Reimbursement' transaction belongs to.
+    # Lets multiple groups reimburse in the same period without colliding on claim_group.
+    # NULL for all non-reimbursement transactions.
+    reimbursement_group_id = db.Column(db.Integer, db.ForeignKey('expense_reimbursement_groups.id'), nullable=True, index=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     

@@ -34,6 +34,14 @@ class ExpenseService:
         expense_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date() if data.get('date') else None
         date_fields = ExpenseService._date_fields(expense_date)
         total_cost = Decimal(data.get('total_cost') or '0')
+
+        from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
+        from services.finance.expense_sync_service import ExpenseSyncService
+        reimbursement_group_id = (
+            int(data['reimbursement_group_id']) if data.get('reimbursement_group_id')
+            else ExpenseReimbursementGroupService.get_default_group().id
+        )
+
         expense = Expense(
             family_id=db_helpers.get_family_id(),
             date=expense_date,
@@ -51,7 +59,9 @@ class ExpenseService:
             paid_for=data.get('paid_for') == 'on',
             submitted=data.get('submitted') == 'on',
             reimbursed=data.get('reimbursed') == 'on',
+            reimbursement_group_id=reimbursement_group_id,
         )
+        expense.payday_period = ExpenseSyncService.get_period_key_for_expense(expense) if expense_date else None
         db.session.add(expense)
         db.session.commit()
         return expense
@@ -78,6 +88,11 @@ class ExpenseService:
         expense.paid_for = data.get('paid_for') == 'on'
         expense.submitted = data.get('submitted') == 'on'
         expense.reimbursed = data.get('reimbursed') == 'on'
+        if data.get('reimbursement_group_id') and not expense.reimbursed:
+            expense.reimbursement_group_id = int(data['reimbursement_group_id'])
+
+        from services.finance.expense_sync_service import ExpenseSyncService
+        expense.payday_period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None
         db.session.commit()
         return expense
 

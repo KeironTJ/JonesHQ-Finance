@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 
 from extensions import db
 from models.vehicles import Vehicle
@@ -160,21 +161,21 @@ def test_forecasts_historical_refills_only_since_latest_fill(app, family, monkey
 
     db.session.add_all([
         FuelRecord(
-            family_id=family.id, vehicle_id=vehicle.id, date='2026-06-01',
+            family_id=family.id, vehicle_id=vehicle.id, date=date(2026, 6, 1),
             price_per_litre=150, mileage=1000, cost=30, gallons=10,
             is_partial_fill=False,
         ),
         FuelRecord(
-            family_id=family.id, vehicle_id=vehicle.id, date='2026-09-01',
+            family_id=family.id, vehicle_id=vehicle.id, date=date(2026, 9, 1),
             price_per_litre=150, mileage=1110, cost=3, gallons=1,
             is_partial_fill=True,
         ),
         Trip(
-            family_id=family.id, vehicle_id=vehicle.id, date='2026-06-02',
+            family_id=family.id, vehicle_id=vehicle.id, date=date(2026, 6, 2),
             total_miles=100, personal_miles=100,
         ),
         Trip(
-            family_id=family.id, vehicle_id=vehicle.id, date='2026-09-02',
+            family_id=family.id, vehicle_id=vehicle.id, date=date(2026, 9, 2),
             total_miles=10, personal_miles=10,
         ),
     ])

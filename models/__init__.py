@@ -8,6 +8,7 @@ from models.childcare import ChildcareRecord
 from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
 from models.expenses import Expense
+from models.expense_reimbursement_group import ExpenseReimbursementGroup
 from models.family import Family, FamilyInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.fuel import FuelRecord
@@ -43,6 +44,7 @@ __all__ = [
     'CreditCardPromotion',
     'CreditCardTransaction',
     'Expense',
+    'ExpenseReimbursementGroup',
     'Family',
     'FamilyAssignmentLabel',
     'FamilyInvite',

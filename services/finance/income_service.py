@@ -169,8 +169,26 @@ class IncomeService:
         db.session.commit()
 
     @staticmethod
+    def _sync_folded_expenses(income):
+        """Recompute any 'folded' reimbursement groups tied to this income's job
+        after it is created/edited, so expenses stay correctly totalled in. Never
+        raises — a sync failure here shouldn't block saving the income record."""
+        if not income.recurring_income_id:
+            return
+        try:
+            from services.finance.expense_sync_service import ExpenseSyncService
+            ExpenseSyncService.sync_folded_expenses_for_recurring_income(income.recurring_income_id)
+        except Exception:
+            from flask import current_app
+            current_app.logger.exception(
+                f'Failed to sync folded expenses for recurring_income_id={income.recurring_income_id}'
+            )
+
+    @staticmethod
     def delete_income_record(income_id, keep_transaction=False):
         income = family_get_or_404(Income, income_id)
+        from services.finance.expense_sync_service import ExpenseSyncService
+        ExpenseSyncService.unlink_expenses_from_income(income.id)
         if income.transaction_id:
             transaction = family_get(Transaction, income.transaction_id)
             if transaction:
@@ -183,11 +201,13 @@ class IncomeService:
 
     @staticmethod
     def delete_income_records(income_ids):
+        from services.finance.expense_sync_service import ExpenseSyncService
         deleted = 0
         for income_id in income_ids:
             income = family_query(Income).filter_by(id=income_id).first()
             if not income:
                 continue
+            ExpenseSyncService.unlink_expenses_from_income(income.id)
             if income.transaction_id:
                 transaction = family_get(Transaction, income.transaction_id)
                 if transaction:
@@ -395,6 +415,7 @@ class IncomeService:
             income.transaction_id = transaction.id
         
         db.session.commit()
+        IncomeService._sync_folded_expenses(income)
         return income
     
     @staticmethod
@@ -483,6 +504,7 @@ class IncomeService:
             income.transaction_id = transaction.id
         
         db.session.commit()
+        IncomeService._sync_folded_expenses(income)
         return income
     
     @staticmethod
@@ -532,7 +554,7 @@ class IncomeService:
             family_id=db_helpers.get_family_id(),
             account_id=income.deposit_account_id,
             category_id=category_id,
-            amount=income.take_home,
+            amount=income.take_home + (income.expense_reimbursement_total or Decimal('0')),
             transaction_date=income.pay_date,
             description=f"{income.person} Salary",
             item=f"Take home: £{income.take_home:,.2f}",
@@ -883,7 +905,9 @@ class IncomeService:
         day_name = income.pay_date.strftime('%a')
         
         # Sync fields from income to transaction
-        transaction.amount = income.take_home
+        # Amount includes any expense reimbursement folded into this payslip
+        # (see ExpenseReimbursementGroup mode='folded') on top of take-home pay.
+        transaction.amount = income.take_home + (income.expense_reimbursement_total or Decimal('0'))
         transaction.transaction_date = income.pay_date
         transaction.description = f"{income.person} Salary"
         transaction.item = f"Take home: £{income.take_home:,.2f}"
@@ -898,6 +922,7 @@ class IncomeService:
         transaction.is_forecasted = not income.is_paid and income.pay_date > date.today()
         
         db.session.flush()
+        IncomeService._sync_folded_expenses(income)
         
         # Recalculate account balance
         if transaction.account_id:

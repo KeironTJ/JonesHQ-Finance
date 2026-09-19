@@ -37,6 +37,20 @@ class Expense(db.Model):
     # NULL means the expense has not yet been assigned to any claim group (pending).
     claim_group = db.Column(db.String(20), nullable=True, index=True)
 
+    # Which reimbursement strategy this expense follows (see ExpenseReimbursementGroup).
+    # Always set to the family's default group by ExpenseService.create_expense — treat
+    # NULL only as "not yet backfilled" on legacy rows, never as a valid ongoing state.
+    reimbursement_group_id = db.Column(db.Integer, db.ForeignKey('expense_reimbursement_groups.id'), nullable=True, index=True)
+
+    # Snapshot of the pay period this expense was assigned to at creation time (YYYY-MM),
+    # computed via ExpenseSyncService.get_period_key_for_expense(). Denormalized so period
+    # assignment survives later changes to the period_mode/cutoff_day settings.
+    payday_period = db.Column(db.String(7), nullable=True, index=True)
+
+    # Set when this expense's reimbursement was folded into a specific Income payslip
+    # (reimbursement_group.mode == 'folded'). NULL when reimbursed via a separate transaction.
+    income_id = db.Column(db.Integer, db.ForeignKey('income.id'), nullable=True, index=True)
+
     # Status
     paid_for = db.Column(db.Boolean, default=False)
     submitted = db.Column(db.Boolean, default=False)
@@ -44,6 +58,9 @@ class Expense(db.Model):
     
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
-    
+
+    reimbursement_group = db.relationship('ExpenseReimbursementGroup', foreign_keys=[reimbursement_group_id])
+    income = db.relationship('Income', foreign_keys=[income_id])
+
     def __repr__(self):
         return f'<Expense {self.date}: {self.description} - £{self.total_cost}>'

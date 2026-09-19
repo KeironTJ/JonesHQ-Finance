@@ -55,6 +55,7 @@ from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from extensions import db
 from models.expenses import Expense
+from models.expense_reimbursement_group import ExpenseReimbursementGroup
 from models.credit_card_transactions import CreditCardTransaction
 from models.transactions import Transaction
 from models.accounts import Account
@@ -64,6 +65,7 @@ from models.vendors import Vendor
 from models.trips import Trip
 from models.vehicles import Vehicle
 from models.settings import Settings
+from models.income import Income
 from services.finance.payday_service import PaydayService
 from flask import current_app
 from sqlalchemy import func
@@ -184,13 +186,21 @@ class ExpenseSyncService:
     @staticmethod
     def reconcile_monthly_reimbursements(year_month=None):
         """
-        Create reimbursement transactions for all submitted expenses.
+        Create reimbursement transactions (or folded-income top-ups) for all submitted
+        expenses, once per (ExpenseReimbursementGroup, period) pair.
+
         Respects the 'expenses.period_mode' setting:
           - 'calendar_month': group by calendar YYYY-MM, reimburse last working day of that month
           - 'payday_period':  group by payday-period YYYY-MM, reimburse last day of the payday period
 
+        Each group's `mode` decides how its expenses are reimbursed:
+          - 'separate': a standalone 'Expense Reimbursement' Transaction (original behaviour).
+          - 'folded':   the period total is added on top of the linked RecurringIncome's
+                        take-home pay instead (see `_fold_group_period`).
+
         If year_month is provided (format "2026-01") only that period is processed.
-        Returns dict with created/updated reimbursement transaction IDs by period key.
+        Returns dict with created/updated reimbursement transaction/income IDs by
+        "{group_id}:{period_key}" key.
         """
         auto_sync = Settings.get_value('expenses.auto_sync', True)
         if not auto_sync:
@@ -210,19 +220,26 @@ class ExpenseSyncService:
                         periods_set.add(key)
                 periods_to_process = sorted(periods_set)
 
+            groups = family_query(ExpenseReimbursementGroup).all()
+
             results = {}
             for period_key in periods_to_process:
-                result = ExpenseSyncService._create_period_reimbursement(period_key)
-                if result:
-                    txn_id, changed = result
-                    if changed:
-                        results[period_key] = txn_id
+                for group in groups:
+                    if group.mode == 'folded':
+                        result = ExpenseSyncService._fold_group_period(group, period_key)
+                    else:
+                        result = ExpenseSyncService._create_period_reimbursement(period_key, group)
+                    if result:
+                        ref_id, changed = result
+                        if changed:
+                            results[f'{group.id}:{period_key}'] = ref_id
 
             db.session.commit()
             return results
         except Exception:
             db.session.rollback()
             raise
+
     
     @staticmethod
     def reconcile_credit_card_payments(year_month=None):
@@ -822,12 +839,12 @@ class ExpenseSyncService:
         return ExpenseSyncService._last_working_day_of_month(year, month)
 
     @staticmethod
-    def _create_period_reimbursement(period_key):
+    def _create_period_reimbursement(period_key, group):
         """
-        Create (or update) a single reimbursement transaction for all expenses
-        in the given period (calendar month or payday period, depending on setting).
-        Transaction is created as is_paid=False regardless of expense submission status.
-        Returns transaction ID or None.
+        Create (or update) a single reimbursement transaction for all of ``group``'s
+        expenses in the given period (calendar month or payday period, depending on
+        setting). Transaction is created as is_paid=False regardless of expense
+        submission status. Returns (transaction_id, changed) or None.
         """
         try:
             period_start, period_end = ExpenseSyncService._get_period_date_range(period_key)
@@ -840,7 +857,8 @@ class ExpenseSyncService:
         #   claim_group is NULL (never assigned) OR claim_group == period_key exactly.
         all_period_expenses = family_query(Expense).filter(
             Expense.date >= period_start,
-            Expense.date <= period_end
+            Expense.date <= period_end,
+            Expense.reimbursement_group_id == group.id,
         ).all()
 
         expenses = [
@@ -853,7 +871,8 @@ class ExpenseSyncService:
             # Remove the stale full-period reimbursement txn if it exists and is not yet paid.
             stale = family_query(Transaction).filter(
                 Transaction.payment_type == 'Expense Reimbursement',
-                Transaction.year_month == period_key
+                Transaction.year_month == period_key,
+                Transaction.reimbursement_group_id == group.id,
             ).first()
             if stale and not stale.is_paid:
                 acct_id_for_del = stale.account_id
@@ -867,10 +886,11 @@ class ExpenseSyncService:
         if total_reimbursement <= 0:
             return None
 
-        # Look for existing reimbursement transaction for this period
+        # Look for existing reimbursement transaction for this group + period
         existing = family_query(Transaction).filter(
             Transaction.payment_type == 'Expense Reimbursement',
-            Transaction.year_month == period_key
+            Transaction.year_month == period_key,
+            Transaction.reimbursement_group_id == group.id,
         ).first()
 
         if existing:
@@ -929,6 +949,7 @@ class ExpenseSyncService:
         vendor_id_setting = Settings.get_value('expenses.reimburse_vendor_id')
         reimburse_vendor_id = int(vendor_id_setting) if vendor_id_setting else None
 
+        label = f'Expense Reimbursement {period_key}' if group.is_default else f'Expense Reimbursement {period_key} ({group.name})'
         reimburse_txn = Transaction(
             family_id=db_helpers.get_family_id(),
             account_id=account.id,
@@ -936,15 +957,16 @@ class ExpenseSyncService:
             vendor_id=reimburse_vendor_id,
             amount=total_reimbursement,
             transaction_date=reimbursement_date,
-            description=f'Expense Reimbursement {period_key}',
-            item=f'Expense Reimbursement {period_key}',
+            description=label,
+            item=label,
             payment_type='Expense Reimbursement',
             is_paid=False,
             year_month=period_key,
             week_year=f"{reimbursement_date.isocalendar()[1]:02d}-{reimbursement_date.year}",
             day_name=reimbursement_date.strftime('%A'),
             payday_period=PaydayService.get_period_for_date(reimbursement_date),
-            claim_group=period_key
+            claim_group=period_key,
+            reimbursement_group_id=group.id,
         )
         db.session.add(reimburse_txn)
         db.session.flush()
@@ -952,9 +974,141 @@ class ExpenseSyncService:
         return reimburse_txn.id, True
 
     @staticmethod
-    def _create_monthly_reimbursement(period_key):
-        """Backward-compatible alias for _create_period_reimbursement."""
-        return ExpenseSyncService._create_period_reimbursement(period_key)
+    def _fold_group_period(group, period_key):
+        """
+        Fold a reimbursement-group's expenses for one period into the take-home pay of
+        the RecurringIncome's matching payslip, instead of creating a standalone
+        reimbursement transaction.
+
+        Looks for an Income record generated from ``group.recurring_income_id`` whose
+        pay_date falls inside this payday period. If none exists yet (payslip not
+        generated for this period), the fold is skipped and retried on the next sync —
+        expenses stay unclaimed (claim_group=None) until then.
+
+        Returns (income_id, changed) or None.
+        """
+        if not group.recurring_income_id:
+            current_app.logger.warning(
+                f"Reimbursement group '{group.name}' (id={group.id}) has mode='folded' "
+                f"but no recurring_income_id configured; skipping period {period_key}."
+            )
+            return None
+
+        candidates = family_query(Income).filter(
+            Income.recurring_income_id == group.recurring_income_id
+        ).all()
+        income = next(
+            (i for i in candidates if i.pay_date and PaydayService.get_period_for_date(i.pay_date) == period_key),
+            None
+        )
+        if not income:
+            # No payslip generated yet for this period — nothing to fold into.
+            return None
+
+        try:
+            period_start, period_end = ExpenseSyncService._get_period_date_range(period_key)
+        except (ValueError, AttributeError):
+            return None
+
+        all_period_expenses = family_query(Expense).filter(
+            Expense.date >= period_start,
+            Expense.date <= period_end,
+            Expense.reimbursement_group_id == group.id,
+        ).all()
+        expenses = [
+            exp for exp in all_period_expenses
+            if exp.claim_group is None or exp.claim_group == period_key
+        ]
+        if not expenses:
+            return None
+
+        total = sum(exp.total_cost for exp in expenses if exp.total_cost) or Decimal('0')
+        changed = (income.expense_reimbursement_total or Decimal('0')) != total
+
+        income.expense_reimbursement_total = total
+        for exp in expenses:
+            if exp.claim_group is None:
+                exp.claim_group = period_key
+            exp.income_id = income.id
+            # Only actually "reimbursed" once the payslip itself has been paid —
+            # folding an expense in doesn't mean the money has moved yet.
+            exp.reimbursed = bool(income.is_paid)
+            db.session.add(exp)
+
+        if income.transaction_id:
+            txn = family_get(Transaction, income.transaction_id)
+            if txn:
+                base_take_home = income.take_home or Decimal('0')
+                new_amount = base_take_home + total
+                if abs((txn.amount or Decimal('0')) - new_amount) > Decimal('0.01'):
+                    txn.amount = new_amount
+                    txn.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    db.session.add(txn)
+                    db.session.flush()
+                    Transaction.recalculate_account_balance(txn.account_id)
+                    changed = True
+
+        db.session.add(income)
+        return income.id, changed
+
+    @staticmethod
+    def unlink_expenses_from_income(income_id):
+        """
+        Revert every expense folded into an Income record back to "unclaimed" —
+        called before that Income record is deleted so its expenses aren't left
+        pointing at a dangling income_id. They will be re-synced (either folded into
+        a different payslip or reimbursed separately) on the next sync run.
+        """
+        expenses = family_query(Expense).filter(Expense.income_id == income_id).all()
+        for exp in expenses:
+            exp.income_id = None
+            exp.claim_group = None
+            exp.reimbursed = False
+            db.session.add(exp)
+        db.session.flush()
+        return len(expenses)
+
+    @staticmethod
+    def sync_folded_expenses_for_recurring_income(recurring_income_id):
+        """
+        Re-run the folding calculation for every 'folded' group tied to this
+        RecurringIncome. Call this after an Income record is created, edited, or
+        regenerated so previously-added expenses stay correctly totalled into the
+        right payslip.
+        """
+        if not recurring_income_id:
+            return {}
+        auto_sync = Settings.get_value('expenses.auto_sync', True)
+        if not auto_sync:
+            return {}
+
+        groups = family_query(ExpenseReimbursementGroup).filter_by(
+            recurring_income_id=recurring_income_id, mode='folded'
+        ).all()
+        if not groups:
+            return {}
+
+        periods = set()
+        for group in groups:
+            for exp in family_query(Expense).filter_by(reimbursement_group_id=group.id).all():
+                key = exp.claim_group or ExpenseSyncService.get_period_key_for_expense(exp)
+                if key:
+                    periods.add(key)
+
+        results = {}
+        try:
+            for group in groups:
+                for period_key in periods:
+                    result = ExpenseSyncService._fold_group_period(group, period_key)
+                    if result:
+                        ref_id, changed = result
+                        if changed:
+                            results[f'{group.id}:{period_key}'] = ref_id
+            db.session.commit()
+            return results
+        except Exception:
+            db.session.rollback()
+            raise
 
     @staticmethod
     def _last_working_day_of_month(year, month):

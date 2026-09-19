@@ -263,6 +263,23 @@
                         </label>
                     </div>
                 </div>
+
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="fold_expenses"
+                               name="fold_expenses" {% if fold_group %}checked{% endif %}>
+                        <label class="form-check-label" for="fold_expenses">
+                            Add work expense reimbursements to this payslip
+                        </label>
+                    </div>
+                    <div class="form-text">
+                        When on, expenses assigned to the "{{ fold_group.name if fold_group else (recurring.person ~ ' payslip') }}"
+                        reimbursement group are added on top of take-home pay for this job instead of
+                        being reimbursed as a separate transaction. Assign expenses to that group from
+                        the <a href="{{ url_for('expenses.index') }}">Expenses</a> page. See linked expenses
+                        for each payslip on the <a href="{{ url_for('income.index') }}">Income</a> page.
+                    </div>
+                </div>
                 
                 <div class="mb-3">
                     <label for="description" class="form-label">Description (Optional)</label>

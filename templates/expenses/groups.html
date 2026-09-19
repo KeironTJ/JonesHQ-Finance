@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Reimbursement Groups - JonesHQ Finance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-diagram-3"></i> Expense Reimbursement Groups</h1>
+            <p class="text-muted mb-0">Decide how each stream of expenses gets paid back to you.</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('expenses.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Expenses
+            </a>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        Every expense belongs to exactly one group. A group is either:
+        <ul class="mb-0">
+            <li><strong>Separate transaction</strong> — the classic flow. All the group's expenses for a
+                pay period are totalled into their own "Expense Reimbursement" transaction.</li>
+            <li><strong>Folded into payslip</strong> — instead of a separate transaction, the period's
+                total is added on top of the take-home pay of whichever job/income you choose below.
+                Useful when your employer reimburses expenses <em>with</em> your salary rather than
+                as a separate payment. Only works once a payslip (Income record) exists for that period —
+                run "Generate income" first if it hasn't been created yet. Credit-card expenses in a
+                folded group still need their card payment settled manually, since there's no separate
+                reimbursement transaction to fund it automatically.</li>
+        </ul>
+        Every family starts with one "Default" group (separate mode) that can't be deleted — add more
+        groups if you want to split expenses per job or per claim type.
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">Add Group</h5></div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('expenses.add_group') }}" class="row g-3 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="col-md-3">
+                    <label class="form-label">Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Keiron's job" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Mode</label>
+                    <select name="mode" id="add_group_mode" class="form-select" onchange="toggleIncomeField('add')">
+                        <option value="separate">Separate transaction</option>
+                        <option value="folded">Folded into payslip</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="add_group_income_field" style="display:none;">
+                    <label class="form-label">Which income/job absorbs the claim?</label>
+                    <select name="recurring_income_id" class="form-select">
+                        <option value="">-- Select income/job --</option>
+                        {% for ri in recurring_incomes %}
+                        <option value="{{ ri.id }}">{{ ri.person }} — {{ ri.source or 'Untitled' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-circle"></i> Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0">Existing Groups</h5></div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Mode</th>
+                            <th>Income/Job</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for g in reimbursement_groups %}
+                        <tr>
+                            <td>{{ g.name }} {% if g.is_default %}<span class="badge bg-secondary">default</span>{% endif %}</td>
+                            <td>
+                                {% if g.mode == 'folded' %}
+                                <span class="badge bg-success">Folded into payslip</span>
+                                {% else %}
+                                <span class="badge bg-primary">Separate transaction</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if g.recurring_income %}
+                                {{ g.recurring_income.person }} — {{ g.recurring_income.source or 'Untitled' }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary edit-group-btn"
+                                    data-id="{{ g.id }}" data-name="{{ g.name }}" data-mode="{{ g.mode }}"
+                                    data-income="{{ g.recurring_income_id or '' }}"
+                                    {% if g.is_default %}disabled title="The default group's mode can't be changed"{% endif %}>
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                {% if not g.is_default %}
+                                <form method="post" action="{{ url_for('expenses.delete_group', group_id=g.id) }}" style="display:contents">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this group? Expenses must be reassigned first.')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Group Modal -->
+<div class="modal fade" id="editGroupModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" id="editGroupForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Group</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Name</label>
+            <input type="text" name="name" id="edit_group_name" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Mode</label>
+            <select name="mode" id="edit_group_mode" class="form-select" onchange="toggleIncomeField('edit')">
+              <option value="separate">Separate transaction</option>
+              <option value="folded">Folded into payslip</option>
+            </select>
+          </div>
+          <div class="mb-3" id="edit_group_income_field" style="display:none;">
+            <label class="form-label">Which income/job absorbs the claim?</label>
+            <select name="recurring_income_id" id="edit_group_income" class="form-select">
+                <option value="">-- Select income/job --</option>
+                {% for ri in recurring_incomes %}
+                <option value="{{ ri.id }}">{{ ri.person }} — {{ ri.source or 'Untitled' }}</option>
+                {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleIncomeField(prefix) {
+    const mode = document.getElementById(prefix + '_group_mode').value;
+    document.getElementById(prefix + '_group_income_field').style.display = mode === 'folded' ? '' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.edit-group-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const id = this.dataset.id;
+            document.getElementById('editGroupForm').action = `/expenses/groups/${id}/update`;
+            document.getElementById('edit_group_name').value = this.dataset.name;
+            document.getElementById('edit_group_mode').value = this.dataset.mode;
+            document.getElementById('edit_group_income').value = this.dataset.income || '';
+            toggleIncomeField('edit');
+            new bootstrap.Modal(document.getElementById('editGroupModal')).show();
+        });
+    });
+});
+</script>
+{% endblock %}
