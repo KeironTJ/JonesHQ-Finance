@@ -2,83 +2,78 @@
 
 {% block title %}Transactions - JonesHQ Finance{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transactions.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <h1>Transactions</h1>
+<div class="container-fluid transactions-page">
+    <header class="page-header transactions-header">
+        <div>
+            <h1><i class="bi bi-list-ul"></i> Transactions</h1>
+            <p class="page-subtitle mb-0">Review, filter and update your account activity.</p>
         </div>
-        <div class="col-auto">
-            <a href="{{ url_for('transactions.consolidated') }}" class="btn btn-info">
-                <i class="bi bi-diagram-3"></i> Consolidated View
+        <div class="transactions-header-actions">
+            <a href="{{ url_for('transactions.consolidated') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-diagram-3"></i> <span class="d-none d-sm-inline">Consolidated</span>
             </a>
-        </div>
-    </div>
-    
-    <!-- Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
-                <div class="card-body">
-                    <h6 class="card-title">Total Income</h6>
-                    <h3>£{{ "%.2f"|format(total_income) }}</h3>
-                    <small>{{ transactions|selectattr('amount', 'lt', 0)|list|length }} transactions</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-danger text-white">
-                <div class="card-body">
-                    <h6 class="card-title">Total Expenses</h6>
-                    <h3>£{{ "%.2f"|format(total_expenses) }}</h3>
-                    <small>{{ transactions|selectattr('amount', 'gt', 0)|list|length }} transactions</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card {% if net_balance >= 0 %}bg-info{% else %}bg-warning{% endif %} text-white">
-                <div class="card-body">
-                    <h6 class="card-title">Net Balance</h6>
-                    <h3>£{{ "%.2f"|format(net_balance) }}</h3>
-                    <small>Filtered period</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-secondary text-white">
-                <div class="card-body">
-                    <h6 class="card-title">Total Transactions</h6>
-                    <h3>{{ transaction_count }}</h3>
-                    <small>Showing {{ transactions|length }}</small>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Action Buttons -->
-    <div class="row mb-3">
-        <div class="col">
+            <a href="{{ url_for('transactions.create_transfer') }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left-right"></i> <span class="d-none d-sm-inline">Transfer</span>
+            </a>
             <a href="{{ url_for('transactions.create') }}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Add New Transaction
-            </a>
-            <a href="{{ url_for('transactions.create_transfer') }}" class="btn btn-success">
-                <i class="bi bi-arrow-left-right"></i> Create Transfer
+                <i class="bi bi-plus-lg"></i> Add transaction
             </a>
         </div>
-    </div>
+    </header>
+    
+    <section class="transaction-metrics" aria-label="Transaction summary">
+        <div class="transaction-metric metric-income">
+            <span class="metric-icon"><i class="bi bi-arrow-down-left"></i></span>
+            <div>
+                <span class="metric-label">Income</span>
+                <strong class="metric-value">£{{ "%.2f"|format(total_income) }}</strong>
+            </div>
+        </div>
+        <div class="transaction-metric metric-expense">
+            <span class="metric-icon"><i class="bi bi-arrow-up-right"></i></span>
+            <div>
+                <span class="metric-label">Expenses</span>
+                <strong class="metric-value">£{{ "%.2f"|format(total_expenses) }}</strong>
+            </div>
+        </div>
+        <div class="transaction-metric {% if net_balance >= 0 %}metric-net-positive{% else %}metric-net-negative{% endif %}">
+            <span class="metric-icon"><i class="bi bi-activity"></i></span>
+            <div>
+                <span class="metric-label">Net balance</span>
+                <strong class="metric-value">£{{ "%.2f"|format(net_balance) }}</strong>
+            </div>
+        </div>
+        <div class="transaction-metric metric-count">
+            <span class="metric-icon"><i class="bi bi-receipt"></i></span>
+            <div>
+                <span class="metric-label">Transactions</span>
+                <strong class="metric-value">{{ transaction_count }}</strong>
+            </div>
+        </div>
+    </section>
     
     <!-- Filters -->
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="{{ 'true' if filter_expanded else 'false' }}">
-            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filters</h5>
-            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="{{ 'true' if filter_expanded else 'false' }}" aria-controls="filterCollapse">
+    <div class="card transaction-filter-card">
+        <button class="card-header transaction-section-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="{{ 'true' if filter_expanded else 'false' }}" aria-controls="filterCollapse">
+            <span><i class="bi bi-funnel"></i> Filters
+                {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
+                <span class="badge text-bg-primary ms-1">Active</span>
+                {% endif %}
+            </span>
+            <span class="filter-toggle-label">Show options</span>
+            <span class="transaction-toggle-icon" aria-hidden="true">
                 <i class="bi {% if filter_expanded %}bi-chevron-up{% else %}bi-chevron-down{% endif %}"></i>
-            </button>
-        </div>
+            </span>
+        </button>
         <div id="filterCollapse" class="collapse {% if filter_expanded %}show{% endif %}">
             <div class="card-body">
-                <form method="get" action="{{ url_for('transactions.index') }}" class="row g-3">
-                <div class="col-md-2">
+                <form method="get" action="{{ url_for('transactions.index') }}" class="transaction-filter-grid" id="transactionFilterForm">
+                <div>
                     <label for="account_id" class="form-label">Account</label>
                     <select name="account_id" id="account_id" class="form-select" onchange="this.form.submit()">
                         <option value="">All Accounts</option>
@@ -90,7 +85,7 @@
                     </select>
                 </div>
                 
-                <div class="col-md-2">
+                <div>
                     <label for="head_budget" class="form-label">Category Group</label>
                     <select name="head_budget" id="head_budget" class="form-select" onchange="handleHeadBudgetChange(this)">
                         <option value="">All Groups</option>
@@ -102,7 +97,7 @@
                     </select>
                 </div>
                 
-                <div class="col-md-2">
+                <div>
                     <label for="category_id" class="form-label">Sub-Category</label>
                     <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %} onchange="this.form.submit()">
                         <option value="">All Sub-Categories</option>
@@ -118,7 +113,7 @@
                     </select>
                 </div>
                 
-                <div class="col-md-2">
+                <div>
                     <label for="vendor_id" class="form-label">Vendor</label>
                     <select name="vendor_id" id="vendor_id" class="form-select" onchange="this.form.submit()">
                         <option value="">All Vendors</option>
@@ -131,7 +126,7 @@
                 </div>
                 
 
-                <div class="col-md-2">
+                <div>
                     <label for="year_month" class="form-label">Month</label>
                     <select name="year_month" id="year_month" class="form-select" onchange="this.form.submit()">
                         <option value="">All Months</option>
@@ -142,8 +137,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="w-100 d-none d-md-block"></div>
-                <div class="col-12">
+                <div class="filter-pay-period">
                     <label for="payday_period" class="form-label">Pay Period</label>
                     <select name="payday_period" id="payday_period" class="form-select" onchange="this.form.submit()">
                         <option value="">All Periods</option>
@@ -164,17 +158,17 @@
                             </optgroup>
                         {% endif %}
                     </select>
-                    <div class="mt-2 d-flex gap-2">
+                    <div class="pay-period-nav">
                         {% if prev_payday_period %}
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('transactions.index', payday_period=prev_payday_period) }}">&larr; Prev</a>
+                            <a class="btn btn-sm btn-outline-secondary" title="Previous pay period" href="{{ url_for('transactions.index', payday_period=prev_payday_period) }}"><i class="bi bi-chevron-left"></i></a>
                         {% endif %}
                         {% if next_payday_period %}
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('transactions.index', payday_period=next_payday_period) }}">Next &rarr;</a>
+                            <a class="btn btn-sm btn-outline-secondary" title="Next pay period" href="{{ url_for('transactions.index', payday_period=next_payday_period) }}"><i class="bi bi-chevron-right"></i></a>
                         {% endif %}
                     </div>
                 </div>
                 
-                <div class="col-md-2">
+                <div>
                     <label for="is_paid" class="form-label">Status</label>
                     <select name="is_paid" id="is_paid" class="form-select" onchange="submitFilterForm()">
                         <option value="">All Status</option>
@@ -183,22 +177,19 @@
                     </select>
                 </div>
                 
-                <div class="col-md-3">
+                <div class="filter-search">
                     <label for="search" class="form-label">Search</label>
                     <input type="text" name="search" id="search" class="form-control" 
                            placeholder="Search description..." value="{{ search_term }}">
                 </div>
                 
-                <div class="col-md-1">
-                    <label class="form-label">&nbsp;</label>
-                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Apply</button>
+                    {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
+                    <a href="{{ url_for('transactions.index') }}" class="btn btn-outline-secondary">Clear</a>
+                    {% endif %}
                 </div>
                 </form>
-                {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
-                <div class="mt-2">
-                    <a href="{{ url_for('transactions.index') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -209,7 +200,7 @@
         <div class="card-header bg-info text-white" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#categorySummary">
             <div class="d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Category Summary</h5>
-                <span class="badge bg-light text-dark">Click to toggle</span>
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>
             </div>
         </div>
         <div id="categorySummary" class="collapse">
@@ -250,14 +241,17 @@
     {% endif %}
     
     <!-- Bulk Actions Panel -->
-    <div class="card mb-3" id="bulkActionsPanel" style="display: none;">
-        <div class="card-header bg-warning text-dark">
-            <h6 class="mb-0">
+    <div class="card bulk-actions-panel" id="bulkActionsPanel" style="display: none;">
+        <div class="card-header bulk-actions-header">
+            <h6>
                 <i class="bi bi-check2-square"></i> Bulk Actions 
                 <span id="selectedCount" class="badge bg-dark">0</span> transactions selected
             </h6>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#bulkActionsEditor" aria-expanded="false" aria-controls="bulkActionsEditor">
+                Edit selected <i class="bi bi-chevron-down"></i>
+            </button>
         </div>
-        <div class="card-body">
+        <div class="card-body collapse" id="bulkActionsEditor">
             <form method="POST" action="{{ url_for('transactions.bulk_edit') }}" id="bulkEditForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="return_url" value="{{ request.url }}">
@@ -366,11 +360,11 @@
     </div>
     
     <!-- Transactions Table -->
-    <div class="card">
-        <div class="card-header bg-light">
-            <div class="d-flex justify-content-between align-items-center">
+    <div class="card transactions-list-card">
+        <div class="card-header transactions-list-header">
+            <div class="transactions-list-heading">
                 <div>
-                    <h5 class="mb-0"><i class="bi bi-list-ul"></i> Transactions</h5>
+                    <h5><i class="bi bi-list-ul"></i> Transactions</h5>
                     <small class="text-muted">
                         Showing {{ transactions|length }} of {{ total_count }} transactions
                         {% if pagination.has_prev or pagination.has_next %}
@@ -378,16 +372,16 @@
                         {% endif %}
                     </small>
                 </div>
-                <div class="d-flex gap-2">
+                <div class="transactions-list-controls">
                     <!-- Sort Order -->
                     <div class="btn-group" role="group">
                         <a href="{{ url_for('transactions.index', sort='asc', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=page, per_page=per_page) }}" 
-                           class="btn btn-sm {% if sort == 'asc' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                            <i class="bi bi-sort-up"></i> Oldest First
+                           class="btn btn-sm {% if sort == 'asc' %}btn-primary{% else %}btn-outline-primary{% endif %}" title="Oldest first">
+                            <i class="bi bi-sort-up"></i> <span class="d-none d-md-inline">Oldest</span>
                         </a>
                         <a href="{{ url_for('transactions.index', sort='desc', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, page=page, per_page=per_page) }}" 
-                           class="btn btn-sm {% if sort == 'desc' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                            <i class="bi bi-sort-down"></i> Newest First
+                           class="btn btn-sm {% if sort == 'desc' %}btn-primary{% else %}btn-outline-primary{% endif %}" title="Newest first">
+                            <i class="bi bi-sort-down"></i> <span class="d-none d-md-inline">Newest</span>
                         </a>
                     </div>
                     
@@ -409,50 +403,31 @@
             </div>
         </div>
             <div class="table-responsive">
-                <table class="table table-hover table-sm">
+                <table class="table table-hover transactions-table">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 40px;">
-                                <input type="checkbox" id="selectAll" onclick="toggleSelectAll()">
+                            <th class="col-select">
+                                <input type="checkbox" id="selectAll" onclick="toggleSelectAll()" aria-label="Select all transactions">
                             </th>
-                            <th style="width: 100px;">Date</th>
-                            <th style="width: 150px;">Account</th>
-                            <th style="width: 200px;">Category</th>
-                            <th style="width: 150px;">Vendor</th>
-                            <th>Description</th>
-                            <th style="width: 100px;">Assigned To</th>
-                            <th style="width: 120px;">Payment Type</th>
-                            <th style="width: 100px;" class="text-end">Amount</th>
-                            <th style="width: 100px;" class="text-end">Running</th>
-                            <th style="width: 90px;">Linked Txn</th>
-                            <th style="width: 60px;">Status</th>
-                            <th style="width: 100px;">Actions</th>
+                            <th class="col-date">Date</th>
+                            <th>Transaction</th>
+                            <th class="col-category">Category</th>
+                            <th class="col-account">Account</th>
+                            <th class="col-status">Status</th>
+                            <th class="col-amount text-end">Amount</th>
+                            <th class="col-running text-end">Running</th>
+                            <th class="col-actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if transactions %}
                             {% for transaction in transactions %}
                             <tr id="txn-{{ transaction.id }}" class="{% if transaction.amount > 0 %}table-success{% elif transaction.credit_card_id %}table-info{% endif %}">
-                                <td>
-                                    <input type="checkbox" class="transaction-checkbox" value="{{ transaction.id }}" onchange="updateBulkActions()">
+                                <td class="txn-select">
+                                    <input type="checkbox" class="transaction-checkbox" value="{{ transaction.id }}" onchange="updateBulkActions()" aria-label="Select transaction {{ transaction.id }}">
                                 </td>
-                                <td>{{ transaction.transaction_date.strftime('%d/%m/%Y') if transaction.transaction_date else '' }}</td>
-                                <td>
-                                    {% if transaction.account %}
-                                        {{ transaction.account.name }}
-                                        {% if transaction.linked_transaction_id %}
-                                            <br><small class="badge bg-info"><i class="bi bi-arrow-left-right"></i> Linked</small>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="text-muted">No Account</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <small class="text-muted">{{ transaction.category.head_budget }}</small><br>
-                                    <strong>{{ transaction.category.sub_budget }}</strong>
-                                </td>
-                                <td>{{ transaction.vendor.name if transaction.vendor else '-' }}</td>
-                                <td>
+                                <td class="txn-date">{{ transaction.transaction_date.strftime('%d/%m/%Y') if transaction.transaction_date else '' }}</td>
+                                <td class="txn-details">
                                     <strong>{{ transaction.item if transaction.item else transaction.description }}</strong>
                                     {% if transaction.linked_transaction_id %}
                                         <span class="badge bg-info ms-1" title="Linked Transfer Transaction (ID: {{ transaction.linked_transaction_id }})"><i class="bi bi-arrow-left-right"></i> Transfer</span>
@@ -460,17 +435,39 @@
                                     {% if transaction.description and transaction.item and transaction.description != transaction.item %}
                                         <br><small class="text-muted">{{ transaction.description }}</small>
                                     {% endif %}
+                                    <div class="txn-meta">
+                                        {% if transaction.vendor %}<span><i class="bi bi-shop"></i> {{ transaction.vendor.name }}</span>{% endif %}
+                                        {% if transaction.assigned_to %}<span><i class="bi bi-person"></i> {{ transaction.assigned_to }}</span>{% endif %}
+                                        {% if transaction.payment_type %}<span>{{ transaction.payment_type }}</span>{% endif %}
+                                    </div>
                                 </td>
-                                <td>{{ transaction.assigned_to if transaction.assigned_to else '-' }}</td>
-                                <td><span class="badge bg-secondary">{{ transaction.payment_type }}</span></td>
-                                <td class="text-end">
+                                <td class="txn-category">
+                                    <small class="text-muted">{{ transaction.category.head_budget }}</small><br>
+                                    <strong>{{ transaction.category.sub_budget }}</strong>
+                                </td>
+                                <td class="txn-account">
+                                    {% if transaction.account %}
+                                        {{ transaction.account.name }}
+                                    {% else %}
+                                        <span class="text-muted">No Account</span>
+                                    {% endif %}
+                                </td>
+                                <td class="txn-status text-center">
+                                    <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}" style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="badge bg-{% if transaction.is_paid %}success{% else %}warning{% endif %} status-toggle" title="Click to toggle paid status">
+                                            {% if transaction.is_paid %}<i class="bi bi-check-circle"></i> Paid{% else %}<i class="bi bi-clock"></i> Pending{% endif %}
+                                        </button>
+                                    </form>
+                                </td>
+                                <td class="txn-amount text-end">
                                     {% if transaction.amount > 0 %}
                                         <span class="text-success fw-bold">£{{ "%.2f"|format(transaction.amount) }}</span>
                                     {% else %}
                                         <span class="text-danger">-£{{ "%.2f"|format(transaction.amount|abs) }}</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-end">
+                                <td class="txn-running text-end">
                                     {% set rb = running_balances[loop.index0] if running_balances and running_balances|length > loop.index0 else None %}
                                     {% if rb is not none %}
                                         {% if rb >= 0 %}
@@ -482,31 +479,7 @@
                                         -
                                     {% endif %}
                                 </td>
-                                <td>
-                                    {% if transaction.credit_card_id %}
-                                        {% if transaction.credit_card %}
-                                            <a href="{{ url_for('credit_cards.detail', id=transaction.credit_card_id) }}" class="btn btn-sm btn-warning text-dark" title="Credit Card: {{ transaction.credit_card.card_name }}">
-                                                <i class="bi bi-credit-card"></i> {{ transaction.credit_card.card_name[:10] }}
-                                            </a>
-                                        {% else %}
-                                            <span class="badge bg-warning text-dark"><i class="bi bi-credit-card"></i> CC</span>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-center">
-                                    <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}" 
-                                          style="display: inline;">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" 
-                                                class="badge bg-{% if transaction.is_paid %}success{% else %}warning{% endif %} status-toggle" 
-                                                title="Click to toggle paid status">
-                                            {% if transaction.is_paid %}✓ Paid{% else %}⏳ Pending{% endif %}
-                                        </button>
-                                    </form>
-                                </td>
-                                <td>
+                                <td class="txn-actions">
                                     {% if transaction.is_paid %}
                                         <span class="text-muted">-</span>
                                     {% else %}
@@ -571,7 +544,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-4">
+                                <td colspan="9" class="transaction-empty text-center text-muted py-4">
                                     No transactions found. Try adjusting your filters.
                                 </td>
                             </tr>
