@@ -21,7 +21,7 @@ The threshold is expressed as a percentage of the tank already consumed:
 
 Forecasted transactions
 -----------------------
-``sync_forecasted_transactions()`` deletes all future forecasted fuel transactions for
+``sync_forecasted_transactions()`` deletes all forecasted fuel transactions for
 the vehicle and recreates them from the latest predictions.  When a real FuelRecord is
 logged, ``link_fuel_record_to_transaction()`` promotes the nearest forecasted transaction
 to is_forecasted=False / is_paid=True (or creates a new actual transaction if none found).
@@ -172,9 +172,8 @@ class FuelForecastingService:
         avg_price = FuelForecastingService.get_average_fuel_price(vehicle_id)
 
         # Anchor on the last FULL fill-up — it resets the tank to tank_capacity,
-        # so everything before it is irrelevant.  Partial-fills since that date
+        # so everything before it is irrelevant. Partial fills since that date
         # are included because they adjust the level before the anchor date's trips.
-        today = date.today()
 
         last_full_fill = (
             family_query(FuelRecord)
@@ -184,6 +183,17 @@ class FuelForecastingService:
         )
 
         anchor_date = last_full_fill.date if last_full_fill else None
+
+        # Rebuild forecasts for the current tank cycle, including missed
+        # historical refills, but never resurrect forecasts from before the
+        # most recent actual fill.
+        last_fill = (
+            family_query(FuelRecord)
+            .filter_by(vehicle_id=vehicle_id)
+            .order_by(FuelRecord.date.desc(), FuelRecord.id.desc())
+            .first()
+        )
+        forecast_start_date = last_fill.date if last_fill else anchor_date
 
         trips = (
             family_query(Trip)
@@ -224,8 +234,9 @@ class FuelForecastingService:
                     fill_litres = fill_gallons * 4.54609
                     cost = (fill_litres * float(avg_price)) / 100
 
-                    # Only emit predictions for present/future trips.
-                    if event_date >= today:
+                    # Include missed historical predictions only in the current
+                    # fill cycle; older cycles must stay out of the forecast log.
+                    if forecast_start_date is None or event_date >= forecast_start_date:
                         predicted_refills.append({
                             'date': refill_date,
                             'gallons': round(fill_gallons, 2),

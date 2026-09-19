@@ -5,6 +5,7 @@ from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
 from services.vehicles.vehicle_service import VehicleService
+from services.vehicles.fuel_forecasting_service import FuelForecastingService
 from werkzeug.datastructures import MultiDict
 
 
@@ -140,3 +141,48 @@ def test_bulk_create_trips_expands_selected_weekdays(app, family, monkeypatch):
     assert [trip.date.isoformat() for trip in created] == ['2026-01-05', '2026-01-07']
     assert all(trip.family_id == family.id for trip in created)
     assert all(trip.business_miles == 20 for trip in created)
+
+
+def test_forecasts_historical_refills_only_since_latest_fill(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    vehicle = Vehicle(
+        family_id=family.id,
+        name='Forecast Car',
+        make='Test',
+        model='Forecast',
+        registration='FC12 AST',
+        tank_size=10,
+        fuel_type='Petrol',
+        refuel_threshold_pct=95,
+    )
+    db.session.add(vehicle)
+    db.session.flush()
+
+    db.session.add_all([
+        FuelRecord(
+            family_id=family.id, vehicle_id=vehicle.id, date='2026-06-01',
+            price_per_litre=150, mileage=1000, cost=30, gallons=10,
+            is_partial_fill=False,
+        ),
+        FuelRecord(
+            family_id=family.id, vehicle_id=vehicle.id, date='2026-09-01',
+            price_per_litre=150, mileage=1110, cost=3, gallons=1,
+            is_partial_fill=True,
+        ),
+        Trip(
+            family_id=family.id, vehicle_id=vehicle.id, date='2026-06-02',
+            total_miles=100, personal_miles=100,
+        ),
+        Trip(
+            family_id=family.id, vehicle_id=vehicle.id, date='2026-09-02',
+            total_miles=10, personal_miles=10,
+        ),
+    ])
+    db.session.commit()
+
+    monkeypatch.setattr(FuelForecastingService, 'get_average_mpg', staticmethod(lambda vehicle_id: 10.0))
+    monkeypatch.setattr(FuelForecastingService, 'get_average_fuel_price', staticmethod(lambda vehicle_id: 150.0))
+
+    predictions = FuelForecastingService.predict_refills(vehicle.id)
+
+    assert [prediction['trigger_trip_date'].isoformat() for prediction in predictions] == ['2026-09-02']
