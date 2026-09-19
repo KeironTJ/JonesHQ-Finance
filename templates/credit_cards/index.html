@@ -7,6 +7,11 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Credit Cards</h1>
         <div>
+            {% if cards|selectattr('is_active')|list|length > 1 %}
+            <a href="{{ url_for('credit_cards.create_balance_transfer') }}" class="btn btn-outline-primary me-2">
+                <i class="bi bi-arrow-left-right"></i> Balance Transfer
+            </a>
+            {% endif %}
             <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#generateFutureModal">
                 <i class="bi bi-calendar-plus"></i> Generate Future Transactions
             </button>

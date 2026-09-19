@@ -40,7 +40,7 @@ def test_credit_card_payment_route_creates_linked_bank_transaction(
 
     client = app.test_client()
     _login(client, user_id)
-    response = client.post(f'/credit-cards/{card_id}/add-transaction', data={
+    response = client.post(f'/credit-cards/{card_id}/transaction/add', data={
         'txn_date': '2026-01-15',
         'txn_type': 'Payment',
         'txn_item': 'Monthly payment',

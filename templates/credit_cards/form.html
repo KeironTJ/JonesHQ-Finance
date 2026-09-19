@@ -112,6 +112,13 @@
                             </select>
                             <small class="text-muted">Account payments will default to (can be overridden per payment)</small>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="default_transfer_fee_percent" class="form-label">Default Balance Transfer Fee (%)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="default_transfer_fee_percent"
+                                   name="default_transfer_fee_percent" value="{{ card.default_transfer_fee_percent if card and card.default_transfer_fee_percent is not none else '' }}">
+                            <small class="text-muted">Pre-fills the fee % when this card is chosen as a balance transfer destination</small>
+                        </div>
                     </div>
                 </div>
             </div>

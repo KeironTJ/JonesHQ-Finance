@@ -443,3 +443,87 @@ def test_update_payment_transaction_creates_linked_bank_transaction(
     assert updated.is_fixed is True
     assert bank_transaction.amount == Decimal('-125')
     assert bank_transaction.account_id == account.id
+
+
+# ---------------------------------------------------------------------------
+# CreditCardService.create_balance_transfer
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def second_card(app, family_id):
+    c = CreditCard(
+        family_id=family_id,
+        card_name='Second Card',
+        annual_apr=Decimal('20.0'),
+        monthly_apr=Decimal('1.67'),
+        credit_limit=Decimal('8000.00'),
+        current_balance=Decimal('0.00'),
+        min_payment_percent=Decimal('2.0'),
+        default_transfer_fee_percent=Decimal('3.00'),
+        is_active=True,
+    )
+    db.session.add(c)
+    db.session.commit()
+    return c
+
+
+def test_create_balance_transfer_creates_linked_transactions_with_fee(
+    app, card, second_card, family_id, patch_family
+):
+    result = CreditCardService.create_balance_transfer({
+        'from_card_id': str(card.id),
+        'to_card_id': str(second_card.id),
+        'amount': '1000.00',
+        'fee_percent': '3.00',
+        'transfer_date': '2026-03-01',
+        'is_paid': '1',
+    })
+
+    from_txn = result['from_txn']
+    to_txn = result['to_txn']
+
+    assert result['fee_amount'] == Decimal('30.00')
+    assert from_txn.transaction_type == 'Balance Transfer'
+    assert from_txn.amount == Decimal('1000.00')
+    assert from_txn.credit_card_id == card.id
+    assert to_txn.transaction_type == 'Balance Transfer'
+    assert to_txn.amount == Decimal('-1030.00')
+    assert to_txn.credit_card_id == second_card.id
+    assert from_txn.linked_cc_transaction_id == to_txn.id
+    assert to_txn.linked_cc_transaction_id == from_txn.id
+
+    db.session.refresh(card)
+    db.session.refresh(second_card)
+    assert card.current_balance == Decimal('1000.00')
+    assert second_card.current_balance == Decimal('-1030.00')
+
+
+def test_create_balance_transfer_rejects_same_card(app, card, family_id, patch_family):
+    with pytest.raises(ValueError):
+        CreditCardService.create_balance_transfer({
+            'from_card_id': str(card.id),
+            'to_card_id': str(card.id),
+            'amount': '100.00',
+            'fee_percent': '0',
+            'transfer_date': '2026-03-01',
+        })
+
+
+def test_delete_balance_transfer_transaction_removes_linked_pair(
+    app, card, second_card, family_id, patch_family
+):
+    result = CreditCardService.create_balance_transfer({
+        'from_card_id': str(card.id),
+        'to_card_id': str(second_card.id),
+        'amount': '500.00',
+        'fee_percent': '2.00',
+        'transfer_date': '2026-03-01',
+        'is_paid': '1',
+    })
+    from_txn_id = result['from_txn'].id
+    to_txn_id = result['to_txn'].id
+
+    CreditCardService.delete_transaction(from_txn_id)
+
+    assert db.session.get(CreditCardTransaction, from_txn_id) is None
+    assert db.session.get(CreditCardTransaction, to_txn_id) is None

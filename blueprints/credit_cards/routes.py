@@ -114,6 +114,52 @@ def delete(id):
     return redirect(url_for('credit_cards.index'))
 
 
+@credit_cards_bp.route('/credit-cards/transfer', methods=['GET', 'POST'])
+def create_balance_transfer():
+    """Create a balance transfer between two of the family's credit cards"""
+    cards = family_query(CreditCard).filter_by(is_active=True).order_by(CreditCard.card_name).all()
+
+    if request.method == 'GET':
+        from_card_id = request.args.get('from_card_id', type=int)
+        return render_template('credit_cards/transfer_form.html',
+                                cards=cards, from_card_id=from_card_id, today=date.today())
+
+    try:
+        from_card_id = request.form.get('from_card_id', type=int)
+        to_card_id = request.form.get('to_card_id', type=int)
+
+        if not from_card_id or not to_card_id:
+            flash('Please select both cards', 'danger')
+            return redirect(url_for('credit_cards.create_balance_transfer'))
+
+        if from_card_id == to_card_id:
+            flash('Source and destination cards must be different', 'danger')
+            return redirect(url_for('credit_cards.create_balance_transfer'))
+
+        amount_str = request.form.get('amount', '')
+        if not amount_str or float(amount_str) <= 0:
+            flash('Please enter a transfer amount greater than 0', 'danger')
+            return redirect(url_for('credit_cards.create_balance_transfer'))
+
+        result = CreditCardService.create_balance_transfer(request.form)
+        flash(
+            f"Balance transfer created: £{float(amount_str):.2f} moved from "
+            f"{result['from_card'].card_name} to {result['to_card'].card_name}"
+            + (f" (fee £{result['fee_amount']:.2f})" if result['fee_amount'] else '')
+            + '.',
+            'success'
+        )
+        return redirect(url_for('credit_cards.detail', id=to_card_id))
+    except ValueError as e:
+        db.session.rollback()
+        flash(f'Invalid input: {str(e)}', 'danger')
+        return redirect(url_for('credit_cards.create_balance_transfer'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating balance transfer: {str(e)}', 'danger')
+        return redirect(url_for('credit_cards.create_balance_transfer'))
+
+
 @credit_cards_bp.route('/credit-cards/<int:id>')
 def detail(id):
     """View credit card details and transactions"""
@@ -125,10 +171,10 @@ def detail(id):
     # Get all transactions for this card
     # Order by date DESC, then ID DESC for display (newest first)
     # This ensures same-day transactions appear in reverse chronological order
-    transactions = family_query(CreditCardTransaction).filter_by(
+    all_transactions = family_query(CreditCardTransaction).filter_by(
         credit_card_id=id
     ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).all()
-    
+
     # Calculate current balance from latest PAID transaction
     # Must use same ordering as display (date DESC, id DESC) to get the truly latest
     latest_paid = family_query(CreditCardTransaction).filter_by(
@@ -144,11 +190,39 @@ def detail(id):
         card.current_balance = 0.00
         card.available_credit = float(card.credit_limit)
     
-    # Calculate summary stats (only PAID transactions)
-    total_purchases = sum([float(t.amount) for t in transactions if t.transaction_type == 'Purchase' and t.is_paid])
-    total_payments = sum([abs(float(t.amount)) for t in transactions if t.transaction_type == 'Payment' and t.is_paid])
-    total_interest = sum([float(t.amount) for t in transactions if t.transaction_type == 'Interest' and t.is_paid])
-    
+    # Calculate summary stats (only PAID transactions, across the whole card - not the filtered page)
+    total_purchases = sum([float(t.amount) for t in all_transactions if t.transaction_type == 'Purchase' and t.is_paid])
+    total_payments = sum([abs(float(t.amount)) for t in all_transactions if t.transaction_type == 'Payment' and t.is_paid])
+    total_interest = sum([float(t.amount) for t in all_transactions if t.transaction_type == 'Interest' and t.is_paid])
+
+    # --- Filters (search / type / status) ---
+    search = request.args.get('search', '')
+    txn_type_filter = request.args.get('txn_type', '')
+    is_paid_filter = request.args.get('is_paid', '')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+
+    # Default to pending-only on first visit (no query params at all)
+    if not request.args:
+        is_paid_filter = 'pending'
+
+    filtered = all_transactions
+    if search:
+        search_lower = search.lower()
+        filtered = [t for t in filtered if t.item and search_lower in t.item.lower()]
+    if txn_type_filter:
+        filtered = [t for t in filtered if t.transaction_type == txn_type_filter]
+    if is_paid_filter == 'paid':
+        filtered = [t for t in filtered if t.is_paid]
+    elif is_paid_filter == 'pending':
+        filtered = [t for t in filtered if not t.is_paid]
+
+    transaction_count = len(filtered)
+    total_pages = max(1, (transaction_count + per_page - 1) // per_page)
+    page = min(max(page, 1), total_pages)
+    start = (page - 1) * per_page
+    transactions = filtered[start:start + per_page]
+
     # Get promotional offers
     promotions = family_query(CreditCardPromotion).filter_by(credit_card_id=id).order_by(
         CreditCardPromotion.end_date.desc()
@@ -164,10 +238,23 @@ def detail(id):
     
     # Get all categories for the add transaction modal
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
-    
+
+    # Other active cards (for the "Balance Transfer" quick action)
+    other_cards = family_query(CreditCard).filter(
+        CreditCard.is_active == True, CreditCard.id != id
+    ).order_by(CreditCard.card_name).all()
+
     return render_template('credit_cards/detail.html',
                          card=card,
                          transactions=transactions,
+                         transaction_count=transaction_count,
+                         page=page,
+                         per_page=per_page,
+                         total_pages=total_pages,
+                         search_term=search,
+                         selected_txn_type=txn_type_filter,
+                         selected_is_paid=is_paid_filter,
+                         other_cards=other_cards,
                          promotions=promotions,
                          total_purchases=total_purchases,
                          total_payments=total_payments,
@@ -180,12 +267,19 @@ def detail(id):
                          highlight_transaction_id=transaction_id)
 
 
-@credit_cards_bp.route('/credit-cards/<int:id>/add-transaction', methods=['POST'])
+@credit_cards_bp.route('/credit-cards/<int:id>/transaction/add', methods=['GET', 'POST'])
 def add_transaction(id):
     """Add a new credit card transaction"""
+    card = family_get_or_404(CreditCard, id)
+
+    if request.method == 'GET':
+        accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+        categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+        return render_template('credit_cards/transaction_form.html',
+                                card=card, transaction=None, accounts=accounts,
+                                categories=categories, today=date.today())
+
     try:
-        card = family_get_or_404(CreditCard, id)
-        
         # Get form data
         txn_date_str = request.form.get('txn_date')
         txn_type = request.form.get('txn_type')
@@ -250,7 +344,7 @@ def add_transaction(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Error adding transaction: {str(e)}', 'danger')
-        return redirect(url_for('credit_cards.detail', id=id))
+        return redirect(url_for('credit_cards.add_transaction', id=id))
 
 
 @credit_cards_bp.route('/credit-cards/transaction/<int:txn_id>/toggle-fixed', methods=['POST'])
@@ -269,18 +363,23 @@ def toggle_fixed(txn_id):
         return redirect(request.referrer or url_for('credit_cards.index'))
 
 
-@credit_cards_bp.route('/credit-cards/<int:id>/transaction/<int:txn_id>/edit', methods=['POST'])
+@credit_cards_bp.route('/credit-cards/<int:id>/transaction/<int:txn_id>/edit', methods=['GET', 'POST'])
 def edit_transaction(id, txn_id):
     """Edit a credit card transaction"""
+    card = family_get_or_404(CreditCard, id)
+    txn = family_get_or_404(CreditCardTransaction, txn_id)
+    if txn.credit_card_id != card.id:
+        flash('Transaction does not belong to this card!', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+
+    if request.method == 'GET':
+        accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+        categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+        return render_template('credit_cards/transaction_form.html',
+                                card=card, transaction=txn, accounts=accounts,
+                                categories=categories, today=date.today())
+
     try:
-        card = family_get_or_404(CreditCard, id)
-        txn = family_get_or_404(CreditCardTransaction, txn_id)
-        
-        # Verify transaction belongs to this card
-        if txn.credit_card_id != card.id:
-            flash('Transaction does not belong to this card!', 'danger')
-            return redirect(url_for('credit_cards.detail', id=id))
-        
         txn = CreditCardService.update_transaction(txn_id, request.form)
         
         # Sync changes to linked bank transaction if exists
@@ -328,28 +427,29 @@ def delete_transaction(id, txn_id):
         return redirect(url_for('credit_cards.detail', id=id))
 
 
-@credit_cards_bp.route('/credit-cards/<int:id>/payment/<int:txn_id>/edit', methods=['POST'])
+@credit_cards_bp.route('/credit-cards/<int:id>/payment/<int:txn_id>/edit', methods=['GET', 'POST'])
 def edit_payment(id, txn_id):
     """Edit a payment transaction amount and automatically lock it"""
+    card = family_get_or_404(CreditCard, id)
+    txn = family_get_or_404(CreditCardTransaction, txn_id)
+
+    if txn.credit_card_id != card.id:
+        flash('Transaction does not belong to this card!', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+
+    if txn.transaction_type != 'Payment':
+        flash('Only Payment transactions can be edited!', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+
+    if txn.is_paid:
+        flash('Cannot edit a paid transaction!', 'danger')
+        return redirect(url_for('credit_cards.detail', id=id))
+
+    if request.method == 'GET':
+        accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+        return render_template('credit_cards/payment_form.html', card=card, transaction=txn, accounts=accounts)
+
     try:
-        card = family_get_or_404(CreditCard, id)
-        txn = family_get_or_404(CreditCardTransaction, txn_id)
-        
-        # Verify transaction belongs to this card
-        if txn.credit_card_id != card.id:
-            flash('Transaction does not belong to this card!', 'danger')
-            return redirect(url_for('credit_cards.detail', id=id))
-        
-        # Only allow editing Payment transactions
-        if txn.transaction_type != 'Payment':
-            flash('Only Payment transactions can be edited!', 'danger')
-            return redirect(url_for('credit_cards.detail', id=id))
-        
-        # Only allow editing future unpaid transactions
-        if txn.is_paid:
-            flash('Cannot edit a paid transaction!', 'danger')
-            return redirect(url_for('credit_cards.detail', id=id))
-        
         txn, account_id = CreditCardService.update_payment_transaction(
             txn_id, request.form
         )

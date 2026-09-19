@@ -47,6 +47,9 @@ class CreditCardTransaction(db.Model):
     # Link to the Statement (Interest) transaction that generated this Payment.
     # SET NULL on delete so removing a statement NULLs the FK without cascading.
     statement_id = db.Column(db.Integer, db.ForeignKey('credit_card_transactions.id', ondelete='SET NULL'), nullable=True)
+
+    # Link to the paired transaction on the other card in a Balance Transfer
+    linked_cc_transaction_id = db.Column(db.Integer, db.ForeignKey('credit_card_transactions.id', ondelete='SET NULL'), nullable=True)
     
     # Audit Fields
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
@@ -54,6 +57,7 @@ class CreditCardTransaction(db.Model):
     
     # Relationships
     bank_transaction = db.relationship('Transaction', foreign_keys=[bank_transaction_id])
+    linked_cc_transaction = db.relationship('CreditCardTransaction', foreign_keys=[linked_cc_transaction_id], remote_side=[id])
     
     @staticmethod
     def recalculate_card_balance(credit_card_id, commit=True):

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Payment - {{ card.card_name }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transactions.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid transaction-editor-page">
+    <div class="row">
+        <div class="col-12">
+            <header class="page-header transaction-editor-header">
+                <div>
+                    <h1><i class="bi bi-pencil-square"></i> Edit Payment</h1>
+                    <p class="page-subtitle mb-0">{{ card.card_name }}</p>
+                </div>
+                <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">{{ card.card_name }}</span>
+                </a>
+            </header>
+
+            <div class="alert alert-info transaction-editor-notice">
+                <i class="bi bi-info-circle"></i> Editing this payment will automatically <strong>lock</strong> it to prevent regeneration.
+            </div>
+
+            <div class="card transaction-editor-card">
+                <div class="card-body">
+                    <form method="POST" id="ccPaymentForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="row g-3 transaction-editor-grid">
+                            <div class="col-md-6 mb-3">
+                                <label for="payment_date" class="form-label">Payment Date *</label>
+                                <input type="date" class="form-control" id="payment_date" name="payment_date"
+                                    value="{{ transaction.date.strftime('%Y-%m-%d') }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="payment_amount" class="form-label">Payment Amount (£) *</label>
+                                <input type="number" class="form-control" id="payment_amount" name="payment_amount" step="0.01"
+                                    value="{{ transaction.amount|abs }}" required>
+                                <small class="text-muted">Enter positive amount to reduce debt</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="account_id" class="form-label">Source Account</label>
+                                <select class="form-select" id="account_id" name="account_id">
+                                    <option value="">-- No linked account --</option>
+                                    {% for account in accounts %}
+                                    <option value="{{ account.id }}" {% if transaction.bank_transaction_id and transaction.bank_transaction.account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Select the bank account this payment will come from (optional)</small>
+                            </div>
+                        </div>
+
+                        <div class="transaction-form-actions">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-lock-fill"></i> Save & Lock
+                            </button>
+                            <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

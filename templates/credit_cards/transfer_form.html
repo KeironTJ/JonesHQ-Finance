@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Balance Transfer - JonesHQ Finance{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transactions.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid transaction-editor-page transfer-editor-page">
+    <div class="row">
+        <div class="col-12">
+            <header class="page-header transaction-editor-header">
+                <div>
+                    <h1><i class="bi bi-arrow-left-right"></i> Balance Transfer</h1>
+                    <p class="page-subtitle mb-0">Move debt from one card to another, including any transfer fee.</p>
+                </div>
+                <a href="{{ request.referrer or url_for('credit_cards.index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">Credit Cards</span>
+                </a>
+            </header>
+
+            <div class="alert alert-info transaction-editor-notice">
+                <i class="bi bi-link-45deg"></i>
+                Two linked transactions will be created: a payment on the source card and a balance transfer (plus fee) on the destination card.
+            </div>
+
+            <div class="card transaction-editor-card">
+                <div class="card-body">
+                    <form method="POST" id="ccTransferForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="transaction-form-intro">
+                            <span class="form-section-icon"><i class="bi bi-credit-card"></i></span>
+                            <div><strong>Transfer details</strong><small>Choose different source and destination cards.</small></div>
+                        </div>
+                        <div class="row g-3 transaction-editor-grid transfer-editor-grid">
+                            <!-- From Card -->
+                            <div class="col-md-6 mb-3">
+                                <label for="from_card_id" class="form-label">
+                                    <i class="bi bi-dash-circle text-success"></i> From Card (Debt Reduced) *
+                                </label>
+                                <select class="form-select" id="from_card_id" name="from_card_id" required>
+                                    <option value="">Select Source Card...</option>
+                                    {% for c in cards %}
+                                    <option value="{{ c.id }}" {% if from_card_id == c.id %}selected{% endif %}>
+                                        {{ c.card_name }} (Balance: £{{ "%.2f"|format(c.current_balance or 0) }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- To Card -->
+                            <div class="col-md-6 mb-3">
+                                <label for="to_card_id" class="form-label">
+                                    <i class="bi bi-plus-circle text-danger"></i> To Card (Debt Increased) *
+                                </label>
+                                <select class="form-select" id="to_card_id" name="to_card_id" required>
+                                    <option value="">Select Destination Card...</option>
+                                    {% for c in cards %}
+                                    <option value="{{ c.id }}"
+                                        data-fee-percent="{{ c.default_transfer_fee_percent if c.default_transfer_fee_percent is not none else '' }}">
+                                        {{ c.card_name }} (Balance: £{{ "%.2f"|format(c.current_balance or 0) }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Amount -->
+                            <div class="col-md-6 mb-3">
+                                <label for="amount" class="form-label">
+                                    <i class="bi bi-currency-pound"></i> Transfer Amount *
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" step="0.01" min="0.01" class="form-control" id="amount" name="amount"
+                                        placeholder="0.00" required>
+                                </div>
+                            </div>
+
+                            <!-- Fee % -->
+                            <div class="col-md-6 mb-3">
+                                <label for="fee_percent" class="form-label">
+                                    <i class="bi bi-percent"></i> Transfer Fee (%)
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" min="0" class="form-control" id="fee_percent" name="fee_percent" value="0">
+                                    <span class="input-group-text">%</span>
+                                </div>
+                                <small class="form-text text-muted" id="feeHint">Pre-filled from the destination card's default fee, if set.</small>
+                            </div>
+
+                            <!-- Transfer Date -->
+                            <div class="col-md-6 mb-3">
+                                <label for="transfer_date" class="form-label">
+                                    <i class="bi bi-calendar"></i> Transfer Date *
+                                </label>
+                                <input type="date" class="form-control" id="transfer_date" name="transfer_date"
+                                    value="{{ today.strftime('%Y-%m-%d') if today else '' }}" required>
+                            </div>
+
+                            <!-- Is Paid -->
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check transaction-toggle-row mt-4">
+                                    <input class="form-check-input" type="checkbox" id="is_paid" name="is_paid" value="1" checked>
+                                    <label class="form-check-label" for="is_paid">
+                                        <i class="bi bi-check-circle"></i> <strong>Mark as Paid/Reconciled</strong>
+                                        <small class="d-block text-muted">Uncheck if this transfer hasn't actually gone through yet</small>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Description -->
+                            <div class="col-md-12 mb-3">
+                                <label for="description" class="form-label">
+                                    <i class="bi bi-pencil"></i> Description/Reference
+                                </label>
+                                <input type="text" class="form-control" id="description" name="description"
+                                    placeholder="e.g., 0% balance transfer offer">
+                                <small class="form-text text-muted">Optional - defaults to "Balance transfer to/from &lt;card&gt;"</small>
+                            </div>
+                        </div>
+
+                        <!-- Preview -->
+                        <div class="transfer-preview" id="transfer-preview" style="display: none;">
+                            <h6 class="mb-2"><i class="bi bi-eye"></i> Transfer Preview:</h6>
+                            <ul class="mb-0">
+                                <li id="preview-from"></li>
+                                <li id="preview-to"></li>
+                            </ul>
+                        </div>
+
+                        <div class="transaction-form-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-arrow-left-right"></i> Create Balance Transfer
+                            </button>
+                            <a href="{{ request.referrer or url_for('credit_cards.index') }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <details class="form-help-panel">
+                <summary><i class="bi bi-question-circle"></i> How balance transfers are recorded</summary>
+                <div class="form-help-content">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-success"><i class="bi bi-dash-circle"></i> Source Card</h6>
+                            <p>Creates a <strong>Balance Transfer</strong> transaction that reduces the balance owed by the transfer amount.</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-danger"><i class="bi bi-plus-circle"></i> Destination Card</h6>
+                            <p>Creates a <strong>Balance Transfer</strong> transaction that increases the balance owed by the transfer amount <em>plus</em> the fee.</p>
+                            <p class="text-muted small mb-0">Example: £1,000 at 3% fee → destination card debt increases by £1,030.</p>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('from_card_id').addEventListener('change', updatePreview);
+    document.getElementById('to_card_id').addEventListener('change', function () {
+        var opt = this.options[this.selectedIndex];
+        var feePercent = opt ? opt.getAttribute('data-fee-percent') : '';
+        if (feePercent) {
+            document.getElementById('fee_percent').value = feePercent;
+        }
+        updatePreview();
+    });
+    document.getElementById('amount').addEventListener('input', updatePreview);
+    document.getElementById('fee_percent').addEventListener('input', updatePreview);
+
+    function updatePreview() {
+        const fromSelect = document.getElementById('from_card_id');
+        const toSelect = document.getElementById('to_card_id');
+        const amount = parseFloat(document.getElementById('amount').value) || 0;
+        const feePercent = parseFloat(document.getElementById('fee_percent').value) || 0;
+        const preview = document.getElementById('transfer-preview');
+
+        if (fromSelect.value && toSelect.value && amount > 0) {
+            const fromName = fromSelect.options[fromSelect.selectedIndex].text.split(' (')[0];
+            const toName = toSelect.options[toSelect.selectedIndex].text.split(' (')[0];
+            const feeAmount = (amount * feePercent / 100);
+            const totalDebit = amount + feeAmount;
+
+            document.getElementById('preview-from').textContent =
+                fromName + ': balance reduced by £' + amount.toFixed(2);
+            document.getElementById('preview-to').textContent =
+                toName + ': balance increased by £' + totalDebit.toFixed(2) +
+                (feeAmount > 0 ? ' (£' + amount.toFixed(2) + ' + £' + feeAmount.toFixed(2) + ' fee)' : '');
+            preview.style.display = 'block';
+        } else {
+            preview.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

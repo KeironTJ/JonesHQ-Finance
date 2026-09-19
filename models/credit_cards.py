@@ -21,6 +21,9 @@ class CreditCard(db.Model):
     min_payment_percent = db.Column(db.Numeric(5, 2))  # Minimum payment %
     set_payment = db.Column(db.Numeric(10, 2))  # Regular payment amount
     statement_date = db.Column(db.Integer)  # Day of month (1-31)
+
+    # Default fee % applied when this card is the destination of a balance transfer
+    default_transfer_fee_percent = db.Column(db.Numeric(5, 2))
     
     # Limits and Balances
     credit_limit = db.Column(db.Numeric(10, 2), nullable=False)

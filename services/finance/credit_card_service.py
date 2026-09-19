@@ -81,6 +81,10 @@ class CreditCardService:
             'monthly_apr': float(data.get('monthly_apr', 0)),
             'min_payment_percent': float(data.get('min_payment_percent', 1.0)),
             'credit_limit': float(data.get('credit_limit', 0)),
+            'default_transfer_fee_percent': (
+                float(data['default_transfer_fee_percent'])
+                if data.get('default_transfer_fee_percent') else None
+            ),
             'set_payment': float(data['set_payment']) if data.get('set_payment') else None,
             'statement_date': int(data['statement_date']) if data.get('statement_date') else None,
             'current_balance': float(data.get('current_balance', 0)),
@@ -147,10 +151,111 @@ class CreditCardService:
             if bank_transaction:
                 account_id = bank_transaction.account_id
                 db.session.delete(bank_transaction)
+
+        linked_card_id = None
+        if transaction.linked_cc_transaction_id:
+            linked_txn = family_get(CreditCardTransaction, transaction.linked_cc_transaction_id)
+            if linked_txn:
+                linked_card_id = linked_txn.credit_card_id
+                # Clear both sides of the FK pair first to avoid a circular
+                # dependency when SQLAlchemy orders the DELETE statements.
+                transaction.linked_cc_transaction_id = None
+                linked_txn.linked_cc_transaction_id = None
+                db.session.flush()
+                db.session.delete(linked_txn)
+
         db.session.delete(transaction)
         db.session.commit()
         CreditCardTransaction.recalculate_card_balance(card_id, commit=True)
+        if linked_card_id and linked_card_id != card_id:
+            CreditCardTransaction.recalculate_card_balance(linked_card_id, commit=True)
         return card_id, account_id
+
+    @staticmethod
+    def create_balance_transfer(data):
+        """Move debt from one of the family's cards to another.
+
+        Creates two linked CreditCardTransaction rows:
+          - On the FROM card: a 'Balance Transfer' transaction that reduces
+            debt (positive amount) equal to the transferred amount.
+          - On the TO card: a 'Balance Transfer' transaction that increases
+            debt (negative amount) equal to the transferred amount PLUS the
+            transfer fee.
+        """
+        from_card_id = int(data['from_card_id'])
+        to_card_id = int(data['to_card_id'])
+        if from_card_id == to_card_id:
+            raise ValueError('Source and destination cards must be different')
+
+        amount = Decimal(str(data.get('amount') or '0'))
+        if amount <= 0:
+            raise ValueError('Amount must be greater than 0')
+
+        fee_percent = Decimal(str(data.get('fee_percent') or '0'))
+        transfer_date = date.fromisoformat(data['transfer_date'])
+        is_paid = data.get('is_paid') == '1'
+        description = (data.get('description') or '').strip()
+
+        from_card = family_get_or_404(CreditCard, from_card_id)
+        to_card = family_get_or_404(CreditCard, to_card_id)
+
+        fee_amount = (amount * fee_percent / Decimal('100')).quantize(Decimal('0.01'))
+        total_debit = amount + fee_amount
+
+        week = f'{transfer_date.isocalendar()[1]:02d}-{transfer_date.year}'
+        month = transfer_date.strftime('%Y-%m')
+        day_name = transfer_date.strftime('%A')
+        bt_apr = to_card.get_current_balance_transfer_apr(transfer_date)
+
+        from_txn = CreditCardTransaction(
+            family_id=db_helpers.get_family_id(),
+            credit_card_id=from_card_id,
+            date=transfer_date,
+            day_name=day_name,
+            week=week,
+            month=month,
+            item=description or f'Balance transfer to {to_card.card_name}',
+            transaction_type='Balance Transfer',
+            amount=amount,
+            is_paid=is_paid,
+            is_fixed=True,
+        )
+        db.session.add(from_txn)
+        db.session.flush()
+
+        to_txn = CreditCardTransaction(
+            family_id=db_helpers.get_family_id(),
+            credit_card_id=to_card_id,
+            date=transfer_date,
+            day_name=day_name,
+            week=week,
+            month=month,
+            item=description or f'Balance transfer from {from_card.card_name}',
+            transaction_type='Balance Transfer',
+            amount=-total_debit,
+            applied_apr=bt_apr,
+            is_promotional_rate=(bt_apr == 0),
+            is_paid=is_paid,
+            is_fixed=True,
+            linked_cc_transaction_id=from_txn.id,
+        )
+        db.session.add(to_txn)
+        db.session.flush()
+
+        from_txn.linked_cc_transaction_id = to_txn.id
+        db.session.commit()
+
+        CreditCardTransaction.recalculate_card_balance(from_card_id, commit=True)
+        CreditCardTransaction.recalculate_card_balance(to_card_id, commit=True)
+
+        return {
+            'from_txn': from_txn,
+            'to_txn': to_txn,
+            'from_card': from_card,
+            'to_card': to_card,
+            'fee_amount': fee_amount,
+            'total_debit': total_debit,
+        }
 
     @staticmethod
     def toggle_transaction_paid(transaction_id):
