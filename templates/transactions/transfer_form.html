@@ -2,33 +2,44 @@
 
 {% block title %}Create Transfer - JonesHQ Finance{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transactions.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
+<div class="container-fluid transaction-editor-page transfer-editor-page">
     <div class="row">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Create Transfer Between Accounts</h2>
-                <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-secondary">
-                    <i class="bi bi-arrow-left"></i> Back to Transactions
+            <header class="page-header transaction-editor-header">
+                <div>
+                    <h1><i class="bi bi-arrow-left-right"></i> Create Transfer</h1>
+                    <p class="page-subtitle mb-0">Move money between two accounts with linked transaction records.</p>
+                </div>
+                <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">Transactions</span>
                 </a>
+            </header>
+
+            <div class="alert alert-info transaction-editor-notice">
+                <i class="bi bi-link-45deg"></i>
+                Two linked transactions will be created and both account balances updated.
             </div>
 
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> 
-                <strong>Transfer Function:</strong> This will automatically create two transactions - one deducting from the source account and one adding to the destination account. Both account balances will be updated automatically.
-            </div>
-
-            <div class="card">
+            <div class="card transaction-editor-card">
                 <div class="card-body">
-                    <form method="POST">
+                    <form method="POST" id="transferEditorForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <div class="row">
+                        <div class="transaction-form-intro">
+                            <span class="form-section-icon"><i class="bi bi-bank"></i></span>
+                            <div><strong>Transfer details</strong><small>Choose different source and destination accounts.</small></div>
+                        </div>
+                        <div class="row g-3 transaction-editor-grid transfer-editor-grid">
                             <!-- From Account -->
                             <div class="col-md-6 mb-3">
                                 <label for="from_account_id" class="form-label">
                                     <i class="bi bi-arrow-up-circle text-danger"></i> From Account (Money Leaving) *
                                 </label>
-                                <select class="form-select form-select-lg" id="from_account_id" name="from_account_id" required>
+                                <select class="form-select" id="from_account_id" name="from_account_id" required>
                                     <option value="">Select Source Account...</option>
                                     {% for account in accounts %}
                                     <option value="{{ account.id }}">
@@ -43,7 +54,7 @@
                                 <label for="to_account_id" class="form-label">
                                     <i class="bi bi-arrow-down-circle text-success"></i> To Account (Money Arriving) *
                                 </label>
-                                <select class="form-select form-select-lg" id="to_account_id" name="to_account_id" required>
+                                <select class="form-select" id="to_account_id" name="to_account_id" required>
                                     <option value="">Select Destination Account...</option>
                                     {% for account in accounts %}
                                     <option value="{{ account.id }}">
@@ -58,7 +69,7 @@
                                 <label for="amount" class="form-label">
                                     <i class="bi bi-currency-pound"></i> Transfer Amount *
                                 </label>
-                                <div class="input-group input-group-lg">
+                                <div class="input-group">
                                     <span class="input-group-text">£</span>
                                     <input type="number" step="0.01" min="0.01" class="form-control" id="amount" name="amount" 
                                         placeholder="0.00" required>
@@ -70,7 +81,7 @@
                                 <label for="transaction_date" class="form-label">
                                     <i class="bi bi-calendar"></i> Transfer Date *
                                 </label>
-                                <input type="date" class="form-control form-control-lg" id="transaction_date" name="transaction_date"
+                                <input type="date" class="form-control" id="transaction_date" name="transaction_date"
                                     value="{{ today.strftime('%Y-%m-%d') if today else '' }}" required>
                             </div>
 
@@ -86,7 +97,7 @@
 
                             <!-- Is Paid -->
                             <div class="col-md-12 mb-3">
-                                <div class="form-check">
+                                <div class="form-check transaction-toggle-row">
                                     <input class="form-check-input" type="checkbox" id="is_paid" name="is_paid" value="1" checked>
                                     <label class="form-check-label" for="is_paid">
                                         <i class="bi bi-check-circle"></i> <strong>Mark as Paid</strong>
@@ -113,8 +124,8 @@
                         </div>
 
                         <!-- Recurring Transfer Options -->
-                        <div class="card mb-3">
-                            <div class="card-header bg-info text-white">
+                        <div class="card mb-3 form-subsection">
+                            <div class="card-header">
                                 <h5 class="mb-0">
                                     <i class="bi bi-calendar-repeat me-2"></i>Recurring Transfer Options
                                 </h5>
@@ -155,7 +166,7 @@
                         </div>
 
                         <!-- Preview -->
-                        <div class="alert alert-secondary" id="transfer-preview" style="display: none;">
+                        <div class="transfer-preview" id="transfer-preview" style="display: none;">
                             <h6 class="mb-2"><i class="bi bi-eye"></i> Transfer Preview:</h6>
                             <ul class="mb-0">
                                 <li id="preview-from"></li>
@@ -163,22 +174,19 @@
                             </ul>
                         </div>
 
-                        <div class="d-flex gap-2 mt-4">
-                            <button type="submit" class="btn btn-primary btn-lg">
+                        <div class="transaction-form-actions">
+                            <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-arrow-left-right"></i> <span id="submit-text">Create Transfer</span>
                             </button>
-                            <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-secondary btn-lg">Cancel</a>
+                            <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-outline-secondary">Cancel</a>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <!-- How it Works -->
-            <div class="card mt-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-question-circle"></i> How This Works</h5>
-                </div>
-                <div class="card-body">
+            <details class="form-help-panel">
+                <summary><i class="bi bi-question-circle"></i> How transfers are recorded</summary>
+                <div class="form-help-content">
                     <div class="row">
                         <div class="col-md-6">
                             <h6 class="text-danger"><i class="bi bi-dash-circle"></i> From Account</h6>
@@ -192,7 +200,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </details>
         </div>
     </div>
 </div>

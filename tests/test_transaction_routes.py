@@ -14,6 +14,48 @@ def _login(client, user_id):
         session['_fresh'] = True
 
 
+def test_transaction_index_renders_compact_filters(app, family, user):
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.get('/transactions?search=rent&is_paid=pending')
+
+    assert response.status_code == 200
+    assert b'transactionFilterDrawer' in response.data
+    assert b'quick-filter-form' in response.data
+    assert b'editPaidControl' in response.data
+    assert b'Filtered by' in response.data
+    assert b'rent' in response.data
+
+
+def test_consolidated_index_renders_responsive_filters(app, family, user):
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.get('/transactions/consolidated?source=bank&is_paid=pending')
+
+    assert response.status_code == 200
+    assert b'consolidatedFilterDrawer' in response.data
+    assert b'consolidated-filter-form' in response.data
+    assert b'Filtered by' in response.data
+    assert b'Bank' in response.data
+
+
+def test_transaction_create_and_transfer_render_compact_editors(app, family, user):
+    client = app.test_client()
+    _login(client, user.id)
+
+    create_response = client.get('/transactions/create')
+    transfer_response = client.get('/transactions/transfer')
+
+    assert create_response.status_code == 200
+    assert b'transaction-editor-page' in create_response.data
+    assert b'transactionEditorForm' in create_response.data
+    assert transfer_response.status_code == 200
+    assert b'transfer-editor-page' in transfer_response.data
+    assert b'transferEditorForm' in transfer_response.data
+
+
 def test_transaction_routes_create_edit_delete(app, family, user):
     family_id = family.id
     user_id = user.id
@@ -48,6 +90,12 @@ def test_transaction_routes_create_edit_delete(app, family, user):
     transaction_id = transaction.id
     assert transaction.family_id == family_id
     assert transaction.amount == Decimal('-25.50')
+
+    response = client.get(f'/transactions/{transaction_id}/edit')
+    assert response.status_code == 200
+    assert b'transaction-editor-page' in response.data
+    assert b'transaction-paid-control is-paid' in response.data
+    assert b'Included in paid balances' in response.data
 
     response = client.post(f'/transactions/{transaction_id}/edit', data={
         'account_id': str(account_id),

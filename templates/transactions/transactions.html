@@ -57,141 +57,100 @@
         </div>
     </section>
     
-    <!-- Filters -->
-    <div class="card transaction-filter-card">
-        <button class="card-header transaction-section-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="{{ 'true' if filter_expanded else 'false' }}" aria-controls="filterCollapse">
-            <span><i class="bi bi-funnel"></i> Filters
-                {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
-                <span class="badge text-bg-primary ms-1">Active</span>
-                {% endif %}
-            </span>
-            <span class="filter-toggle-label">Show options</span>
-            <span class="transaction-toggle-icon" aria-hidden="true">
-                <i class="bi {% if filter_expanded %}bi-chevron-up{% else %}bi-chevron-down{% endif %}"></i>
-            </span>
-        </button>
-        <div id="filterCollapse" class="collapse {% if filter_expanded %}show{% endif %}">
-            <div class="card-body">
-                <form method="get" action="{{ url_for('transactions.index') }}" class="transaction-filter-grid" id="transactionFilterForm">
-                <div>
-                    <label for="account_id" class="form-label">Account</label>
-                    <select name="account_id" id="account_id" class="form-select" onchange="this.form.submit()">
-                        <option value="">All Accounts</option>
-                        {% for account in accounts %}
-                        <option value="{{ account.id }}" {% if selected_account and selected_account.id == account.id %}selected{% endif %}>
-                            {{ account.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div>
-                    <label for="head_budget" class="form-label">Category Group</label>
-                    <select name="head_budget" id="head_budget" class="form-select" onchange="handleHeadBudgetChange(this)">
-                        <option value="">All Groups</option>
-                        {% for hb in head_budgets %}
-                        <option value="{{ hb }}" {% if selected_head_budget == hb %}selected{% endif %}>
-                            {{ hb }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div>
-                    <label for="category_id" class="form-label">Sub-Category</label>
-                    <select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %} onchange="this.form.submit()">
-                        <option value="">All Sub-Categories</option>
-                        {% for category in categories %}
-                        <option value="{{ category.id }}" {% if selected_category and selected_category.id == category.id %}selected{% endif %}>
-                            {% if selected_head_budget %}
-                                {{ category.sub_budget }}
-                            {% else %}
-                                {{ category.head_budget }} > {{ category.sub_budget }}
-                            {% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div>
-                    <label for="vendor_id" class="form-label">Vendor</label>
-                    <select name="vendor_id" id="vendor_id" class="form-select" onchange="this.form.submit()">
-                        <option value="">All Vendors</option>
-                        {% for vendor in vendors %}
-                        <option value="{{ vendor.id }}" {% if selected_vendor and selected_vendor.id == vendor.id %}selected{% endif %}>
-                            {{ vendor.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
+    {% set has_active_filters = selected_account or selected_head_budget or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
 
-                <div>
-                    <label for="year_month" class="form-label">Month</label>
-                    <select name="year_month" id="year_month" class="form-select" onchange="this.form.submit()">
-                        <option value="">All Months</option>
-                        {% for ym in year_months %}
-                        <option value="{{ ym }}" {% if selected_year_month == ym %}selected{% endif %}>
-                            {{ ym }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="filter-pay-period">
-                    <label for="payday_period" class="form-label">Pay Period</label>
-                    <select name="payday_period" id="payday_period" class="form-select" onchange="this.form.submit()">
-                        <option value="">All Periods</option>
-                        {% set ns = namespace(current_year=None) %}
-                        {% for period in payday_periods %}
-                            {% if ns.current_year != period['year'] %}
-                                {% if ns.current_year is not none %}
-                                    </optgroup>
-                                {% endif %}
-                                <optgroup label="{{ period['year'] }}">
-                                {% set ns.current_year = period['year'] %}
-                            {% endif %}
-                            <option value="{{ period['label'] }}" {% if selected_payday_period == period['label'] %}selected{% endif %}>
-                                {{ period['display_name'] }}
-                            </option>
-                        {% endfor %}
-                        {% if ns.current_year is not none %}
-                            </optgroup>
-                        {% endif %}
-                    </select>
-                    <div class="pay-period-nav">
-                        {% if prev_payday_period %}
-                            <a class="btn btn-sm btn-outline-secondary" title="Previous pay period" href="{{ url_for('transactions.index', payday_period=prev_payday_period) }}"><i class="bi bi-chevron-left"></i></a>
-                        {% endif %}
-                        {% if next_payday_period %}
-                            <a class="btn btn-sm btn-outline-secondary" title="Next pay period" href="{{ url_for('transactions.index', payday_period=next_payday_period) }}"><i class="bi bi-chevron-right"></i></a>
-                        {% endif %}
-                    </div>
-                </div>
-                
-                <div>
-                    <label for="is_paid" class="form-label">Status</label>
-                    <select name="is_paid" id="is_paid" class="form-select" onchange="submitFilterForm()">
-                        <option value="">All Status</option>
-                        <option value="paid" {% if selected_is_paid == 'paid' %}selected{% endif %}>Paid</option>
-                        <option value="pending" {% if selected_is_paid == 'pending' %}selected{% endif %}>Pending</option>
-                    </select>
-                </div>
-                
-                <div class="filter-search">
-                    <label for="search" class="form-label">Search</label>
-                    <input type="text" name="search" id="search" class="form-control" 
-                           placeholder="Search description..." value="{{ search_term }}">
-                </div>
-                
-                <div class="filter-actions">
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Apply</button>
-                    {% if selected_account or selected_category or selected_vendor or selected_year_month or selected_payday_period or search_term or selected_is_paid %}
-                    <a href="{{ url_for('transactions.index') }}" class="btn btn-outline-secondary">Clear</a>
-                    {% endif %}
-                </div>
-                </form>
+    <!-- Compact filters -->
+    <section class="transaction-filters" aria-label="Transaction filters">
+        <form method="get" action="{{ url_for('transactions.index') }}" class="quick-filter-form">
+            <input type="hidden" name="head_budget" value="{{ selected_head_budget or '' }}">
+            <input type="hidden" name="category_id" value="{{ selected_category.id if selected_category else '' }}">
+            <input type="hidden" name="vendor_id" value="{{ selected_vendor.id if selected_vendor else '' }}">
+            <input type="hidden" name="year_month" value="{{ selected_year_month or '' }}">
+            <input type="hidden" name="is_paid" value="{{ selected_is_paid or '' }}">
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
+            <div class="quick-filter-search">
+                <label class="visually-hidden" for="quick_search">Search transactions</label>
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" name="search" id="quick_search" class="form-control" placeholder="Search transactions" value="{{ search_term }}">
             </div>
+            <div>
+                <label class="filter-compact-label" for="quick_payday_period">Pay period</label>
+                <select name="payday_period" id="quick_payday_period" class="form-select">
+                    <option value="">All periods</option>
+                    {% for period in payday_periods %}<option value="{{ period['label'] }}" {% if selected_payday_period == period['label'] %}selected{% endif %}>{{ period['display_name'] }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="filter-compact-label" for="quick_account_id">Account</label>
+                <select name="account_id" id="quick_account_id" class="form-select">
+                    <option value="">All accounts</option>
+                    {% for account in accounts %}<option value="{{ account.id }}" {% if selected_account and selected_account.id == account.id %}selected{% endif %}>{{ account.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary quick-filter-submit"><i class="bi bi-search"></i> Apply</button>
+        </form>
+        <div class="status-filter" aria-label="Payment status">
+            <a href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, sort=sort, per_page=per_page) }}" class="status-filter-option {% if not selected_is_paid %}active{% endif %}">All</a>
+            <a href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid='pending', sort=sort, per_page=per_page) }}" class="status-filter-option {% if selected_is_paid == 'pending' %}active{% endif %}">Pending</a>
+            <a href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid='paid', sort=sort, per_page=per_page) }}" class="status-filter-option {% if selected_is_paid == 'paid' %}active{% endif %}">Paid</a>
         </div>
+        <button class="btn btn-outline-secondary filter-drawer-trigger" type="button" data-bs-toggle="offcanvas" data-bs-target="#transactionFilterDrawer" aria-controls="transactionFilterDrawer">
+            <i class="bi bi-sliders"></i> Filters
+            {% if has_active_filters %}<span class="filter-active-dot" aria-label="Filters active"></span>{% endif %}
+        </button>
+    </section>
+
+    {% if has_active_filters %}
+    <div class="active-filter-row" aria-label="Active filters">
+        <span class="active-filter-label">Filtered by</span>
+        {% if search_term %}<a class="filter-chip" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}">“{{ search_term }}” <i class="bi bi-x"></i></a>{% endif %}
+        {% if selected_account %}<a class="filter-chip" href="{{ url_for('transactions.index', head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}">{{ selected_account.name }} <i class="bi bi-x"></i></a>{% endif %}
+        {% if selected_payday_period %}<a class="filter-chip" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}">Pay period: {{ selected_payday_period }} <i class="bi bi-x"></i></a>{% endif %}
+        {% if selected_is_paid %}<a class="filter-chip" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, sort=sort, per_page=per_page) }}">{{ selected_is_paid|title }} <i class="bi bi-x"></i></a>{% endif %}
+        {% if selected_head_budget %}<a class="filter-chip" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}">{{ selected_head_budget }} <i class="bi bi-x"></i></a>{% endif %}
+        {% if selected_category %}<a class="filter-chip" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}">{{ selected_category.sub_budget }} <i class="bi bi-x"></i></a>{% endif %}
+        {% if selected_vendor %}<a class="filter-chip" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, year_month=selected_year_month, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}">{{ selected_vendor.name }} <i class="bi bi-x"></i></a>{% endif %}
+        {% if selected_year_month %}<a class="filter-chip" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, payday_period=selected_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}">{{ selected_year_month }} <i class="bi bi-x"></i></a>{% endif %}
+        <a href="{{ url_for('transactions.index', sort=sort, per_page=per_page) }}" class="clear-filter-link">Clear all</a>
+    </div>
+    {% endif %}
+
+    <div class="offcanvas offcanvas-end transaction-filter-drawer" tabindex="-1" id="transactionFilterDrawer" aria-labelledby="transactionFilterDrawerLabel">
+        <div class="offcanvas-header">
+            <div>
+                <h5 class="offcanvas-title" id="transactionFilterDrawerLabel"><i class="bi bi-sliders"></i> Filter transactions</h5>
+                <small class="text-muted">Refine the current transaction list</small>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <form method="get" action="{{ url_for('transactions.index') }}" class="drawer-filter-form" id="transactionFilterForm">
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="per_page" value="{{ per_page }}">
+            <div class="offcanvas-body">
+                <div class="drawer-filter-grid">
+                    <div class="drawer-filter-wide"><label for="search" class="form-label">Search</label><input type="search" name="search" id="search" class="form-control" placeholder="Description or item" value="{{ search_term }}"></div>
+                    <div><label for="account_id" class="form-label">Account</label><select name="account_id" id="account_id" class="form-select"><option value="">All accounts</option>{% for account in accounts %}<option value="{{ account.id }}" {% if selected_account and selected_account.id == account.id %}selected{% endif %}>{{ account.name }}</option>{% endfor %}</select></div>
+                    <div><label for="is_paid" class="form-label">Status</label><select name="is_paid" id="is_paid" class="form-select"><option value="">All statuses</option><option value="pending" {% if selected_is_paid == 'pending' %}selected{% endif %}>Pending</option><option value="paid" {% if selected_is_paid == 'paid' %}selected{% endif %}>Paid</option></select></div>
+                    <div class="drawer-filter-wide filter-pay-period">
+                        <label for="payday_period" class="form-label">Pay period</label>
+                        <select name="payday_period" id="payday_period" class="form-select"><option value="">All periods</option>{% for period in payday_periods %}<option value="{{ period['label'] }}" {% if selected_payday_period == period['label'] %}selected{% endif %}>{{ period['display_name'] }}</option>{% endfor %}</select>
+                        <div class="pay-period-nav">
+                            {% if prev_payday_period %}<a class="btn btn-sm btn-outline-secondary" title="Previous pay period" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=prev_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}"><i class="bi bi-chevron-left"></i></a>{% endif %}
+                            {% if next_payday_period %}<a class="btn btn-sm btn-outline-secondary" title="Next pay period" href="{{ url_for('transactions.index', account_id=selected_account.id if selected_account else None, head_budget=selected_head_budget, category_id=selected_category.id if selected_category else None, vendor_id=selected_vendor.id if selected_vendor else None, year_month=selected_year_month, payday_period=next_payday_period, search=search_term, is_paid=selected_is_paid, sort=sort, per_page=per_page) }}"><i class="bi bi-chevron-right"></i></a>{% endif %}
+                        </div>
+                    </div>
+                    <div><label for="head_budget" class="form-label">Category group</label><select name="head_budget" id="head_budget" class="form-select" onchange="handleHeadBudgetChange(this)"><option value="">All groups</option>{% for hb in head_budgets %}<option value="{{ hb }}" {% if selected_head_budget == hb %}selected{% endif %}>{{ hb }}</option>{% endfor %}</select></div>
+                    <div><label for="category_id" class="form-label">Sub-category</label><select name="category_id" id="category_id" class="form-select" {% if not selected_head_budget %}disabled{% endif %}><option value="">All sub-categories</option>{% for category in all_categories %}<option value="{{ category.id }}" data-head-budget="{{ category.head_budget }}" {% if selected_head_budget and selected_head_budget != category.head_budget %}hidden disabled{% endif %} {% if selected_category and selected_category.id == category.id %}selected{% endif %}>{{ category.sub_budget if selected_head_budget else category.head_budget ~ ' > ' ~ category.sub_budget }}</option>{% endfor %}</select></div>
+                    <div><label for="vendor_id" class="form-label">Vendor</label><select name="vendor_id" id="vendor_id" class="form-select"><option value="">All vendors</option>{% for vendor in vendors %}<option value="{{ vendor.id }}" {% if selected_vendor and selected_vendor.id == vendor.id %}selected{% endif %}>{{ vendor.name }}</option>{% endfor %}</select></div>
+                    <div><label for="year_month" class="form-label">Month</label><select name="year_month" id="year_month" class="form-select"><option value="">All months</option>{% for ym in year_months %}<option value="{{ ym }}" {% if selected_year_month == ym %}selected{% endif %}>{{ ym }}</option>{% endfor %}</select></div>
+                </div>
+            </div>
+            <div class="offcanvas-filter-footer">
+                <a href="{{ url_for('transactions.index', sort=sort, per_page=per_page) }}" class="btn btn-outline-secondary">Clear</a>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check2"></i> Show results</button>
+            </div>
+        </form>
     </div>
     
     <!-- Category Summary (collapsible) -->
@@ -590,16 +549,19 @@
 
 <!-- Edit Transaction Modal -->
 <div class="modal fade" id="editTransactionModal" tabindex="-1" aria-labelledby="editTransactionModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable transaction-edit-dialog">
+        <div class="modal-content transaction-edit-modal">
             <div class="modal-header">
-                <h5 class="modal-title" id="editTransactionModalLabel">Edit Transaction</h5>
+                <div>
+                    <h5 class="modal-title" id="editTransactionModalLabel"><i class="bi bi-pencil-square"></i> Edit Transaction</h5>
+                    <small class="text-muted">Update transaction details without leaving the list.</small>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST" id="editTransactionForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <div class="modal-body">
-                    <div class="mb-3">
+                <div class="modal-body transaction-modal-grid">
+                    <div class="mb-3 transaction-modal-wide">
                         <label for="edit_transaction_date" class="form-label">Date</label>
                         <input type="date" class="form-control" name="transaction_date" id="edit_transaction_date" required>
                     </div>
@@ -659,7 +621,21 @@
                                    placeholder="0.00" autocomplete="off">
                         </div>
                         <input type="hidden" name="amount" id="edit_amount">
-                        <small class="form-text text-muted">Expense = positive debit, Income = negative</small>
+                        <small class="form-text text-muted">Expense = debit from account; Income = credit into account.</small>
+                    </div>
+
+                    <div class="transaction-paid-control transaction-modal-wide" id="editPaidControl">
+                        <div class="transaction-paid-summary">
+                            <span class="paid-status-icon"><i class="bi bi-clock"></i></span>
+                            <div>
+                                <strong>Payment status</strong>
+                                <small id="editPaidStatusHelp">Waiting to be paid</small>
+                            </div>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input type="checkbox" class="form-check-input" role="switch" name="is_paid" id="edit_is_paid" value="1">
+                            <label class="form-check-label" for="edit_is_paid" id="editPaidStatusLabel">Pending</label>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -691,54 +667,52 @@
                         </select>
                     </div>
                     
-                    <div class="mb-3 form-check">
+                    <div class="mb-3 form-check transaction-toggle-row">
                         <input type="checkbox" class="form-check-input" name="txn_fixed" id="edit_txn_fixed" value="1">
                         <label class="form-check-label" for="edit_txn_fixed">
                             Lock this transaction (prevent regeneration)
                         </label>
                     </div>
                     
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" name="is_paid" id="edit_is_paid" value="1">
-                        <label class="form-check-label" for="edit_is_paid">
-                            Mark as paid
-                        </label>
-                    </div>
-
-                    <!-- Period Overrides -->
-                    <hr>
-                    <p class="text-muted small mb-2"><i class="bi bi-calendar3"></i> Period fields — leave blank to auto-calculate from date</p>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="form-label form-label-sm">Year-Month</label>
-                            <input type="text" class="form-control form-control-sm" name="year_month" id="edit_year_month" placeholder="2026-02">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label form-label-sm">Week-Year</label>
-                            <input type="text" class="form-control form-control-sm" name="week_year" id="edit_week_year" placeholder="08-2026">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label form-label-sm">Day Name</label>
-                            <select class="form-select form-select-sm" name="day_name" id="edit_day_name">
-                                <option value="">(auto)</option>
-                                <option value="Mon">Mon</option>
-                                <option value="Tue">Tue</option>
-                                <option value="Wed">Wed</option>
-                                <option value="Thu">Thu</option>
-                                <option value="Fri">Fri</option>
-                                <option value="Sat">Sat</option>
-                                <option value="Sun">Sun</option>
-                            </select>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label form-label-sm">Payday Period</label>
-                            <input type="text" class="form-control form-control-sm" name="payday_period_override" id="edit_payday_period" placeholder="2026-02">
+                    <div class="transaction-modal-advanced">
+                        <button type="button" class="transaction-advanced-toggle" data-bs-toggle="collapse" data-bs-target="#editPeriodOverrides" aria-expanded="false" aria-controls="editPeriodOverrides">
+                            <span><i class="bi bi-calendar3"></i> Period overrides</span>
+                            <span class="text-muted">Auto-calculated <i class="bi bi-chevron-down"></i></span>
+                        </button>
+                        <div class="collapse" id="editPeriodOverrides">
+                            <div class="row g-2 pt-3">
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Year-Month</label>
+                                    <input type="text" class="form-control form-control-sm" name="year_month" id="edit_year_month" placeholder="2026-02">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Week-Year</label>
+                                    <input type="text" class="form-control form-control-sm" name="week_year" id="edit_week_year" placeholder="08-2026">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Day Name</label>
+                                    <select class="form-select form-select-sm" name="day_name" id="edit_day_name">
+                                        <option value="">(auto)</option>
+                                        <option value="Mon">Mon</option>
+                                        <option value="Tue">Tue</option>
+                                        <option value="Wed">Wed</option>
+                                        <option value="Thu">Thu</option>
+                                        <option value="Fri">Fri</option>
+                                        <option value="Sat">Sat</option>
+                                        <option value="Sun">Sun</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label form-label-sm">Payday Period</label>
+                                    <input type="text" class="form-control form-control-sm" name="payday_period_override" id="edit_payday_period" placeholder="2026-02">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check2"></i> Save changes</button>
                 </div>
             </form>
         </div>
@@ -796,6 +770,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_payment_type').value = txnPaymentType;
             document.getElementById('edit_txn_fixed').checked = (txnFixed === '1');
             document.getElementById('edit_is_paid').checked = (txnPaid === '1');
+            syncEditPaidControl();
 
             // Period override fields — pre-populate for visibility
             document.getElementById('edit_year_month').value = button.getAttribute('data-txn-year-month') || '';
@@ -818,52 +793,40 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Persist filter collapse state and update chevron
-document.addEventListener('DOMContentLoaded', function() {
-    const filterCollapseEl = document.getElementById('filterCollapse');
-    const headerBtn = document.querySelector('[data-bs-target="#filterCollapse"]');
-    const chevron = headerBtn ? headerBtn.querySelector('i') : null;
+function syncEditPaidControl() {
+    const checkbox = document.getElementById('edit_is_paid');
+    const control = document.getElementById('editPaidControl');
+    const icon = control.querySelector('.paid-status-icon i');
+    const isPaid = checkbox.checked;
+    control.classList.toggle('is-paid', isPaid);
+    document.getElementById('editPaidStatusLabel').textContent = isPaid ? 'Paid' : 'Pending';
+    document.getElementById('editPaidStatusHelp').textContent = isPaid ? 'Included in paid balances' : 'Waiting to be paid';
+    icon.className = isPaid ? 'bi bi-check-circle-fill' : 'bi bi-clock';
+}
 
-    if (filterCollapseEl) {
-        filterCollapseEl.addEventListener('shown.bs.collapse', function () {
-            if (chevron) {
-                chevron.classList.remove('bi-chevron-down');
-                chevron.classList.add('bi-chevron-up');
-            }
-            // save preference
-            fetch('{{ url_for("transactions.save_filter_preference") }}', {
-                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({expanded: true})
-            });
-        });
-        filterCollapseEl.addEventListener('hidden.bs.collapse', function () {
-            if (chevron) {
-                chevron.classList.remove('bi-chevron-up');
-                chevron.classList.add('bi-chevron-down');
-            }
-            fetch('{{ url_for("transactions.save_filter_preference") }}', {
-                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({expanded: false})
-            });
-        });
-    }
-});
+document.getElementById('edit_is_paid').addEventListener('change', syncEditPaidControl);
 
 // Handle head budget change
 function handleHeadBudgetChange(selectElement) {
     const categorySelect = document.getElementById('category_id');
+    const selectedGroup = selectElement.value;
+    const selectedOption = categorySelect.options[categorySelect.selectedIndex];
+
+    categorySelect.querySelectorAll('option[data-head-budget]').forEach(option => {
+        const matchesGroup = !selectedGroup || option.dataset.headBudget === selectedGroup;
+        option.hidden = !matchesGroup;
+        option.disabled = !matchesGroup;
+    });
+
+    if (selectedOption && selectedOption.dataset.headBudget !== selectedGroup) {
+        categorySelect.value = '';
+    }
+
     if (selectElement.value) {
         categorySelect.disabled = false;
     } else {
         categorySelect.disabled = true;
         categorySelect.value = '';
-    }
-    selectElement.form.submit();
-}
-
-// Submit filter form
-function submitFilterForm() {
-    const form = document.querySelector('form[action*="transactions"]');
-    if (form) {
-        form.submit();
     }
 }
 
