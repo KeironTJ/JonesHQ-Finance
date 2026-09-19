@@ -225,6 +225,7 @@
                         <tr>
                             <th style="width:40px;"><input type="checkbox" id="selectAllExpenses" onclick="toggleSelectAllExpenses()"></th>
                             <th>Date</th>
+                            <th title="Claim period this expense counts toward">Period</th>
                             <th>Type</th>
                             <th>Desc</th>
                             <th>Card</th>
@@ -256,7 +257,7 @@
                         {% set cc_payments = cc_payments_by_month.get(e_period, []) if not is_partial else [] %}
                         <tr class="{% if is_partial %}table-info{% else %}table-secondary{% endif %} {% if is_closed %}period-settled{% endif %}"
                             {% if is_closed %}style="opacity:0.6;" data-settled="true"{% endif %}>
-                            <td colspan="16" class="fw-bold">
+                            <td colspan="17" class="fw-bold">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <span>
                                         {% if is_closed %}
@@ -310,6 +311,18 @@
                         <tr id="expense-{{ e.id }}" {% if is_closed %}class="period-settled text-muted" data-settled="true"{% elif e.bank_transaction_id or e.credit_card_transaction_id %}class="table-success"{% endif %}>
                             <td><input type="checkbox" class="expense-checkbox" value="{{ e.id }}" onchange="updateExpenseBulkActions()"></td>
                             <td>{{ e.date.strftime('%d/%m/%Y') if e.date else '' }}</td>
+                            <td>
+                                <form method="post" action="{{ url_for('expenses.set_period', expense_id=e.id) }}" class="period-form" title="{% if is_closed %}Locked — period settled{% else %}Assign this expense to a different claim period{% endif %}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <input type="hidden" name="return_url" value="{{ request.url }}">
+                                    <select name="period" class="form-select form-select-sm" style="min-width:100px;" onchange="this.form.submit()" {% if is_closed %}disabled{% endif %}>
+                                        <option value="auto" {% if not e.claim_group %}selected{% endif %}>Auto ({{ e_period }})</option>
+                                        {% for opt in period_options %}
+                                        <option value="{{ opt.value }}" {% if e.claim_group == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </form>
+                            </td>
                             <td>
                                 <span class="badge {% if e.expense_type == 'Fuel' %}bg-danger{% elif e.expense_type == 'Hotel' %}bg-info{% elif e.expense_type == 'Food' %}bg-success{% else %}bg-secondary{% endif %}">
                                     {{ e.expense_type }}
@@ -408,7 +421,7 @@
                         </tr>
                         {% endfor %}
                         {% if expenses|length == 0 %}
-                        <tr><td colspan="15" class="text-center p-3 text-muted">No expenses found</td></tr>
+                        <tr><td colspan="17" class="text-center p-3 text-muted">No expenses found</td></tr>
                         {% endif %}
                     </tbody>
                 </table>

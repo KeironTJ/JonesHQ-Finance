@@ -173,6 +173,25 @@ def _build_expense_report(expenses, finance_year):
     }
 
 
+def _build_period_options(existing_keys, months_back=18, months_forward=3):
+    """Build a sorted (newest first) list of {'value','label'} period options
+    spanning a window around today, plus any period keys already in use."""
+    today = datetime.now().date()
+    keys = set(k for k in existing_keys if k and '-P' not in k)
+    total_start = (today.year * 12 + (today.month - 1)) - months_back
+    total_end = (today.year * 12 + (today.month - 1)) + months_forward
+    for total in range(total_start, total_end + 1):
+        yy, mm = divmod(total, 12)
+        keys.add(f'{yy}-{mm + 1:02d}')
+
+    options = []
+    for key in sorted(keys, reverse=True):
+        yy, mm = map(int, key.split('-'))
+        label = datetime(yy, mm, 1).strftime('%b %Y')
+        options.append({'value': key, 'label': label})
+    return options
+
+
 @expenses_bp.route('/expenses')
 def index():
     """List expenses with simple filters"""
@@ -374,10 +393,13 @@ def index():
     if not mileage_finance_years:
         mileage_finance_years = [WorkExpenseMileageService.current_finance_year()]
 
+    period_options = _build_period_options(set(expense_period_keys.values()) | set(expense_claim_groups.values()))
+
     return render_template(
         'expenses/index.html',
         expenses=expenses,
         expense_period_keys=expense_period_keys,
+        period_options=period_options,
         expense_claim_groups=expense_claim_groups,
         claim_group_summaries=claim_group_summaries,
         period_summaries=period_summaries,
@@ -664,6 +686,28 @@ def update_expense(expense_id):
         current_app.logger.exception('Error updating expense')
         flash('Error updating expense — check the server log for details.', 'danger')
     return redirect(url_for('expenses.index'))
+
+
+@expenses_bp.route('/expenses/<int:expense_id>/set-period', methods=['POST'])
+def set_period(expense_id):
+    """Manually reassign which claim period an expense belongs to."""
+    return_url = request.form.get('return_url') or url_for('expenses.index')
+    try:
+        expense = ExpenseService.set_period(expense_id, request.form.get('period'))
+        try:
+            ExpenseSyncService.reconcile_monthly_reimbursements()
+            ExpenseSyncService.reconcile_credit_card_payments()
+        except Exception:
+            current_app.logger.exception(f'Sync failed after period reassignment for expense {expense_id}')
+            flash('Period updated but syncing reimbursements failed — check the server log.', 'warning')
+        flash('Expense period updated', 'success')
+    except ValueError as ve:
+        flash(str(ve), 'warning')
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Error updating expense period')
+        flash('Error updating expense period — check the server log for details.', 'danger')
+    return redirect(return_url)
 
 
 @expenses_bp.route('/expenses/delete/<int:expense_id>', methods=['POST'])

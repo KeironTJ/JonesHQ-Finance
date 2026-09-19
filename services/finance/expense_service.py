@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -85,6 +86,40 @@ class ExpenseService:
         expense = family_get_or_404(Expense, expense_id)
         db.session.delete(expense)
         db.session.commit()
+
+    @staticmethod
+    def set_period(expense_id, period_value):
+        """Manually assign (or clear) which claim period an expense belongs to.
+
+        period_value of '' or 'auto' clears the override so the period reverts
+        to being derived from the expense date. Otherwise it must be 'YYYY-MM'.
+        Raises ValueError if the expense's current period is already settled/locked.
+        """
+        from models.transactions import Transaction
+        from services.finance.expense_sync_service import ExpenseSyncService
+
+        expense = family_get_or_404(Expense, expense_id)
+
+        current_key = expense.claim_group or ExpenseSyncService.get_period_key_for_expense(expense)
+        locked = bool(expense.reimbursed)
+        if not locked and current_key:
+            txn = family_query(Transaction).filter(Transaction.claim_group == current_key).first()
+            if txn and txn.is_paid:
+                locked = True
+        if locked:
+            raise ValueError("This expense's period is already settled and can't be reassigned.")
+
+        period_value = (period_value or '').strip()
+        if period_value in ('', 'auto'):
+            expense.claim_group = None
+        else:
+            if not re.match(r'^\d{4}-(0[1-9]|1[0-2])$', period_value):
+                raise ValueError('Invalid period format — expected YYYY-MM.')
+            expense.claim_group = period_value
+
+        db.session.commit()
+        return expense
+
 
     @staticmethod
     def bulk_delete_expenses(expense_ids):
