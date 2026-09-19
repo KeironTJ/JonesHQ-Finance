@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% macro payday_money(value) -%}
+    {% if value < 0 %}-£{{ "%.2f"|format(value|abs) }}{% else %}£{{ "%.2f"|format(value) }}{% endif %}
+{%- endmacro %}
+
 {% block title %}Dashboard - JonesHQ Finance{% endblock %}
 
 {% block content %}
@@ -129,36 +133,32 @@
     {% if payday_data %}
     <div class="card mb-4 dashboard-section">
         <div class="card-header bg-success text-white {% if not payday_expanded %}collapsed{% endif %}" role="button" data-bs-toggle="collapse" data-bs-target="#paydayCollapse" aria-expanded="{{ 'true' if payday_expanded else 'false' }}" aria-controls="paydayCollapse" style="cursor:pointer;user-select:none">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h5 class="mb-0">
-                    <i class="bi bi-calendar-check"></i> Payday Period Tracking 
-                    <small class="ms-2 payday-subtitle">(Payday: {{ payday_day }}{{ 'st' if payday_day == 1 or payday_day == 21 or payday_day == 31 else 'nd' if payday_day == 2 or payday_day == 22 else 'rd' if payday_day == 3 or payday_day == 23 else 'th' }} of each month)</small>
-                </h5>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="d-flex justify-content-between align-items-center gap-2 payday-header-content">
+                <div class="payday-section-heading">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Payday Period Tracking</h5>
+                    <small class="payday-subtitle">Payday: {{ payday_day }}{{ 'st' if payday_day == 1 or payday_day == 21 or payday_day == 31 else 'nd' if payday_day == 2 or payday_day == 22 else 'rd' if payday_day == 3 or payday_day == 23 else 'th' }} of each month</small>
+                </div>
+                <div class="d-flex align-items-center gap-2 payday-toolbar">
                     {% if selected_account %}
                     <span class="badge bg-light text-dark selected-account-badge">
                         <i class="bi bi-bank"></i> {{ selected_account.name }}
                     </span>
                     {% endif %}
-                    <button class="btn btn-sm btn-light" onclick="event.stopPropagation();changeYear({{ selected_year - 1 }})" title="Previous Year">
-                        <i class="bi bi-chevron-left"></i>
-                    </button>
-                    <span class="badge bg-light text-dark px-3 py-2" onclick="event.stopPropagation()">
-                        {{ selected_year }}
-                        {% if selected_year == current_year %}
-                            <i class="bi bi-circle-fill text-success status-dot" title="Current Year"></i>
-                        {% endif %}
+                    <span class="payday-year-control" onclick="event.stopPropagation()">
+                        <button class="btn btn-sm btn-light" onclick="changeYear({{ selected_year - 1 }})" title="Previous Year" aria-label="Previous year"><i class="bi bi-chevron-left"></i></button>
+                        <span class="payday-year-label">
+                            {{ selected_year }}
+                            {% if selected_year == current_year %}<i class="bi bi-circle-fill text-success status-dot" title="Current Year"></i>{% endif %}
+                        </span>
+                        <button class="btn btn-sm btn-light" onclick="changeYear({{ selected_year + 1 }})" title="Next Year" aria-label="Next year"><i class="bi bi-chevron-right"></i></button>
                     </span>
-                    <button class="btn btn-sm btn-light" onclick="event.stopPropagation();changeYear({{ selected_year + 1 }})" title="Next Year">
-                        <i class="bi bi-chevron-right"></i>
-                    </button>
                     <i class="bi bi-chevron-down dashboard-chevron"></i>
                 </div>
             </div>
         </div>
         <div id="paydayCollapse" class="collapse {% if payday_expanded %}show{% endif %}">
             <div class="card-body payday-body payday-compact">
-            <p class="text-muted mb-4">
+            <p class="text-muted payday-guidance">
                 <i class="bi bi-info-circle"></i> 
                 Showing projected balances from payday to payday, including both paid and unpaid transactions. 
                 If payday falls on a weekend, it's adjusted to the previous working day.
@@ -183,29 +183,29 @@
                     <h2 class="accordion-header" id="heading{{ loop.index }}">
                         <button class="accordion-button collapsed{% if is_current %} current-period-btn{% elif is_past %} past-period-btn{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
                             <div class="d-flex justify-content-between align-items-center w-100 me-3 payday-row">
-                                <div style="flex: 1;">
-                                    <strong class="me-2">{{ period.period_label }}</strong>
-                                    <span class="text-muted small">{{ period.start_date.strftime('%d %b') }} - {{ period.end_date.strftime('%d %b %Y') }}</span>
+                                <div class="payday-period-copy">
+                                    <strong class="payday-period-name">{{ period.period_label }}</strong>
+                                    <span class="text-muted payday-period-dates">{{ period.start_date.strftime('%d %b') }} - {{ period.end_date.strftime('%d %b %Y') }}</span>
                                     {% if is_current %}
-                                        <span class="badge bg-success ms-2"><i class="bi bi-star-fill me-1"></i>Current Period</span>
+                                        <span class="badge bg-success payday-current-badge"><i class="bi bi-star-fill me-1"></i>Current</span>
                                     {% endif %}
                                 </div>
                                 <div class="d-flex gap-4 payday-metrics">
-                                    <strong class="text-primary payday-metric">£{{ "%.2f"|format(period.rolling_balance) }}</strong>
-                                    <strong class="text-warning payday-metric">£{{ "%.2f"|format(period.min_balance) }}</strong>
-                                    <strong class="text-info payday-metric">£{{ "%.2f"|format(period.max_extra_spend) }}</strong>
+                                    <strong class="{% if period.rolling_balance < 0 %}text-danger{% else %}text-primary{% endif %} payday-metric" data-label="Ending">{{ payday_money(period.rolling_balance) }}</strong>
+                                    <strong class="{% if period.min_balance < 0 %}text-danger{% else %}text-warning{% endif %} payday-metric" data-label="Minimum">{{ payday_money(period.min_balance) }}</strong>
+                                    <strong class="{% if period.max_extra_spend < 0 %}text-danger{% else %}text-info{% endif %} payday-metric" data-label="Extra spend">{{ payday_money(period.max_extra_spend) }}</strong>
                                 </div>
                             </div>
                         </button>
                     </h2>
                     <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#paydayAccordion">
                         <div class="accordion-body">
-                            <div class="row mb-3">
+                            <div class="row mb-3 payday-detail-metrics">
                                 <div class="col-md-3">
                                     <div class="card bg-light">
                                         <div class="card-body text-center py-2">
                                             <div class="text-muted small">Opening Balance</div>
-                                            <strong>£{{ "%.2f"|format(period.opening_balance) }}</strong>
+                                            <strong class="{% if period.opening_balance < 0 %}text-danger{% endif %}">{{ payday_money(period.opening_balance) }}</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -213,7 +213,7 @@
                                     <div class="card bg-primary bg-opacity-10">
                                         <div class="card-body text-center py-2">
                                             <div class="text-muted small">Ending Balance</div>
-                                            <strong class="text-primary">£{{ "%.2f"|format(period.rolling_balance) }}</strong>
+                                            <strong class="{% if period.rolling_balance < 0 %}text-danger{% else %}text-primary{% endif %}">{{ payday_money(period.rolling_balance) }}</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -221,7 +221,7 @@
                                     <div class="card bg-warning bg-opacity-10">
                                         <div class="card-body text-center py-2">
                                             <div class="text-muted small">Minimum Balance</div>
-                                            <strong class="text-warning">£{{ "%.2f"|format(period.min_balance) }}</strong>
+                                            <strong class="{% if period.min_balance < 0 %}text-danger{% else %}text-warning{% endif %}">{{ payday_money(period.min_balance) }}</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -229,7 +229,7 @@
                                     <div class="card bg-info bg-opacity-10">
                                         <div class="card-body text-center py-2">
                                             <div class="text-muted small">Safe Extra Spend</div>
-                                            <strong class="text-info">£{{ "%.2f"|format(period.max_extra_spend) }}</strong>
+                                            <strong class="{% if period.max_extra_spend < 0 %}text-danger{% else %}text-info{% endif %}">{{ payday_money(period.max_extra_spend) }}</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -322,7 +322,9 @@
             </div>
 
             <!-- Legend -->
-            <div class="alert alert-light mt-4 mb-0">
+            <details class="payday-legend mt-3">
+                <summary><i class="bi bi-info-circle"></i> What these figures mean</summary>
+                <div class="payday-legend-content">
                 <div class="row">
                     <div class="col-md-3">
                         <strong class="text-primary"><i class="bi bi-circle-fill"></i> Rolling Balance:</strong><br>
@@ -341,7 +343,8 @@
                         <small>Includes unpaid transactions</small>
                     </div>
                 </div>
-            </div>
+                </div>
+            </details>
             </div>
         </div>
     </div>

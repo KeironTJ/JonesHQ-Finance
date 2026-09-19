@@ -1306,10 +1306,27 @@ hr {
 .dashboard-page .status-dot { font-size: 0.45rem; }
 
 .dashboard-page .payday-columns { gap: 0.75rem; }
+.dashboard-page .payday-section-heading { min-width: 0; }
+.dashboard-page .payday-subtitle { display: block; margin-top: 0.15rem; opacity: 0.82; }
+.dashboard-page .payday-toolbar { flex-shrink: 0; }
+.dashboard-page .payday-year-control {
+  display: inline-grid;
+  grid-template-columns: 32px auto 32px;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.16);
+}
+.dashboard-page .payday-year-control .btn { border: 0; border-radius: var(--radius-xs); }
+.dashboard-page .payday-year-label { min-width: 64px; padding-inline: 0.35rem; text-align: center; font-size: 0.8rem; font-weight: 700; }
 .dashboard-page .payday-period-label { flex: 1; }
 .dashboard-page .payday-metrics { align-items: center; }
 .dashboard-page .payday-metric { width: 110px; text-align: right; }
 .dashboard-page .payday-metric-header { font-weight: 600; }
+.dashboard-page .payday-period-copy { flex: 1; min-width: 0; }
+.dashboard-page .payday-period-name { margin-right: 0.5rem; }
+.dashboard-page .payday-period-dates { font-size: 0.78rem; white-space: nowrap; }
+.dashboard-page .payday-current-badge { margin-left: 0.5rem; }
+.dashboard-page .payday-guidance { margin-bottom: 1rem; font-size: 0.8rem; }
 
 .dashboard-page .payday-compact .accordion-button { padding: 0.5rem 0.75rem; font-size: 0.875rem; }
 .dashboard-page .payday-compact .accordion-body { padding: 0.65rem 0.875rem; }
@@ -1317,6 +1334,14 @@ hr {
 .dashboard-page .payday-compact .card-body .card-body { padding: 0.45rem 0.65rem; }
 .dashboard-page .payday-compact .table > :not(caption) > * > * { padding: 0.3rem 0.5rem; }
 .dashboard-page .payday-compact .alert { padding: 0.45rem 0.65rem; }
+
+.dashboard-page .payday-legend {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-2);
+}
+.dashboard-page .payday-legend summary { padding: 0.65rem 0.8rem; color: var(--text-secondary); font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.dashboard-page .payday-legend-content { padding: 0 0.8rem 0.8rem; }
 
 .dashboard-page .current-period-item {
   border-left: 3px solid var(--clr-success) !important;
@@ -1611,24 +1636,11 @@ body,
 }
 
 @media (max-width: 768px) {
-  .dashboard-page .payday-columns {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .dashboard-page .payday-metrics {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap;
-  }
-  .dashboard-page .payday-metric {
-    width: auto;
-    min-width: 90px;
-    text-align: left;
-  }
-  .dashboard-page .payday-subtitle {
-    display: block;
-    margin-left: 0 !important;
-  }
+  .dashboard-page .payday-header-content { align-items: flex-start !important; flex-direction: column; }
+  .dashboard-page .payday-toolbar { display: grid !important; grid-template-columns: minmax(0, 1fr) auto auto; width: 100%; }
+  .dashboard-page .selected-account-badge { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-page .payday-columns { display: none !important; }
+  .dashboard-page .payday-guidance { margin-bottom: 0.75rem; line-height: 1.45; }
   .page-header {
     flex-direction: column;
     align-items: flex-start;
@@ -1639,24 +1651,54 @@ body,
   .dashboard-page .account-card-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
-  .dashboard-page .payday-columns {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-  }
-  .dashboard-page .payday-columns .payday-metrics {
-    width: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 12px;
-  }
-  .dashboard-page .payday-columns .payday-metric-header { font-size: 0.75rem; }
+  .dashboard-page .payday-body { padding: 0.75rem; }
+  .dashboard-page .payday-section-heading h5 { font-size: 0.9rem; }
+  .dashboard-page .payday-subtitle { font-size: 0.68rem; }
   .dashboard-page .payday-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+    margin-right: 0.4rem !important;
+  }
+  .dashboard-page .payday-period-copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.15rem 0.4rem; width: 100%; }
+  .dashboard-page .payday-period-name { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-page .payday-period-dates { grid-column: 1 / -1; font-size: 0.7rem; }
+  .dashboard-page .payday-current-badge { grid-column: 2; grid-row: 1; margin: 0; font-size: 0.62rem; }
+  .dashboard-page .payday-row .payday-metrics {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    width: 100%;
+  }
+  .dashboard-page .payday-row .payday-metric {
+    display: flex;
+    min-width: 0;
+    width: auto;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
+    padding: 0.35rem 0.4rem;
+    border-radius: var(--radius-xs);
+    background: var(--bg-surface-3);
+    font-size: 0.78rem;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .dashboard-page .payday-row .payday-metric::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.58rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .dashboard-page .payday-detail-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  .dashboard-page .payday-detail-metrics > [class*='col-'] { width: auto; padding: 0; margin: 0; }
+  .dashboard-page .payday-legend-content .row { display: grid; grid-template-columns: 1fr; gap: 0.65rem; }
+  .dashboard-page .payday-legend-content [class*='col-'] { width: auto; }
+  .dashboard-page .payday-compact .accordion-button { padding: 0.65rem; }
+  .dashboard-page .payday-compact .accordion-body { padding: 0.65rem; }
   }
 }
 
