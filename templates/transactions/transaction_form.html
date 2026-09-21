@@ -19,7 +19,7 @@
                     <p class="page-subtitle mb-0">Record account activity with the correct category and payment details.</p>
                     {% endif %}
                 </div>
-                <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-outline-secondary">
+                <a href="{{ return_url or url_for('transactions.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">Transactions</span>
                 </a>
             </header>
@@ -34,7 +34,7 @@
                 <div class="card-body">
                     <form method="POST" id="transactionEditorForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <input type="hidden" name="return_url" value="{{ request.referrer or url_for('transactions.index') }}">
+                        <input type="hidden" name="return_url" value="{{ return_url or url_for('transactions.index') }}">
                         <div class="transaction-form-intro">
                             <span class="form-section-icon"><i class="bi bi-receipt"></i></span>
                             <div><strong>Transaction details</strong><small>Required fields are marked with an asterisk.</small></div>
@@ -316,7 +316,7 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-check-circle"></i> <span id="submit-text">Save Transaction{% if not transaction %}(s){% endif %}</span>
                             </button>
-                            <a href="{{ request.referrer or url_for('transactions.index') }}" class="btn btn-outline-secondary">Cancel</a>
+                            <a href="{{ return_url or url_for('transactions.index') }}" class="btn btn-outline-secondary">Cancel</a>
                         </div>
                     </form>
                 </div>

@@ -315,8 +315,10 @@ def create():
                 flash(f'{transactions_created} transactions created successfully! Account balance updated.', 'success')
             else:
                 flash('Transaction created successfully! Account balance updated.', 'success')
-            # Preserve filters from referrer
-            return redirect(request.referrer or url_for('transactions.index'))
+            # Preserve the original return destination (submitted via hidden field) so
+            # repeatedly redirecting back to this form doesn't overwrite it with itself
+            return_url = request.form.get('return_url') or url_for('transactions.index')
+            return redirect(url_for('transactions.create', return_url=return_url))
         except Exception as e:
             db.session.rollback()
             flash(f'Error creating transaction: {str(e)}', 'danger')
@@ -329,7 +331,8 @@ def create():
     vendors = family_query(Vendor).order_by(Vendor.name).all()
     assigned_people_options = get_assigned_people_options()
     plans, plan_items = PlanLinkService.get_options()
-    
+    return_url = request.args.get('return_url') or request.referrer or url_for('transactions.index')
+
     return render_template(
         'transactions/transaction_form.html',
         transaction=None,
@@ -341,7 +344,8 @@ def create():
         plan_items=plan_items,
         current_plan_item=None,
         action='Create',
-        today=date.today()
+        today=date.today(),
+        return_url=return_url
     )
 
 
@@ -405,7 +409,8 @@ def edit(id):
     assigned_people_options = get_assigned_people_options()
     plans, plan_items = PlanLinkService.get_options()
     current_plan_item = PlanLinkService.current_item(transaction.id)
-    
+    return_url = request.args.get('return_url') or request.referrer or url_for('transactions.index')
+
     return render_template(
         'transactions/transaction_form.html',
         transaction=transaction,
@@ -416,7 +421,8 @@ def edit(id):
         plans=plans,
         plan_items=plan_items,
         current_plan_item=current_plan_item,
-        action='Edit'
+        action='Edit',
+        return_url=return_url
     )
 
 
