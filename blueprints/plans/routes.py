@@ -6,6 +6,8 @@ from flask import flash, jsonify, redirect, render_template, request, url_for
 from extensions import db
 from models.plans import Plan, PlanItem
 from models.transactions import Transaction
+from models.credit_card_transactions import CreditCardTransaction
+from models.credit_cards import CreditCard
 from models.vendors import Vendor
 from services.planning.plan_link_service import PlanLinkService
 from utils.assignment_helpers import get_assignment_options
@@ -59,6 +61,53 @@ def _link_transaction(item, transaction):
         for existing_item in existing_items:
             existing_item.transaction = None
     item.transaction = transaction
+
+
+def _resolve_transaction_source(form):
+    reference = (form.get('transaction_ref') or '').strip()
+    if reference:
+        try:
+            source, record_id = reference.split(':', 1)
+            record_id = int(record_id)
+        except (ValueError, TypeError):
+            raise ValueError('That transaction reference is invalid.')
+        if source == 'bank':
+            transaction = family_get(Transaction, record_id)
+            if transaction is None:
+                raise ValueError('That bank transaction is not available.')
+            return transaction, None
+        if source == 'card':
+            transaction = family_get(CreditCardTransaction, record_id)
+            if transaction is None:
+                raise ValueError('That card transaction is not available.')
+            return None, transaction
+        raise ValueError('That transaction source is invalid.')
+
+    transaction_id = form.get('transaction_id')
+    if transaction_id:
+        transaction = family_get(Transaction, int(transaction_id))
+        if transaction is None:
+            raise ValueError('That transaction is not available.')
+        return transaction, None
+    return None, None
+
+
+def _link_item_source(item, bank_transaction=None, card_transaction=None):
+    if bank_transaction is not None:
+        _link_transaction(item, bank_transaction)
+        item.credit_card_transaction = None
+        return
+    if card_transaction is not None:
+        for existing_item in family_query(PlanItem).filter(
+            PlanItem.credit_card_transaction_id == card_transaction.id,
+            PlanItem.id != item.id,
+        ).all():
+            existing_item.credit_card_transaction = None
+        item.transaction = None
+        item.credit_card_transaction = card_transaction
+        return
+    item.transaction = None
+    item.credit_card_transaction = None
 
 
 @plans_bp.route('/plans')
@@ -128,54 +177,90 @@ def transaction_search():
     if not search:
         return jsonify([])
 
-    query = family_query(Transaction).filter(
+    bank_query = family_query(Transaction).filter(
         Transaction.is_forecasted.is_(False),
     )
     if plan_type != 'savings_goal':
-        query = query.filter(Transaction.amount < 0)
-    query = query.outerjoin(Vendor, Transaction.vendor_id == Vendor.id)
-    matches = [
+        bank_query = bank_query.filter(Transaction.amount < 0)
+    bank_query = bank_query.outerjoin(Vendor, Transaction.vendor_id == Vendor.id)
+    bank_matches = [
         Transaction.description.ilike(f'%{search}%'),
         Transaction.item.ilike(f'%{search}%'),
         Vendor.name.ilike(f'%{search}%'),
     ]
+    card_query = family_query(CreditCardTransaction).filter(
+        CreditCardTransaction.transaction_type == 'Purchase',
+        CreditCardTransaction.amount < 0,
+    ).outerjoin(CreditCard, CreditCardTransaction.credit_card_id == CreditCard.id)
+    card_matches = [
+        CreditCardTransaction.item.ilike(f'%{search}%'),
+        CreditCard.card_name.ilike(f'%{search}%'),
+    ]
     try:
         amount = Decimal(search.replace('£', '').replace(',', ''))
-        matches.append(db.func.abs(Transaction.amount) == abs(amount))
+        bank_matches.append(db.func.abs(Transaction.amount) == abs(amount))
+        card_matches.append(db.func.abs(CreditCardTransaction.amount) == abs(amount))
     except InvalidOperation:
         pass
     for date_format in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y'):
         try:
-            matches.append(Transaction.transaction_date == datetime.strptime(search, date_format).date())
+            searched_date = datetime.strptime(search, date_format).date()
+            bank_matches.append(Transaction.transaction_date == searched_date)
+            card_matches.append(CreditCardTransaction.date == searched_date)
             break
         except ValueError:
             continue
-    query = query.filter(db.or_(*matches))
-    transactions = query.order_by(
+    bank_transactions = bank_query.filter(db.or_(*bank_matches)).order_by(
         Transaction.transaction_date.desc(),
         Transaction.id.desc(),
     ).limit(30).all()
-    linked_items = family_query(PlanItem).filter(
-        PlanItem.transaction_id.in_([transaction.id for transaction in transactions]),
-    ).all() if transactions else []
-    links = {item.transaction_id: item for item in linked_items}
-    return jsonify([
+    card_transactions = card_query.filter(db.or_(*card_matches)).order_by(
+        CreditCardTransaction.date.desc(),
+        CreditCardTransaction.id.desc(),
+    ).limit(30).all()
+    bank_links = {
+        item.transaction_id: item for item in family_query(PlanItem).filter(
+            PlanItem.transaction_id.in_([transaction.id for transaction in bank_transactions]),
+        ).all()
+    } if bank_transactions else {}
+    card_links = {
+        item.credit_card_transaction_id: item for item in family_query(PlanItem).filter(
+            PlanItem.credit_card_transaction_id.in_([transaction.id for transaction in card_transactions]),
+        ).all()
+    } if card_transactions else {}
+    results = [
         {
-            'id': transaction.id,
+            'id': f'bank:{transaction.id}',
+            'date': transaction.transaction_date.isoformat(),
             'label': (
-                f"{transaction.transaction_date.strftime('%d %b %Y')} · "
+                f"Bank · {transaction.transaction_date.strftime('%d %b %Y')} · "
                 f"{transaction.item or transaction.description or 'Transaction'} · "
                 f"{'+' if transaction.amount > 0 else '-'}£{abs(transaction.amount):.2f}"
                 f"{' · ' + transaction.vendor.name if transaction.vendor else ''}"
                 f"{' · ' + transaction.account.name if transaction.account else ''}"
             ),
             'linked_to': (
-                f'{links[transaction.id].plan.title}: {links[transaction.id].title}'
-                if transaction.id in links else None
+                f'{bank_links[transaction.id].plan.title}: {bank_links[transaction.id].title}'
+                if transaction.id in bank_links else None
             ),
         }
-        for transaction in transactions
-    ])
+        for transaction in bank_transactions
+    ]
+    results.extend({
+        'id': f'card:{transaction.id}',
+        'date': transaction.date.isoformat(),
+        'label': (
+            f"Card · {transaction.date.strftime('%d %b %Y')} · "
+            f"{transaction.item or 'Purchase'} · -£{abs(transaction.amount):.2f} · "
+            f"{transaction.credit_card.card_name}"
+        ),
+        'linked_to': (
+            f'{card_links[transaction.id].plan.title}: {card_links[transaction.id].title}'
+            if transaction.id in card_links else None
+        ),
+    } for transaction in card_transactions)
+    results.sort(key=lambda result: result['date'], reverse=True)
+    return jsonify(results[:30])
 
 
 @plans_bp.route('/plans/<int:plan_id>/update', methods=['POST'])
@@ -224,10 +309,10 @@ def add_item(plan_id):
         flash('Give the item a name.', 'danger')
         return redirect(url_for('plans.detail', plan_id=plan.id))
 
-    transaction_id = request.form.get('transaction_id')
-    transaction = family_get(Transaction, int(transaction_id)) if transaction_id else None
-    if transaction_id and transaction is None:
-        flash('That transaction is not available.', 'danger')
+    try:
+        bank_transaction, card_transaction = _resolve_transaction_source(request.form)
+    except (ValueError, TypeError) as error:
+        flash(str(error), 'danger')
         return redirect(url_for('plans.detail', plan_id=plan.id))
 
     try:
@@ -244,7 +329,7 @@ def add_item(plan_id):
         )
         if item.priority not in ITEM_PRIORITIES or item.status not in ITEM_STATUSES:
             raise ValueError('Invalid item state.')
-        _link_transaction(item, transaction)
+        _link_item_source(item, bank_transaction, card_transaction)
         db.session.add(item)
         db.session.commit()
     except (ValueError, TypeError):
@@ -264,10 +349,10 @@ def update_item(plan_id, item_id):
         flash('That item does not belong to this plan.', 'danger')
         return redirect(url_for('plans.detail', plan_id=plan.id))
 
-    transaction_id = request.form.get('transaction_id')
-    transaction = family_get(Transaction, int(transaction_id)) if transaction_id else None
-    if transaction_id and transaction is None:
-        flash('That transaction is not available.', 'danger')
+    try:
+        bank_transaction, card_transaction = _resolve_transaction_source(request.form)
+    except (ValueError, TypeError) as error:
+        flash(str(error), 'danger')
         return redirect(url_for('plans.detail', plan_id=plan.id))
 
     try:
@@ -280,7 +365,7 @@ def update_item(plan_id, item_id):
         item.assigned_to = _assignment_value(request.form.get('assigned_to'))
         item.estimated_cost = _money_value(request.form.get('estimated_cost'))
         item.actual_cost = _money_value(request.form.get('actual_cost'))
-        _link_transaction(item, transaction)
+        _link_item_source(item, bank_transaction, card_transaction)
         item.status = status
         item.priority = priority
         item.notes = request.form.get('notes', '').strip() or None

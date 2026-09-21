@@ -144,6 +144,12 @@ class CreditCardService:
     @staticmethod
     def delete_transaction(transaction_id):
         transaction = family_get_or_404(CreditCardTransaction, transaction_id)
+        from models.plans import PlanItem
+
+        for plan_item in family_query(PlanItem).filter_by(
+            credit_card_transaction_id=transaction.id,
+        ).all():
+            plan_item.credit_card_transaction = None
         card_id = transaction.credit_card_id
         account_id = None
         if transaction.bank_transaction_id:
@@ -156,6 +162,10 @@ class CreditCardService:
         if transaction.linked_cc_transaction_id:
             linked_txn = family_get(CreditCardTransaction, transaction.linked_cc_transaction_id)
             if linked_txn:
+                for plan_item in family_query(PlanItem).filter_by(
+                    credit_card_transaction_id=linked_txn.id,
+                ).all():
+                    plan_item.credit_card_transaction = None
                 linked_card_id = linked_txn.credit_card_id
                 # Clear both sides of the FK pair first to avoid a circular
                 # dependency when SQLAlchemy orders the DELETE statements.

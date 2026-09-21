@@ -51,7 +51,7 @@
                 <button class="item-summary" type="button" data-bs-toggle="collapse" data-bs-target="#item{{ item.id }}" aria-expanded="false" aria-controls="item{{ item.id }}">
                     <span class="item-state"><i class="bi {% if item.status == 'purchased' %}bi-check-circle-fill{% elif item.status == 'skipped' %}bi-dash-circle{% elif item.status == 'planned' %}bi-bookmark-check{% else %}bi-lightbulb{% endif %}"></i></span>
                     <span class="item-main"><strong>{{ item.title }}</strong><small>{% if plan.plan_type == 'savings_goal' and item.status == 'purchased' %}Recorded{% else %}{{ item.status | title }}{% endif %}{% if item.priority != 'normal' %} · {{ item.priority | title }} priority{% endif %}{% if item.assigned_to %}<span class="item-assignee"><i class="bi bi-person"></i> {{ item.assigned_to }}</span>{% endif %}</small></span>
-                    <span class="item-costs"><strong>£{{ '%.2f' | format(item.resolved_actual_cost) }}</strong><small>{% if item.transaction %}From transaction{% elif item.actual_cost is not none %}Actual{% else %}£{{ '%.2f' | format(item.estimated_cost or 0) }} estimate{% endif %}</small></span>
+                    <span class="item-costs"><strong>£{{ '%.2f' | format(item.resolved_actual_cost) }}</strong><small>{% if item.transaction %}From bank transaction{% elif item.credit_card_transaction %}From card transaction{% elif item.actual_cost is not none %}Actual{% else %}£{{ '%.2f' | format(item.estimated_cost or 0) }} estimate{% endif %}</small></span>
                     <i class="bi bi-chevron-down item-chevron"></i>
                 </button>
                 <div class="collapse" id="item{{ item.id }}">
@@ -67,9 +67,9 @@
                             <div class="col-md-7 transaction-picker">
                                 <label class="form-label">Linked transaction</label>
                                 <div class="input-group mb-2"><span class="input-group-text"><i class="bi bi-search"></i></span><input class="form-control transaction-picker-search" type="search" placeholder="Merchant, item, £ amount or date"></div>
-                                <select class="form-select transaction-picker-select" name="transaction_id" data-selected="{{ item.transaction_id or '' }}">
+                                <select class="form-select transaction-picker-select" name="transaction_ref" data-selected="{% if item.transaction_id %}bank:{{ item.transaction_id }}{% elif item.credit_card_transaction_id %}card:{{ item.credit_card_transaction_id }}{% endif %}">
                                     <option value="">No transaction</option>
-                                    {% if item.transaction %}<option value="{{ item.transaction.id }}" selected>{{ item.transaction.transaction_date.strftime('%d %b %Y') }} · {{ item.transaction.item or item.transaction.description or 'Transaction' }} · £{{ '%.2f' | format(item.transaction.amount | abs) }}</option>{% endif %}
+                                    {% if item.transaction %}<option value="bank:{{ item.transaction.id }}" selected>Bank · {{ item.transaction.transaction_date.strftime('%d %b %Y') }} · {{ item.transaction.item or item.transaction.description or 'Transaction' }} · £{{ '%.2f' | format(item.transaction.amount | abs) }}</option>{% elif item.credit_card_transaction %}<option value="card:{{ item.credit_card_transaction.id }}" selected>Card · {{ item.credit_card_transaction.date.strftime('%d %b %Y') }} · {{ item.credit_card_transaction.item or 'Purchase' }} · £{{ '%.2f' | format(item.credit_card_transaction.amount | abs) }} · {{ item.credit_card_transaction.credit_card.card_name }}</option>{% endif %}
                                 </select>
                                 <div class="form-text transaction-picker-help">{% if plan.plan_type == 'savings_goal' %}Search either side of an actual savings transfer. Forecasts stay out of the way.{% else %}Search actual expenses only. Forecasts stay out of the way.{% endif %}</div>
                             </div>
@@ -104,7 +104,7 @@
         <div class="col-12 transaction-picker">
             <label class="form-label">Link a transaction</label>
             <div class="input-group mb-2"><span class="input-group-text"><i class="bi bi-search"></i></span><input class="form-control transaction-picker-search" type="search" placeholder="Merchant, item, £ amount or date"></div>
-            <select class="form-select transaction-picker-select" name="transaction_id"><option value="">Not yet</option></select>
+            <select class="form-select transaction-picker-select" name="transaction_ref"><option value="">Not yet</option></select>
             <div class="form-text transaction-picker-help">{% if plan.plan_type == 'savings_goal' %}Search either side of an actual transfer, or link it later from Transactions.{% else %}Search actual expenses only. You can also link it later from Transactions.{% endif %}</div>
         </div>
         <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>

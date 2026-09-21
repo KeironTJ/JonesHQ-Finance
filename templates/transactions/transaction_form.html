@@ -181,19 +181,27 @@
                             </div>
                             <div class="card-body">
                                 {% if plans %}
-                                <div class="row g-3">
-                                    <div class="col-md-6">
+                                <div class="btn-group plan-link-mode mb-3" role="group" aria-label="Plan item choice">
+                                    <input class="btn-check" type="radio" id="planModeExisting" name="plan_mode_display" value="existing" checked>
+                                    <label class="btn btn-outline-secondary" for="planModeExisting"><i class="bi bi-list-check"></i> Existing item</label>
+                                    <input class="btn-check" type="radio" id="planModeNew" name="plan_mode_display" value="new">
+                                    <label class="btn btn-outline-secondary" for="planModeNew"><i class="bi bi-plus-lg"></i> New item</label>
+                                </div>
+                                <div id="planExistingFields">
+                                    <div>
                                         <label class="form-label" for="plan_item_id">Existing plan item</label>
                                         <select class="form-select" id="plan_item_id" name="plan_item_id">
                                             <option value="">{% if current_plan_item %}Unlink from {{ current_plan_item.plan.title }} · {{ current_plan_item.title }}{% else %}No plan item{% endif %}</option>
                                             {% for plan_item in plan_items %}
-                                            <option value="{{ plan_item.id }}" {% if current_plan_item and current_plan_item.id == plan_item.id %}selected{% endif %}>{{ plan_item.plan.title }} · {{ plan_item.title }}{% if plan_item.transaction_id and (not transaction or plan_item.transaction_id != transaction.id) %} · currently linked{% endif %}</option>
+                                            <option value="{{ plan_item.id }}" {% if current_plan_item and current_plan_item.id == plan_item.id %}selected{% endif %}>{{ plan_item.plan.title }} · {{ plan_item.title }}{% if (plan_item.transaction_id or plan_item.credit_card_transaction_id) and (not current_plan_item or current_plan_item.id != plan_item.id) %} · currently linked{% endif %}</option>
                                             {% endfor %}
                                         </select>
                                         <div class="form-text">Selecting an item makes this transaction its actual cost.</div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label" for="new_plan_item_title">Or create a new item</label>
+                                </div>
+                                <div id="planNewFields" hidden>
+                                    <div>
+                                        <label class="form-label" for="new_plan_item_title">New plan item</label>
                                         <div class="input-group">
                                             <select class="form-select" id="plan_id" name="plan_id" aria-label="Plan for new item">
                                                 <option value="">Choose plan</option>
@@ -338,13 +346,19 @@
 <script>
 const planItemSelect = document.getElementById('plan_item_id');
 const newPlanItemTitle = document.getElementById('new_plan_item_title');
+const planSelect = document.getElementById('plan_id');
+const planExistingFields = document.getElementById('planExistingFields');
+const planNewFields = document.getElementById('planNewFields');
 if (planItemSelect && newPlanItemTitle) {
-    planItemSelect.addEventListener('change', function () {
-        if (planItemSelect.value) newPlanItemTitle.value = '';
-    });
-    newPlanItemTitle.addEventListener('input', function () {
-        if (newPlanItemTitle.value) planItemSelect.value = '';
-    });
+    function setPlanMode(mode) {
+        const isNew = mode === 'new';
+        planExistingFields.hidden = isNew;
+        planNewFields.hidden = !isNew;
+        if (isNew) planItemSelect.value = '';
+        else { newPlanItemTitle.value = ''; planSelect.value = ''; }
+    }
+    document.getElementById('planModeExisting').addEventListener('change', function () { setPlanMode('existing'); });
+    document.getElementById('planModeNew').addEventListener('change', function () { setPlanMode('new'); });
 }
 
     // ── Amount sign toggle ────────────────────────────────────────────────

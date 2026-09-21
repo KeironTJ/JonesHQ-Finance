@@ -10,9 +10,12 @@ from models.transactions import Transaction
 from models.categories import Category
 from models.vendors import Vendor
 from models.settings import Settings
+from models.plans import PlanItem
 from services.finance.credit_card_service import CreditCardService
 from services.finance.payday_service import PaydayService
+from services.planning.plan_link_service import PlanLinkService
 from extensions import db
+from utils.assignment_helpers import get_assignment_options
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
@@ -238,6 +241,11 @@ def detail(id):
     
     # Get all categories for the add transaction modal
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+    plans, plan_items = PlanLinkService.get_options()
+    linked_plan_items = family_query(PlanItem).filter(
+        PlanItem.credit_card_transaction_id.in_([txn.id for txn in transactions]),
+    ).all() if transactions else []
+    transaction_plan_links = {item.credit_card_transaction_id: item for item in linked_plan_items}
 
     # Other active cards (for the "Balance Transfer" quick action)
     other_cards = family_query(CreditCard).filter(
@@ -263,6 +271,10 @@ def detail(id):
                          active_bt_promo=active_bt_promo,
                          accounts=accounts,
                          categories=categories,
+                         plans=plans,
+                         plan_items=plan_items,
+                         transaction_plan_links=transaction_plan_links,
+                         assignment_options=get_assignment_options(),
                          today=today,
                          highlight_transaction_id=transaction_id)
 
@@ -275,9 +287,13 @@ def add_transaction(id):
     if request.method == 'GET':
         accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
         categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+        plans, plan_items = PlanLinkService.get_options()
         return render_template('credit_cards/transaction_form.html',
                                 card=card, transaction=None, accounts=accounts,
-                                categories=categories, today=date.today())
+                                categories=categories, today=date.today(),
+                                plans=plans, plan_items=plan_items,
+                                assignment_options=get_assignment_options(),
+                                current_plan_item=None)
 
     try:
         # Get form data
@@ -311,6 +327,9 @@ def add_transaction(id):
         if is_recurring and occurrences < 1:
             flash('Number of occurrences must be at least 1', 'danger')
             return redirect(url_for('credit_cards.detail', id=id))
+        if is_recurring and (request.form.get('plan_item_id') or request.form.get('new_plan_item_title')):
+            raise ValueError('A recurring batch cannot be linked to one plan item.')
+        PlanLinkService.validate_form(request.form)
         
         # Parse amount
         try:
@@ -336,6 +355,8 @@ def add_transaction(id):
             return redirect(url_for('credit_cards.detail', id=id))
 
         transactions = CreditCardService.create_transactions(id, request.form)
+        PlanLinkService.sync_credit_card(transactions[0], request.form)
+        db.session.commit()
         if is_recurring:
             flash(f'{len(transactions)} transactions created successfully!', 'success')
         else:
@@ -375,12 +396,19 @@ def edit_transaction(id, txn_id):
     if request.method == 'GET':
         accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
         categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+        plans, plan_items = PlanLinkService.get_options()
+        current_plan_item = PlanLinkService.current_credit_card_item(txn.id)
         return render_template('credit_cards/transaction_form.html',
                                 card=card, transaction=txn, accounts=accounts,
-                                categories=categories, today=date.today())
+                                categories=categories, today=date.today(),
+                                plans=plans, plan_items=plan_items,
+                                assignment_options=get_assignment_options(),
+                                current_plan_item=current_plan_item)
 
     try:
+        PlanLinkService.validate_form(request.form)
         txn = CreditCardService.update_transaction(txn_id, request.form)
+        PlanLinkService.sync_credit_card(txn, request.form)
         
         # Sync changes to linked bank transaction if exists
         if txn.bank_transaction_id:
@@ -400,6 +428,24 @@ def edit_transaction(id, txn_id):
         db.session.rollback()
         flash(f'Error updating transaction: {str(e)}', 'danger')
         return redirect(url_for('credit_cards.detail', id=id))
+
+
+@credit_cards_bp.route('/credit-cards/transaction/<int:txn_id>/link-plan', methods=['POST'])
+def link_transaction_to_plan(txn_id):
+    txn = family_get_or_404(CreditCardTransaction, txn_id)
+    try:
+        item = PlanLinkService.sync_credit_card(txn, request.form)
+        db.session.commit()
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+        return redirect(url_for('credit_cards.detail', id=txn.credit_card_id, txn_id=txn.id))
+
+    if item is None:
+        flash('Credit-card transaction unlinked from its plan item.', 'success')
+    else:
+        flash(f'Credit-card transaction linked to {item.plan.title}: {item.title}.', 'success')
+    return redirect(url_for('credit_cards.detail', id=txn.credit_card_id, txn_id=txn.id))
 
 
 @credit_cards_bp.route('/credit-cards/<int:id>/transaction/<int:txn_id>/delete', methods=['POST'])

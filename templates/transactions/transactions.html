@@ -588,7 +588,13 @@
                         {% for plan in plans %}<option value="{{ plan.id }}">{{ plan.title }}{% if plan.person %} · {{ plan.person }}{% endif %}</option>{% endfor %}
                     </select>
                 </div>
-                <div class="mb-3">
+                <div class="btn-group plan-link-mode mb-3" role="group" aria-label="Plan item choice">
+                    <input class="btn-check" type="radio" id="linkModeExisting" name="link_mode_display" value="existing" checked>
+                    <label class="btn btn-outline-secondary" for="linkModeExisting"><i class="bi bi-list-check"></i> Existing item</label>
+                    <input class="btn-check" type="radio" id="linkModeNew" name="link_mode_display" value="new">
+                    <label class="btn btn-outline-secondary" for="linkModeNew"><i class="bi bi-plus-lg"></i> New item</label>
+                </div>
+                <div class="mb-3" id="linkExistingFields">
                     <label class="form-label" for="linkPlanItemSearch">Existing item</label>
                     <div class="input-group mb-2">
                         <span class="input-group-text"><i class="bi bi-search"></i></span>
@@ -597,11 +603,11 @@
                     <select class="form-select" id="linkPlanItemId" name="item_id">
                         <option value="">Choose an existing item</option>
                         {% for item in plan_items %}
-                        <option value="{{ item.id }}" data-plan-id="{{ item.plan_id }}" data-search="{{ (item.plan.title ~ ' ' ~ item.title) | lower | e }}">{{ item.title }}{% if item.transaction_id %} · currently linked{% endif %}</option>
+                        <option value="{{ item.id }}" data-plan-id="{{ item.plan_id }}" data-search="{{ (item.plan.title ~ ' ' ~ item.title) | lower | e }}">{{ item.title }}{% if item.transaction_id or item.credit_card_transaction_id %} · currently linked{% endif %}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="plan-link-divider"><span>or create an item</span></div>
+                <div id="linkNewFields" hidden>
                 <div class="mb-2">
                     <label class="form-label" for="linkPlanNewItem">New item name</label>
                     <input class="form-control" id="linkPlanNewItem" name="new_item_title" placeholder="Uses this transaction as its actual cost">
@@ -612,6 +618,7 @@
                         <option value="">Unassigned</option>
                         {% for person_name in assigned_people_options %}<option value="{{ person_name }}">{{ person_name }}</option>{% endfor %}
                     </select>
+                </div>
                 </div>
                 {% else %}
                 <div class="text-center py-3">
@@ -765,14 +772,22 @@
                             <span class="text-muted" id="editPlanLinkSummary">Not linked <i class="bi bi-chevron-down"></i></span>
                         </button>
                         <div class="collapse" id="editPlanLink">
+                            <div class="btn-group plan-link-mode mt-3" role="group" aria-label="Plan item choice">
+                                <input class="btn-check" type="radio" id="editPlanModeExisting" name="edit_plan_mode_display" value="existing" checked>
+                                <label class="btn btn-outline-secondary" for="editPlanModeExisting"><i class="bi bi-list-check"></i> Existing item</label>
+                                <input class="btn-check" type="radio" id="editPlanModeNew" name="edit_plan_mode_display" value="new">
+                                <label class="btn btn-outline-secondary" for="editPlanModeNew"><i class="bi bi-plus-lg"></i> New item</label>
+                            </div>
                             <div class="row g-2 pt-3">
-                                <div class="col-12">
+                                <div class="col-12" id="editPlanExistingFields">
                                     <label class="form-label form-label-sm" for="edit_plan_item_id">Existing item</label>
                                     <select class="form-select" id="edit_plan_item_id" name="plan_item_id">
                                         <option value="">No plan item</option>
                                         {% for plan_item in plan_items %}<option value="{{ plan_item.id }}" data-plan-title="{{ plan_item.plan.title | e }}" data-item-title="{{ plan_item.title | e }}">{{ plan_item.plan.title }} · {{ plan_item.title }}{% if plan_item.transaction_id %} · currently linked{% endif %}</option>{% endfor %}
                                     </select>
                                 </div>
+                                <div class="col-12" id="editPlanNewFields" hidden>
+                                <div class="row g-2">
                                 <div class="col-5">
                                     <label class="form-label form-label-sm" for="edit_plan_id">New item plan</label>
                                     <select class="form-select" id="edit_plan_id" name="plan_id"><option value="">Choose plan</option>{% for plan in plans %}<option value="{{ plan.id }}">{{ plan.title }}</option>{% endfor %}</select>
@@ -780,6 +795,8 @@
                                 <div class="col-7">
                                     <label class="form-label form-label-sm" for="edit_new_plan_item_title">New item name</label>
                                     <input class="form-control" id="edit_new_plan_item_title" name="new_plan_item_title">
+                                </div>
+                                </div>
                                 </div>
                             </div>
                         </div>
@@ -835,7 +852,7 @@
 // Wait for DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', function() {
     const linkPlanModal = document.getElementById('linkPlanModal');
-    if (linkPlanModal) {
+    if (linkPlanModal && document.getElementById('linkPlanId')) {
         const form = document.getElementById('linkPlanForm');
         const planSelect = document.getElementById('linkPlanId');
         const itemSelect = document.getElementById('linkPlanItemId');
@@ -843,6 +860,18 @@ document.addEventListener('DOMContentLoaded', function() {
         const newItemInput = document.getElementById('linkPlanNewItem');
         const assigneeSelect = document.getElementById('linkPlanAssignee');
         const unlinkButton = document.getElementById('unlinkPlanButton');
+        const existingFields = document.getElementById('linkExistingFields');
+        const newFields = document.getElementById('linkNewFields');
+
+        function setLinkMode(mode) {
+            const isNew = mode === 'new';
+            existingFields.hidden = isNew;
+            newFields.hidden = !isNew;
+            document.getElementById('linkModeExisting').checked = !isNew;
+            document.getElementById('linkModeNew').checked = isNew;
+            if (isNew) itemSelect.value = '';
+            else newItemInput.value = '';
+        }
 
         function filterPlanItems(selectedItemId) {
             if (!itemSelect) return;
@@ -868,9 +897,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (newItemInput) newItemInput.value = '';
             if (assigneeSelect) assigneeSelect.value = button.dataset.txnAssigned || '';
             filterPlanItems(currentItemId);
+            setLinkMode('existing');
             if (unlinkButton) unlinkButton.hidden = !currentItemId;
         });
 
+        document.getElementById('linkModeExisting').addEventListener('change', function () { setLinkMode('existing'); });
+        document.getElementById('linkModeNew').addEventListener('change', function () { setLinkMode('new'); });
         if (planSelect) planSelect.addEventListener('change', function () { filterPlanItems(''); });
         if (itemSearch) itemSearch.addEventListener('input', function () { filterPlanItems(itemSelect.value); });
         if (itemSelect) itemSelect.addEventListener('change', function () { if (itemSelect.value) newItemInput.value = ''; });
@@ -952,6 +984,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const option = planItemSelect.selectedOptions[0];
                 planLinkSummary.innerHTML = txnPlanItemId ? `${option.dataset.planTitle} · ${option.dataset.itemTitle} <i class="bi bi-chevron-down"></i>` : 'Not linked <i class="bi bi-chevron-down"></i>';
             }
+            if (planItemSelect) setEditPlanMode('existing');
 
             // Period override fields — pre-populate for visibility
             document.getElementById('edit_year_month').value = button.getAttribute('data-txn-year-month') || '';
@@ -962,9 +995,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const editPlanItemSelect = document.getElementById('edit_plan_item_id');
         const editNewPlanItemTitle = document.getElementById('edit_new_plan_item_title');
+        const editPlanSelect = document.getElementById('edit_plan_id');
+        function setEditPlanMode(mode) {
+            const isNew = mode === 'new';
+            document.getElementById('editPlanExistingFields').hidden = isNew;
+            document.getElementById('editPlanNewFields').hidden = !isNew;
+            document.getElementById('editPlanModeExisting').checked = !isNew;
+            document.getElementById('editPlanModeNew').checked = isNew;
+            if (isNew) editPlanItemSelect.value = '';
+            else { editNewPlanItemTitle.value = ''; editPlanSelect.value = ''; }
+        }
         if (editPlanItemSelect && editNewPlanItemTitle) {
-            editPlanItemSelect.addEventListener('change', function () { if (editPlanItemSelect.value) editNewPlanItemTitle.value = ''; });
-            editNewPlanItemTitle.addEventListener('input', function () { if (editNewPlanItemTitle.value) editPlanItemSelect.value = ''; });
+            document.getElementById('editPlanModeExisting').addEventListener('change', function () { setEditPlanMode('existing'); });
+            document.getElementById('editPlanModeNew').addEventListener('change', function () { setEditPlanMode('new'); });
         }
     }
 

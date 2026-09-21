@@ -7,6 +7,8 @@ from models.categories import Category
 from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
 from models.transactions import Transaction
+from models.plans import Plan, PlanItem
+from models.family import Family
 
 
 def _login(client, user_id):
@@ -60,5 +62,112 @@ def test_credit_card_payment_route_creates_linked_bank_transaction(
     assert bank_transaction is not None
     assert bank_transaction.amount == Decimal('-125.00')
     assert bank_transaction.account_id == account.id
+
+
+def test_credit_card_transaction_create_and_edit_manage_plan_link(app, family, user):
+    card = CreditCard(
+        family_id=family.id, card_name='Route Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    category = Category(family_id=family.id, name='Gifts', head_budget='Lifestyle', sub_budget='Gifts', category_type='expense')
+    plan = Plan(family_id=family.id, title='Christmas')
+    item = PlanItem(family_id=family.id, plan=plan, title='Scooter')
+    db.session.add_all([card, category, plan, item])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(f'/credit-cards/{card.id}/transaction/add', data={
+        'txn_date': '2026-09-21', 'txn_type': 'Purchase',
+        'txn_item': 'Toy shop', 'txn_amount': '-70.00',
+        'category_id': str(category.id), 'plan_item_id': str(item.id),
+    })
+    transaction = CreditCardTransaction.query.one()
+    assert response.status_code == 302
+    assert item.credit_card_transaction_id == transaction.id
+    assert item.transaction_id is None
+
+    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
+        'txn_date': '2026-09-21', 'txn_type': 'Purchase',
+        'txn_item': 'Toy shop', 'txn_amount': '-70.00',
+        'category_id': str(category.id), 'plan_item_id': '',
+    })
+    assert response.status_code == 302
+    assert item.credit_card_transaction_id is None
+
+
+def test_credit_card_detail_renders_plan_link_action_and_badge(app, family, user):
+    card = CreditCard(
+        family_id=family.id, card_name='Route Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    transaction = CreditCardTransaction(
+        family_id=family.id, credit_card=card, date=date.today(),
+        transaction_type='Purchase', item='Toy shop', amount=Decimal('-20.00'),
+    )
+    plan = Plan(family_id=family.id, title='Christmas')
+    item = PlanItem(family_id=family.id, plan=plan, title='Gift', credit_card_transaction=transaction)
+    db.session.add_all([card, transaction, plan, item])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.get(f'/credit-cards/{card.id}?is_paid=pending')
+
+    assert response.status_code == 200
+    assert b'ccPlanLinkModal' in response.data
+    assert b'Christmas' in response.data
+    assert b'Gift' in response.data
+
+
+def test_credit_card_plan_link_rejects_foreign_item(app, family, user):
+    card = CreditCard(
+        family_id=family.id, card_name='Route Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    transaction = CreditCardTransaction(
+        family_id=family.id, credit_card=card, date=date.today(),
+        transaction_type='Purchase', item='Toy shop', amount=Decimal('-20.00'),
+    )
+    other_family = Family(name='Other Family')
+    db.session.add_all([card, transaction, other_family])
+    db.session.flush()
+    foreign_plan = Plan(family_id=other_family.id, title='Private')
+    foreign_item = PlanItem(family_id=other_family.id, plan=foreign_plan, title='Private gift')
+    db.session.add(foreign_plan)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(f'/credit-cards/transaction/{transaction.id}/link-plan', data={'item_id': str(foreign_item.id)})
+
+    assert response.status_code == 404
+    assert foreign_item.credit_card_transaction_id is None
+
+
+def test_deleting_credit_card_transaction_clears_plan_link(app, family, user):
+    card = CreditCard(
+        family_id=family.id, card_name='Route Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    transaction = CreditCardTransaction(
+        family_id=family.id, credit_card=card, date=date.today(),
+        transaction_type='Purchase', item='Toy shop', amount=Decimal('-20.00'),
+    )
+    plan = Plan(family_id=family.id, title='Christmas')
+    item = PlanItem(family_id=family.id, plan=plan, title='Gift', credit_card_transaction=transaction)
+    db.session.add_all([card, transaction, plan, item])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/delete')
+
+    assert response.status_code == 302
+    assert item.credit_card_transaction_id is None
 
 

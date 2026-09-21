@@ -115,6 +115,51 @@
                             </div>
                         </div>
 
+                        {% if can_access_section('plans') %}
+                        <div class="card mb-3 form-subsection transaction-plan-link-section">
+                            <div class="card-header"><h5 class="mb-0"><i class="bi bi-journal-check me-2"></i>Plan link</h5></div>
+                            <div class="card-body">
+                                {% if plans %}
+                                <div class="btn-group plan-link-mode mb-3" role="group" aria-label="Plan item choice">
+                                    <input class="btn-check" type="radio" id="planModeExisting" name="plan_mode_display" value="existing" checked>
+                                    <label class="btn btn-outline-secondary" for="planModeExisting"><i class="bi bi-list-check"></i> Existing item</label>
+                                    <input class="btn-check" type="radio" id="planModeNew" name="plan_mode_display" value="new">
+                                    <label class="btn btn-outline-secondary" for="planModeNew"><i class="bi bi-plus-lg"></i> New item</label>
+                                </div>
+                                <div id="planExistingFields">
+                                    <div>
+                                        <label class="form-label" for="plan_item_id">Existing plan item</label>
+                                        <select class="form-select" id="plan_item_id" name="plan_item_id">
+                                            <option value="">{% if current_plan_item %}Unlink from {{ current_plan_item.plan.title }} · {{ current_plan_item.title }}{% else %}No plan item{% endif %}</option>
+                                            {% for plan_item in plan_items %}<option value="{{ plan_item.id }}" {% if current_plan_item and current_plan_item.id == plan_item.id %}selected{% endif %}>{{ plan_item.plan.title }} · {{ plan_item.title }}{% if (plan_item.transaction_id or plan_item.credit_card_transaction_id) and (not current_plan_item or current_plan_item.id != plan_item.id) %} · currently linked{% endif %}</option>{% endfor %}
+                                        </select>
+                                        <div class="form-text">This card transaction becomes the item's actual cost.</div>
+                                    </div>
+                                </div>
+                                <div id="planNewFields" hidden>
+                                    <div class="row g-3">
+                                    <div class="col-md-7">
+                                        <label class="form-label" for="new_plan_item_title">New plan item</label>
+                                        <div class="input-group">
+                                            <select class="form-select" id="plan_id" name="plan_id" aria-label="Plan for new item"><option value="">Choose plan</option>{% for plan in plans %}<option value="{{ plan.id }}">{{ plan.title }}</option>{% endfor %}</select>
+                                            <input class="form-control" id="new_plan_item_title" name="new_plan_item_title" placeholder="New item name">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label" for="plan_assigned_to">Assigned to</label>
+                                        <select class="form-select" id="plan_assigned_to" name="plan_assigned_to"><option value="">Unassigned</option>{% for person_name in assignment_options %}<option value="{{ person_name }}">{{ person_name }}</option>{% endfor %}</select>
+                                    </div>
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">Recurring batches cannot be linked to one item.</div>
+                                {% else %}
+                                <p class="text-muted mb-2">There are no open plans yet.</p>
+                                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('plans.index') }}"><i class="bi bi-plus-lg"></i> Create a plan</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
                         {% if not transaction %}
                         <!-- Recurring Transaction Options (only for new transactions) -->
                         <div class="card mb-3 form-subsection">
@@ -167,6 +212,23 @@
 </div>
 
 <script>
+const planItemSelect = document.getElementById('plan_item_id');
+const newPlanItemTitle = document.getElementById('new_plan_item_title');
+const planSelect = document.getElementById('plan_id');
+const planExistingFields = document.getElementById('planExistingFields');
+const planNewFields = document.getElementById('planNewFields');
+if (planItemSelect && newPlanItemTitle) {
+    function setPlanMode(mode) {
+        const isNew = mode === 'new';
+        planExistingFields.hidden = isNew;
+        planNewFields.hidden = !isNew;
+        if (isNew) planItemSelect.value = '';
+        else { newPlanItemTitle.value = ''; planSelect.value = ''; }
+    }
+    document.getElementById('planModeExisting').addEventListener('change', function () { setPlanMode('existing'); });
+    document.getElementById('planModeNew').addEventListener('change', function () { setPlanMode('new'); });
+}
+
 function toggleCCAmountSign() {
     var btn = document.getElementById('ccAmountSignBtn');
     var hint = document.getElementById('ccAmountHint');

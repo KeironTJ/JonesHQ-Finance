@@ -73,6 +73,7 @@ class PlanItem(db.Model):
     estimated_cost = db.Column(db.Numeric(10, 2), nullable=True)
     actual_cost = db.Column(db.Numeric(10, 2), nullable=True)
     transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True, index=True)
+    credit_card_transaction_id = db.Column(db.Integer, db.ForeignKey('credit_card_transactions.id'), nullable=True, index=True)
     status = db.Column(db.String(20), nullable=False, default='idea')
     priority = db.Column(db.String(20), nullable=False, default='normal')
     notes = db.Column(db.Text, nullable=True)
@@ -88,9 +89,12 @@ class PlanItem(db.Model):
 
     plan = db.relationship('Plan', back_populates='items')
     transaction = db.relationship('Transaction', foreign_keys=[transaction_id])
+    credit_card_transaction = db.relationship('CreditCardTransaction', foreign_keys=[credit_card_transaction_id])
 
     @property
     def resolved_actual_cost(self):
         if self.transaction is not None:
             return abs(Decimal(str(self.transaction.amount)))
+        if self.credit_card_transaction is not None:
+            return abs(Decimal(str(self.credit_card_transaction.amount)))
         return self.actual_cost or Decimal('0')

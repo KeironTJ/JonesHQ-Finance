@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from extensions import db
+from models.credit_card_transactions import CreditCardTransaction
 from models.plans import Plan, PlanItem
 from utils.assignment_helpers import get_assignment_options
 from utils.db_helpers import family_get, family_get_or_404, family_query, get_family_id
@@ -21,6 +22,10 @@ class PlanLinkService:
     @staticmethod
     def current_item(transaction_id):
         return family_query(PlanItem).filter_by(transaction_id=transaction_id).first()
+
+    @staticmethod
+    def current_credit_card_item(transaction_id):
+        return family_query(PlanItem).filter_by(credit_card_transaction_id=transaction_id).first()
 
     @staticmethod
     def validate_form(data):
@@ -71,5 +76,45 @@ class PlanLinkService:
             PlanItem.id != item.id,
         ).all():
             linked_item.transaction = None
+        item.credit_card_transaction = None
         item.transaction = transaction
+        return item
+
+    @staticmethod
+    def sync_credit_card(transaction, data):
+        PlanLinkService.validate_form(data)
+        item_id = data.get('plan_item_id') or data.get('item_id')
+        plan_id = data.get('plan_id')
+        new_title = (data.get('new_plan_item_title') or data.get('new_item_title') or '').strip()
+        requested_assignee = (data.get('plan_assigned_to') or '').strip()
+
+        if new_title:
+            assigned_to = requested_assignee or None
+            if assigned_to not in get_assignment_options():
+                assigned_to = None
+            item = PlanItem(
+                family_id=get_family_id(),
+                plan_id=int(plan_id),
+                title=new_title,
+                assigned_to=assigned_to,
+                estimated_cost=abs(Decimal(str(transaction.amount))),
+                status='purchased',
+            )
+            db.session.add(item)
+        elif item_id:
+            item = family_get_or_404(PlanItem, int(item_id))
+        else:
+            for linked_item in family_query(PlanItem).filter_by(
+                credit_card_transaction_id=transaction.id,
+            ).all():
+                linked_item.credit_card_transaction = None
+            return None
+
+        for linked_item in family_query(PlanItem).filter(
+            PlanItem.credit_card_transaction_id == transaction.id,
+            PlanItem.id != item.id,
+        ).all():
+            linked_item.credit_card_transaction = None
+        item.transaction = None
+        item.credit_card_transaction = transaction
         return item

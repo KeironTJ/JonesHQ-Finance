@@ -739,3 +739,11 @@
   .transactions-list-heading { flex-direction: column; }
   .transactions-list-controls { width: 100%; justify-content: space-between; }
 }
+
+.plan-link-mode {
+  display: inline-flex;
+}
+
+.plan-link-mode .btn {
+  min-width: 132px;
+}

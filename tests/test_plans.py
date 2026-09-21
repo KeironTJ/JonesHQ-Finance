@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from extensions import db
 from models.categories import Category
+from models.credit_cards import CreditCard
+from models.credit_card_transactions import CreditCardTransaction
 from models.plans import Plan, PlanItem
 from models.transactions import Transaction
 
@@ -56,6 +58,40 @@ def test_plan_totals_use_linked_transaction_over_manual_cost(family):
     assert plan.actual_total == Decimal('54.50')
     assert plan.progress_percent == 54
     assert plan.items[0].assigned_to == 'Oliver'
+
+
+def test_plan_item_uses_linked_credit_card_purchase_as_actual_cost(family):
+    card = CreditCard(
+        family_id=family.id,
+        card_name='Rewards Card',
+        annual_apr=24,
+        monthly_apr=2,
+        min_payment_percent=2,
+        credit_limit=5000,
+        current_balance=0,
+        available_credit=5000,
+        is_active=True,
+    )
+    purchase = CreditCardTransaction(
+        family_id=family.id,
+        credit_card=card,
+        date=date.today(),
+        transaction_type='Purchase',
+        item='Toy shop',
+        amount=Decimal('-64.99'),
+    )
+    plan = Plan(family_id=family.id, title='Christmas')
+    plan.items = [PlanItem(
+        family_id=family.id,
+        title='Scooter',
+        actual_cost=Decimal('50.00'),
+        credit_card_transaction=purchase,
+    )]
+    db.session.add(plan)
+    db.session.commit()
+
+    assert plan.items[0].resolved_actual_cost == Decimal('64.99')
+    assert plan.actual_total == Decimal('64.99')
 
 
 def test_create_plan_and_add_item(app, family, user):
@@ -335,6 +371,53 @@ def test_transaction_search_excludes_forecasts_and_income_and_matches_amount(app
     assert empty_response.get_json() == []
     assert len(amount_response.get_json()) == 1
     assert 'Actual purchase' in amount_response.get_json()[0]['label']
+
+
+def test_plan_transaction_search_returns_typed_bank_and_card_results(app, family, user):
+    category = Category(family_id=family.id, name='Gifts', category_type='expense', head_budget='Lifestyle', sub_budget='Gifts')
+    card = CreditCard(
+        family_id=family.id, card_name='Rewards Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    bank_transaction = Transaction(family_id=family.id, category=category, amount=Decimal('-25.00'), transaction_date=date.today(), description='Shared search')
+    card_transaction = CreditCardTransaction(family_id=family.id, credit_card=card, amount=Decimal('-30.00'), date=date.today(), transaction_type='Purchase', item='Shared search')
+    db.session.add_all([category, card, bank_transaction, card_transaction])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    results = client.get('/plans/api/transactions?q=Shared').get_json()
+
+    assert {result['id'] for result in results} == {
+        f'bank:{bank_transaction.id}',
+        f'card:{card_transaction.id}',
+    }
+
+
+def test_plan_item_can_link_card_transaction_from_plan_form(app, family, user):
+    card = CreditCard(
+        family_id=family.id, card_name='Rewards Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    card_transaction = CreditCardTransaction(family_id=family.id, credit_card=card, amount=Decimal('-30.00'), date=date.today(), transaction_type='Purchase', item='Toy shop')
+    plan = Plan(family_id=family.id, title='Christmas')
+    db.session.add_all([card, card_transaction, plan])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(f'/plans/{plan.id}/items/add', data={
+        'title': 'Train set', 'transaction_ref': f'card:{card_transaction.id}',
+        'status': 'purchased', 'priority': 'normal',
+    })
+    item = PlanItem.query.one()
+
+    assert response.status_code == 302
+    assert item.credit_card_transaction_id == card_transaction.id
+    assert item.transaction_id is None
+    assert item.resolved_actual_cost == Decimal('30.00')
 
 
 def test_savings_goal_adds_linked_contributions_to_opening_balance(family):
