@@ -42,10 +42,10 @@ find /home -type d -name ".git" 2>/dev/null | while read gitdir; do
 done
 
 echo "5. Expected location from deploy.sh:"
-echo "  /home/joneshq/app"
-if [ -d /home/joneshq/app ]; then
+echo "  /home/joneshq/joneshq-finance"
+if [ -d /home/joneshq/joneshq-finance ]; then
     echo "  ✓ Directory exists"
-    cd /home/joneshq/app
+    cd /home/joneshq/joneshq-finance
     if [ -d .git ]; then
         echo "  ✓ Is a git repo"
         echo "  Branch: $(git branch --show-current)"
@@ -66,7 +66,7 @@ fi
 echo ""
 echo "========================================="
 echo "To update the correct installation:"
-echo "  cd /home/joneshq/app"
+echo "  cd /home/joneshq/joneshq-finance"
 echo "  git pull origin main"
 echo "  sudo systemctl restart joneshq-finance"
 echo "========================================="

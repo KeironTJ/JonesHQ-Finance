@@ -19,8 +19,8 @@ timeout = 60
 keepalive = 5
 
 # Logging
-accesslog = '/home/joneshq/app/logs/gunicorn_access.log'
-errorlog = '/home/joneshq/app/logs/gunicorn_error.log'
+accesslog = '/home/joneshq/joneshq-finance/logs/gunicorn_access.log'
+errorlog = '/home/joneshq/joneshq-finance/logs/gunicorn_error.log'
 loglevel = 'info'
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
@@ -29,7 +29,7 @@ proc_name = 'joneshq-finance'
 
 # Server Mechanics
 daemon = False
-pidfile = '/home/joneshq/app/gunicorn.pid'
+pidfile = '/home/joneshq/joneshq-finance/gunicorn.pid'
 umask = 0o007
 user = None
 group = None

@@ -15,7 +15,7 @@
 set -e
 
 # Configuration
-APP_DIR="/home/joneshq/app"
+APP_DIR="/home/joneshq/joneshq-finance"
 BACKUP_DIR="/home/joneshq/backups"
 DB_PATH="$APP_DIR/instance/joneshq_finance.db"
 RETENTION_DAYS=30  # Keep backups for 30 days
