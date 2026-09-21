@@ -79,6 +79,7 @@ bash $APP_DIR/deployment/backup.sh
 BACKUP_FILE=$(ls -t $BACKUP_DIR/joneshq_finance_*.db.gz 2>/dev/null | head -1)
 
 echo "Step 4: Running test suite..."
+sudo -u $APP_USER bash -c "cd $APP_DIR && source venv/bin/activate && pip install -q -r requirements-dev.txt"
 if ! sudo -u $APP_USER bash -c "cd $APP_DIR && source venv/bin/activate && pytest -q"; then
     echo "ERROR: Tests failed. Rolling back code (database untouched, service not restarted)."
     rollback_code
