@@ -69,6 +69,7 @@ class PlanItem(db.Model):
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=False, index=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('plans.id'), nullable=False, index=True)
     title = db.Column(db.String(160), nullable=False)
+    assigned_to = db.Column(db.String(100), nullable=True, index=True)
     estimated_cost = db.Column(db.Numeric(10, 2), nullable=True)
     actual_cost = db.Column(db.Numeric(10, 2), nullable=True)
     transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True, index=True)

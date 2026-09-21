@@ -454,6 +454,7 @@
                                                 data-txn-label="{{ (transaction.item or transaction.description or 'Transaction') | e }}"
                                                 data-txn-date="{{ transaction.transaction_date.strftime('%d %b %Y') if transaction.transaction_date else '' }}"
                                                 data-txn-amount="{{ transaction.amount | abs }}"
+                                                data-txn-assigned="{{ transaction.assigned_to or '' }}"
                                                 data-plan-id="{{ plan_item.plan_id if plan_item else '' }}"
                                                 data-plan-item-id="{{ plan_item.id if plan_item else '' }}">
                                             <i class="bi bi-{% if plan_item %}journal-check{% else %}journal-plus{% endif %}"></i>
@@ -602,6 +603,13 @@
                 <div class="mb-2">
                     <label class="form-label" for="linkPlanNewItem">New item name</label>
                     <input class="form-control" id="linkPlanNewItem" name="new_item_title" placeholder="Uses this transaction as its actual cost">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="linkPlanAssignee">Assigned to</label>
+                    <select class="form-select" id="linkPlanAssignee" name="assigned_to">
+                        <option value="">Unassigned</option>
+                        {% for person_name in assigned_people_options %}<option value="{{ person_name }}">{{ person_name }}</option>{% endfor %}
+                    </select>
                 </div>
                 {% else %}
                 <div class="text-center py-3">
@@ -803,6 +811,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const itemSelect = document.getElementById('linkPlanItemId');
         const itemSearch = document.getElementById('linkPlanItemSearch');
         const newItemInput = document.getElementById('linkPlanNewItem');
+        const assigneeSelect = document.getElementById('linkPlanAssignee');
         const unlinkButton = document.getElementById('unlinkPlanButton');
 
         function filterPlanItems(selectedItemId) {
@@ -827,6 +836,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (planSelect) planSelect.value = currentPlanId;
             if (itemSearch) itemSearch.value = '';
             if (newItemInput) newItemInput.value = '';
+            if (assigneeSelect) assigneeSelect.value = button.dataset.txnAssigned || '';
             filterPlanItems(currentItemId);
             if (unlinkButton) unlinkButton.hidden = !currentItemId;
         });

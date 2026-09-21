@@ -34,14 +34,23 @@
     <section class="items-section">
         <div class="section-heading">
             <div><p class="plans-kicker">{% if plan.plan_type == 'savings_goal' %}Saving activity{% else %}The list{% endif %}</p><h2>{% if plan.plan_type == 'savings_goal' %}Contributions{% else %}Items{% endif %}</h2></div>
-            <span>{{ plan.items | rejectattr('status', 'equalto', 'skipped') | list | length }} active</span>
+            <div class="plan-item-filters">
+                <label class="visually-hidden" for="itemAssigneeFilter">Filter by assignee</label>
+                <select class="form-select form-select-sm" id="itemAssigneeFilter">
+                    <option value="">All people</option>
+                    {% for person_name in assignment_options %}<option value="{{ person_name | lower | e }}">{{ person_name }}</option>{% endfor %}
+                    <option value="__unassigned__">Unassigned</option>
+                </select>
+                <span id="activeItemCount">{{ plan.items | rejectattr('status', 'equalto', 'skipped') | list | length }} active</span>
+                {% if can_access_section('family') %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('family.index') }}" title="Manage family members and assignment labels"><i class="bi bi-person-gear"></i></a>{% endif %}
+            </div>
         </div>
         <div class="item-list">
             {% for item in plan.items %}
-            <article class="plan-item plan-item-{{ item.status }}">
+            <article class="plan-item plan-item-{{ item.status }}" data-assignee="{{ item.assigned_to | lower | e if item.assigned_to else '__unassigned__' }}" data-status="{{ item.status }}">
                 <button class="item-summary" type="button" data-bs-toggle="collapse" data-bs-target="#item{{ item.id }}" aria-expanded="false" aria-controls="item{{ item.id }}">
                     <span class="item-state"><i class="bi {% if item.status == 'purchased' %}bi-check-circle-fill{% elif item.status == 'skipped' %}bi-dash-circle{% elif item.status == 'planned' %}bi-bookmark-check{% else %}bi-lightbulb{% endif %}"></i></span>
-                    <span class="item-main"><strong>{{ item.title }}</strong><small>{% if plan.plan_type == 'savings_goal' and item.status == 'purchased' %}Recorded{% else %}{{ item.status | title }}{% endif %}{% if item.priority != 'normal' %} · {{ item.priority | title }} priority{% endif %}</small></span>
+                    <span class="item-main"><strong>{{ item.title }}</strong><small>{% if plan.plan_type == 'savings_goal' and item.status == 'purchased' %}Recorded{% else %}{{ item.status | title }}{% endif %}{% if item.priority != 'normal' %} · {{ item.priority | title }} priority{% endif %}{% if item.assigned_to %}<span class="item-assignee"><i class="bi bi-person"></i> {{ item.assigned_to }}</span>{% endif %}</small></span>
                     <span class="item-costs"><strong>£{{ '%.2f' | format(item.resolved_actual_cost) }}</strong><small>{% if item.transaction %}From transaction{% elif item.actual_cost is not none %}Actual{% else %}£{{ '%.2f' | format(item.estimated_cost or 0) }} estimate{% endif %}</small></span>
                     <i class="bi bi-chevron-down item-chevron"></i>
                 </button>
@@ -50,6 +59,7 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="row g-3">
                             <div class="col-md-5"><label class="form-label">Item</label><input class="form-control" name="title" value="{{ item.title }}" required></div>
+                            <div class="col-md-3"><label class="form-label">Assigned to</label><select class="form-select" name="assigned_to"><option value="">Unassigned</option>{% if item.assigned_to and item.assigned_to not in assignment_options %}<option value="{{ item.assigned_to }}" selected>{{ item.assigned_to }}</option>{% endif %}{% for person_name in assignment_options %}<option value="{{ person_name }}" {% if item.assigned_to == person_name %}selected{% endif %}>{{ person_name }}</option>{% endfor %}</select></div>
                             <div class="col-6 col-md"><label class="form-label">Estimate</label><input class="form-control" name="estimated_cost" type="number" min="0" step="0.01" value="{{ item.estimated_cost or '' }}"></div>
                             <div class="col-6 col-md"><label class="form-label">Manual actual</label><input class="form-control" name="actual_cost" type="number" min="0" step="0.01" value="{{ item.actual_cost or '' }}"></div>
                             <div class="col-6 col-md"><label class="form-label">Status</label><select class="form-select" name="status">{% for value in ['idea', 'planned', 'purchased', 'skipped'] %}<option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></div>
@@ -75,6 +85,7 @@
             {% else %}
             <div class="plans-empty compact"><i class="bi bi-lightbulb"></i><h3>No ideas yet</h3><p>Add the first item when something comes to mind.</p></div>
             {% endfor %}
+            <div class="plans-empty compact" id="assigneeFilterEmpty" hidden><i class="bi bi-person-x"></i><h3>No matching items</h3><p>Choose another person or clear the filter.</p></div>
         </div>
     </section>
     {% if plan.notes %}<section class="plan-notes"><p class="plans-kicker">Notes</p><p>{{ plan.notes }}</p></section>{% endif %}
@@ -86,6 +97,7 @@
     <div class="modal-body"><div class="row g-3">
         <div class="col-md-7"><label class="form-label">{% if plan.plan_type == 'savings_goal' %}Contribution{% else %}Item{% endif %}</label><input class="form-control" name="title" required autofocus placeholder="{% if plan.plan_type == 'savings_goal' %}September transfer{% else %}Bike, theatre tickets, new boiler...{% endif %}"></div>
         <div class="col-md"><label class="form-label">{% if plan.plan_type == 'savings_goal' %}Planned amount{% else %}Estimated cost{% endif %}</label><div class="input-group"><span class="input-group-text">£</span><input class="form-control" name="estimated_cost" type="number" min="0" step="0.01"></div></div>
+        <div class="col-md-6"><label class="form-label">Assigned to</label><select class="form-select" name="assigned_to"><option value="">Unassigned</option>{% for person_name in assignment_options %}<option value="{{ person_name }}">{{ person_name }}</option>{% endfor %}</select></div>
         <div class="col-6 col-md-3"><label class="form-label">Status</label><select class="form-select" name="status"><option value="idea">Idea</option><option value="planned">Planned</option><option value="purchased">{% if plan.plan_type == 'savings_goal' %}Recorded{% else %}Purchased{% endif %}</option></select></div>
         <div class="col-6 col-md-3"><label class="form-label">Priority</label><select class="form-select" name="priority"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option></select></div>
         <div class="col-md-6"><label class="form-label">{% if plan.plan_type == 'savings_goal' %}Manual contribution{% else %}Manual actual cost{% endif %}</label><div class="input-group"><span class="input-group-text">£</span><input class="form-control" name="actual_cost" type="number" min="0" step="0.01"></div></div>
@@ -117,6 +129,25 @@
 
 {% block extra_js %}
 <script>
+const assigneeFilter = document.getElementById('itemAssigneeFilter');
+if (assigneeFilter) {
+    assigneeFilter.addEventListener('change', function () {
+        const selected = assigneeFilter.value;
+        let visible = 0;
+        let active = 0;
+        document.querySelectorAll('.plan-item').forEach(function (item) {
+            const matches = !selected || item.dataset.assignee === selected;
+            item.hidden = !matches;
+            if (matches) {
+                visible += 1;
+                if (item.dataset.status !== 'skipped') active += 1;
+            }
+        });
+        document.getElementById('activeItemCount').textContent = `${active} active`;
+        document.getElementById('assigneeFilterEmpty').hidden = visible !== 0;
+    });
+}
+
 document.querySelectorAll('.transaction-picker').forEach(function (picker) {
     const search = picker.querySelector('.transaction-picker-search');
     const select = picker.querySelector('.transaction-picker-select');

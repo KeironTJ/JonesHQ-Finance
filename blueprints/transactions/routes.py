@@ -12,7 +12,6 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.credit_cards import CreditCard
 from models.loan_payments import LoanPayment
 from models.loans import Loan
-from models.family_assignment_labels import FamilyAssignmentLabel
 from models.settings import Settings
 from models.users import User
 from models.plans import Plan, PlanItem
@@ -20,37 +19,13 @@ from services.finance.payday_service import PaydayService
 from services.finance.transaction_service import TransactionService
 from extensions import db
 from models.expenses import Expense
+from utils.assignment_helpers import get_assignment_options
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
 def get_assigned_people_options():
     """Return family assignment options from members + custom family labels."""
-    configured = []
-    seen = set()
-
-    members = family_query(User).filter(User.is_active == True).all()
-    for member in members:
-        display_name = (member.member_name or member.name or '').strip()
-        if display_name and display_name not in seen:
-            seen.add(display_name)
-            configured.append(display_name)
-
-    custom_labels = (
-        family_query(FamilyAssignmentLabel)
-        .filter(FamilyAssignmentLabel.is_active == True)
-        .order_by(FamilyAssignmentLabel.sort_order.asc(), FamilyAssignmentLabel.name.asc())
-        .all()
-    )
-    for label in custom_labels:
-        label_name = (label.name or '').strip()
-        if label_name and label_name not in seen:
-            seen.add(label_name)
-            configured.append(label_name)
-
-    if not configured:
-        configured = ['Household']
-
-    return configured
+    return get_assignment_options()
 
 
 @transactions_bp.route('/transactions')

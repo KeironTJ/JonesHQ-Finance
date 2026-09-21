@@ -37,6 +37,7 @@ def test_plan_totals_use_linked_transaction_over_manual_cost(family):
         PlanItem(
             family_id=family.id,
             title='Scooter',
+            assigned_to='Oliver',
             estimated_cost=Decimal('60.00'),
             actual_cost=Decimal('55.00'),
             transaction=transaction,
@@ -54,6 +55,7 @@ def test_plan_totals_use_linked_transaction_over_manual_cost(family):
     assert plan.estimated_total == Decimal('75.00')
     assert plan.actual_total == Decimal('54.50')
     assert plan.progress_percent == 54
+    assert plan.items[0].assigned_to == 'Oliver'
 
 
 def test_create_plan_and_add_item(app, family, user):
@@ -74,6 +76,7 @@ def test_create_plan_and_add_item(app, family, user):
 
     response = client.post(f'/plans/{plan.id}/items/add', data={
         'title': 'Bike',
+        'assigned_to': user.name,
         'estimated_cost': '150.00',
         'actual_cost': '140.00',
         'status': 'purchased',
@@ -82,6 +85,25 @@ def test_create_plan_and_add_item(app, family, user):
 
     assert response.status_code == 302
     assert PlanItem.query.one().resolved_actual_cost == Decimal('140.00')
+    assert PlanItem.query.one().assigned_to == user.name
+
+
+def test_add_item_rejects_unknown_assignee(app, family, user):
+    plan = Plan(family_id=family.id, title='Christmas')
+    db.session.add(plan)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(f'/plans/{plan.id}/items/add', data={
+        'title': 'Private gift',
+        'assigned_to': 'Someone from another family',
+        'status': 'idea',
+        'priority': 'normal',
+    })
+
+    assert response.status_code == 302
+    assert PlanItem.query.count() == 0
 
 
 def test_cannot_link_another_familys_transaction(app, family, user):
@@ -156,6 +178,7 @@ def test_link_transaction_from_transaction_page_can_create_and_unlink_item(app, 
         amount=Decimal('-39.95'),
         transaction_date=date.today(),
         description='Toy shop',
+        assigned_to=user.name,
     )
     plan = Plan(family_id=family.id, title='Christmas')
     db.session.add_all([transaction, plan])
@@ -173,6 +196,7 @@ def test_link_transaction_from_transaction_page_can_create_and_unlink_item(app, 
     assert item.transaction_id == transaction.id
     assert item.status == 'purchased'
     assert item.estimated_cost == Decimal('39.95')
+    assert item.assigned_to == user.name
 
     response = client.post(f'/plans/transactions/{transaction.id}/link', data={})
 

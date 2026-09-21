@@ -7,6 +7,7 @@ from extensions import db
 from models.plans import Plan, PlanItem
 from models.transactions import Transaction
 from models.vendors import Vendor
+from utils.assignment_helpers import get_assignment_options
 from utils.db_helpers import family_get, family_get_or_404, family_query, get_family_id
 
 from . import plans_bp
@@ -37,6 +38,15 @@ def _money_value(value):
     if amount < 0:
         raise ValueError('Amounts cannot be negative.')
     return amount
+
+
+def _assignment_value(value):
+    assigned_to = (value or '').strip()
+    if not assigned_to:
+        return None
+    if assigned_to not in get_assignment_options():
+        raise ValueError('Choose a valid family member or assignment label.')
+    return assigned_to
 
 
 def _link_transaction(item, transaction):
@@ -105,6 +115,7 @@ def detail(plan_id):
         'plans/detail.html',
         plan=plan,
         plan_types=PLAN_TYPES,
+        assignment_options=get_assignment_options(),
         today=date.today(),
     )
 
@@ -223,6 +234,7 @@ def add_item(plan_id):
             family_id=get_family_id(),
             plan_id=plan.id,
             title=title,
+            assigned_to=_assignment_value(request.form.get('assigned_to')),
             estimated_cost=_money_value(request.form.get('estimated_cost')),
             actual_cost=_money_value(request.form.get('actual_cost')),
             priority=request.form.get('priority', 'normal'),
@@ -264,6 +276,7 @@ def update_item(plan_id, item_id):
         if not title or status not in ITEM_STATUSES or priority not in ITEM_PRIORITIES:
             raise ValueError('Invalid item details.')
         item.title = title
+        item.assigned_to = _assignment_value(request.form.get('assigned_to'))
         item.estimated_cost = _money_value(request.form.get('estimated_cost'))
         item.actual_cost = _money_value(request.form.get('actual_cost'))
         _link_transaction(item, transaction)
@@ -300,10 +313,19 @@ def link_transaction(transaction_id):
 
     if new_item_title:
         plan = family_get_or_404(Plan, plan_id)
+        requested_assignee = request.form.get('assigned_to')
+        try:
+            assigned_to = _assignment_value(requested_assignee) if requested_assignee else None
+        except ValueError:
+            flash('Choose a valid family member or assignment label.', 'danger')
+            return redirect(url_for('transactions.index', id=transaction.id))
+        if assigned_to is None and transaction.assigned_to in get_assignment_options():
+            assigned_to = transaction.assigned_to
         item = PlanItem(
             family_id=get_family_id(),
             plan_id=plan.id,
             title=new_item_title,
+            assigned_to=assigned_to,
             estimated_cost=abs(Decimal(str(transaction.amount))),
             status='purchased',
         )
