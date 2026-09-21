@@ -388,6 +388,12 @@
                                 <td class="txn-date">{{ transaction.transaction_date.strftime('%d/%m/%Y') if transaction.transaction_date else '' }}</td>
                                 <td class="txn-details">
                                     <strong>{{ transaction.item if transaction.item else transaction.description }}</strong>
+                                    {% set plan_item = transaction_plan_links.get(transaction.id) %}
+                                    {% if plan_item %}
+                                        <a class="badge bg-success-subtle text-success-emphasis ms-1 text-decoration-none" href="{{ url_for('plans.detail', plan_id=plan_item.plan_id) }}" title="Open {{ plan_item.plan.title }}">
+                                            <i class="bi bi-journal-check"></i> {{ plan_item.plan.title }} · {{ plan_item.title }}
+                                        </a>
+                                    {% endif %}
                                     {% if transaction.linked_transaction_id %}
                                         <span class="badge bg-info ms-1" title="Linked Transfer Transaction (ID: {{ transaction.linked_transaction_id }})"><i class="bi bi-arrow-left-right"></i> Transfer</span>
                                     {% endif %}
@@ -439,10 +445,21 @@
                                     {% endif %}
                                 </td>
                                 <td class="txn-actions">
-                                    {% if transaction.is_paid %}
-                                        <span class="text-muted">-</span>
-                                    {% else %}
-                                        <div class="btn-group btn-group-sm" role="group">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        {% if can_access_section('plans') %}
+                                        <button type="button" class="btn btn-outline-success" title="{% if plan_item %}Change plan link{% else %}Link to a plan{% endif %}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#linkPlanModal"
+                                                data-txn-id="{{ transaction.id }}"
+                                                data-txn-label="{{ (transaction.item or transaction.description or 'Transaction') | e }}"
+                                                data-txn-date="{{ transaction.transaction_date.strftime('%d %b %Y') if transaction.transaction_date else '' }}"
+                                                data-txn-amount="{{ transaction.amount | abs }}"
+                                                data-plan-id="{{ plan_item.plan_id if plan_item else '' }}"
+                                                data-plan-item-id="{{ plan_item.id if plan_item else '' }}">
+                                            <i class="bi bi-{% if plan_item %}journal-check{% else %}journal-plus{% endif %}"></i>
+                                        </button>
+                                        {% endif %}
+                                        {% if not transaction.is_paid %}
                                             <!-- Edit button (opens modal) -->
                                             <button type="button" class="btn btn-outline-primary" title="Edit Transaction"
                                                     data-bs-toggle="modal" 
@@ -496,8 +513,8 @@
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </form>
-                                        </div>
-                                    {% endif %}
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -544,6 +561,63 @@
                 </nav>
             </div>
             {% endif %}
+    </div>
+</div>
+
+<!-- Link Transaction to Plan Modal -->
+<div class="modal fade" id="linkPlanModal" tabindex="-1" aria-labelledby="linkPlanModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" method="POST" id="linkPlanForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="linkPlanModalLabel"><i class="bi bi-journal-plus"></i> Link to a plan</h5>
+                    <small class="text-muted" id="linkPlanTransactionSummary"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if plans %}
+                <div class="mb-3">
+                    <label class="form-label" for="linkPlanId">Plan</label>
+                    <select class="form-select" id="linkPlanId" name="plan_id">
+                        <option value="">Choose a plan</option>
+                        {% for plan in plans %}<option value="{{ plan.id }}">{{ plan.title }}{% if plan.person %} · {{ plan.person }}{% endif %}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="linkPlanItemSearch">Existing item</label>
+                    <div class="input-group mb-2">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input class="form-control" id="linkPlanItemSearch" type="search" placeholder="Search this plan's items">
+                    </div>
+                    <select class="form-select" id="linkPlanItemId" name="item_id">
+                        <option value="">Choose an existing item</option>
+                        {% for item in plan_items %}
+                        <option value="{{ item.id }}" data-plan-id="{{ item.plan_id }}" data-search="{{ (item.plan.title ~ ' ' ~ item.title) | lower | e }}">{{ item.title }}{% if item.transaction_id %} · currently linked{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="plan-link-divider"><span>or create an item</span></div>
+                <div class="mb-2">
+                    <label class="form-label" for="linkPlanNewItem">New item name</label>
+                    <input class="form-control" id="linkPlanNewItem" name="new_item_title" placeholder="Uses this transaction as its actual cost">
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="bi bi-journal-plus fs-2 text-muted"></i>
+                    <p class="mt-2 mb-3">Create a plan before linking transactions.</p>
+                    <a class="btn btn-primary" href="{{ url_for('plans.index') }}">Open Plans</a>
+                </div>
+                {% endif %}
+            </div>
+            {% if plans %}
+            <div class="modal-footer justify-content-between">
+                <button class="btn btn-outline-danger" type="submit" id="unlinkPlanButton" formnovalidate><i class="bi bi-link-45deg"></i> Unlink</button>
+                <button class="btn btn-primary" type="submit" id="savePlanLinkButton"><i class="bi bi-check-lg"></i> Save link</button>
+            </div>
+            {% endif %}
+        </form>
     </div>
 </div>
 
@@ -722,6 +796,62 @@
 <script>
 // Wait for DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', function() {
+    const linkPlanModal = document.getElementById('linkPlanModal');
+    if (linkPlanModal) {
+        const form = document.getElementById('linkPlanForm');
+        const planSelect = document.getElementById('linkPlanId');
+        const itemSelect = document.getElementById('linkPlanItemId');
+        const itemSearch = document.getElementById('linkPlanItemSearch');
+        const newItemInput = document.getElementById('linkPlanNewItem');
+        const unlinkButton = document.getElementById('unlinkPlanButton');
+
+        function filterPlanItems(selectedItemId) {
+            if (!itemSelect) return;
+            const planId = planSelect.value;
+            const search = itemSearch.value.trim().toLowerCase();
+            Array.from(itemSelect.options).forEach(function (option, index) {
+                if (index === 0) return;
+                option.hidden = option.dataset.planId !== planId || !option.dataset.search.includes(search);
+            });
+            itemSelect.value = selectedItemId || '';
+            if (itemSelect.selectedOptions[0] && itemSelect.selectedOptions[0].hidden) itemSelect.value = '';
+        }
+
+        linkPlanModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const transactionId = button.dataset.txnId;
+            const currentPlanId = button.dataset.planId || '';
+            const currentItemId = button.dataset.planItemId || '';
+            form.action = `/plans/transactions/${transactionId}/link`;
+            document.getElementById('linkPlanTransactionSummary').textContent = `${button.dataset.txnDate} · ${button.dataset.txnLabel} · £${parseFloat(button.dataset.txnAmount).toFixed(2)}`;
+            if (planSelect) planSelect.value = currentPlanId;
+            if (itemSearch) itemSearch.value = '';
+            if (newItemInput) newItemInput.value = '';
+            filterPlanItems(currentItemId);
+            if (unlinkButton) unlinkButton.hidden = !currentItemId;
+        });
+
+        if (planSelect) planSelect.addEventListener('change', function () { filterPlanItems(''); });
+        if (itemSearch) itemSearch.addEventListener('input', function () { filterPlanItems(itemSelect.value); });
+        if (itemSelect) itemSelect.addEventListener('change', function () { if (itemSelect.value) newItemInput.value = ''; });
+        if (newItemInput) newItemInput.addEventListener('input', function () { if (newItemInput.value) itemSelect.value = ''; });
+        if (unlinkButton) unlinkButton.addEventListener('click', function () {
+            itemSelect.value = '';
+            newItemInput.value = '';
+            planSelect.value = '';
+        });
+        form.addEventListener('submit', function (event) {
+            if (event.submitter === unlinkButton) return;
+            if (!planSelect.value || (!itemSelect.value && !newItemInput.value.trim())) {
+                event.preventDefault();
+                newItemInput.setCustomValidity('Choose an existing item or enter a new item name.');
+                newItemInput.reportValidity();
+            } else {
+                newItemInput.setCustomValidity('');
+            }
+        });
+    }
+
     // Edit Transaction Modal - populate form
     const editTransactionModal = document.getElementById('editTransactionModal');
     if (editTransactionModal) {

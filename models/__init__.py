@@ -23,6 +23,7 @@ from models.mortgage_payments import MortgagePayment, MortgageSnapshot
 from models.networth import NetWorth
 from models.pensions import Pension
 from models.pension_snapshots import PensionSnapshot
+from models.plans import Plan, PlanItem
 from models.planned import PlannedTransaction
 from models.property import Property
 from models.property_valuation_snapshot import PropertyValuationSnapshot
@@ -61,6 +62,8 @@ __all__ = [
     'NetWorth',
     'Pension',
     'PensionSnapshot',
+    'Plan',
+    'PlanItem',
     'PlannedTransaction',
     'Property',
     'PropertyValuationSnapshot',

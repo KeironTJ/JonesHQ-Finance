@@ -15,6 +15,7 @@ from models.loans import Loan
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.settings import Settings
 from models.users import User
+from models.plans import Plan, PlanItem
 from services.finance.payday_service import PaydayService
 from services.finance.transaction_service import TransactionService
 from extensions import db
@@ -260,6 +261,19 @@ def index():
     if has_active_filters:
         filter_expanded = True
     assigned_people_options = get_assigned_people_options()
+    plans = family_query(Plan).filter(
+        Plan.status.in_(['active', 'draft']),
+    ).order_by(Plan.target_date.is_(None), Plan.target_date, Plan.title).all()
+    plan_items = family_query(PlanItem).join(Plan).filter(
+        Plan.status.in_(['active', 'draft']),
+        PlanItem.status != 'skipped',
+    ).order_by(Plan.title, PlanItem.title).all()
+    linked_plan_items = family_query(PlanItem).filter(
+        PlanItem.transaction_id.in_([transaction.id for transaction in transactions]),
+    ).all() if transactions else []
+    transaction_plan_links = {
+        item.transaction_id: item for item in linked_plan_items
+    }
     
     return render_template(
         'transactions/transactions.html',
@@ -295,7 +309,10 @@ def index():
         per_page=per_page,
         filter_expanded=filter_expanded,
         assigned_people_options=assigned_people_options,
-        highlight_transaction_id=transaction_id
+        highlight_transaction_id=transaction_id,
+        plans=plans,
+        plan_items=plan_items,
+        transaction_plan_links=transaction_plan_links,
     )
 
 

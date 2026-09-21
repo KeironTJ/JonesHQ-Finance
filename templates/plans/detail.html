@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plan.title }} - Plans{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/plans.css') }}">
+{% endblock %}
+
+{% block content %}
+<main class="plans-page plan-detail container-fluid py-4">
+    <a class="plans-back" href="{{ url_for('plans.index') }}"><i class="bi bi-arrow-left"></i> All plans</a>
+    <header class="detail-header">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="plan-type plan-type-{{ plan.plan_type }}">{{ plan_types[plan.plan_type] }}</span>
+                <span class="plan-status plan-status-{{ plan.status }}">{{ plan.status | title }}</span>
+            </div>
+            <h1>{{ plan.title }}</h1>
+            <p>{% if plan.person %}For {{ plan.person }}{% else %}Shared family plan{% endif %}{% if plan.target_date %} · {{ plan.target_date.strftime('%d %B %Y') }}{% endif %}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editPlanModal"><i class="bi bi-sliders"></i> Edit</button>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addItemModal"><i class="bi bi-plus-lg"></i> {% if plan.plan_type == 'savings_goal' %}Add contribution{% else %}Add item{% endif %}</button>
+        </div>
+    </header>
+
+    <section class="detail-metrics">
+        <div><span>{% if plan.plan_type == 'savings_goal' %}Planned contributions{% else %}Estimated{% endif %}</span><strong>£{{ '%.2f' | format(plan.estimated_total) }}</strong></div>
+        <div><span>{% if plan.plan_type == 'savings_goal' %}Contributions{% else %}Actual spend{% endif %}</span><strong>£{{ '%.2f' | format(plan.actual_total) }}</strong></div>
+        <div><span>{% if plan.plan_type == 'savings_goal' %}Saved total{% else %}Budget left{% endif %}</span><strong>{% if plan.plan_type == 'savings_goal' %}£{{ '%.2f' | format(plan.saved_total) }}{% else %}£{{ '%.2f' | format([plan.funding_target - plan.actual_total, 0] | max) }}{% endif %}</strong></div>
+        <div><span>Progress</span><strong>{{ plan.progress_percent }}%</strong></div>
+    </section>
+
+    <section class="items-section">
+        <div class="section-heading">
+            <div><p class="plans-kicker">{% if plan.plan_type == 'savings_goal' %}Saving activity{% else %}The list{% endif %}</p><h2>{% if plan.plan_type == 'savings_goal' %}Contributions{% else %}Items{% endif %}</h2></div>
+            <span>{{ plan.items | rejectattr('status', 'equalto', 'skipped') | list | length }} active</span>
+        </div>
+        <div class="item-list">
+            {% for item in plan.items %}
+            <article class="plan-item plan-item-{{ item.status }}">
+                <button class="item-summary" type="button" data-bs-toggle="collapse" data-bs-target="#item{{ item.id }}" aria-expanded="false" aria-controls="item{{ item.id }}">
+                    <span class="item-state"><i class="bi {% if item.status == 'purchased' %}bi-check-circle-fill{% elif item.status == 'skipped' %}bi-dash-circle{% elif item.status == 'planned' %}bi-bookmark-check{% else %}bi-lightbulb{% endif %}"></i></span>
+                    <span class="item-main"><strong>{{ item.title }}</strong><small>{% if plan.plan_type == 'savings_goal' and item.status == 'purchased' %}Recorded{% else %}{{ item.status | title }}{% endif %}{% if item.priority != 'normal' %} · {{ item.priority | title }} priority{% endif %}</small></span>
+                    <span class="item-costs"><strong>£{{ '%.2f' | format(item.resolved_actual_cost) }}</strong><small>{% if item.transaction %}From transaction{% elif item.actual_cost is not none %}Actual{% else %}£{{ '%.2f' | format(item.estimated_cost or 0) }} estimate{% endif %}</small></span>
+                    <i class="bi bi-chevron-down item-chevron"></i>
+                </button>
+                <div class="collapse" id="item{{ item.id }}">
+                    <form class="item-editor" method="post" action="{{ url_for('plans.update_item', plan_id=plan.id, item_id=item.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-3">
+                            <div class="col-md-5"><label class="form-label">Item</label><input class="form-control" name="title" value="{{ item.title }}" required></div>
+                            <div class="col-6 col-md"><label class="form-label">Estimate</label><input class="form-control" name="estimated_cost" type="number" min="0" step="0.01" value="{{ item.estimated_cost or '' }}"></div>
+                            <div class="col-6 col-md"><label class="form-label">Manual actual</label><input class="form-control" name="actual_cost" type="number" min="0" step="0.01" value="{{ item.actual_cost or '' }}"></div>
+                            <div class="col-6 col-md"><label class="form-label">Status</label><select class="form-select" name="status">{% for value in ['idea', 'planned', 'purchased', 'skipped'] %}<option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></div>
+                            <div class="col-6 col-md"><label class="form-label">Priority</label><select class="form-select" name="priority">{% for value in ['low', 'normal', 'high'] %}<option value="{{ value }}" {% if item.priority == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></div>
+                            <div class="col-md-7 transaction-picker">
+                                <label class="form-label">Linked transaction</label>
+                                <div class="input-group mb-2"><span class="input-group-text"><i class="bi bi-search"></i></span><input class="form-control transaction-picker-search" type="search" placeholder="Merchant, item, £ amount or date"></div>
+                                <select class="form-select transaction-picker-select" name="transaction_id" data-selected="{{ item.transaction_id or '' }}">
+                                    <option value="">No transaction</option>
+                                    {% if item.transaction %}<option value="{{ item.transaction.id }}" selected>{{ item.transaction.transaction_date.strftime('%d %b %Y') }} · {{ item.transaction.item or item.transaction.description or 'Transaction' }} · £{{ '%.2f' | format(item.transaction.amount | abs) }}</option>{% endif %}
+                                </select>
+                                <div class="form-text transaction-picker-help">{% if plan.plan_type == 'savings_goal' %}Search either side of an actual savings transfer. Forecasts stay out of the way.{% else %}Search actual expenses only. Forecasts stay out of the way.{% endif %}</div>
+                            </div>
+                            <div class="col-md-5"><label class="form-label">Notes</label><input class="form-control" name="notes" value="{{ item.notes or '' }}"></div>
+                        </div>
+                        <div class="item-actions">
+                            <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check-lg"></i> Save</button>
+                            <button class="btn btn-sm btn-outline-danger" type="submit" formaction="{{ url_for('plans.delete_item', plan_id=plan.id, item_id=item.id) }}" onclick="return confirm('Remove this item?')"><i class="bi bi-trash"></i> Remove</button>
+                        </div>
+                    </form>
+                </div>
+            </article>
+            {% else %}
+            <div class="plans-empty compact"><i class="bi bi-lightbulb"></i><h3>No ideas yet</h3><p>Add the first item when something comes to mind.</p></div>
+            {% endfor %}
+        </div>
+    </section>
+    {% if plan.notes %}<section class="plan-notes"><p class="plans-kicker">Notes</p><p>{{ plan.notes }}</p></section>{% endif %}
+</main>
+
+<div class="modal fade" id="addItemModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-lg"><form class="modal-content" method="post" action="{{ url_for('plans.add_item', plan_id=plan.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="modal-header"><div><p class="plans-kicker mb-1">{% if plan.plan_type == 'savings_goal' %}Build the goal over time{% else %}Capture it now, decide later{% endif %}</p><h2 class="modal-title fs-4">{% if plan.plan_type == 'savings_goal' %}Add a contribution{% else %}Add an item{% endif %}</h2></div><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button></div>
+    <div class="modal-body"><div class="row g-3">
+        <div class="col-md-7"><label class="form-label">{% if plan.plan_type == 'savings_goal' %}Contribution{% else %}Item{% endif %}</label><input class="form-control" name="title" required autofocus placeholder="{% if plan.plan_type == 'savings_goal' %}September transfer{% else %}Bike, theatre tickets, new boiler...{% endif %}"></div>
+        <div class="col-md"><label class="form-label">{% if plan.plan_type == 'savings_goal' %}Planned amount{% else %}Estimated cost{% endif %}</label><div class="input-group"><span class="input-group-text">£</span><input class="form-control" name="estimated_cost" type="number" min="0" step="0.01"></div></div>
+        <div class="col-6 col-md-3"><label class="form-label">Status</label><select class="form-select" name="status"><option value="idea">Idea</option><option value="planned">Planned</option><option value="purchased">{% if plan.plan_type == 'savings_goal' %}Recorded{% else %}Purchased{% endif %}</option></select></div>
+        <div class="col-6 col-md-3"><label class="form-label">Priority</label><select class="form-select" name="priority"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option></select></div>
+        <div class="col-md-6"><label class="form-label">{% if plan.plan_type == 'savings_goal' %}Manual contribution{% else %}Manual actual cost{% endif %}</label><div class="input-group"><span class="input-group-text">£</span><input class="form-control" name="actual_cost" type="number" min="0" step="0.01"></div></div>
+        <div class="col-12 transaction-picker">
+            <label class="form-label">Link a transaction</label>
+            <div class="input-group mb-2"><span class="input-group-text"><i class="bi bi-search"></i></span><input class="form-control transaction-picker-search" type="search" placeholder="Merchant, item, £ amount or date"></div>
+            <select class="form-select transaction-picker-select" name="transaction_id"><option value="">Not yet</option></select>
+            <div class="form-text transaction-picker-help">{% if plan.plan_type == 'savings_goal' %}Search either side of an actual transfer, or link it later from Transactions.{% else %}Search actual expenses only. You can also link it later from Transactions.{% endif %}</div>
+        </div>
+        <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="2"></textarea></div>
+    </div></div><div class="modal-footer"><button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg"></i> {% if plan.plan_type == 'savings_goal' %}Add contribution{% else %}Add item{% endif %}</button></div>
+</form></div></div>
+
+<div class="modal fade" id="editPlanModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><form class="modal-content" method="post" action="{{ url_for('plans.update_plan', plan_id=plan.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="modal-header"><h2 class="modal-title fs-4">Plan settings</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button></div>
+    <div class="modal-body"><div class="row g-3">
+        <div class="col-12"><label class="form-label">Name</label><input class="form-control" name="title" value="{{ plan.title }}" required></div>
+        <div class="col-6"><label class="form-label">Type</label><select class="form-select" name="plan_type">{% for value, label in plan_types.items() %}<option value="{{ value }}" {% if plan.plan_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-6"><label class="form-label">Status</label><select class="form-select" name="status">{% for value in ['active', 'draft', 'completed', 'archived'] %}<option value="{{ value }}" {% if plan.status == value %}selected{% endif %}>{{ value | title }}</option>{% endfor %}</select></div>
+        <div class="col-6"><label class="form-label">For</label><input class="form-control" name="person" value="{{ plan.person or '' }}"></div>
+        <div class="col-6"><label class="form-label">Target date</label><input class="form-control" name="target_date" type="date" value="{{ plan.target_date.isoformat() if plan.target_date else '' }}"></div>
+        <div class="col-6"><label class="form-label">Budget or target</label><input class="form-control" name="target_amount" type="number" min="0" step="0.01" value="{{ plan.target_amount or '' }}"></div>
+        <div class="col-6"><label class="form-label">{% if plan.plan_type == 'savings_goal' %}Opening balance{% else %}Amount saved{% endif %}</label><input class="form-control" name="saved_amount" type="number" min="0" step="0.01" value="{{ plan.saved_amount or 0 }}"></div>
+        <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="3">{{ plan.notes or '' }}</textarea></div>
+    </div></div><div class="modal-footer justify-content-between"><button class="btn btn-outline-danger" type="submit" formaction="{{ url_for('plans.delete_plan', plan_id=plan.id) }}" onclick="return confirm('Delete this plan and all its items?')"><i class="bi bi-trash"></i> Delete</button><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Save</button></div>
+</form></div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.transaction-picker').forEach(function (picker) {
+    const search = picker.querySelector('.transaction-picker-search');
+    const select = picker.querySelector('.transaction-picker-select');
+    const help = picker.querySelector('.transaction-picker-help');
+    let timer;
+
+    async function loadTransactions() {
+        const selectedId = select.value || select.dataset.selected || '';
+        const query = search.value.trim();
+        if (!query) {
+            const selectedOption = selectedId ? Array.from(select.options).find(option => option.value === selectedId) : null;
+            select.replaceChildren(new Option('No transaction', ''));
+            if (selectedOption) select.add(new Option(selectedOption.textContent, selectedId, true, true));
+            help.textContent = {% if plan.plan_type == 'savings_goal' %}'Search either side of an actual savings transfer. Forecasts stay out of the way.'{% else %}'Search actual expenses only. Forecasts stay out of the way.'{% endif %};
+            return;
+        }
+        help.textContent = 'Searching...';
+        try {
+            const response = await fetch(`{{ url_for('plans.transaction_search') }}?plan_type={{ plan.plan_type }}&q=${encodeURIComponent(query)}`);
+            const transactions = await response.json();
+            const currentOption = selectedId ? Array.from(select.options).find(option => option.value === selectedId) : null;
+            select.replaceChildren(new Option('No transaction', ''));
+            transactions.forEach(function (transaction) {
+                const suffix = transaction.linked_to ? ` · linked to ${transaction.linked_to}` : '';
+                select.add(new Option(transaction.label + suffix, transaction.id));
+            });
+            if (selectedId && !Array.from(select.options).some(option => option.value === selectedId) && currentOption) {
+                select.add(new Option(currentOption.textContent, selectedId));
+            }
+            select.value = selectedId;
+            help.textContent = transactions.length ? `${transactions.length} matching transactions` : 'No matching transactions';
+        } catch (error) {
+            help.textContent = 'Could not load transactions. Try again.';
+        }
+    }
+
+    search.addEventListener('input', function () {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(loadTransactions, 250);
+    });
+});
+</script>
+{% endblock %}

@@ -19,6 +19,7 @@ a *key* (short string) used as the canonical identifier across the codebase:
     networth           /networth
     vehicles           /vehicles, /vehicles/fuel, /vehicles/trips
     childcare          /childcare
+    plans              /plans
     settings           /settings            (admin-only by default)
     family             /family              (admin-only by default)
 
@@ -48,6 +49,7 @@ SECTION_MAP = [
     ('/networth',     'networth'),
     ('/vehicles',     'vehicles'),
     ('/childcare',    'childcare'),
+    ('/plans',        'plans'),
     ('/settings',     'settings'),
     ('/family',       'family'),
 ]
@@ -70,6 +72,7 @@ SECTION_LABELS = {
     'networth':     'Net Worth',
     'vehicles':     'Vehicles',
     'childcare':    'Childcare',
+    'plans':        'Plans',
 }
 
 # Sections grouped for easier nav/checkbox rendering
@@ -77,7 +80,7 @@ SECTION_GROUPS = {
     'Banking':      ['accounts', 'transactions', 'expenses', 'categories', 'vendors'],
     'Credit & Debt':['credit_cards', 'loans', 'mortgage'],
     'Wealth':       ['income', 'pensions', 'networth'],
-    'Lifestyle':    ['vehicles', 'childcare'],
+    'Lifestyle':    ['vehicles', 'childcare', 'plans'],
 }
 
 

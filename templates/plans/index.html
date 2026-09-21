@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Plans - JonesHQ Finance{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/plans.css') }}">
+{% endblock %}
+
+{% block content %}
+<main class="plans-page container-fluid py-4">
+    <header class="plans-header">
+        <div>
+            <p class="plans-kicker">Occasions, wishes and goals</p>
+            <h1>Plans</h1>
+            <p class="plans-lead">Keep ideas, budgets and purchases together from the first thought to the final cost.</p>
+        </div>
+        <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newPlanModal">
+            <i class="bi bi-plus-lg"></i> New plan
+        </button>
+    </header>
+
+    {% set active_plans = plans | rejectattr('status', 'equalto', 'archived') | list %}
+    <section class="plans-summary" aria-label="Plan summary">
+        <div><span>Open plans</span><strong>{{ active_plans | length }}</strong></div>
+        <div><span>Ideas tracked</span><strong>{{ active_plans | map(attribute='items') | map('length') | sum }}</strong></div>
+        <div><span>Estimated</span><strong>£{{ '%.2f' | format(active_plans | map(attribute='estimated_total') | sum) }}</strong></div>
+        <div><span>Spent</span><strong>£{{ '%.2f' | format(active_plans | map(attribute='actual_total') | sum) }}</strong></div>
+    </section>
+
+    <div class="plans-toolbar">
+        <div class="btn-group" role="group" aria-label="Filter plans">
+            <button class="btn btn-sm btn-dark plan-filter active" type="button" data-filter="open">Open</button>
+            <button class="btn btn-sm btn-outline-secondary plan-filter" type="button" data-filter="all">All</button>
+            <button class="btn btn-sm btn-outline-secondary plan-filter" type="button" data-filter="archived">Archived</button>
+        </div>
+    </div>
+
+    <section class="plan-grid" id="planGrid">
+        {% for plan in plans %}
+        <a class="plan-tile" href="{{ url_for('plans.detail', plan_id=plan.id) }}" data-status="{{ plan.status }}">
+            <div class="plan-tile-top">
+                <span class="plan-type plan-type-{{ plan.plan_type }}">
+                    {% if plan.plan_type == 'savings_goal' %}<i class="bi bi-piggy-bank"></i>
+                    {% elif plan.plan_type == 'wish_list' %}<i class="bi bi-stars"></i>
+                    {% elif plan.plan_type == 'occasion' %}<i class="bi bi-calendar-heart"></i>
+                    {% else %}<i class="bi bi-pin-angle"></i>{% endif %}
+                    {{ plan_types[plan.plan_type] }}
+                </span>
+                <span class="plan-status plan-status-{{ plan.status }}">{{ plan.status | title }}</span>
+            </div>
+            <div class="plan-tile-body">
+                <h2>{{ plan.title }}</h2>
+                <p>
+                    {% if plan.person %}For {{ plan.person }}{% else %}Shared family plan{% endif %}
+                    {% if plan.target_date %}<span>·</span> {{ plan.target_date.strftime('%d %b %Y') }}{% endif %}
+                </p>
+            </div>
+            <div class="plan-progress-copy">
+                <span>{% if plan.plan_type == 'savings_goal' %}£{{ '%.2f' | format(plan.saved_total) }} saved{% else %}£{{ '%.2f' | format(plan.actual_total) }} spent{% endif %}</span>
+                <span>£{{ '%.2f' | format(plan.funding_target) }} target</span>
+            </div>
+            <div class="progress" role="progressbar" aria-label="Plan progress" aria-valuenow="{{ plan.progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" style="width: {{ plan.progress_percent }}%"></div>
+            </div>
+            <footer>
+                <span>{{ plan.items | length }} item{{ '' if plan.items | length == 1 else 's' }}</span>
+                <span>Open <i class="bi bi-arrow-right"></i></span>
+            </footer>
+        </a>
+        {% else %}
+        <div class="plans-empty">
+            <i class="bi bi-journal-plus"></i>
+            <h2>Start with something worth planning</h2>
+            <p>A birthday, Christmas list, family purchase or savings target all fit here.</p>
+            <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newPlanModal">Create the first plan</button>
+        </div>
+        {% endfor %}
+    </section>
+</main>
+
+<div class="modal fade" id="newPlanModal" tabindex="-1" aria-labelledby="newPlanLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" method="post" action="{{ url_for('plans.add_plan') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-header">
+                <div><p class="plans-kicker mb-1">A place for the whole idea</p><h2 class="modal-title fs-4" id="newPlanLabel">New plan</h2></div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="planTitle">Name</label>
+                    <input class="form-control" id="planTitle" name="title" placeholder="Christmas 2026" required maxlength="120">
+                </div>
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <label class="form-label" for="planType">Type</label>
+                        <select class="form-select" id="planType" name="plan_type">
+                            {% for value, label in plan_types.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label" for="planPerson">For</label>
+                        <input class="form-control" id="planPerson" name="person" placeholder="The kids">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label" for="planDate">Target date</label>
+                        <input class="form-control" id="planDate" name="target_date" type="date">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label" for="planTarget">Budget or target</label>
+                        <div class="input-group"><span class="input-group-text">£</span><input class="form-control" id="planTarget" name="target_amount" type="number" min="0" step="0.01"></div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label" for="planNotes">Notes</label>
+                    <textarea class="form-control" id="planNotes" name="notes" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg"></i> Create plan</button></div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.plan-filter').forEach(function (button) {
+    button.addEventListener('click', function () {
+        document.querySelectorAll('.plan-filter').forEach(function (item) {
+            item.classList.toggle('btn-dark', item === button);
+            item.classList.toggle('btn-outline-secondary', item !== button);
+            item.classList.toggle('active', item === button);
+        });
+        document.querySelectorAll('.plan-tile').forEach(function (tile) {
+            var filter = button.dataset.filter;
+            tile.hidden = filter === 'open' ? tile.dataset.status === 'archived' : filter === 'archived' ? tile.dataset.status !== 'archived' : false;
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -149,9 +149,9 @@
                         </ul>
                     </li>
                     {% endif %}
-                    {% if can_access_section('vehicles') or can_access_section('childcare') %}
+                    {% if can_access_section('vehicles') or can_access_section('childcare') or can_access_section('plans') %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if '/vehicles' in request.path or '/childcare' in request.path %}active{% endif %}"
+                        <a class="nav-link dropdown-toggle {% if '/vehicles' in request.path or '/childcare' in request.path or '/plans' in request.path %}active{% endif %}"
                            href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-heart"></i> Lifestyle
                         </a>
@@ -164,6 +164,11 @@
                             {% if can_access_section('childcare') %}
                             <li><a class="dropdown-item" href="/childcare">
                                 <i class="bi bi-people"></i> Childcare
+                            </a></li>
+                            {% endif %}
+                            {% if can_access_section('plans') %}
+                            <li><a class="dropdown-item" href="{{ url_for('plans.index') }}">
+                                <i class="bi bi-journal-check"></i> Plans
                             </a></li>
                             {% endif %}
                         </ul>

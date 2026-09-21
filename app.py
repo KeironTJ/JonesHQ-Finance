@@ -104,6 +104,7 @@ def create_app(config_name=None):
     from blueprints.settings import settings_bp
     from blueprints.expenses import expenses_bp
     from blueprints.family import family_bp
+    from blueprints.plans import plans_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -122,6 +123,7 @@ def create_app(config_name=None):
     app.register_blueprint(settings_bp)
     app.register_blueprint(expenses_bp)
     app.register_blueprint(family_bp)
+    app.register_blueprint(plans_bp)
 
     # ── Section-level access enforcement ──────────────────────────────────
     @app.before_request

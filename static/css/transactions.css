@@ -1,3 +1,21 @@
+.plan-link-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  color: var(--text-muted);
+  font-size: .78rem;
+  text-transform: uppercase;
+}
+
+.plan-link-divider::before,
+.plan-link-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+
 .transactions-page {
   max-width: 1800px;
   margin-inline: auto;
