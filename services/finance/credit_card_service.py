@@ -53,6 +53,7 @@ from decimal import Decimal
 from dateutil.relativedelta import relativedelta
 from models.credit_cards import CreditCard, CreditCardPromotion
 from models.credit_card_transactions import CreditCardTransaction
+from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
 from models.vendors import Vendor
@@ -63,6 +64,34 @@ from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
 class CreditCardService:
+    @staticmethod
+    def _get_or_create_card_vendor(card):
+        vendor = family_query(Vendor).filter_by(name=card.card_name).first()
+        if not vendor:
+            vendor = Vendor(
+                family_id=db_helpers.get_family_id(),
+                name=card.card_name,
+            )
+            db.session.add(vendor)
+            db.session.flush()
+        return vendor
+
+    @staticmethod
+    def _get_or_create_payment_vendor(card, account_id=None):
+        account = family_get(Account, account_id) if account_id else None
+        if not account:
+            return CreditCardService._get_or_create_card_vendor(card)
+
+        vendor = family_query(Vendor).filter_by(name=account.name).first()
+        if not vendor:
+            vendor = Vendor(
+                family_id=db_helpers.get_family_id(),
+                name=account.name,
+            )
+            db.session.add(vendor)
+            db.session.flush()
+        return vendor
+
     @staticmethod
     def get_summary():
         cards = family_query(CreditCard).filter_by(is_active=True).all()
@@ -299,6 +328,8 @@ class CreditCardService:
         transaction.transaction_type = data.get('txn_type')
         transaction.item = data.get('txn_item')
         transaction.amount = float(data.get('txn_amount'))
+        vendor_id = int(data['vendor_id']) if data.get('vendor_id') else None
+        transaction.vendor_id = family_get(Vendor, vendor_id).id if vendor_id else None
         transaction.is_fixed = data.get('txn_fixed') == '1'
         transaction.is_paid = data.get('txn_paid') == '1'
         db.session.commit()
@@ -328,13 +359,8 @@ class CreditCardService:
             ).first() or family_query(Category).filter_by(
                 head_budget='Credit Cards'
             ).first()
-            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
-            if not vendor:
-                vendor = Vendor(
-                    family_id=db_helpers.get_family_id(), name=card.card_name
-                )
-                db.session.add(vendor)
-                db.session.flush()
+            vendor = CreditCardService._get_or_create_payment_vendor(card, account_id)
+            transaction.vendor_id = vendor.id
             bank_transaction = None
             if transaction.bank_transaction_id:
                 bank_transaction = family_get(Transaction, transaction.bank_transaction_id)
@@ -383,6 +409,7 @@ class CreditCardService:
         item = data['txn_item']
         amount = Decimal(str(data.get('txn_amount') or '0'))
         category_id = int(data['category_id']) if data.get('category_id') else None
+        vendor_id = int(data['vendor_id']) if data.get('vendor_id') else None
         account_id = int(data['account_id']) if data.get('account_id') else None
         is_fixed = data.get('txn_fixed') == '1'
         is_paid = data.get('txn_paid') == '1'
@@ -392,6 +419,8 @@ class CreditCardService:
             raise ValueError('Number of occurrences must be at least 1')
 
         category = family_get(Category, category_id) if category_id else None
+        vendor = family_get(Vendor, vendor_id) if vendor_id else None
+        card_vendor = CreditCardService._get_or_create_payment_vendor(card, account_id) if transaction_type == 'Payment' else None
         frequency = data.get('frequency', 'monthly')
         transactions = []
         for occurrence in range(occurrences):
@@ -405,6 +434,7 @@ class CreditCardService:
                 family_id=db_helpers.get_family_id(),
                 credit_card_id=card_id,
                 category_id=category_id,
+                vendor_id=(card_vendor or vendor).id if (card_vendor or vendor) else None,
                 date=current_date,
                 day_name=current_date.strftime('%A'),
                 week=f'{current_date.isocalendar()[1]:02d}-{current_date.year}',
@@ -426,16 +456,11 @@ class CreditCardService:
                 ).first() or family_query(Category).filter_by(
                     head_budget='Credit Cards'
                 ).first()
-                vendor = family_query(Vendor).filter_by(name=card.card_name).first()
-                if not vendor:
-                    vendor = Vendor(family_id=db_helpers.get_family_id(), name=card.card_name)
-                    db.session.add(vendor)
-                    db.session.flush()
                 bank_transaction = Transaction(
                     family_id=db_helpers.get_family_id(),
                     account_id=account_id,
                     category_id=payment_category.id if payment_category else None,
-                    vendor_id=vendor.id,
+                    vendor_id=card_vendor.id,
                     amount=-abs(amount),
                     transaction_date=current_date,
                     description=f'Payment to {card.card_name}',
@@ -673,6 +698,8 @@ class CreditCardService:
             )
             db.session.add(credit_card_category)
             db.session.flush()
+
+        card_vendor = CreditCardService._get_or_create_card_vendor(card)
         
         # Get current APR and check if promotional
         monthly_apr = card.get_current_purchase_apr(statement_date)
@@ -691,6 +718,7 @@ class CreditCardService:
             item='Statement Interest',
             transaction_type='Interest',
             amount=interest_amount,  # Already negative (increases debt)
+            vendor_id=card_vendor.id,
             applied_apr=monthly_apr,
             is_promotional_rate=is_promo,
             is_paid=False,
@@ -775,6 +803,10 @@ class CreditCardService:
             )
             db.session.add(credit_card_category)
             db.session.flush()
+
+        card_vendor = CreditCardService._get_or_create_payment_vendor(
+            card, card.default_payment_account_id
+        )
         
         # Create payment transaction
         transaction = CreditCardTransaction(
@@ -789,6 +821,7 @@ class CreditCardService:
             item='Payment',
             transaction_type='Payment',
             amount=payment_amount,  # POSITIVE = reduces debt (pays off what you owe)
+            vendor_id=card_vendor.id,
             is_paid=False,
             is_fixed=False,  # Generated payments can be regenerated
             statement_id=statement_id  # Link back to the statement that triggered this payment
@@ -800,11 +833,7 @@ class CreditCardService:
         # Create linked bank transaction if default payment account is set
         if card.default_payment_account_id:
             # Find or create vendor for card provider
-            vendor = family_query(Vendor).filter_by(name=card.card_name).first()
-            if not vendor:
-                vendor = Vendor(name=card.card_name)
-                db.session.add(vendor)
-                db.session.flush()
+            vendor = card_vendor
             
             # Calculate computed fields
             payday_period = PaydayService.get_period_for_date(payment_date)
@@ -1333,6 +1362,12 @@ class CreditCardService:
         # Only sync if not paid (avoid changing historical data)
         if cc_payment.is_paid:
             return None
+
+        card = family_get(CreditCard, cc_payment.credit_card_id)
+        if card:
+            cc_payment.vendor_id = CreditCardService._get_or_create_payment_vendor(
+                card, bank_txn.account_id
+            ).id
         
         # Sync date
         if bank_txn.transaction_date != cc_payment.date:
@@ -1393,6 +1428,12 @@ class CreditCardService:
         # Only sync if not paid (avoid changing historical data)
         if bank_txn.is_paid:
             return None
+
+        card = family_get(CreditCard, cc_payment.credit_card_id)
+        if card:
+            bank_txn.vendor_id = CreditCardService._get_or_create_payment_vendor(
+                card, bank_txn.account_id
+            ).id
         
         # Sync date
         if cc_payment.date != bank_txn.transaction_date:

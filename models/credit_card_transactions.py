@@ -9,6 +9,7 @@ class CreditCardTransaction(db.Model):
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     credit_card_id= db.Column(db.Integer, db.ForeignKey('credit_cards.id'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+    vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'), nullable=True)
     
     # Transaction Details
     date = db.Column(db.Date, nullable=False)
@@ -57,6 +58,7 @@ class CreditCardTransaction(db.Model):
     
     # Relationships
     bank_transaction = db.relationship('Transaction', foreign_keys=[bank_transaction_id])
+    vendor = db.relationship('Vendor')
     linked_cc_transaction = db.relationship('CreditCardTransaction', foreign_keys=[linked_cc_transaction_id], remote_side=[id])
     
     @staticmethod

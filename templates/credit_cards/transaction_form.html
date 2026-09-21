@@ -15,9 +15,14 @@
                     <h1><i class="bi bi-{% if transaction %}pencil-square{% else %}plus-circle{% endif %}"></i> {% if transaction %}Edit{% else %}Add{% endif %} Transaction</h1>
                     <p class="page-subtitle mb-0">{{ card.card_name }}</p>
                 </div>
-                <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">{{ card.card_name }}</span>
-                </a>
+                <div class="transactions-header-actions">
+                    <a href="{{ url_for('credit_cards.index') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">Cards</span>
+                    </a>
+                    <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="btn btn-outline-secondary">
+                        <span class="d-none d-sm-inline">{{ card.card_name }}</span>
+                    </a>
+                </div>
             </header>
 
             <div class="card transaction-editor-card">
@@ -68,6 +73,17 @@
                                     <option value="">-- No category --</option>
                                     {% for cat in categories %}
                                     <option value="{{ cat.id }}" {% if transaction and transaction.category_id == cat.id %}selected{% endif %}>{{ cat.head_budget }} > {{ cat.sub_budget }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Vendor -->
+                            <div class="col-md-6 mb-3">
+                                <label for="vendor_id" class="form-label">Vendor</label>
+                                <select class="form-select" id="vendor_id" name="vendor_id">
+                                    <option value="">-- No vendor --</option>
+                                    {% for vendor in vendors %}
+                                    <option value="{{ vendor.id }}" {% if transaction and transaction.vendor_id == vendor.id %}selected{% endif %}>{{ vendor.name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>

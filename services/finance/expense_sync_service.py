@@ -1212,14 +1212,16 @@ class ExpenseSyncService:
             acct_id = Settings.get_value('expenses.payment_account_id')
             payment_account_id = int(acct_id) if acct_id else None
 
+        payment_account = family_get(Account, payment_account_id) if payment_account_id else None
+        vendor_name = payment_account.name if payment_account else cc.card_name
+        vendor = family_query(Vendor).filter_by(name=vendor_name).first()
+        if not vendor:
+            vendor = Vendor(name=vendor_name, family_id=db_helpers.get_family_id())
+            db.session.add(vendor)
+            db.session.flush()
+
         if payment_account_id:
             # Vendor: use the card's own name (create if missing)
-            vendor = family_query(Vendor).filter_by(name=cc.card_name).first()
-            if not vendor:
-                vendor = Vendor(name=cc.card_name, family_id=db_helpers.get_family_id())
-                db.session.add(vendor)
-                db.session.flush()
-
             year_month = payment_date.strftime('%Y-%m')
             week_year  = f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}"
             day_name   = payment_date.strftime('%A')
@@ -1253,6 +1255,7 @@ class ExpenseSyncService:
             day_name=payment_date.strftime('%A'),
             week=f"{payment_date.isocalendar()[1]:02d}-{payment_date.year}",
             month=payment_date.strftime('%Y-%m'),
+            vendor_id=vendor.id,
             transaction_type='Payment',
             item=description,
             amount=total,

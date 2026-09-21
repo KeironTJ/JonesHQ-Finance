@@ -140,6 +140,8 @@ class TestGenerateMonthlyStatement:
         assert float(result['interest_txn'].amount) == pytest.approx(-10.0)
         # Payment = min(set_payment=£200, balance=£510) = £200
         assert float(result['payment_txn'].amount) == pytest.approx(200.0)
+        assert result['interest_txn'].vendor.name == card.card_name
+        assert result['payment_txn'].vendor_id == result['interest_txn'].vendor_id
 
     def test_zero_interest_statement_created_during_promo(
         self, app, card, family_id, patch_family
@@ -262,6 +264,8 @@ def test_create_credit_card_payment_links_bank_transaction(
     assert bank_transaction.family_id == family_id
     assert bank_transaction.amount == Decimal('-200.00')
     assert bank_transaction.account_id == account.id
+    assert transactions[0].vendor.name == account.name
+    assert bank_transaction.vendor_id == transactions[0].vendor_id
 
 
 def test_credit_card_crud_assigns_family_and_updates_available_credit(
@@ -443,6 +447,8 @@ def test_update_payment_transaction_creates_linked_bank_transaction(
     assert updated.is_fixed is True
     assert bank_transaction.amount == Decimal('-125')
     assert bank_transaction.account_id == account.id
+    assert updated.vendor.name == account.name
+    assert bank_transaction.vendor_id == updated.vendor_id
 
 
 # ---------------------------------------------------------------------------

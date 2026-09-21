@@ -14,6 +14,9 @@
             <p class="page-subtitle mb-0">Review balances, transactions and promotional offers for this card.</p>
         </div>
         <div class="transactions-header-actions">
+            <a href="{{ url_for('credit_cards.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">Cards</span>
+            </a>
             {% if other_cards %}
             <a href="{{ url_for('credit_cards.create_balance_transfer', from_card_id=card.id) }}" class="btn btn-outline-primary">
                 <i class="bi bi-arrow-left-right"></i> <span class="d-none d-sm-inline">Balance Transfer</span>
@@ -128,7 +131,7 @@
     {% endif %}
 
     <!-- Transactions Table -->
-    <div class="card">
+    <div class="card cc-transaction-list">
         <div class="card-header">
             <h5 class="mb-0">Transactions <span class="text-muted fw-normal">({{ transaction_count }})</span></h5>
         </div>
@@ -140,6 +143,7 @@
                             <th class="col-date">Date</th>
                             <th class="col-status">Type</th>
                             <th>Details</th>
+                            <th>Vendor</th>
                             <th class="col-amount">Amount</th>
                             <th class="col-running">Balance</th>
                             <th class="col-status">Status</th>
@@ -150,7 +154,7 @@
                         {% for txn in transactions %}
                         <tr id="cc-txn-{{ txn.id }}" class="{% if txn.is_paid %}table-secondary{% elif txn.bank_transaction_id or txn.linked_cc_transaction_id %}table-info{% endif %}" {% if txn.is_paid %}style="opacity: 0.7;"{% endif %}>
                             <td class="txn-date">{{ txn.date.strftime('%d/%m/%Y') }}</td>
-                            <td class="txn-status">
+                            <td class="txn-status txn-type">
                                 {% if txn.transaction_type == 'Purchase' %}
                                 <span class="badge bg-danger">Purchase</span>
                                 {% elif txn.transaction_type == 'Payment' %}
@@ -176,6 +180,7 @@
                                     {% if txn.is_fixed %}<span class="text-warning"><i class="bi bi-lock-fill"></i> Fixed</span>{% endif %}
                                 </div>
                             </td>
+                            <td class="txn-vendor">{{ txn.vendor.name if txn.vendor else '-' }}</td>
                             <td class="txn-amount {% if txn.amount < 0 %}text-danger{% else %}text-success{% endif %}">
                                 £{{ "%.2f"|format(txn.amount|abs) }}
                             </td>
@@ -183,7 +188,7 @@
                                 £{{ "%.2f"|format(txn.balance or 0) }}
                                 {% if not txn.is_paid %}<i class="bi bi-clock-history" title="Future/Unpaid - not included in actual balance"></i>{% endif %}
                             </td>
-                            <td class="txn-status">
+                            <td class="txn-status txn-paid-status">
                                 <form method="POST" action="{{ url_for('credit_cards.toggle_paid', id=card.id, txn_id=txn.id) }}" style="display: inline;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="badge bg-{% if txn.is_paid %}success{% else %}secondary{% endif %} status-toggle" title="Click to toggle paid status">
@@ -236,7 +241,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="7" class="text-center text-muted py-4 transaction-empty">No transactions found.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted py-4 transaction-empty">No transactions found.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

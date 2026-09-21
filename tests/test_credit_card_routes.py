@@ -7,6 +7,7 @@ from models.categories import Category
 from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
 from models.transactions import Transaction
+from models.vendors import Vendor
 from models.plans import Plan, PlanItem
 from models.family import Family
 
@@ -97,6 +98,37 @@ def test_credit_card_transaction_create_and_edit_manage_plan_link(app, family, u
     assert item.credit_card_transaction_id is None
 
 
+def test_credit_card_transaction_create_and_edit_vendor(app, family, user):
+    card = CreditCard(
+        family_id=family.id, card_name='Route Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    first_vendor = Vendor(family_id=family.id, name='First Vendor')
+    second_vendor = Vendor(family_id=family.id, name='Second Vendor')
+    db.session.add_all([card, first_vendor, second_vendor])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(f'/credit-cards/{card.id}/transaction/add', data={
+        'txn_date': '2026-09-21', 'txn_type': 'Purchase',
+        'txn_item': 'First purchase', 'txn_amount': '-70.00',
+        'vendor_id': str(first_vendor.id),
+    })
+    transaction = CreditCardTransaction.query.one()
+    assert response.status_code == 302
+    assert transaction.vendor_id == first_vendor.id
+
+    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
+        'txn_date': '2026-09-21', 'txn_type': 'Purchase',
+        'txn_item': 'Second purchase', 'txn_amount': '-70.00',
+        'vendor_id': str(second_vendor.id),
+    })
+    assert response.status_code == 302
+    assert transaction.vendor_id == second_vendor.id
+
+
 def test_credit_card_detail_renders_plan_link_action_and_badge(app, family, user):
     card = CreditCard(
         family_id=family.id, card_name='Route Card', annual_apr=24,
@@ -107,6 +139,8 @@ def test_credit_card_detail_renders_plan_link_action_and_badge(app, family, user
         family_id=family.id, credit_card=card, date=date.today(),
         transaction_type='Purchase', item='Toy shop', amount=Decimal('-20.00'),
     )
+    vendor = Vendor(family_id=family.id, name='Toy Shop')
+    transaction.vendor = vendor
     plan = Plan(family_id=family.id, title='Christmas')
     item = PlanItem(family_id=family.id, plan=plan, title='Gift', credit_card_transaction=transaction)
     db.session.add_all([card, transaction, plan, item])
@@ -120,6 +154,7 @@ def test_credit_card_detail_renders_plan_link_action_and_badge(app, family, user
     assert b'ccPlanLinkModal' in response.data
     assert b'Christmas' in response.data
     assert b'Gift' in response.data
+    assert b'Toy Shop' in response.data
 
 
 def test_credit_card_plan_link_rejects_foreign_item(app, family, user):

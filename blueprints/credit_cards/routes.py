@@ -287,10 +287,11 @@ def add_transaction(id):
     if request.method == 'GET':
         accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
         categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+        vendors = family_query(Vendor).filter_by(is_active=True).order_by(Vendor.name).all()
         plans, plan_items = PlanLinkService.get_options()
         return render_template('credit_cards/transaction_form.html',
                                 card=card, transaction=None, accounts=accounts,
-                                categories=categories, today=date.today(),
+                                categories=categories, vendors=vendors, today=date.today(),
                                 plans=plans, plan_items=plan_items,
                                 assignment_options=get_assignment_options(),
                                 current_plan_item=None)
@@ -396,11 +397,12 @@ def edit_transaction(id, txn_id):
     if request.method == 'GET':
         accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
         categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
+        vendors = family_query(Vendor).filter_by(is_active=True).order_by(Vendor.name).all()
         plans, plan_items = PlanLinkService.get_options()
         current_plan_item = PlanLinkService.current_credit_card_item(txn.id)
         return render_template('credit_cards/transaction_form.html',
                                 card=card, transaction=txn, accounts=accounts,
-                                categories=categories, today=date.today(),
+                                categories=categories, vendors=vendors, today=date.today(),
                                 plans=plans, plan_items=plan_items,
                                 assignment_options=get_assignment_options(),
                                 current_plan_item=current_plan_item)

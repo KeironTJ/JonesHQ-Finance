@@ -544,6 +544,42 @@
   .filter-drawer-trigger { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; }
 }
 
+@media (min-width: 768px) and (max-width: 991.98px) {
+  .cc-transaction-list .table-responsive { overflow: visible; }
+  .cc-transaction-list .transactions-table,
+  .cc-transaction-list .transactions-table tbody { display: block; width: 100%; }
+  .cc-transaction-list .transactions-table thead { display: none; }
+  .cc-transaction-list .transactions-table tbody { padding: 0 0.75rem; }
+  .cc-transaction-list .transactions-table tbody tr {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr) auto;
+    gap: 0.35rem 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .cc-transaction-list .transactions-table tbody td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .cc-transaction-list .txn-date { grid-column: 1; grid-row: 1; }
+  .cc-transaction-list .txn-type { grid-column: 2; grid-row: 1; text-align: left; }
+  .cc-transaction-list .txn-amount { grid-column: 3; grid-row: 1; }
+  .cc-transaction-list .txn-details { grid-column: 1 / 4; grid-row: 2; }
+  .cc-transaction-list .txn-vendor { grid-column: 1 / 3; grid-row: 3; color: var(--text-secondary); font-size: 0.78rem; }
+  .cc-transaction-list .txn-vendor::before { content: 'Vendor: '; color: var(--text-muted); }
+  .cc-transaction-list .txn-paid-status { grid-column: 3; grid-row: 3; text-align: right; }
+  .cc-transaction-list .txn-actions { grid-column: 1 / 4; grid-row: 4; margin-top: 0.25rem; }
+  .cc-transaction-list .txn-actions .btn-group { display: flex; width: 100%; }
+  .cc-transaction-list .txn-actions .btn-group > .btn,
+  .cc-transaction-list .txn-actions .btn-group > form { flex: 1 1 0; min-width: 0; }
+  .cc-transaction-list .txn-actions .btn-group > form { display: flex; }
+  .cc-transaction-list .txn-actions .btn { width: 100%; min-height: 36px; }
+}
+
 @media (max-width: 767.98px) {
   .transactions-page { padding-inline: 0.75rem; }
   .transactions-header { flex-direction: row; align-items: center; }
