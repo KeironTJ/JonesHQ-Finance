@@ -480,7 +480,9 @@
                                                     data-txn-year-month="{{ transaction.year_month or '' }}"
                                                     data-txn-week-year="{{ transaction.week_year or '' }}"
                                                     data-txn-day-name="{{ transaction.day_name or '' }}"
-                                                    data-txn-payday-period="{{ transaction.payday_period or '' }}">
+                                                    data-txn-payday-period="{{ transaction.payday_period or '' }}"
+                                                    data-txn-plan-id="{{ plan_item.plan_id if plan_item else '' }}"
+                                                    data-txn-plan-item-id="{{ plan_item.id if plan_item else '' }}">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             
@@ -606,7 +608,7 @@
                 </div>
                 <div class="mb-2">
                     <label class="form-label" for="linkPlanAssignee">Assigned to</label>
-                    <select class="form-select" id="linkPlanAssignee" name="assigned_to">
+                    <select class="form-select" id="linkPlanAssignee" name="plan_assigned_to">
                         <option value="">Unassigned</option>
                         {% for person_name in assigned_people_options %}<option value="{{ person_name }}">{{ person_name }}</option>{% endfor %}
                     </select>
@@ -755,6 +757,34 @@
                             Lock this transaction (prevent regeneration)
                         </label>
                     </div>
+
+                    {% if can_access_section('plans') and plans %}
+                    <div class="transaction-modal-advanced">
+                        <button type="button" class="transaction-advanced-toggle" data-bs-toggle="collapse" data-bs-target="#editPlanLink" aria-expanded="false" aria-controls="editPlanLink">
+                            <span><i class="bi bi-journal-check"></i> Plan link</span>
+                            <span class="text-muted" id="editPlanLinkSummary">Not linked <i class="bi bi-chevron-down"></i></span>
+                        </button>
+                        <div class="collapse" id="editPlanLink">
+                            <div class="row g-2 pt-3">
+                                <div class="col-12">
+                                    <label class="form-label form-label-sm" for="edit_plan_item_id">Existing item</label>
+                                    <select class="form-select" id="edit_plan_item_id" name="plan_item_id">
+                                        <option value="">No plan item</option>
+                                        {% for plan_item in plan_items %}<option value="{{ plan_item.id }}" data-plan-title="{{ plan_item.plan.title | e }}" data-item-title="{{ plan_item.title | e }}">{{ plan_item.plan.title }} · {{ plan_item.title }}{% if plan_item.transaction_id %} · currently linked{% endif %}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-5">
+                                    <label class="form-label form-label-sm" for="edit_plan_id">New item plan</label>
+                                    <select class="form-select" id="edit_plan_id" name="plan_id"><option value="">Choose plan</option>{% for plan in plans %}<option value="{{ plan.id }}">{{ plan.title }}</option>{% endfor %}</select>
+                                </div>
+                                <div class="col-7">
+                                    <label class="form-label form-label-sm" for="edit_new_plan_item_title">New item name</label>
+                                    <input class="form-control" id="edit_new_plan_item_title" name="new_plan_item_title">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                     
                     <div class="transaction-modal-advanced">
                         <button type="button" class="transaction-advanced-toggle" data-bs-toggle="collapse" data-bs-target="#editPeriodOverrides" aria-expanded="false" aria-controls="editPeriodOverrides">
@@ -879,6 +909,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const txnPaymentType = button.getAttribute('data-txn-payment-type');
             const txnFixed = button.getAttribute('data-txn-fixed');
             const txnPaid = button.getAttribute('data-txn-paid');
+            const txnPlanItemId = button.getAttribute('data-txn-plan-item-id') || '';
             
             // Set form action dynamically
             const form = document.getElementById('editTransactionForm');
@@ -912,12 +943,29 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_is_paid').checked = (txnPaid === '1');
             syncEditPaidControl();
 
+            const planItemSelect = document.getElementById('edit_plan_item_id');
+            const newPlanItemTitle = document.getElementById('edit_new_plan_item_title');
+            const planLinkSummary = document.getElementById('editPlanLinkSummary');
+            if (planItemSelect) {
+                planItemSelect.value = txnPlanItemId;
+                if (newPlanItemTitle) newPlanItemTitle.value = '';
+                const option = planItemSelect.selectedOptions[0];
+                planLinkSummary.innerHTML = txnPlanItemId ? `${option.dataset.planTitle} · ${option.dataset.itemTitle} <i class="bi bi-chevron-down"></i>` : 'Not linked <i class="bi bi-chevron-down"></i>';
+            }
+
             // Period override fields — pre-populate for visibility
             document.getElementById('edit_year_month').value = button.getAttribute('data-txn-year-month') || '';
             document.getElementById('edit_week_year').value = button.getAttribute('data-txn-week-year') || '';
             document.getElementById('edit_day_name').value = button.getAttribute('data-txn-day-name') || '';
             document.getElementById('edit_payday_period').value = button.getAttribute('data-txn-payday-period') || '';
         });
+
+        const editPlanItemSelect = document.getElementById('edit_plan_item_id');
+        const editNewPlanItemTitle = document.getElementById('edit_new_plan_item_title');
+        if (editPlanItemSelect && editNewPlanItemTitle) {
+            editPlanItemSelect.addEventListener('change', function () { if (editPlanItemSelect.value) editNewPlanItemTitle.value = ''; });
+            editNewPlanItemTitle.addEventListener('input', function () { if (editNewPlanItemTitle.value) editPlanItemSelect.value = ''; });
+        }
     }
 
     // When the date changes in the modal, clear all period override fields so

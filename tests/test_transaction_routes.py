@@ -6,6 +6,7 @@ from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
 from models.family import Family
+from models.plans import Plan, PlanItem
 
 
 def _login(client, user_id):
@@ -118,6 +119,79 @@ def test_transaction_routes_create_edit_delete(app, family, user):
     response = client.post(f'/{transaction_id}/delete')
     assert response.status_code == 302
     assert db.session.get(Transaction, transaction_id) is None
+
+
+def test_transaction_create_and_edit_manage_plan_link(app, family, user):
+    account = Account(family_id=family.id, name='Current', account_type='Joint', balance=0, is_active=True)
+    category = Category(family_id=family.id, name='Gifts', head_budget='Lifestyle', sub_budget='Gifts', category_type='expense')
+    plan = Plan(family_id=family.id, title='Christmas')
+    item = PlanItem(family_id=family.id, plan=plan, title='Scooter')
+    db.session.add_all([account, category, plan, item])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post('/transactions/create', data={
+        'account_id': str(account.id), 'category_id': str(category.id),
+        'amount': '-50.00', 'transaction_date': '2026-09-21',
+        'description': 'Toy shop', 'plan_item_id': str(item.id),
+    })
+    transaction = Transaction.query.one()
+    assert response.status_code == 302
+    assert item.transaction_id == transaction.id
+
+    response = client.post(f'/transactions/{transaction.id}/edit', data={
+        'account_id': str(account.id), 'category_id': str(category.id),
+        'amount': '-50.00', 'transaction_date': '2026-09-21',
+        'description': 'Toy shop', 'plan_item_id': '',
+    })
+    assert response.status_code == 302
+    assert item.transaction_id is None
+
+
+def test_transaction_create_can_quick_create_plan_item(app, family, user):
+    account = Account(family_id=family.id, name='Current', account_type='Joint', balance=0, is_active=True)
+    category = Category(family_id=family.id, name='Gifts', head_budget='Lifestyle', sub_budget='Gifts', category_type='expense')
+    plan = Plan(family_id=family.id, title='Birthday')
+    db.session.add_all([account, category, plan])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post('/transactions/create', data={
+        'account_id': str(account.id), 'category_id': str(category.id),
+        'amount': '-35.00', 'transaction_date': '2026-09-21',
+        'description': 'Book shop', 'plan_id': str(plan.id),
+        'new_plan_item_title': 'Books', 'assigned_to': user.name,
+    })
+    item = PlanItem.query.one()
+
+    assert response.status_code == 302
+    assert item.title == 'Books'
+    assert item.assigned_to == user.name
+    assert item.transaction_id == Transaction.query.one().id
+
+
+def test_recurring_transaction_batch_rejects_single_plan_link(app, family, user):
+    account = Account(family_id=family.id, name='Current', account_type='Joint', balance=0, is_active=True)
+    category = Category(family_id=family.id, name='Gifts', head_budget='Lifestyle', sub_budget='Gifts', category_type='expense')
+    plan = Plan(family_id=family.id, title='Christmas')
+    item = PlanItem(family_id=family.id, plan=plan, title='Subscription')
+    db.session.add_all([account, category, plan, item])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post('/transactions/create', data={
+        'account_id': str(account.id), 'category_id': str(category.id),
+        'amount': '-10.00', 'transaction_date': '2026-09-21',
+        'is_recurring': 'on', 'occurrences': '12', 'frequency': 'monthly',
+        'plan_item_id': str(item.id),
+    })
+
+    assert response.status_code == 302
+    assert Transaction.query.count() == 0
+    assert item.transaction_id is None
 
 
 def test_transaction_create_rejects_references_from_another_family(app, family, user):

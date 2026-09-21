@@ -17,6 +17,7 @@ from models.users import User
 from models.plans import Plan, PlanItem
 from services.finance.payday_service import PaydayService
 from services.finance.transaction_service import TransactionService
+from services.planning.plan_link_service import PlanLinkService
 from extensions import db
 from models.expenses import Expense
 from utils.assignment_helpers import get_assignment_options
@@ -297,8 +298,14 @@ def create():
     if request.method == 'POST':
         try:
             is_recurring = request.form.get('is_recurring') == 'on'
+            if is_recurring and (
+                request.form.get('plan_item_id') or request.form.get('new_plan_item_title')
+            ):
+                raise ValueError('A recurring batch cannot be linked to one plan item.')
+            PlanLinkService.validate_form(request.form)
             transactions = TransactionService.create_transactions(request.form)
             transactions_created = len(transactions)
+            PlanLinkService.sync(transactions[0], request.form)
             
             # Recalculate account balance
             Transaction.recalculate_account_balance(transactions[0].account_id)
@@ -321,6 +328,7 @@ def create():
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     vendors = family_query(Vendor).order_by(Vendor.name).all()
     assigned_people_options = get_assigned_people_options()
+    plans, plan_items = PlanLinkService.get_options()
     
     return render_template(
         'transactions/transaction_form.html',
@@ -329,6 +337,9 @@ def create():
         categories=categories,
         vendors=vendors,
         assigned_people_options=assigned_people_options,
+        plans=plans,
+        plan_items=plan_items,
+        current_plan_item=None,
         action='Create',
         today=date.today()
     )
@@ -341,9 +352,11 @@ def edit(id):
     
     if request.method == 'POST':
         try:
+            PlanLinkService.validate_form(request.form)
             transaction, old_account_id, linked_account_id = TransactionService.update_transaction(
                 id, request.form
             )
+            PlanLinkService.sync(transaction, request.form)
             
             # Sync changes to linked credit card payment if exists
             if transaction.credit_card_id:
@@ -390,6 +403,8 @@ def edit(id):
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     vendors = family_query(Vendor).order_by(Vendor.name).all()
     assigned_people_options = get_assigned_people_options()
+    plans, plan_items = PlanLinkService.get_options()
+    current_plan_item = PlanLinkService.current_item(transaction.id)
     
     return render_template(
         'transactions/transaction_form.html',
@@ -398,6 +413,9 @@ def edit(id):
         categories=categories,
         vendors=vendors,
         assigned_people_options=assigned_people_options,
+        plans=plans,
+        plan_items=plan_items,
+        current_plan_item=current_plan_item,
         action='Edit'
     )
 

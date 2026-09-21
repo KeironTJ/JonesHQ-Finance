@@ -7,6 +7,7 @@ from extensions import db
 from models.plans import Plan, PlanItem
 from models.transactions import Transaction
 from models.vendors import Vendor
+from services.planning.plan_link_service import PlanLinkService
 from utils.assignment_helpers import get_assignment_options
 from utils.db_helpers import family_get, family_get_or_404, family_query, get_family_id
 
@@ -307,40 +308,16 @@ def delete_item(plan_id, item_id):
 @plans_bp.route('/plans/transactions/<int:transaction_id>/link', methods=['POST'])
 def link_transaction(transaction_id):
     transaction = family_get_or_404(Transaction, transaction_id)
-    item_id = request.form.get('item_id', type=int)
-    plan_id = request.form.get('plan_id', type=int)
-    new_item_title = request.form.get('new_item_title', '').strip()
-
-    if new_item_title:
-        plan = family_get_or_404(Plan, plan_id)
-        requested_assignee = request.form.get('assigned_to')
-        try:
-            assigned_to = _assignment_value(requested_assignee) if requested_assignee else None
-        except ValueError:
-            flash('Choose a valid family member or assignment label.', 'danger')
-            return redirect(url_for('transactions.index', id=transaction.id))
-        if assigned_to is None and transaction.assigned_to in get_assignment_options():
-            assigned_to = transaction.assigned_to
-        item = PlanItem(
-            family_id=get_family_id(),
-            plan_id=plan.id,
-            title=new_item_title,
-            assigned_to=assigned_to,
-            estimated_cost=abs(Decimal(str(transaction.amount))),
-            status='purchased',
-        )
-        db.session.add(item)
-    elif item_id:
-        item = family_get_or_404(PlanItem, item_id)
-    else:
-        linked_items = family_query(PlanItem).filter_by(transaction_id=transaction.id).all()
-        for linked_item in linked_items:
-            linked_item.transaction = None
+    try:
+        item = PlanLinkService.sync(transaction, request.form)
         db.session.commit()
-        flash('Transaction unlinked from its plan item.', 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
         return redirect(url_for('transactions.index', id=transaction.id))
 
-    _link_transaction(item, transaction)
-    db.session.commit()
+    if item is None:
+        flash('Transaction unlinked from its plan item.', 'success')
+        return redirect(url_for('transactions.index', id=transaction.id))
     flash(f'Transaction linked to {item.plan.title}: {item.title}.', 'success')
     return redirect(url_for('transactions.index', id=transaction.id))
