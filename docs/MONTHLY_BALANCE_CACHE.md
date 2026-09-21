@@ -105,7 +105,7 @@ MonthlyBalanceService.handle_transaction_change(account_id, date(2024, 12, 15))
 
 Force rebuild entire cache:
 ```python
-from services.monthly_balance_service import MonthlyBalanceService
+from services.finance.monthly_balance_service import MonthlyBalanceService
 MonthlyBalanceService.rebuild_all_cache()
 ```
 
@@ -119,7 +119,7 @@ MonthlyBalanceService.update_account_from_month(account_id, 2024, 12)
 ### Get Balance for Specific Month
 
 ```python
-from services.monthly_balance_service import MonthlyBalanceService
+from services.finance.monthly_balance_service import MonthlyBalanceService
 
 # Get actual balance (paid transactions only)
 actual = MonthlyBalanceService.get_balance_for_month(account_id, 2024, 12, use_projected=False)
@@ -131,7 +131,7 @@ projected = MonthlyBalanceService.get_balance_for_month(account_id, 2025, 6, use
 ### Calculate Net Worth Timeline
 
 ```python
-from services.networth_service import NetWorthService
+from services.analytics.networth_service import NetWorthService
 
 # Get 24-month timeline (uses cache automatically)
 timeline = NetWorthService.get_monthly_timeline(start_year=2024, start_month=1, num_months=24)

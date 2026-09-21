@@ -106,7 +106,7 @@ db.session.commit()
 ## API/Service Methods
 
 ```python
-from services.pension_service import PensionService
+from services.planning.pension_service import PensionService
 
 # Generate projections for one pension
 PensionService.save_projections(pension, scenario='default')

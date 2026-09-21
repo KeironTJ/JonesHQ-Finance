@@ -17,7 +17,7 @@
 
 Run this from the project root:
 ```powershell
-python create_initial_users.py
+python -m scripts.create_initial_users
 ```
 
 This will prompt you to create 2 user accounts (you and your wife).
@@ -63,7 +63,7 @@ Login with the credentials you just created!
 - `models/users.py` - User model
 - `blueprints/auth/` - Authentication blueprint
 - `templates/auth/login.html` - Login page
-- `create_initial_users.py` - User creation script
+- `scripts/create_initial_users.py` - User creation script
 - `docs/DEPLOYMENT.md` - Full deployment guide
 
 ### Modified Files:
@@ -80,7 +80,7 @@ Login with the credentials you just created!
 
 ### Create New Users
 ```powershell
-python create_initial_users.py
+python -m scripts.create_initial_users
 ```
 
 ### Check Existing Users

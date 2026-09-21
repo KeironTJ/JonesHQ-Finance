@@ -1,6 +1,6 @@
 """
 Quick User Creation
-Run from project root: python create_initial_users.py
+Run from project root: python -m scripts.create_initial_users
 """
 from app import create_app
 from extensions import db

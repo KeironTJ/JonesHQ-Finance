@@ -102,7 +102,7 @@ echo "You will be prompted to create user accounts..."
 sudo -u $APP_USER bash << 'EOF'
 echo "The interactive user-creation step is intentionally left manual."
 echo "Run the following as the $APP_USER after deploy if you need to create users:"
-echo "  sudo -u $APP_USER bash -ic 'cd $APP_DIR && source venv/bin/activate && . .env.production && python3 create_initial_users.py'"
+echo "  sudo -u $APP_USER bash -ic 'cd $APP_DIR && source venv/bin/activate && . .env.production && python3 -m scripts.create_initial_users'"
 echo "Skipping automatic user creation in automated deploy."
 EOF
 

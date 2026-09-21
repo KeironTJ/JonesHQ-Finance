@@ -1,7 +1,7 @@
 # Quick start script for JonesHQ Finance (PowerShell)
 
 Write-Host "Activating virtual environment..." -ForegroundColor Green
-& .\.venv\Scripts\Activate.ps1
+& .\venv\Scripts\Activate.ps1
 
 Write-Host ""
 Write-Host "Starting Flask application..." -ForegroundColor Green

@@ -146,7 +146,7 @@ export $(cat .env.production | xargs)
 flask db upgrade
 
 # Create your user accounts
-python3 create_initial_users.py
+python3 -m scripts.create_initial_users
 ```
 
 ---

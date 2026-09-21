@@ -75,7 +75,7 @@ Calculates tax and NI for given salary.
 
 **Example:**
 ```python
-from services.income_service import IncomeService
+from services.finance.income_service import IncomeService
 
 result = IncomeService.calculate_tax_and_ni(
     gross_annual=53000,
@@ -178,7 +178,7 @@ Create pension snapshot interface:
 
 ### Recording New Income
 ```python
-from services.income_service import IncomeService
+from services.finance.income_service import IncomeService
 from datetime import date
 
 # Keiron's salary - Jan 2024
@@ -260,7 +260,7 @@ Your Excel data can be imported with a script like:
 ```python
 import pandas as pd
 from datetime import datetime
-from services.income_service import IncomeService
+from services.finance.income_service import IncomeService
 
 # Read Excel
 df = pd.read_excel('income_history.xlsx')

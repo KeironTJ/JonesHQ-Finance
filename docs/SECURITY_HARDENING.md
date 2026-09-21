@@ -84,7 +84,7 @@ Before deploying publicly, ensure:
 4. **Update Existing Users**
    If you already created users with weak passwords, recreate them:
    ```powershell
-   python create_initial_users.py
+   python -m scripts.create_initial_users
    ```
 
 ### Optional but Recommended:
@@ -123,7 +123,7 @@ Before deploying publicly, ensure:
 - [models/users.py](../models/users.py) - Added lockout fields and methods
 - [blueprints/auth/routes.py](../blueprints/auth/routes.py) - Implemented rate limiting and lockout logic
 - [templates/auth/login.html](../templates/auth/login.html) - Updated to use WTForms with CSRF
-- [create_initial_users.py](../create_initial_users.py) - Added password validation
+- [scripts/create_initial_users.py](../scripts/create_initial_users.py) - Added password validation
 
 ### Database Changes:
 - Migration added `failed_login_attempts` and `locked_until` columns to `users` table

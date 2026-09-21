@@ -62,6 +62,8 @@ migrations/versions/*.pyc
 .coverage
 htmlcov/
 .tox/
+.pytest_*.txt
+.pycompile.txt
 
 # OS
 Thumbs.db

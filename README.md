@@ -106,9 +106,9 @@ JonesHQ Finance/
 │   ├── vehicles.py
 │   └── ...
 ├── services/              # Business logic and domain workflows
-│   ├── income_service.py
-│   ├── loan_service.py
-│   ├── mortgage_service.py
+│   ├── finance/
+│   ├── planning/
+│   ├── household/
 │   └── ...
 ├── blueprints/            # Route blueprints
 │   ├── dashboard/
@@ -127,7 +127,7 @@ JonesHQ Finance/
 
 ## Database Schema
 
-See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for detailed documentation of the database structure.
+See [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) for detailed documentation of the database structure.
 
 ## Development Workflow
 

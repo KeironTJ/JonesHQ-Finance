@@ -2,7 +2,7 @@
 REM Quick start script for JonesHQ Finance
 
 echo Activating virtual environment...
-call .venv\Scripts\activate.bat
+call venv\Scripts\activate.bat
 
 echo.
 echo Setting environment for development...

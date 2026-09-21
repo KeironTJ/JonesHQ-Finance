@@ -129,7 +129,7 @@ export $(cat .env.production | xargs)
 flask db upgrade
 
 # Create users
-python3 create_initial_users.py
+python3 -m scripts.create_initial_users
 # Follow prompts to create accounts for you and your wife
 ```
 

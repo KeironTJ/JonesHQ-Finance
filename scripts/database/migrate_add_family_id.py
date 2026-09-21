@@ -114,7 +114,7 @@ def main():
             row = conn.execute(text('SELECT id, name FROM families WHERE id = 1')).fetchone()
             if row is None:
                 print('ERROR: No family with id=1 found in the families table.')
-                print('       Run create_initial_users.py first, or insert a family manually.')
+                print('       Run python -m scripts.create_initial_users first, or insert a family manually.')
                 sys.exit(1)
             print(f'Found family: id={row[0]}, name="{row[1]}"')
             print()
