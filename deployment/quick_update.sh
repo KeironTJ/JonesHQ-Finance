@@ -61,7 +61,7 @@ rollback_full() {
     echo "Rollback complete. Service restarted on previous code/database."
 }
 
-if [ -n "$(sudo -u $APP_USER bash -c "cd $APP_DIR && git status --porcelain")" ]; then
+if [ -n "$(sudo -u $APP_USER bash -c "cd $APP_DIR && git status --porcelain --untracked-files=no")" ]; then
     echo "ERROR: Working tree has uncommitted changes on the server. Resolve manually before updating."
     exit 1
 fi
