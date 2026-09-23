@@ -104,6 +104,7 @@ class LoanService:
             ),
             weekend_adjustment=data.get('weekend_adjustment', 'none'),
             is_active=data.get('is_active') == 'on',
+            owner_id=db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None,
         )
         db.session.add(loan)
         db.session.commit()
@@ -207,6 +208,7 @@ class LoanService:
             
             if not existing:
                 opening_payment = LoanPayment(
+                    family_id=loan.family_id,
                     loan_id=loan_id,
                     date=current_date,
                     year_month=current_date.strftime('%Y-%m'),
@@ -267,6 +269,7 @@ class LoanService:
                 
                 # Create payment record
                 payment = LoanPayment(
+                    family_id=loan.family_id,
                     loan_id=loan_id,
                     date=adjusted_date,
                     year_month=adjusted_date.strftime('%Y-%m'),
@@ -349,6 +352,8 @@ class LoanService:
         
         if not loan_category:
             loan_category = Category(
+                family_id=loan.family_id,
+                name=loan.name,
                 head_budget='Loans',
                 sub_budget=loan.name,
                 category_type='expense'
@@ -359,7 +364,7 @@ class LoanService:
         # Find or create vendor for this loan
         vendor = family_query(Vendor).filter_by(name=loan.name).first()
         if not vendor:
-            vendor = Vendor(name=loan.name)
+            vendor = Vendor(family_id=loan.family_id, name=loan.name)
             db.session.add(vendor)
             db.session.flush()
         
@@ -371,6 +376,7 @@ class LoanService:
         
         # Create bank transaction
         bank_txn = Transaction(
+            family_id=loan.family_id,
             account_id=loan.default_payment_account_id,
             category_id=loan_category.id,
             loan_id=loan_id,

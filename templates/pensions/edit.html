@@ -32,6 +32,14 @@
                 </div>
                 
                 <div class="mb-3">
+                    <label for="visibility" class="form-label">Visibility</label>
+                    <select class="form-select" id="visibility" name="visibility">
+                        <option value="shared" {% if not pension.is_private %}selected{% endif %}>Shared with family</option>
+                        <option value="private" {% if pension.is_private %}selected{% endif %}>Private (only me)</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
                     <label for="current_value" class="form-label">Current Value</label>
                     <div class="input-group">
                         <span class="input-group-text">£</span>

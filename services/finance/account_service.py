@@ -3,6 +3,7 @@ from decimal import Decimal
 from extensions import db
 from models.accounts import Account
 from models.transactions import Transaction
+from models.users import User
 from utils import db_helpers
 from utils.db_helpers import family_get_or_404, family_query
 
@@ -58,28 +59,32 @@ class AccountService:
             'accounts_by_type': accounts_by_type,
             'type_totals': type_totals,
             'total_balance': sum(account.calculated_balance for account in active_accounts),
+            'family_members': User.query.filter_by(family_id=db_helpers.get_family_id()).order_by(User.name).all(),
         }
 
     @staticmethod
-    def create_account(name, account_type, balance, is_active):
+    def create_account(name, account_type, balance, is_active, is_private=False):
         account = Account(
             family_id=db_helpers.get_family_id(),
             name=name,
             account_type=account_type,
             balance=float(balance),
             is_active=is_active,
+            owner_id=db_helpers.get_current_user_id() if is_private else None,
         )
         db.session.add(account)
         db.session.commit()
         return account
 
     @staticmethod
-    def update_account(account_id, name, account_type, balance, is_active):
+    def update_account(account_id, name, account_type, balance, is_active, is_private=None):
         account = family_get_or_404(Account, account_id)
         account.name = name
         account.account_type = account_type
         account.balance = float(balance)
         account.is_active = is_active
+        if is_private is not None:
+            account.owner_id = db_helpers.get_current_user_id() if is_private else None
         db.session.commit()
         return account
 

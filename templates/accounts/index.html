@@ -86,11 +86,18 @@
                                     <i class="bi bi-bank2 text-primary"></i>
                                     {{ account.name }}
                                 </h5>
-                                {% if account.is_active %}
-                                <span class="badge bg-success">Active</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Inactive</span>
-                                {% endif %}
+                                <div class="text-end">
+                                    {% if account.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                    {% if account.is_private %}
+                                    <span class="badge bg-warning text-dark d-block mt-1" title="Only visible to you">
+                                        <i class="bi bi-lock"></i> Private
+                                    </span>
+                                    {% endif %}
+                                </div>
                             </div>
                             
                             <hr class="my-2">
@@ -175,6 +182,14 @@
                                                 Active Account
                                             </label>
                                         </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="edit_visibility{{ account.id }}" class="form-label">Visibility</label>
+                                        <select class="form-select" id="edit_visibility{{ account.id }}" name="visibility">
+                                            <option value="shared" {% if not account.is_private %}selected{% endif %}>Shared with family</option>
+                                            <option value="private" {% if account.is_private %}selected{% endif %}>Private (only me)</option>
+                                        </select>
+                                        <small class="text-muted">Private accounts are hidden from other family members.</small>
                                     </div>
                                 </div>
                                 <div class="modal-footer">
@@ -292,6 +307,14 @@
                                 Active Account
                             </label>
                         </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="visibility" class="form-label">Visibility</label>
+                        <select class="form-select" id="visibility" name="visibility">
+                            <option value="shared" selected>Shared with family</option>
+                            <option value="private">Private (only me)</option>
+                        </select>
+                        <small class="text-muted">Private accounts are hidden from other family members, including in totals and reports.</small>
                     </div>
                 </div>
                 <div class="modal-footer">

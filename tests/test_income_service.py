@@ -140,3 +140,113 @@ def test_income_deletion_cleans_or_keeps_linked_transactions(app, family, monkey
     assert db.session.get(Transaction, kept_transaction.id) is not None
     assert db.session.get(Income, first.id) is None
     assert db.session.get(Transaction, deleted_transaction.id) is None
+
+
+def test_private_income_record_hidden_from_other_family_members(app, family, monkeypatch, user):
+    from utils.db_helpers import family_query
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    income = IncomeService.create_income_record(
+        person='Keiron',
+        pay_date=date(2026, 1, 15),
+        gross_annual=50000,
+        deposit_account_id=None,
+        create_transaction=False,
+        owner_id=user.id,
+    )
+
+    assert income.owner_id == user.id
+    assert income in family_query(Income).all()
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    assert income not in family_query(Income).all()
+
+
+def test_recurring_income_privacy_is_inherited_by_generated_records(app, family, monkeypatch, user):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    recurring = IncomeService.create_recurring_income({
+        'person': 'Keiron',
+        'start_date': '2026-01-15',
+        'pay_day': '15',
+        'gross_annual': '50000',
+        'employer_pension_pct': '0',
+        'employee_pension_pct': '0',
+        'tax_code': '1257L',
+        'avc': '0',
+        'other': '0',
+        'deposit_account_id': '',
+        'category_id': '',
+        'source': 'Employer',
+        'visibility': 'private',
+    })
+
+    assert recurring.owner_id == user.id
+    assert recurring.is_private is True
+
+    generated = IncomeService.generate_missing_income(
+        recurring.id, end_date=date(2026, 1, 1)
+    )
+
+    assert len(generated) == 1
+    assert generated[0].owner_id == user.id
+
+    from utils.db_helpers import family_query
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    assert generated[0] not in family_query(Income).all()
+    assert recurring not in family_query(RecurringIncome).all()
+
+
+def test_private_income_deposited_into_shared_account_stays_visible_as_a_transaction(
+    app, family, monkeypatch, user
+):
+    """Private hides the Income record's details (salary/tax breakdown), but a
+    shared account still shows every transaction in it to the whole family —
+    including the deposit from a private income record."""
+    from utils.db_helpers import family_query
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    shared_account = Account(
+        family_id=family.id, name='Joint', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    category = Category(
+        family_id=family.id, name='Groceries', head_budget='Expenses',
+        sub_budget='Groceries', category_type='expense',
+    )
+    db.session.add_all([shared_account, category])
+    db.session.flush()
+
+    other_transaction = Transaction(
+        family_id=family.id, account_id=shared_account.id,
+        category_id=category.id, amount=Decimal('50'),
+        transaction_date=date(2026, 1, 10), description='Groceries',
+    )
+    db.session.add(other_transaction)
+    db.session.commit()
+
+    income = IncomeService.create_income_record(
+        person='Keiron',
+        pay_date=date(2026, 1, 15),
+        gross_annual=50000,
+        deposit_account_id=shared_account.id,
+        create_transaction=True,
+        owner_id=user.id,
+    )
+    salary_transaction = db.session.get(Transaction, income.transaction_id)
+
+    assert shared_account.owner_id is None  # the account itself stays shared
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+
+    # The Income record's details are hidden from other family members...
+    assert income not in family_query(Income).all()
+    # ...but both transactions in the shared account remain visible to everyone.
+    visible_transactions = family_query(Transaction).all()
+    assert other_transaction in visible_transactions
+    assert salary_transaction in visible_transactions

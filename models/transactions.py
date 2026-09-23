@@ -51,6 +51,7 @@ class Transaction(db.Model):
     
     # Relationships
     vendor = db.relationship('Vendor', back_populates='transactions')
+
     def __repr__(self):
         return f'<Transaction {self.transaction_date}: {self.description} - £{self.amount}>'
     

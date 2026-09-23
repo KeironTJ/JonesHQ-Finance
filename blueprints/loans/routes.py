@@ -9,7 +9,7 @@ from extensions import db
 from services.planning.loan_service import LoanService
 from datetime import datetime, date, timezone
 from dateutil.relativedelta import relativedelta
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id, get_current_user_id
 
 
 @loans_bp.route('/')
@@ -161,6 +161,7 @@ def edit(id):
             loan.default_payment_account_id = default_payment_account_id
             loan.weekend_adjustment = request.form.get('weekend_adjustment', 'none')
             loan.is_active = request.form.get('is_active') == 'on'
+            loan.owner_id = get_current_user_id() if request.form.get('visibility') == 'private' else None
             loan.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
             if not has_paid_payments:

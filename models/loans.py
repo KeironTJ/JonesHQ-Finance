@@ -26,6 +26,9 @@ class Loan(db.Model):
     # 'next' (roll forward to Monday), or 'none' (leave as-is).
     weekend_adjustment = db.Column(db.String(10), nullable=True, default='none')
 
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
@@ -36,6 +39,12 @@ class Loan(db.Model):
     default_payment_account = db.relationship('Account', foreign_keys=[default_payment_account_id])
     term_changes = db.relationship('LoanTermChange', back_populates='loan',
                                    order_by='LoanTermChange.effective_date', lazy=True)
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this loan is restricted to a single family member."""
+        return self.owner_id is not None
     
     def __repr__(self):
         return f'<Loan {self.name}: £{self.current_balance}>'

@@ -122,6 +122,9 @@ class CreditCardService:
                 int(data['default_payment_account_id'])
                 if data.get('default_payment_account_id') else None
             ),
+            'owner_id': (
+                db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
+            ),
         }
         if data.get('start_date'):
             values['start_date'] = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
@@ -707,6 +710,7 @@ class CreditCardService:
         
         # Create interest transaction
         transaction = CreditCardTransaction(
+            family_id=card.family_id,
             credit_card_id=card.id,
             category_id=credit_card_category.id,
             date=statement_date,
@@ -810,6 +814,7 @@ class CreditCardService:
         
         # Create payment transaction
         transaction = CreditCardTransaction(
+            family_id=card.family_id,
             credit_card_id=card.id,
             category_id=credit_card_category.id,
             date=payment_date,
@@ -842,6 +847,7 @@ class CreditCardService:
             day_name = payment_date.strftime('%a')
             
             bank_txn = Transaction(
+                family_id=card.family_id,
                 account_id=card.default_payment_account_id,
                 category_id=credit_card_category.id,
                 vendor_id=vendor.id,

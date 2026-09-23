@@ -77,6 +77,7 @@ class IncomeService:
         recurring = RecurringIncome(
             family_id=db_helpers.get_family_id(),
             person=data.get('person', 'Household'),
+            owner_id=db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None,
             start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
             end_date=(
                 datetime.strptime(data['end_date'], '%Y-%m-%d').date()
@@ -133,6 +134,7 @@ class IncomeService:
             deposit_account_id, category_id
         )
         recurring.person = data.get('person', recurring.person)
+        recurring.owner_id = db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
         recurring.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
         recurring.end_date = (
             datetime.strptime(data['end_date'], '%Y-%m-%d').date()
@@ -320,7 +322,7 @@ class IncomeService:
     def create_income_record(person, pay_date, gross_annual, employer_pension_pct=0,
                             employee_pension_pct=0, tax_code='1257L', avc=0, other=0,
                             deposit_account_id=None, source='', create_transaction=True,
-                            recurring_income_id=None):
+                            recurring_income_id=None, owner_id=None):
         """
         Create an income record with calculated tax/NI
         
@@ -337,6 +339,7 @@ class IncomeService:
             source: Employer name
             create_transaction: Whether to create linked transaction
             recurring_income_id: ID of recurring income template that generated this
+            owner_id: If set, restricts visibility of this record to that user
         """
         IncomeService._validate_family_references(
             deposit_account_id=deposit_account_id
@@ -403,7 +406,8 @@ class IncomeService:
             estimated_annual_take_home=(take_home * 12).quantize(Decimal('0.01')),
             deposit_account_id=deposit_account_id,
             source=source,
-            recurring_income_id=recurring_income_id
+            recurring_income_id=recurring_income_id,
+            owner_id=owner_id
         )
         
         db.session.add(income)
@@ -422,7 +426,7 @@ class IncomeService:
     def create_income_record_manual(person, pay_date, gross_annual, employer_pension,
                                    employee_pension, tax, ni, take_home, tax_code='1257L',
                                    avc=0, other=0, deposit_account_id=None, source='',
-                                   create_transaction=True, recurring_income_id=None):
+                                   create_transaction=True, recurring_income_id=None, owner_id=None):
         """
         Create an income record with manual (actual payslip) values
         
@@ -442,6 +446,7 @@ class IncomeService:
             source: Employer name
             create_transaction: Whether to create linked transaction
             recurring_income_id: ID of recurring income template that generated this
+            owner_id: If set, restricts visibility of this record to that user
         """
         IncomeService._validate_family_references(
             deposit_account_id=deposit_account_id
@@ -492,7 +497,8 @@ class IncomeService:
             deposit_account_id=deposit_account_id,
             source=source,
             is_manual_override=True,  # Flag as manually entered
-            recurring_income_id=recurring_income_id
+            recurring_income_id=recurring_income_id,
+            owner_id=owner_id
         )
         
         db.session.add(income)
@@ -680,7 +686,8 @@ class IncomeService:
                 deposit_account_id=recurring_income.deposit_account_id,
                 source=recurring_income.source,
                 create_transaction=recurring_income.auto_create_transaction,
-                recurring_income_id=recurring_income.id
+                recurring_income_id=recurring_income.id,
+                owner_id=recurring_income.owner_id
             )
             # Template-generated records are forecasts, not actual payslips.
             # is_manual_override is reset here so the status badge shows correctly.
@@ -702,7 +709,8 @@ class IncomeService:
                 deposit_account_id=recurring_income.deposit_account_id,
                 source=recurring_income.source,
                 create_transaction=recurring_income.auto_create_transaction,
-                recurring_income_id=recurring_income.id
+                recurring_income_id=recurring_income.id,
+                owner_id=recurring_income.owner_id
             )
         
         return income

@@ -10,7 +10,7 @@ from extensions import db
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id, get_current_user_id
 
 
 def _get_income_people():
@@ -117,6 +117,7 @@ def add():
             deposit_account_id = request.form.get('deposit_account_id')
             source = request.form.get('source', '')
             create_transaction = request.form.get('create_transaction') == 'on'
+            is_private = request.form.get('visibility') == 'private'
             
             # Convert empty account_id to None
             if deposit_account_id:
@@ -137,7 +138,8 @@ def add():
                 other=other,
                 deposit_account_id=deposit_account_id,
                 source=source,
-                create_transaction=create_transaction
+                create_transaction=create_transaction,
+                owner_id=get_current_user_id() if is_private else None
             )
             
             flash(f'Income record added successfully! Take home: £{income.take_home:,.2f}', 'success')
@@ -167,6 +169,7 @@ def edit(id):
             income.tax_code   = request.form.get('tax_code', income.tax_code)
             income.avc        = Decimal(request.form.get('avc', 0) or 0)
             income.other_deductions = Decimal(request.form.get('other', 0) or 0)
+            income.owner_id   = get_current_user_id() if request.form.get('visibility') == 'private' else None
 
             deposit_account_id = request.form.get('deposit_account_id')
             if deposit_account_id:

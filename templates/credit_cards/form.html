@@ -119,6 +119,15 @@
                                    name="default_transfer_fee_percent" value="{{ card.default_transfer_fee_percent if card and card.default_transfer_fee_percent is not none else '' }}">
                             <small class="text-muted">Pre-fills the fee % when this card is chosen as a balance transfer destination</small>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="visibility" class="form-label">Visibility</label>
+                            <select class="form-select" id="visibility" name="visibility">
+                                <option value="shared" {% if not card or not card.is_private %}selected{% endif %}>Shared with family</option>
+                                <option value="private" {% if card and card.is_private %}selected{% endif %}>Private (only me)</option>
+                            </select>
+                            <small class="text-muted">Private hides this card and its statement/transaction history from other family members. If paid from a shared account, the payment transactions still appear there for everyone.</small>
+                        </div>
                     </div>
                 </div>
             </div>

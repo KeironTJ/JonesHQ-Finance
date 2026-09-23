@@ -75,6 +75,14 @@
                                 <input type="date" class="form-control" name="pay_date"
                                        value="{{ income.pay_date.strftime('%Y-%m-%d') }}" required>
                             </div>
+                            <div class="col-6">
+                                <label class="form-label">Visibility</label>
+                                <select class="form-select" name="visibility">
+                                    <option value="shared" {% if not income.is_private %}selected{% endif %}>Shared with family</option>
+                                    <option value="private" {% if income.is_private %}selected{% endif %}>Private (only me)</option>
+                                </select>
+                                <small class="text-muted">If paid into a shared account, the deposit transaction still appears there for everyone.</small>
+                            </div>
                             <div class="col-12">
                                 <label class="form-label">Gross Annual Income</label>
                                 <div class="input-group">

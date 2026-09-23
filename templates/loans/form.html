@@ -192,6 +192,18 @@
                             </div>
                         </div>
 
+                        <div class="row">
+                            <!-- Visibility -->
+                            <div class="col-md-6 mb-3">
+                                <label for="visibility" class="form-label">Visibility</label>
+                                <select class="form-select" id="visibility" name="visibility">
+                                    <option value="shared" {% if not loan or not loan.is_private %}selected{% endif %}>Shared with family</option>
+                                    <option value="private" {% if loan and loan.is_private %}selected{% endif %}>Private (only me)</option>
+                                </select>
+                                <small class="text-muted">Private hides this loan and its payment schedule from other family members. If paid from a shared account, the payment transactions still appear there for everyone.</small>
+                            </div>
+                        </div>
+
                         <!-- Calculated Fields Info -->
                         {% if loan %}
                         <div class="alert alert-info">

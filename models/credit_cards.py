@@ -33,6 +33,9 @@ class CreditCard(db.Model):
     # Default Payment Account
     default_payment_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
     
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
     # Account Management
     start_date = db.Column(db.Date)
     is_active = db.Column(db.Boolean, default=True)
@@ -43,6 +46,12 @@ class CreditCard(db.Model):
     transactions = db.relationship('CreditCardTransaction', backref='credit_card', lazy=True, cascade='all, delete-orphan')
     promotional_offers = db.relationship('CreditCardPromotion', backref='credit_card', lazy=True, cascade='all, delete-orphan')
     default_payment_account = db.relationship('Account', foreign_keys=[default_payment_account_id])
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this credit card is restricted to a single family member."""
+        return self.owner_id is not None
     
     def get_current_purchase_apr(self, date=None):
         """Get APR for purchases on a specific date (considers 0% offers)"""

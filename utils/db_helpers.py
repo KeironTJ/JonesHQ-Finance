@@ -43,8 +43,88 @@ def get_family_id():
     return None
 
 
+def get_current_user_id():
+    """Return the current user's id, or ``None`` if not authenticated."""
+    if getattr(current_user, 'is_authenticated', False):
+        return current_user.id
+    return None
+
+
+# Models whose visibility is inherited from a related parent model rather
+# than an `owner_id` column of their own, e.g. a Transaction is private if the
+# Account it belongs to is private. Mapping of {model: (fk_column_name, parent_model_loader)}.
+# Populated lazily to avoid circular imports at module load time.
+_INHERITED_VISIBILITY_MODELS = None
+
+
+def _inherited_visibility_models():
+    global _INHERITED_VISIBILITY_MODELS
+    if _INHERITED_VISIBILITY_MODELS is None:
+        from models.transactions import Transaction
+        from models.pension_snapshots import PensionSnapshot
+        from models.accounts import Account
+        from models.pensions import Pension
+        from models.loan_payments import LoanPayment
+        from models.loans import Loan
+        from models.credit_card_transactions import CreditCardTransaction
+        from models.credit_cards import CreditCard
+        _INHERITED_VISIBILITY_MODELS = {
+            Transaction: ('account_id', Account),
+            PensionSnapshot: ('pension_id', Pension),
+            LoanPayment: ('loan_id', Loan),
+            CreditCardTransaction: ('credit_card_id', CreditCard),
+        }
+    return _INHERITED_VISIBILITY_MODELS
+
+
+def _apply_visibility(model, query):
+    """Restrict *query* to rows visible to the current user.
+
+    A record with ``owner_id`` set is a "private" record only its owner may
+    see. ``owner_id`` of ``None`` means the record is shared with the whole
+    family. Models without an ``owner_id`` column (e.g. Transaction,
+    PensionSnapshot) inherit visibility from a related parent model instead
+    (e.g. a Transaction is private only if the Account it belongs to is
+    private — a private Income record does NOT hide its deposit transaction
+    if the account itself is shared, since shared accounts show every
+    transaction in them to the whole family).
+
+    A model could theoretically have both its own ``owner_id`` and an
+    inherited parent; if so both checks are combined with AND.
+    """
+    uid = get_current_user_id()
+    conditions = []
+
+    if hasattr(model, 'owner_id'):
+        conditions.append((model.owner_id.is_(None)) | (model.owner_id == uid))
+
+    entry = _inherited_visibility_models().get(model)
+    if entry:
+        fk_name, parent_model = entry
+        # Use a correlated subquery (rather than a join) so this doesn't shift
+        # the query's implicit entity, which would break callers using
+        # .filter_by() afterwards.
+        fk_column = getattr(model, fk_name)
+        owner_subq = (
+            parent_model.query.with_entities(parent_model.owner_id)
+            .filter(parent_model.id == fk_column)
+            .correlate(model)
+            .scalar_subquery()
+        )
+        conditions.append(
+            (fk_column.is_(None)) | (owner_subq.is_(None)) | (owner_subq == uid)
+        )
+
+    for condition in conditions:
+        query = query.filter(condition)
+    return query
+
+
 def family_query(model):
     """Return a SQLAlchemy query pre-filtered to the current family.
+
+    Also excludes records that are private to another family member (see
+    ``_apply_visibility``).
 
     Examples::
 
@@ -62,18 +142,21 @@ def family_query(model):
     if fid is None:
         # Return a query that always yields zero rows rather than leaking data
         return model.query.filter(model.id == -1)
-    return model.query.filter_by(family_id=fid)
+    query = model.query.filter_by(family_id=fid)
+    return _apply_visibility(model, query)
 
 
 def family_get(model, record_id):
     """Fetch a single record by *record_id*, scoped to the current family.
 
-    Returns ``None`` if the record does not exist or belongs to another family.
+    Returns ``None`` if the record does not exist, belongs to another family,
+    or is private to another family member.
     """
     fid = get_family_id()
     if fid is None:
         return None
-    return model.query.filter_by(id=record_id, family_id=fid).first()
+    query = model.query.filter(model.id == record_id, model.family_id == fid)
+    return _apply_visibility(model, query).first()
 
 
 def family_get_or_404(model, record_id):
@@ -82,7 +165,8 @@ def family_get_or_404(model, record_id):
     if fid is None:
         from flask import abort
         abort(404)
-    return model.query.filter_by(id=record_id, family_id=fid).first_or_404()
+    query = model.query.filter(model.id == record_id, model.family_id == fid)
+    return _apply_visibility(model, query).first_or_404()
 
 
 def set_family_id(obj):

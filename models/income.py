@@ -45,7 +45,10 @@ class Income(db.Model):
     
     # Link to recurring income template that generated this record
     recurring_income_id = db.Column(db.Integer, db.ForeignKey('recurring_income.id'), nullable=True)
-    
+
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
     source = db.Column(db.String(100))  # Employer name
     description = db.Column(db.String(255))
     is_recurring = db.Column(db.Boolean, default=True)
@@ -66,7 +69,13 @@ class Income(db.Model):
     deposit_account = db.relationship('Account', foreign_keys=[deposit_account_id])
     transaction = db.relationship('Transaction', foreign_keys=[transaction_id], uselist=False)
     recurring_income = db.relationship('RecurringIncome', foreign_keys=[recurring_income_id], backref='generated_income')
-    
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this income record is restricted to a single family member."""
+        return self.owner_id is not None
+
     def __repr__(self):
         return f'<Income {self.person} {self.pay_date}: £{self.take_home}>'
     

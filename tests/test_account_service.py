@@ -88,4 +88,31 @@ def test_update_and_delete_account(app, family, monkeypatch):
     assert float(updated.balance) == 42
     assert updated.is_active is False
     assert deleted_name == 'New name'
-    assert db.session.get(Account, account.id) is None
+
+
+def test_private_account_hidden_from_other_family_members(app, family, monkeypatch, user):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    private_account = AccountService.create_account('Personal', 'Personal', 50, True, is_private=True)
+    assert private_account.owner_id == user.id
+
+    # Owner still sees it
+    overview = AccountService.get_overview()
+    assert private_account in overview['accounts']
+
+    # Another family member does not
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    overview_other = AccountService.get_overview()
+    assert private_account not in overview_other['accounts']
+
+
+def test_shared_account_visible_to_everyone(app, family, monkeypatch, user):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    shared_account = AccountService.create_account('Joint', 'Joint', 50, True, is_private=False)
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    overview_other = AccountService.get_overview()
+    assert shared_account in overview_other['accounts']

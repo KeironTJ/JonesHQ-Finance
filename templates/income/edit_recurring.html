@@ -38,6 +38,15 @@
                                    value="{{ recurring.source }}" required>
                         </div>
                     </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="visibility" class="form-label">Visibility</label>
+                            <select class="form-select" id="visibility" name="visibility">
+                                <option value="shared" {% if not recurring.is_private %}selected{% endif %}>Shared with family</option>
+                                <option value="private" {% if recurring.is_private %}selected{% endif %}>Private (only me)</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="row">

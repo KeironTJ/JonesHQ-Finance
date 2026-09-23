@@ -40,13 +40,24 @@ class RecurringIncome(db.Model):
     deposit_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     auto_create_transaction = db.Column(db.Boolean, default=True)
-    
+
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    # Inherited by Income records generated from this template.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
     # Metadata
     source = db.Column(db.String(100))  # Employer name
     description = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this recurring income template is restricted to a single family member."""
+        return self.owner_id is not None
     
     # Relationships
     deposit_account = db.relationship('Account', foreign_keys=[deposit_account_id])

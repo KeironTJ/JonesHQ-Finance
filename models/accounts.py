@@ -11,12 +11,20 @@ class Account(db.Model):
     account_type = db.Column(db.String(50), nullable=False)  # Joint, Personal, Savings, etc.
     balance = db.Column(db.Numeric(10, 2), default=0.00)
     is_active = db.Column(db.Boolean, default=True)
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relationships
     transactions = db.relationship('Transaction', backref='account', lazy=True)
     balances = db.relationship('Balance', backref='account', lazy=True)
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this account is restricted to a single family member."""
+        return self.owner_id is not None
     
     @property
     def paid_balance(self):

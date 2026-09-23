@@ -18,8 +18,9 @@ def create():
         account_type = request.form.get('account_type')
         balance = float(request.form.get('balance', 0))
         is_active = request.form.get('is_active') == 'on'
+        is_private = request.form.get('visibility') == 'private'
 
-        AccountService.create_account(name, account_type, balance, is_active)
+        AccountService.create_account(name, account_type, balance, is_active, is_private)
         flash(f'Account "{name}" created successfully!', 'success')
     except Exception as e:
         db.session.rollback()
@@ -38,6 +39,7 @@ def edit(id):
             request.form.get('account_type'),
             float(request.form.get('balance', 0)),
             request.form.get('is_active') == 'on',
+            request.form.get('visibility') == 'private',
         )
         flash(f'Account "{account.name}" updated successfully!', 'success')
     except Exception as e:

@@ -533,3 +533,60 @@ def test_delete_balance_transfer_transaction_removes_linked_pair(
 
     assert db.session.get(CreditCardTransaction, from_txn_id) is None
     assert db.session.get(CreditCardTransaction, to_txn_id) is None
+
+
+def test_private_credit_card_and_statement_hidden_but_shared_payment_txn_stays_visible(
+    app, family_id, patch_family, monkeypatch
+):
+    """Private hides the card and its statement/transaction history, but a
+    payment transaction posted to a shared account still appears there for
+    the whole family."""
+    from models.users import User
+    from utils.db_helpers import family_query
+
+    owner = User(
+        email='owner@example.com', name='Owner', family_id=family_id, role='admin',
+    )
+    owner.set_password('TestPass1!')
+    db.session.add(owner)
+    db.session.commit()
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: owner.id)
+
+    account = Account(
+        family_id=family_id, name='Joint', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    db.session.add(account)
+    db.session.commit()
+
+    private_card = CreditCardService.create_card({
+        'card_name': 'Private Card',
+        'annual_apr': '24.0',
+        'monthly_apr': '2.0',
+        'credit_limit': '5000.00',
+        'current_balance': '-200.00',
+        'min_payment_percent': '2.0',
+        'set_payment': '50.00',
+        'statement_date': '15',
+        'default_payment_account_id': str(account.id),
+        'is_active': 'on',
+        'visibility': 'private',
+    })
+
+    assert private_card.owner_id == owner.id
+    assert private_card.is_private is True
+    assert account.owner_id is None  # the account itself stays shared
+
+    payment_txn = CreditCardService.generate_payment_transaction(
+        private_card.id, date(2026, 2, 15)
+    )
+    bank_transaction = db.session.get(Transaction, payment_txn.bank_transaction_id)
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: owner.id + 999)
+
+    # The card and its statement/payment history are hidden from other family members...
+    assert private_card not in family_query(CreditCard).all()
+    assert payment_txn not in family_query(CreditCardTransaction).all()
+    # ...but the bank payment transaction remains visible in the shared account.
+    assert bank_transaction in family_query(Transaction).all()

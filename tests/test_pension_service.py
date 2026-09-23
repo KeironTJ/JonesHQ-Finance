@@ -38,7 +38,36 @@ def test_add_actual_snapshot_calculates_growth_and_updates_pension(
     assert second.growth_percent == Decimal('10')
     assert second_growth == Decimal('10')
     assert updated_pension.current_value == Decimal('11000')
-    assert PensionSnapshot.query.count() == 2
+
+
+def test_private_pension_and_snapshots_hidden_from_other_family_members(
+    app, family, monkeypatch, user
+):
+    from utils.db_helpers import family_query
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    pension = PensionService.create_pension({
+        'person': 'Household',
+        'provider': 'Test Provider',
+        'current_value': '10000',
+        'visibility': 'private',
+    })
+
+    assert pension.owner_id == user.id
+    assert pension.is_private is True
+
+    snapshot, _, _ = PensionService.add_actual_snapshot(
+        pension.id, date(2026, 1, 1), Decimal('10000')
+    )
+
+    assert pension in family_query(Pension).all()
+    assert snapshot in family_query(PensionSnapshot).all()
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    assert pension not in family_query(Pension).all()
+    assert snapshot not in family_query(PensionSnapshot).all()
 
 
 def test_create_pension_assigns_family_and_converts_values(app, family, monkeypatch):

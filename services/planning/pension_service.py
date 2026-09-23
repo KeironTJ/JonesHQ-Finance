@@ -68,6 +68,7 @@ class PensionService:
             is_active=data.get('is_active') == 'on',
             retirement_age=int(data.get('retirement_age') or 65),
             monthly_contribution=Decimal(data.get('monthly_contribution') or 0),
+            owner_id=db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None,
         )
         db.session.add(pension)
         db.session.commit()
@@ -85,6 +86,7 @@ class PensionService:
         pension.is_active = data.get('is_active') == 'on'
         pension.retirement_age = int(data.get('retirement_age') or 65)
         pension.monthly_contribution = Decimal(data.get('monthly_contribution') or 0)
+        pension.owner_id = db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
         db.session.commit()
         return pension
 
