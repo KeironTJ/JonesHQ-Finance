@@ -306,24 +306,6 @@
         </div>
     </div>
 </div>
-
-<script>
-function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct, is_private) {
-    document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
-    document.getElementById('edit_vehicle_name').value = name;
-    document.getElementById('edit_vehicle_registration').value = registration;
-    document.getElementById('edit_vehicle_make').value = make;
-    document.getElementById('edit_vehicle_model').value = model;
-    document.getElementById('edit_vehicle_year').value = year || '';
-    document.getElementById('edit_vehicle_tank_size').value = tank_size;
-    document.getElementById('edit_vehicle_fuel_type').value = fuel_type;
-    document.getElementById('edit_vehicle_is_active').checked = is_active;
-    document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
-    document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
-    document.getElementById('edit_vehicle_visibility').value = is_private ? 'private' : 'shared';
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('editVehicleModal')).show();
-}
-</script>
         </div>
     </div>
 </div>
