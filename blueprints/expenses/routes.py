@@ -9,6 +9,7 @@ from models.accounts import Account
 from models.vehicles import Vehicle
 from models.trips import Trip
 from models.transactions import Transaction
+from models.income import Income
 from datetime import datetime
 from decimal import Decimal
 import csv
@@ -315,6 +316,19 @@ def index():
     # Keep backward-compat name used by template
     reimbursements_by_month = reimbursements_by_claim
 
+    # Get payslips that received folded expenses, keyed by claim period.
+    folded_incomes_by_period = {}
+    folded_income_ids = {e.income_id for e in expenses if e.income_id}
+    if folded_income_ids:
+        folded_incomes = family_query(Income).filter(Income.id.in_(folded_income_ids)).all()
+        for income in folded_incomes:
+            period_key = next(
+                (expense_period_keys[e.id] for e in expenses if e.income_id == income.id),
+                None,
+            )
+            if period_key:
+                folded_incomes_by_period.setdefault(period_key, []).append(income)
+
     # Determine which periods are fully settled (locked from sync edits).
     # A period is closed if: its reimbursement transaction is marked is_paid=True,
     # OR every expense in the period is individually marked reimbursed=True.
@@ -417,6 +431,7 @@ def index():
         trips_dict=trips_dict,
         highlight_expense_id=highlight_id,
         reimbursements_by_month=reimbursements_by_month,
+        folded_incomes_by_period=folded_incomes_by_period,
         partial_reimbursements_by_claim=partial_reimbursements_by_claim,
         partial_reimbursements_by_month=partial_reimbursements_by_month,
         cc_payments_by_month=cc_payments_by_month,

@@ -5,6 +5,7 @@ from extensions import db
 from models.accounts import Account
 from models.categories import Category
 from models.expenses import Expense
+from models.income import Income
 from models.transactions import Transaction
 
 
@@ -22,6 +23,37 @@ def test_expense_index_route_loads_for_authenticated_family(app, family, user):
 
     assert response.status_code == 200
     assert b'Expenses' in response.data or b'expense' in response.data.lower()
+
+
+def test_expense_index_shows_folded_payslip_badge(app, family, user):
+    income = Income(
+        family_id=family.id,
+        pay_date=date(2026, 4, 15),
+        gross_annual_income=Decimal('30000.00'),
+        gross_monthly_income=Decimal('2500.00'),
+        take_home=Decimal('2000.00'),
+        expense_reimbursement_total=Decimal('25.00'),
+    )
+    expense = Expense(
+        family_id=family.id,
+        date=date(2026, 4, 10),
+        description='Client lunch',
+        expense_type='Food',
+        cost=Decimal('25.00'),
+        total_cost=Decimal('25.00'),
+        income=income,
+    )
+    db.session.add(expense)
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.get('/expenses')
+
+    assert response.status_code == 200
+    assert b'Folded: \xc2\xa325.00' in response.data
+    assert f'/income/{income.id}/edit'.encode() in response.data
 
 
 def test_expense_mileage_route_loads_empty_state(app, family, user):

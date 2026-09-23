@@ -257,6 +257,7 @@
                         {% set cg_summary = claim_group_summaries.get(e_cg, {'count': 0, 'total': 0}) %}
                         {% set partial_reimb_txn = partial_reimbursements_by_claim.get(e_cg) %}
                         {% set reimb_txn = reimbursements_by_month.get(e_period) if not is_partial else none %}
+                        {% set folded_incomes = folded_incomes_by_period.get(e_period, []) if not is_partial else [] %}
                         {% set cc_payments = cc_payments_by_month.get(e_period, []) if not is_partial else [] %}
                         <tr class="{% if is_partial %}table-info{% else %}table-secondary{% endif %} {% if is_closed %}period-settled{% endif %}"
                             {% if is_closed %}style="opacity:0.6;" data-settled="true"{% endif %}>
@@ -296,6 +297,11 @@
                                             {% else %}
                                             <span class="badge bg-warning text-dark">No reimbursement</span>
                                             {% endif %}
+                                            {% for folded_income in folded_incomes %}
+                                            <a href="{{ url_for('income.edit', id=folded_income.id) }}" class="btn btn-sm btn-success" title="Expenses folded into payslip">
+                                                <i class="bi bi-wallet2"></i> Folded: £{{ "%.2f"|format(folded_income.expense_reimbursement_total) }} ({{ folded_income.pay_date.strftime('%d/%m') }})
+                                            </a>
+                                            {% endfor %}
                                             {% if cc_payments %}
                                             <div class="btn-group" role="group">
                                                 {% for cc_payment in cc_payments %}
