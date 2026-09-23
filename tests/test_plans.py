@@ -482,3 +482,29 @@ def test_savings_transaction_search_includes_incoming_transfer(app, family, user
     assert ordinary_results == []
     assert len(savings_results) == 1
     assert '+£90.00' in savings_results[0]['label']
+
+
+def test_private_plan_hidden_from_other_family_members(app, family, user, monkeypatch):
+    from utils.db_helpers import family_query
+
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post('/plans/add', data={
+        'title': 'Surprise gift',
+        'plan_type': 'occasion',
+        'target_amount': '100.00',
+        'visibility': 'private',
+    })
+    assert response.status_code == 302
+    plan = Plan.query.one()
+
+    assert plan.owner_id == user.id
+    assert plan.is_private is True
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+    assert plan in family_query(Plan).all()
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    assert plan not in family_query(Plan).all()

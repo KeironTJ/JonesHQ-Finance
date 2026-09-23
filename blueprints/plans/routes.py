@@ -11,7 +11,7 @@ from models.credit_cards import CreditCard
 from models.vendors import Vendor
 from services.planning.plan_link_service import PlanLinkService
 from utils.assignment_helpers import get_assignment_options
-from utils.db_helpers import family_get, family_get_or_404, family_query, get_family_id
+from utils.db_helpers import family_get, family_get_or_404, family_query, get_family_id, get_current_user_id
 
 from . import plans_bp
 
@@ -146,6 +146,7 @@ def add_plan():
             target_date=_date_value(request.form.get('target_date')),
             target_amount=_money_value(request.form.get('target_amount')),
             notes=request.form.get('notes', '').strip() or None,
+            owner_id=get_current_user_id() if request.form.get('visibility') == 'private' else None,
         )
         db.session.add(plan)
         db.session.commit()
@@ -282,6 +283,7 @@ def update_plan(plan_id):
         plan.saved_amount = _money_value(request.form.get('saved_amount')) or Decimal('0')
         plan.status = status
         plan.notes = request.form.get('notes', '').strip() or None
+        plan.owner_id = get_current_user_id() if request.form.get('visibility') == 'private' else None
         db.session.commit()
     except (ValueError, TypeError):
         db.session.rollback()

@@ -61,6 +61,9 @@ class VehicleService:
             refuel_threshold_pct=Decimal(
                 data.get('refuel_threshold_pct') or '95'
             ),
+            owner_id=(
+                db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
+            ),
             is_active=True,
         )
         db.session.add(vehicle)
@@ -84,6 +87,9 @@ class VehicleService:
             vehicle.year = int(data['year'])
         vehicle.fuel_account_id = (
             int(data['fuel_account_id']) if data.get('fuel_account_id') else None
+        )
+        vehicle.owner_id = (
+            db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
         )
         db.session.commit()
         return vehicle
@@ -438,6 +444,7 @@ class VehicleService:
         
         if not category:
             category = Category(
+                family_id=db_helpers.get_family_id(),
                 name='Fuel',
                 category_type='Expense',
                 head_budget='General',
@@ -469,6 +476,7 @@ class VehicleService:
         
         # Create transaction
         transaction = Transaction(
+            family_id=db_helpers.get_family_id(),
             transaction_date=fuel_record.date,
             account_id=account_id,
             category_id=category.id,

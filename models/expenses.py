@@ -56,11 +56,20 @@ class Expense(db.Model):
     submitted = db.Column(db.Boolean, default=False)
     reimbursed = db.Column(db.Boolean, default=False)
     
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     reimbursement_group = db.relationship('ExpenseReimbursementGroup', foreign_keys=[reimbursement_group_id])
     income = db.relationship('Income', foreign_keys=[income_id])
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this expense is restricted to a single family member."""
+        return self.owner_id is not None
 
     def __repr__(self):
         return f'<Expense {self.date}: {self.description} - £{self.total_cost}>'

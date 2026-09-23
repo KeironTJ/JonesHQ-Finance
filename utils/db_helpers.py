@@ -68,11 +68,20 @@ def _inherited_visibility_models():
         from models.loans import Loan
         from models.credit_card_transactions import CreditCardTransaction
         from models.credit_cards import CreditCard
+        from models.fuel import FuelRecord
+        from models.trips import Trip
+        from models.vehicles import Vehicle
+        from models.balances import Balance
+        from models.plans import Plan, PlanItem
         _INHERITED_VISIBILITY_MODELS = {
             Transaction: ('account_id', Account),
             PensionSnapshot: ('pension_id', Pension),
             LoanPayment: ('loan_id', Loan),
             CreditCardTransaction: ('credit_card_id', CreditCard),
+            FuelRecord: ('vehicle_id', Vehicle),
+            Trip: ('vehicle_id', Vehicle),
+            Balance: ('account_id', Account),
+            PlanItem: ('plan_id', Plan),
         }
     return _INHERITED_VISIBILITY_MODELS
 

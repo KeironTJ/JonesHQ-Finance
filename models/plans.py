@@ -17,6 +17,8 @@ class Plan(db.Model):
     saved_amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     status = db.Column(db.String(20), nullable=False, default='active')
     notes = db.Column(db.Text, nullable=True)
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     created_at = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
@@ -33,6 +35,12 @@ class Plan(db.Model):
         cascade='all, delete-orphan',
         order_by='PlanItem.created_at',
     )
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this plan is restricted to a single family member."""
+        return self.owner_id is not None
 
     @property
     def estimated_total(self):

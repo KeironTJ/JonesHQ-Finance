@@ -421,7 +421,8 @@
                                     data-paid="{{ 'true' if e.paid_for else 'false' }}"
                                     data-submitted="{{ 'true' if e.submitted else 'false' }}"
                                     data-reimbursed="{{ 'true' if e.reimbursed else 'false' }}"
-                                    data-group="{{ e.reimbursement_group_id or '' }}">                                    <i class="bi bi-pencil"></i>
+                                    data-group="{{ e.reimbursement_group_id or '' }}"
+                                    data-private="{{ 'true' if e.is_private else 'false' }}">                                    <i class="bi bi-pencil"></i>
                                 </button>
                                 <form method="post" action="{{ url_for('expenses.delete_expense', expense_id=e.id) }}" style="display:contents">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -575,6 +576,13 @@
                     <label class="form-check-label">Reimbursed</label>
                 </div>
             </div>
+            <div class="col-md-3">
+                <label class="form-label">Visibility</label>
+                <select name="visibility" id="add_visibility" class="form-select">
+                    <option value="shared" selected>Shared with family</option>
+                    <option value="private">Private (only me)</option>
+                </select>
+            </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -690,6 +698,13 @@
                     <label class="form-check-label">Reimbursed</label>
                 </div>
             </div>
+            <div class="col-md-3">
+                <label class="form-label">Visibility</label>
+                <select name="visibility" id="edit_visibility" class="form-select">
+                    <option value="shared">Shared with family</option>
+                    <option value="private">Private (only me)</option>
+                </select>
+            </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -757,6 +772,7 @@ document.addEventListener('DOMContentLoaded', function(){
             const submitted = this.dataset.submitted === 'true';
             const reimbursed = this.dataset.reimbursed === 'true';
             const groupId = this.dataset.group;
+            const isPrivate = this.dataset.private === 'true';
             
             document.getElementById('editExpenseForm').action = `/expenses/update/${id}`;
             document.getElementById('edit_expense_id').value = id;
@@ -789,6 +805,7 @@ document.addEventListener('DOMContentLoaded', function(){
             document.getElementById('edit_submitted').checked = submitted;
             document.getElementById('edit_reimbursed').checked = reimbursed;
             document.getElementById('edit_reimbursement_group_id').value = groupId || '';
+            document.getElementById('edit_visibility').value = isPrivate ? 'private' : 'shared';
             new bootstrap.Modal(document.getElementById('editExpenseModal')).show();
         });
     });

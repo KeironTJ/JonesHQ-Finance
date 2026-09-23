@@ -67,7 +67,7 @@
                         <td>{{ vehicle.tank_size }} gal</td>
                         <td>{{ vehicle.fuel_type }}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }}, {{ vehicle.is_private|lower }})">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;" onsubmit="return confirm('Delete {{ vehicle.name }}? This will delete all fuel and trip records!');">
@@ -120,7 +120,7 @@
                                 <td>{{ vehicle.tank_size }} gal</td>
                                 <td>{{ vehicle.fuel_type }}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }}, {{ vehicle.is_private|lower }})">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;" onsubmit="return confirm('Delete {{ vehicle.name }}? This will delete all fuel and trip records!');">
@@ -205,6 +205,14 @@
                         </select>
                         <small class="text-muted">Account used for fuel transactions and forecasts</small>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Visibility</label>
+                        <select name="visibility" class="form-select">
+                            <option value="shared" selected>Shared with family</option>
+                            <option value="private">Private (only me)</option>
+                        </select>
+                        <small class="text-muted">Private hides this vehicle and its fuel/trip logs from other family members.</small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -278,6 +286,13 @@
                         </select>
                         <small class="text-muted">Account used for fuel transactions and forecasts</small>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Visibility</label>
+                        <select name="visibility" id="edit_vehicle_visibility" class="form-select">
+                            <option value="shared">Shared with family</option>
+                            <option value="private">Private (only me)</option>
+                        </select>
+                    </div>
                     <div class="mb-3 form-check">
                         <input type="checkbox" name="is_active" id="edit_vehicle_is_active" class="form-check-input">
                         <label class="form-check-label" for="edit_vehicle_is_active">Active</label>
@@ -293,7 +308,7 @@
 </div>
 
 <script>
-function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct) {
+function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct, is_private) {
     document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
     document.getElementById('edit_vehicle_name').value = name;
     document.getElementById('edit_vehicle_registration').value = registration;
@@ -305,6 +320,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
     document.getElementById('edit_vehicle_is_active').checked = is_active;
     document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
     document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
+    document.getElementById('edit_vehicle_visibility').value = is_private ? 'private' : 'shared';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('editVehicleModal')).show();
 }
 </script>
@@ -315,7 +331,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
 
 {% block extra_js %}
 <script>
-function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct) {
+function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct, is_private) {
     document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
     document.getElementById('edit_vehicle_name').value = name;
     document.getElementById('edit_vehicle_registration').value = registration;
@@ -327,6 +343,7 @@ function editVehicle(id, name, registration, make, model, year, tank_size, fuel_
     document.getElementById('edit_vehicle_is_active').checked = is_active;
     document.getElementById('edit_vehicle_fuel_account_id').value = fuel_account_id || '';
     document.getElementById('edit_vehicle_refuel_threshold_pct').value = refuel_threshold_pct || 95;
+    document.getElementById('edit_vehicle_visibility').value = is_private ? 'private' : 'shared';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('editVehicleModal')).show();
 }
 </script>

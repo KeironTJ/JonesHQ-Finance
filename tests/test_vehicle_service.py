@@ -187,3 +187,53 @@ def test_forecasts_historical_refills_only_since_latest_fill(app, family, monkey
     predictions = FuelForecastingService.predict_refills(vehicle.id)
 
     assert [prediction['trigger_trip_date'].isoformat() for prediction in predictions] == ['2026-09-02']
+
+
+def test_private_vehicle_and_records_hidden_but_shared_fuel_txn_stays_visible(
+    app, family, monkeypatch, user
+):
+    """Private hides the vehicle and its fuel/trip logs, but a fuel purchase
+    transaction posted to a shared account still appears there for everyone."""
+    from models.accounts import Account
+    from models.transactions import Transaction
+    from utils.db_helpers import family_query
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    account = Account(
+        family_id=family.id, name='Joint', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    db.session.add(account)
+    db.session.flush()
+
+    vehicle = VehicleService.create_vehicle({
+        'name': 'Private Car', 'make': 'Test', 'model': 'Private',
+        'registration': 'PR1V ATE', 'tank_size': '12', 'fuel_type': 'Petrol',
+        'fuel_account_id': str(account.id),
+        'visibility': 'private',
+    })
+
+    assert vehicle.owner_id == user.id
+    assert vehicle.is_private is True
+    assert account.owner_id is None  # the account itself stays shared
+
+    fuel_record = VehicleService.create_fuel_record({
+        'vehicle_id': str(vehicle.id),
+        'date': '2026-01-01',
+        'price_per_litre': '150',
+        'mileage': '1000',
+        'cost': '30',
+        'gallons': '5',
+        'is_partial_fill': '0',
+    })
+    bank_transaction = VehicleService.create_fuel_transaction(fuel_record, account.id)
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+
+    # Vehicle and its fuel log are hidden from other family members...
+    assert vehicle not in family_query(Vehicle).all()
+    assert fuel_record not in family_query(FuelRecord).all()
+    # ...but the fuel purchase transaction remains visible in the shared account.
+    assert bank_transaction in family_query(Transaction).all()

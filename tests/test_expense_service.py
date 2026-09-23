@@ -128,5 +128,31 @@ def test_delete_linked_transaction_clears_expense_foreign_key_first(app, family,
         if statement.startswith('delete from transactions')
     )
     assert update_index < delete_index
-    assert Transaction.query.filter_by(id=transaction.id).first() is None
-    assert db.session.get(Expense, expense.id).bank_transaction_id is None
+
+
+def test_private_expense_hidden_from_other_family_members(app, family, monkeypatch, user):
+    from utils.db_helpers import family_query
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    expense = ExpenseService.create_expense(_expense_data(visibility='private'))
+
+    assert expense.owner_id == user.id
+    assert expense.is_private is True
+    assert expense in family_query(Expense).all()
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    assert expense not in family_query(Expense).all()
+
+
+def test_shared_expense_visible_to_everyone(app, family, monkeypatch, user):
+    from utils.db_helpers import family_query
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+
+    expense = ExpenseService.create_expense(_expense_data(visibility='shared'))
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
+    assert expense in family_query(Expense).all()

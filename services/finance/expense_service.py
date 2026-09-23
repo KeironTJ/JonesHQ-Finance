@@ -60,6 +60,7 @@ class ExpenseService:
             submitted=data.get('submitted') == 'on',
             reimbursed=data.get('reimbursed') == 'on',
             reimbursement_group_id=reimbursement_group_id,
+            owner_id=db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None,
         )
         expense.payday_period = ExpenseSyncService.get_period_key_for_expense(expense) if expense_date else None
         db.session.add(expense)
@@ -90,6 +91,7 @@ class ExpenseService:
         expense.reimbursed = data.get('reimbursed') == 'on'
         if data.get('reimbursement_group_id') and not expense.reimbursed:
             expense.reimbursement_group_id = int(data['reimbursement_group_id'])
+        expense.owner_id = db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
 
         from services.finance.expense_sync_service import ExpenseSyncService
         expense.payday_period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None

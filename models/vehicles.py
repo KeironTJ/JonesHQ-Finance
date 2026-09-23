@@ -19,6 +19,8 @@ class Vehicle(db.Model):
     fuel_account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'))  # Default account for fuel transactions
     purchase_date = db.Column(db.Date)
     purchase_price = db.Column(db.Numeric(10, 2))
+    # NULL = shared/joint, visible to the whole family. Set = private, visible only to that user.
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
@@ -26,6 +28,12 @@ class Vehicle(db.Model):
     # Relationships
     fuel_records = db.relationship('FuelRecord', backref='vehicle', lazy=True)
     trips = db.relationship('Trip', backref='vehicle', lazy=True)
+    owner = db.relationship('User', foreign_keys=[owner_id])
+
+    @property
+    def is_private(self):
+        """True if this vehicle is restricted to a single family member."""
+        return self.owner_id is not None
     
     def __repr__(self):
         return f'<Vehicle {self.registration}: {self.name}>'
