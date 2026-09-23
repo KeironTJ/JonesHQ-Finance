@@ -3,10 +3,45 @@ from decimal import Decimal
 from extensions import db
 from models.tax_settings import TaxSettings
 from models.settings import Settings
-from utils.db_helpers import family_get_or_404, get_family_id
+from models.accounts import Account
+from models.users import User
+from utils.db_helpers import (
+    family_get,
+    family_get_or_404,
+    get_current_user_id,
+    get_family_id,
+)
 
 
 class SettingsService:
+    @staticmethod
+    def get_default_account(accounts):
+        user_id = get_current_user_id()
+        user = db.session.get(User, user_id) if user_id else None
+        if user:
+            for account in accounts:
+                if account.id == user.default_account_id:
+                    return account
+        return accounts[0] if accounts else None
+
+    @staticmethod
+    def update_default_account(data):
+        user_id = get_current_user_id()
+        user = db.session.get(User, user_id) if user_id else None
+        if not user:
+            raise ValueError('Unable to identify the current user.')
+
+        account_id = data.get('default_account_id')
+        if not account_id:
+            user.default_account_id = None
+            return None
+
+        account = family_get(Account, int(account_id))
+        if not account or not account.is_active:
+            raise ValueError('Please select an active account you can access.')
+        user.default_account_id = account.id
+        return account
+
     @staticmethod
     def clear_networth_start_date():
         setting = Settings.query.filter_by(

@@ -115,7 +115,7 @@ def register():
             # Log the new user in
             login_user(user)
             flash(f'Welcome to {family.name}! Your household has been created.', 'success')
-            return redirect(url_for('dashboard.index'))
+            return redirect(url_for('onboarding.index'))
 
         except Exception as e:
             db.session.rollback()

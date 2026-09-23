@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}Set Up Family HQ{% endblock %}
+
+{% block extra_css %}
+<style>
+.onboarding-page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 1rem 0 3rem;
+}
+.onboarding-header {
+    margin-bottom: 1.5rem;
+}
+.onboarding-kicker {
+    color: var(--brand);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.onboarding-header h1 {
+    font-size: clamp(1.75rem, 4vw, 2.35rem);
+    margin: 0.35rem 0 0.5rem;
+}
+.onboarding-header p {
+    color: var(--text-secondary);
+    margin: 0;
+    max-width: 680px;
+}
+.onboarding-progress {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 1.5rem 0;
+}
+.onboarding-progress-item {
+    align-items: center;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    display: flex;
+    font-size: 0.8rem;
+    font-weight: 600;
+    gap: 0.5rem;
+    min-width: 0;
+    padding: 0.65rem 0.75rem;
+}
+.onboarding-progress-item .bi {
+    color: var(--brand);
+    flex-shrink: 0;
+}
+.onboarding-form {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+.onboarding-section {
+    padding: 1.35rem;
+}
+.onboarding-section + .onboarding-section {
+    border-top: 1px solid var(--border-color);
+}
+.onboarding-section-heading {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.onboarding-section-icon {
+    align-items: center;
+    background: var(--brand-soft);
+    border: 1px solid var(--brand-border);
+    border-radius: var(--radius-sm);
+    color: var(--brand);
+    display: inline-flex;
+    flex: 0 0 38px;
+    height: 38px;
+    justify-content: center;
+}
+.onboarding-section-heading h2 {
+    font-size: 1rem;
+    margin: 0 0 0.2rem;
+}
+.onboarding-section-heading p {
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    margin: 0;
+}
+.onboarding-account-fields {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 1rem;
+}
+.onboarding-account-fields .field-wide {
+    grid-column: 1 / -1;
+}
+.onboarding-choice {
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+}
+.onboarding-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding: 1rem 1.35rem;
+}
+.onboarding-skip {
+    margin-top: 0.75rem;
+    text-align: right;
+}
+@media (max-width: 640px) {
+    .onboarding-page { padding-top: 0.25rem; }
+    .onboarding-progress { grid-template-columns: 1fr; }
+    .onboarding-account-fields { grid-template-columns: 1fr; }
+    .onboarding-account-fields .field-wide { grid-column: auto; }
+    .onboarding-actions { align-items: stretch; flex-direction: column; }
+    .onboarding-actions .btn { width: 100%; }
+    .onboarding-skip { text-align: center; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <main class="onboarding-page">
+        <header class="onboarding-header">
+            <div class="onboarding-kicker">Getting started</div>
+            {% if mode == 'household' %}
+            <h1>Set up your household</h1>
+            <p>Choose the essentials Family HQ needs for useful payday projections and organised transactions.</p>
+            {% else %}
+            <h1>Choose your default account</h1>
+            <p>This only changes your personal dashboard default. Household settings remain unchanged.</p>
+            {% endif %}
+        </header>
+
+        {% if mode == 'household' %}
+        <div class="onboarding-progress" aria-label="Setup steps">
+            <div class="onboarding-progress-item"><i class="bi bi-calendar-check"></i><span>Payday</span></div>
+            <div class="onboarding-progress-item"><i class="bi bi-bank"></i><span>First account</span></div>
+            <div class="onboarding-progress-item"><i class="bi bi-tags"></i><span>Vendor types</span></div>
+        </div>
+        {% endif %}
+
+        <form method="POST" class="onboarding-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            {% if mode == 'household' %}
+            <section class="onboarding-section">
+                <div class="onboarding-section-heading">
+                    <span class="onboarding-section-icon"><i class="bi bi-calendar-check"></i></span>
+                    <div>
+                        <h2>Household payday</h2>
+                        <p>Used to group shared transactions into payday-to-payday periods.</p>
+                    </div>
+                </div>
+                <label for="payday_day" class="form-label">Day of the month</label>
+                <input type="number" class="form-control" id="payday_day" name="payday_day"
+                       value="{{ payday_day }}" min="1" max="31" required>
+                <div class="form-text">Weekend paydays are adjusted to the previous working day.</div>
+            </section>
+
+            <section class="onboarding-section">
+                <div class="onboarding-section-heading">
+                    <span class="onboarding-section-icon"><i class="bi bi-bank"></i></span>
+                    <div>
+                        <h2>First bank account</h2>
+                        <p>Create the account used for your initial dashboard and transaction tracking.</p>
+                    </div>
+                </div>
+                <div class="onboarding-choice form-check">
+                    <input class="form-check-input" type="checkbox" id="create_account"
+                           name="create_account" value="1" checked>
+                    <label class="form-check-label fw-semibold" for="create_account">Create an account now</label>
+                </div>
+                <div class="onboarding-account-fields" id="onboarding-account-fields">
+                    <div class="field-wide">
+                        <label for="account_name" class="form-label">Account name</label>
+                        <input type="text" class="form-control" id="account_name" name="account_name"
+                               placeholder="e.g. Main Current Account" required>
+                    </div>
+                    <div>
+                        <label for="account_type" class="form-label">Account type</label>
+                        <select class="form-select" id="account_type" name="account_type" required>
+                            {% for account_type in account_types %}
+                            <option value="{{ account_type }}" {% if account_type == 'Current' %}selected{% endif %}>{{ account_type }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="opening_balance" class="form-label">Opening balance</label>
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" class="form-control" id="opening_balance"
+                                   name="opening_balance" value="0.00" step="0.01">
+                        </div>
+                    </div>
+                    <div class="field-wide">
+                        <label for="visibility" class="form-label">Visibility</label>
+                        <select class="form-select" id="visibility" name="visibility">
+                            <option value="shared">Shared with household</option>
+                            <option value="private">Private to me</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <section class="onboarding-section">
+                <div class="onboarding-section-heading">
+                    <span class="onboarding-section-icon"><i class="bi bi-tags"></i></span>
+                    <div>
+                        <h2>Recommended vendor types</h2>
+                        <p>Add editable defaults such as Grocery, Fuel, Utilities, and Healthcare.</p>
+                    </div>
+                </div>
+                <div class="onboarding-choice form-check">
+                    <input class="form-check-input" type="checkbox" id="seed_vendor_types"
+                           name="seed_vendor_types" value="1" checked>
+                    <label class="form-check-label fw-semibold" for="seed_vendor_types">Add recommended vendor types</label>
+                </div>
+            </section>
+            {% else %}
+            <section class="onboarding-section">
+                <div class="onboarding-section-heading">
+                    <span class="onboarding-section-icon"><i class="bi bi-person-check"></i></span>
+                    <div>
+                        <h2>Your dashboard account</h2>
+                        <p>Select from the active accounts you can access.</p>
+                    </div>
+                </div>
+                <label for="default_account_id" class="form-label">Default account</label>
+                <select class="form-select" id="default_account_id" name="default_account_id">
+                    <option value="">No default account yet</option>
+                    {% for account in accounts %}
+                    <option value="{{ account.id }}">{{ account.name }} ({{ account.account_type }})</option>
+                    {% endfor %}
+                </select>
+                {% if not accounts %}
+                <div class="form-text">There are no active accounts visible to you yet. You can continue and choose one later.</div>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            <div class="onboarding-actions">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-circle"></i>
+                    {{ 'Complete household setup' if mode == 'household' else 'Save and continue' }}
+                </button>
+            </div>
+        </form>
+
+        <form method="POST" action="{{ url_for('onboarding.skip') }}" class="onboarding-skip">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-link text-secondary">Skip for now</button>
+        </form>
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if mode == 'household' %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const toggle = document.getElementById('create_account');
+    const fields = document.getElementById('onboarding-account-fields');
+    const controls = fields.querySelectorAll('input, select');
+
+    function updateAccountFields() {
+        fields.hidden = !toggle.checked;
+        controls.forEach(function (control) {
+            control.disabled = !toggle.checked;
+        });
+    }
+
+    toggle.addEventListener('change', updateAccountFields);
+    updateAccountFields();
+});
+</script>
+{% endif %}
+{% endblock %}

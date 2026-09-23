@@ -17,6 +17,12 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(100), nullable=False)
+    onboarding_version = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default='0',
+    )
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
     last_login = db.Column(db.DateTime)
@@ -31,6 +37,16 @@ class User(UserMixin, db.Model):
 
     # Family / multi-user fields
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
+    default_account_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'accounts.id',
+            name='fk_users_default_account',
+            ondelete='SET NULL',
+            use_alter=True,
+        ),
+        nullable=True,
+    )
     # 'admin' = full access within the family app; 'member' = restricted to allowed_sections
     role = db.Column(db.String(20), nullable=False, default='admin')
     # Display name that maps to 'assigned_to' values in transaction data

@@ -1,29 +1,34 @@
 from decimal import Decimal
 
+from extensions import db
 from models.accounts import Account
 from models.mortgage import MortgageProduct
 from models.settings import Settings
+from models.users import User
 from services.finance.account_service import AccountService
 from services.finance.credit_card_service import CreditCardService
 from services.planning.loan_service import LoanService
 from services.analytics.networth_service import NetWorthService
 from services.finance.payday_service import PaydayService
 from services.planning.pension_service import PensionService
-from utils.db_helpers import family_get, family_query
+from utils import db_helpers
+from utils.db_helpers import family_query
 
 
 class DashboardService:
     @staticmethod
     def get_dashboard_data(selected_account_id=None, selected_year=None):
         accounts = AccountService.get_active_accounts_with_balances()
+        accounts_by_id = {account.id: account for account in accounts}
         if not selected_account_id:
-            joint_account = family_query(Account).filter_by(
-                account_type='Joint', is_active=True
-            ).first()
-            if joint_account:
-                selected_account_id = joint_account.id
+            user_id = db_helpers.get_current_user_id()
+            user = db.session.get(User, user_id) if user_id else None
+            if user and user.default_account_id in accounts_by_id:
+                selected_account_id = user.default_account_id
+            elif accounts:
+                selected_account_id = accounts[0].id
 
-        selected_account = family_get(Account, selected_account_id) if selected_account_id else None
+        selected_account = accounts_by_id.get(selected_account_id)
         payday_data = (
             PaydayService.get_payday_summary_for_year(
                 selected_account_id, selected_year, include_unpaid=True

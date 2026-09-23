@@ -1,7 +1,11 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from extensions import db
+from models.accounts import Account
+from models.family import Family
 from models.tax_settings import TaxSettings
 from models.settings import Settings
 from services.platform.settings_service import SettingsService
@@ -56,3 +60,51 @@ def test_clear_networth_start_date_removes_setting(app):
 
     assert removed.id == setting.id
     assert db.session.get(Settings, setting.id) is None
+
+
+def test_update_default_account_for_current_user(app, family, user, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr(
+        'services.platform.settings_service.get_current_user_id', lambda: user.id
+    )
+    account = Account(
+        family_id=family.id,
+        name='Personal Current',
+        account_type='Personal',
+        is_active=True,
+    )
+    db.session.add(account)
+    db.session.flush()
+
+    selected = SettingsService.update_default_account({
+        'default_account_id': str(account.id),
+    })
+    db.session.commit()
+
+    assert selected == account
+    assert user.default_account_id == account.id
+
+
+def test_update_default_account_rejects_other_family(app, family, user, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr(
+        'services.platform.settings_service.get_current_user_id', lambda: user.id
+    )
+    other_family = Family(name='Other Family')
+    db.session.add(other_family)
+    db.session.flush()
+    other_account = Account(
+        family_id=other_family.id,
+        name='Other Current',
+        account_type='Current',
+        is_active=True,
+    )
+    db.session.add(other_account)
+    db.session.flush()
+
+    with pytest.raises(ValueError, match='active account you can access'):
+        SettingsService.update_default_account({
+            'default_account_id': str(other_account.id),
+        })
+
+    assert user.default_account_id is None

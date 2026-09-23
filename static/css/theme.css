@@ -1215,6 +1215,42 @@ hr {
 }
 
 /* ── Dashboard specifics ─────────────────────────────────── */
+.dashboard-page .dashboard-setup-state {
+  color: var(--text-primary);
+}
+
+.dashboard-page .dashboard-setup-state > .bi {
+  color: var(--clr-info);
+}
+
+.dashboard-page .dashboard-setup-state .alert-link {
+  color: var(--text-primary);
+  text-decoration-color: var(--clr-info);
+  text-underline-offset: 0.15em;
+}
+
+.dashboard-page .dashboard-setup-state .alert-link:hover {
+  color: var(--clr-info);
+}
+
+.dashboard-page .dashboard-empty-state {
+  color: var(--text-primary);
+}
+
+.dashboard-page .dashboard-empty-state > .bi {
+  color: var(--clr-warning);
+}
+
+.dashboard-page .dashboard-empty-state .alert-link {
+  color: var(--text-primary);
+  text-decoration-color: var(--clr-warning);
+  text-underline-offset: 0.15em;
+}
+
+.dashboard-page .dashboard-empty-state .alert-link:hover {
+  color: var(--clr-warning);
+}
+
 .dashboard-page .networth-metric {
   border-radius: var(--radius-md);
   padding: 1rem;
@@ -1393,6 +1429,26 @@ hr {
 }
 
 /* ── Accounts page ───────────────────────────────────────── */
+.accounts-page .accounts-empty-state {
+  align-items: center;
+  color: var(--text-primary);
+  flex-direction: column;
+  gap: 0.5rem;
+  justify-content: center;
+  padding-block: 1.5rem;
+}
+
+.accounts-page .accounts-empty-state > .bi {
+  color: var(--clr-info);
+  font-size: 2rem;
+  margin-top: 0;
+}
+
+.accounts-page .accounts-empty-state p {
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
 .accounts-page .account-card-compact .card-body { padding: 0.75rem; }
 .accounts-page .account-card-compact .card-footer { padding: 0.4rem 0.75rem; }
 .accounts-page .account-card-compact .card-title { font-size: 0.95rem; }

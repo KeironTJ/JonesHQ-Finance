@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 class VendorType(db.Model):
     """Vendor type lookup table"""
     __tablename__ = 'vendor_types'
+    __table_args__ = (
+        db.UniqueConstraint('family_id', 'name', name='uq_vendor_types_family_name'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)

@@ -97,17 +97,26 @@ class VendorService:
         return {'deleted': True, 'name': name}
 
     @staticmethod
-    def seed_types():
-        if family_query(VendorType).count() > 0:
-            return False
+    def seed_types(commit=True):
+        existing_names = {
+            vendor_type.name.casefold()
+            for vendor_type in family_query(VendorType).all()
+        }
+        added = False
         for index, name in enumerate(DEFAULT_VENDOR_TYPES, start=1):
+            if name.casefold() in existing_names:
+                continue
             db.session.add(VendorType(
                 family_id=db_helpers.get_family_id(),
                 name=name,
                 is_active=True,
                 sort_order=index,
             ))
-        db.session.commit()
+            added = True
+        if not added:
+            return False
+        if commit:
+            db.session.commit()
         return True
 
     @staticmethod

@@ -263,6 +263,6 @@ def join(token):
 
         login_user(user)
         flash(f'Welcome to the family, {name}!', 'success')
-        return redirect(url_for('dashboard.index'))
+        return redirect(url_for('onboarding.index'))
 
     return render_template('family/join.html', invite=invite, token=token)

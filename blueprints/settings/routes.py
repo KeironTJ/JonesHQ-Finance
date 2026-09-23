@@ -49,6 +49,7 @@ def index():
     
     # Get all active accounts
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
+    default_account = SettingsService.get_default_account(accounts)
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     vendors    = family_query(Vendor).order_by(Vendor.name).all()
     
@@ -64,6 +65,7 @@ def index():
                          expense_reimburse_category_id=int(expense_reimburse_category_id) if expense_reimburse_category_id else None,
                          expense_reimburse_vendor_id=int(expense_reimburse_vendor_id) if expense_reimburse_vendor_id else None,
                          accounts=accounts,
+                         default_account_id=default_account.id if default_account else None,
                          categories=categories,
                          vendors=vendors,
                          networth_start_date=networth_start_date,
@@ -107,6 +109,8 @@ def update():
             'Day of month when payday occurs (adjusted for weekends)',
             'int'
         )
+
+        SettingsService.update_default_account(request.form)
         
         # Expense Settings
         expense_reimburse_account = request.form.get('expense_reimburse_account')

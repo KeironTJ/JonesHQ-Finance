@@ -17,11 +17,29 @@
         </div>
     </div>
 
+    {% if onboarding_incomplete %}
+    <div class="alert alert-info dashboard-setup-state d-flex align-items-start gap-2" role="status">
+        <i class="bi bi-compass-fill fs-5" aria-hidden="true"></i>
+        <div>
+            <div class="fw-semibold">Finish setting up Family HQ</div>
+            <div>
+                <a href="{{ url_for('onboarding.index') }}" class="alert-link">Continue setup</a>
+                to configure payday tracking and account defaults.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if not selected_account %}
-    <div class="alert alert-warning">
-        <i class="bi bi-exclamation-triangle"></i> 
-        <strong>No Account Selected</strong><br>
-        Please create a "Joint" type account to track payday periods, or select an account below.
+    <div class="alert alert-warning dashboard-empty-state d-flex align-items-start gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+        <div>
+            <div class="fw-semibold">No account available</div>
+            <div>
+                <a href="{{ url_for('accounts.index') }}" class="alert-link">Create your first account</a>
+                to start tracking payday periods.
+            </div>
+        </div>
     </div>
     {% endif %}
 

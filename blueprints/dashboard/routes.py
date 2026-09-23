@@ -23,6 +23,14 @@ def index():
     selected_year = request.args.get('year', type=int, default=today.year)
     
     dashboard_data = DashboardService.get_dashboard_data(selected_account_id, selected_year)
+    onboarding_incomplete = (
+        current_user.onboarding_version < 1
+        or (
+            current_user.is_admin
+            and current_user.family
+            and current_user.family.onboarding_version < 1
+        )
+    )
     
     return render_template('dashboard/index.html',
                          accounts=dashboard_data['accounts'],
@@ -37,6 +45,7 @@ def index():
                          loan_summary=dashboard_data['loan_summary'],
                          mortgage_summary=dashboard_data['mortgage_summary'],
                          pension_summary=dashboard_data['pension_summary'],
+                         onboarding_incomplete=onboarding_incomplete,
                          networth_expanded=Settings.get_value('dashboard.networth_expanded', True),
                          account_selection_expanded=Settings.get_value('dashboard.account_selection_expanded', True),
                          payday_expanded=Settings.get_value('dashboard.payday_expanded', True),
