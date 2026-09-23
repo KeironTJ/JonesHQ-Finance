@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for JonesHQ Finance test suite.
+Shared pytest fixtures for FamilyHQ Finance test suite.
 
 All tests run against an in-memory SQLite database (TestingConfig).
 A single app context is pushed for the whole session so that SQLAlchemy

@@ -1,4 +1,4 @@
-# JonesHQ Finance
+# Family HQ
 
 A comprehensive personal finance management web application built with Flask, designed to track accounts, budgets, loans, vehicles, childcare, pensions, mortgages, and net worth.
 
@@ -89,7 +89,7 @@ The application will be available at `http://localhost:5000`
 ## Project Structure
 
 ```
-JonesHQ Finance/
+Family HQ/
 ├── app.py                  # Application factory
 ├── config.py               # Configuration settings
 ├── extensions.py           # Flask extensions

@@ -4,7 +4,7 @@
     {% if value < 0 %}-£{{ "%.2f"|format(value|abs) }}{% else %}£{{ "%.2f"|format(value) }}{% endif %}
 {%- endmacro %}
 
-{% block title %}Dashboard - JonesHQ Finance{% endblock %}
+{% block title %}Dashboard - Family HQ{% endblock %}
 
 {% block content %}
 <div class="container-fluid dashboard-page">
@@ -24,6 +24,93 @@
         Please create a "Joint" type account to track payday periods, or select an account below.
     </div>
     {% endif %}
+
+    {% set current_period = namespace(value=none) %}
+    {% for period in payday_data %}
+        {% if period.start_date <= today <= period.end_date %}
+            {% set current_period.value = period %}
+        {% endif %}
+    {% endfor %}
+
+    <!-- At-a-glance position -->
+    <div class="row g-3 mb-4 dashboard-glance">
+        <div class="col-6 col-xl-3">
+            <a href="{{ url_for('accounts.index') }}" class="card h-100 text-decoration-none dashboard-glance-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-muted small">{{ selected_account.name if selected_account else 'Selected account' }}</span>
+                        <i class="bi bi-bank text-primary"></i>
+                    </div>
+                    {% if selected_account %}
+                    <div class="h4 mb-1 mt-2 {% if selected_account.calculated_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        £{{ "{:,.2f}".format(selected_account.calculated_balance) }}
+                    </div>
+                    <small class="text-muted">Current balance</small>
+                    {% else %}
+                    <div class="fw-semibold mt-2">Choose an account</div>
+                    <small class="text-muted">To see payday projections</small>
+                    {% endif %}
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a href="#paydayCollapse" class="card h-100 text-decoration-none dashboard-glance-card" data-bs-toggle="collapse">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-muted small">Current payday period</span>
+                        <i class="bi bi-calendar-check text-success"></i>
+                    </div>
+                    {% if current_period.value %}
+                    <div class="h4 mb-1 mt-2 {% if current_period.value.rolling_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ payday_money(current_period.value.rolling_balance) }}
+                    </div>
+                    <small class="text-muted">Projected ending balance</small>
+                    {% else %}
+                    <div class="fw-semibold mt-2">No current period</div>
+                    <small class="text-muted">Select an account to begin</small>
+                    {% endif %}
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a href="#paydayCollapse" class="card h-100 text-decoration-none dashboard-glance-card" data-bs-toggle="collapse">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-muted small">Lowest this period</span>
+                        <i class="bi bi-arrow-down-circle text-warning"></i>
+                    </div>
+                    {% if current_period.value %}
+                    <div class="h4 mb-1 mt-2 {% if current_period.value.min_balance >= 0 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ payday_money(current_period.value.min_balance) }}
+                    </div>
+                    <small class="text-muted">Projected minimum balance</small>
+                    {% else %}
+                    <div class="fw-semibold mt-2">Not available</div>
+                    <small class="text-muted">No payday data yet</small>
+                    {% endif %}
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a href="#paydayCollapse" class="card h-100 text-decoration-none dashboard-glance-card" data-bs-toggle="collapse">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-muted small">Safe extra spend</span>
+                        <i class="bi bi-wallet2 text-info"></i>
+                    </div>
+                    {% if current_period.value %}
+                    <div class="h4 mb-1 mt-2 {% if current_period.value.max_extra_spend >= 0 %}text-info{% else %}text-danger{% endif %}">
+                        {{ payday_money(current_period.value.max_extra_spend) }}
+                    </div>
+                    <small class="text-muted">After planned transactions</small>
+                    {% else %}
+                    <div class="fw-semibold mt-2">Not available</div>
+                    <small class="text-muted">No payday data yet</small>
+                    {% endif %}
+                </div>
+            </a>
+        </div>
+    </div>
 
     <!-- Net Worth Summary Card -->
     <div class="card mb-4 border-primary dashboard-section">

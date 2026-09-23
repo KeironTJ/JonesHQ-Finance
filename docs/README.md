@@ -1,6 +1,6 @@
 # JonesHQ Finance Documentation
 
-Complete documentation for the JonesHQ Finance personal finance management system.
+Complete documentation for the FamilyHQ Finance personal finance management system.
 
 ## Documentation Index
 

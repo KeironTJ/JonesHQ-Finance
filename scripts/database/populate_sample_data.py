@@ -1,5 +1,5 @@
 """
-Sample data population script for JonesHQ Finance
+Sample data population script for FamilyHQ Finance
 Demonstrates the correct order for populating tables with foreign key dependencies
 """
 

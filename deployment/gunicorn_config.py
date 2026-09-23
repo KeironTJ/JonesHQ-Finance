@@ -1,5 +1,5 @@
 """
-Gunicorn Configuration for JonesHQ Finance
+Gunicorn Configuration for FamilyHQ Finance
 Production WSGI server settings
 """
 import multiprocessing

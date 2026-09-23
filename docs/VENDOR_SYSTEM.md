@@ -1,7 +1,7 @@
 # Vendor Management System - Implementation Summary
 
 ## Overview
-Complete vendor tracking and management system integrated into JonesHQ Finance webapp. Enables standardization of vendor/merchant names across all transactions for improved data quality and analytics.
+Complete vendor tracking and management system integrated into FamilyHQ Finance webapp. Enables standardization of vendor/merchant names across all transactions for improved data quality and analytics.
 
 ## Implementation Status: ✅ COMPLETE
 

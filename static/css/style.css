@@ -1,4 +1,4 @@
-/* Custom styles for JonesHQ Finance */
+/* Custom styles for Family HQ */
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -60,6 +60,23 @@ footer {
 
 .dashboard-page .networth-metric.is-negative {
     background-color: #f8d7da;
+}
+
+.dashboard-page .dashboard-glance-card {
+    border: 1px solid #e3e6ea;
+    border-left: 4px solid #0d6efd;
+    color: inherit;
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.dashboard-page .dashboard-glance-card:hover {
+    border-color: #b8c9dc;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.dashboard-page .dashboard-glance-card .card-body {
+    min-height: 132px;
 }
 
 .dashboard-page .dashboard-collapse-toggle .bi,

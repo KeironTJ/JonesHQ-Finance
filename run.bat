@@ -1,5 +1,5 @@
 @echo off
-REM Quick start script for JonesHQ Finance
+REM Quick start script for FamilyHQ Finance
 
 echo Activating virtual environment...
 call venv\Scripts\activate.bat

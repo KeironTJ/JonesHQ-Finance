@@ -1,5 +1,5 @@
 """
-Flask-Admin panel for JonesHQ Finance
+Flask-Admin panel for Family HQ
 Accessible at /admin - restricted to users with role='admin'
 """
 from flask import redirect, url_for, flash
@@ -163,7 +163,7 @@ def init_admin(app, db):
 
     admin = Admin(
         app,
-        name='JonesHQ Admin',
+        name='FamilyHQ Admin',
         theme=Bootstrap4Theme(),
         index_view=SecureAdminIndexView(),
         url='/admin',

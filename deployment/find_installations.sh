@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# Find all JonesHQ Finance installations on the server
+# Find all FamilyHQ Finance installations on the server
 #
 
 echo "========================================="
-echo "  Finding JonesHQ Finance Installations"
+echo "  Finding FamilyHQ Finance Installations"
 echo "========================================="
 echo ""
 

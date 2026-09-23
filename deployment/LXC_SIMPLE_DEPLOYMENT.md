@@ -1,13 +1,13 @@
 # Simple LXC Deployment - Behind Existing Nginx Proxy
 
-This guide is for deploying JonesHQ Finance in a new LXC container when you **already have Nginx Proxy Manager** running.
+This guide is for deploying FamilyHQ Finance in a new LXC container when you **already have Nginx Proxy Manager** running.
 
 ---
 
 ## 🎯 Architecture
 
 ```
-Internet → Router → Nginx Proxy Manager (existing) → JonesHQ Finance LXC (new)
+Internet → Router → Nginx Proxy Manager (existing) → FamilyHQ Finance LXC (new)
                     ↓
                     Handles SSL/HTTPS
                     finance.joneshq.co.uk
@@ -148,7 +148,7 @@ nano /etc/systemd/system/joneshq-finance.service
 Paste this configuration:
 ```ini
 [Unit]
-Description=JonesHQ Finance Application
+Description=FamilyHQ Finance Application
 After=network.target
 
 [Service]

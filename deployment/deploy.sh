@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# JonesHQ Finance - Automated Deployment Script
+# FamilyHQ Finance - Automated Deployment Script
 # Run this on your Proxmox Ubuntu container
 #
 # Usage: bash deployment/deploy.sh
@@ -9,7 +9,7 @@
 set -e  # Exit on any error
 
 echo "========================================="
-echo "  JonesHQ Finance - Deployment Script"
+echo "  FamilyHQ Finance - Deployment Script"
 echo "========================================="
 echo ""
 

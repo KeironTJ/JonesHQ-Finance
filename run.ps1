@@ -1,4 +1,4 @@
-# Quick start script for JonesHQ Finance (PowerShell)
+# Quick start script for FamilyHQ Finance (PowerShell)
 
 Write-Host "Activating virtual environment..." -ForegroundColor Green
 & .\venv\Scripts\Activate.ps1

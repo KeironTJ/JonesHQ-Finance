@@ -1,6 +1,6 @@
 # Scripts Directory
 
-Scripts for managing and maintaining the JonesHQ Finance database.
+Scripts for managing and maintaining the FamilyHQ Finance database.
 
 ## 📁 Structure
 

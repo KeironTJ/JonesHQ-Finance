@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# JonesHQ Finance - Automated Backup Script
+# FamilyHQ Finance - Automated Backup Script
 # Run daily via cron
 #
 # Installation:

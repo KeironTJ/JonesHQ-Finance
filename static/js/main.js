@@ -1,4 +1,4 @@
-// JonesHQ Finance — Main JS
+// Family HQ — Main JS
 
 // ── Theme Manager ─────────────────────────────────────────────────────────────
 const ThemeManager = (function () {

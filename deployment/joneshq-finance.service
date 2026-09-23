@@ -1,4 +1,4 @@
-# Systemd Service for JonesHQ Finance
+# Systemd Service for FamilyHQ Finance
 # File: /etc/systemd/system/joneshq-finance.service
 # 
 # Installation:
@@ -8,7 +8,7 @@
 #   sudo systemctl start joneshq-finance
 
 [Unit]
-Description=JonesHQ Finance Application
+Description=FamilyHQ Finance Application
 Documentation=https://github.com/yourusername/joneshq-finance
 After=network.target
 

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Welcome - JonesHQ Finance{% endblock %}
+{% block title %}Welcome - Family HQ{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -26,10 +26,10 @@
             <i class="bi bi-shield-check"></i> Private Household Finance
         </div>
         <i class="bi bi-cash-stack jhq-hero-icon"></i>
-        <h1>JonesHQ <span>Finance</span></h1>
+        <h1>Family HQ</h1>
         <p class="jhq-hero-sub">
-            A personal finance platform built for the Jones household &mdash;
-            track every account, expense, debt, and investment in one secure place.
+            One calm, private view of your household finances &mdash;
+            track what you have, understand what is happening, and plan what comes next.
         </p>
         <div class="jhq-hero-actions">
             {% if current_user.is_authenticated %}
@@ -44,6 +44,41 @@
             <a href="{{ url_for('auth.help') }}" class="btn-hero-ghost">
                 <i class="bi bi-question-circle"></i> Help &amp; Support
             </a>
+        </div>
+    </div>
+
+    <!-- ── Product Overview ───────────────────────────────── -->
+    <div class="jhq-section jhq-overview-section">
+        <div class="jhq-section-inner">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <div class="jhq-feature-card jhq-card-row h-100">
+                        <div class="jhq-card-icon"><i class="bi bi-eye"></i></div>
+                        <div>
+                            <h5>See the whole picture</h5>
+                            <p class="mb-0">Bring accounts, spending, income, debts, and assets together in one view.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="jhq-feature-card jhq-card-row h-100">
+                        <div class="jhq-card-icon"><i class="bi bi-calendar2-check"></i></div>
+                        <div>
+                            <h5>Plan with confidence</h5>
+                            <p class="mb-0">Use payday projections, budgets, and long-term planning to make informed decisions.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="jhq-feature-card jhq-card-row h-100">
+                        <div class="jhq-card-icon"><i class="bi bi-lock"></i></div>
+                        <div>
+                            <h5>Keep it private</h5>
+                            <p class="mb-0">Family HQ is self-hosted and invitation-only, with access controlled by your household.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -132,7 +167,7 @@
                 <div>
                     <h6>Independent Project &mdash; Currently In Development</h6>
                     <p>
-                        JonesHQ Finance is a <strong>personal, independent project</strong> built from scratch and
+                        Family HQ is a <strong>personal, independent project</strong> built from scratch and
                         actively being developed. It is not a commercial product. New features are being added
                         regularly and some areas may be incomplete or subject to change without notice.<br><br>
                         If you encounter any bugs, broken pages, or unexpected behaviour, please
@@ -144,7 +179,7 @@
 
             <h4>About This Project</h4>
                 <p>
-                    JonesHQ Finance started as a way to replace scattered spreadsheets with a single,
+                    Family HQ started as a way to replace scattered spreadsheets with a single,
                     well-organised application tailored specifically to our household's needs. Rather than
                     fitting into a generic budgeting tool, every feature here has been designed around
                     real day-to-day requirements.

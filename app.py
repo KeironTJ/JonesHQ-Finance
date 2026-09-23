@@ -29,11 +29,11 @@ def configure_logging(app):
         app.logger.addHandler(file_handler)
         
         app.logger.setLevel(logging.INFO)
-        app.logger.info('JonesHQ Finance startup')
+        app.logger.info('Family HQ startup')
     else:
         # Development logging to console
         app.logger.setLevel(logging.DEBUG)
-        app.logger.info('JonesHQ Finance startup (DEBUG mode)')
+        app.logger.info('Family HQ startup (DEBUG mode)')
 
 
 def create_app(config_name=None):
