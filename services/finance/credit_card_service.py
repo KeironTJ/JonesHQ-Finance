@@ -601,44 +601,72 @@ class CreditCardService:
         return result
     
     @staticmethod
+    def _outstanding_balance_transfer_debt(card_id, statement_date):
+        """Debt on this card that originated from balance transfers, as a positive number.
+
+        Sums the debit side (negative amounts) of 'Balance Transfer' transactions posted
+        to this card up to and including ``statement_date``.  Transfers *out* of the card
+        (positive amounts) reduce that pot.
+        """
+        transfers = family_query(CreditCardTransaction).filter(
+            CreditCardTransaction.credit_card_id == card_id,
+            CreditCardTransaction.transaction_type == 'Balance Transfer',
+            CreditCardTransaction.date <= statement_date,
+        ).all()
+        total = sum(float(txn.amount or 0) for txn in transfers)
+        return abs(total) if total < 0 else 0.0
+
+    @staticmethod
     def calculate_interest(card_id, statement_date, balance_to_use=None):
         """
         Calculate the monthly interest charge for a card on a given statement date.
 
-        Uses the card's APR for that date (respects 0% promotional periods).
+        Respects 0% promotional periods, and charges balance-transfer debt at the
+        balance-transfer APR while the rest of the balance is charged at the purchase
+        APR.  Payments are assumed to clear the higher-rate (non-transfer) debt first,
+        which is how UK card issuers are required to allocate them.
+
         Interest is always returned as a positive number; the caller is responsible
         for negating it when storing as a transaction.
 
         Args:
             card_id:        ID of the CreditCard.
-            statement_date: Date used to look up the applicable APR.
+            statement_date: Date used to look up the applicable APRs.
             balance_to_use: Balance to charge interest on.  If None, uses
                             card.current_balance.  Should be the absolute
                             balance (sign is ignored via abs()).
 
         Returns:
             float — interest amount, rounded to 2 decimal places.
-            Returns 0.0 if the card is not found or the APR is 0%.
         """
         card = family_get(CreditCard, card_id)
         if not card:
             return 0.0
-        
-        # Get APR for this date (considers 0% offers)
-        monthly_apr = card.get_current_purchase_apr(statement_date)
-        
-        # If 0%, return 0
-        if monthly_apr == 0:
-            return 0.0
-        
-        # Use provided balance or card's current balance
+
+        purchase_apr = card.get_current_purchase_apr(statement_date)
+        transfer_apr = card.get_current_balance_transfer_apr(statement_date)
+
         if balance_to_use is not None:
-            balance = balance_to_use
+            balance = abs(float(balance_to_use))
         else:
-            balance = float(card.current_balance)
-        
-        # Calculate interest on balance (use absolute value since negative = owe)
-        interest = abs(balance) * (monthly_apr / 100)
+            balance = abs(float(card.current_balance))
+
+        if balance == 0 or (purchase_apr == 0 and transfer_apr == 0):
+            return 0.0
+
+        if purchase_apr == transfer_apr:
+            return round(balance * (purchase_apr / 100), 2)
+
+        transfer_balance = min(
+            CreditCardService._outstanding_balance_transfer_debt(card_id, statement_date),
+            balance,
+        )
+        other_balance = balance - transfer_balance
+
+        interest = (
+            transfer_balance * (transfer_apr / 100)
+            + other_balance * (purchase_apr / 100)
+        )
         return round(interest, 2)
     
     @staticmethod
@@ -703,9 +731,16 @@ class CreditCardService:
             db.session.flush()
 
         card_vendor = CreditCardService._get_or_create_card_vendor(card)
-        
-        # Get current APR and check if promotional
-        monthly_apr = card.get_current_purchase_apr(statement_date)
+
+        # Effective rate actually charged, which may be a blend of the purchase and
+        # balance-transfer APRs when only one of them is in a 0% period.
+        charged_balance = abs(float(
+            card.current_balance if balance_for_interest is None else balance_for_interest
+        ))
+        if charged_balance:
+            monthly_apr = round(abs(interest_amount) / charged_balance * 100, 2)
+        else:
+            monthly_apr = card.get_current_purchase_apr(statement_date)
         is_promo = (monthly_apr == 0 and (balance_for_interest is None or balance_for_interest < 0))  # negative = owe money
         
         # Create interest transaction
