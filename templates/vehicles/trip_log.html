@@ -3,6 +3,7 @@
 {% block title %}Trip Log{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/vehicle-tables.css') }}">
 <style>
 @keyframes jhqFadeSlide {
     from { opacity: 0; transform: translateY(12px); }
@@ -113,6 +114,12 @@
 
 .jhq-row-actions { white-space: nowrap; }
 .tank-bar { height: 10px; min-width: 52px; }
+.trip-mobile-vehicle,
+.trip-card-toggle,
+.tank-mobile-label,
+.trip-description-full { display: none; }
+
+
 </style>
 {% endblock %}
 
@@ -122,53 +129,60 @@
         <div class="col-12">
             <h1 class="mb-4"><i class="bi bi-car-front"></i> My Garage</h1>
 
-            <!-- Navigation -->
-            <ul class="nav nav-tabs mb-4">
+            <nav class="vehicle-section-navigation" aria-label="Vehicle pages">
+            <ul class="nav vehicle-page-nav mb-4">
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('vehicles.index') }}">
-                        <i class="bi bi-speedometer2"></i> Overview
+                        <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Overview</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
-                        <i class="bi bi-fuel-pump-fill"></i> Fuel Log
+                        <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link active" href="{{ url_for('vehicles.trips') }}">
-                        <i class="bi bi-map"></i> Trip Log
+                    <a class="nav-link active" href="{{ url_for('vehicles.trips') }}" aria-current="page">
+                        <i class="bi bi-map" aria-hidden="true"></i><span>Trip Log</span>
                     </a>
                 </li>
             </ul>
+            </nav>
 
             <div id="trip-log-panel">
             <div class="card shadow">
                 <div class="card-header bg-success d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-map me-2"></i>Trip Log</h5>
-                    <div class="d-flex gap-2 flex-wrap">
+                    <div class="d-flex gap-2 flex-wrap" id="trip-header-actions">
                         {% if selected_vehicle_id_trip %}
                         <form method="POST" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=selected_vehicle_id_trip) }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for this vehicle?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="btn btn-warning btn-sm">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh Forecasts
+                                <i class="bi bi-arrow-clockwise"></i>
+                                <span class="trip-action-label-full">Refresh Forecasts</span>
+                                <span class="trip-action-label-short">Refresh</span>
                             </button>
                         </form>
                         {% else %}
                         <form method="POST" action="{{ url_for('vehicles.refresh_all_forecasts') }}" style="display:inline;" onsubmit="return confirm('Refresh forecasted fuel transactions for ALL vehicles?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="btn btn-warning btn-sm">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh All Forecasts
+                                <i class="bi bi-arrow-clockwise"></i>
+                                <span class="trip-action-label-full">Refresh All Forecasts</span>
+                                <span class="trip-action-label-short">Refresh</span>
                             </button>
                         </form>
                         {% endif %}
                         <button class="btn btn-danger btn-sm" id="bulkDeleteTripBtn" onclick="bulkDeleteTrips()" style="display:none;">
-                            <i class="bi bi-trash"></i> Delete Selected (<span id="selectedTripCount">0</span>)
+                            <i class="bi bi-trash"></i>
+                            <span class="trip-action-label-full">Delete Selected (<span id="selectedTripCount">0</span>)</span>
+                            <span class="trip-action-label-short">Delete (<span id="selectedTripCountMobile">0</span>)</span>
                         </button>
                         <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#bulkAddTripModal">
-                            <i class="bi bi-calendar-plus"></i> Bulk Add
+                            <i class="bi bi-calendar-plus"></i> <span>Bulk Add</span>
                         </button>
                         <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addTripModal">
-                            <i class="bi bi-plus-circle"></i> Add Trip
+                            <i class="bi bi-plus-circle"></i> <span>Add Trip</span>
                         </button>
                     </div>
                 </div>
@@ -226,8 +240,8 @@
                     </div>
 
                     <!-- Timeline table -->
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm mb-0">
+                    <div class="table-responsive vehicle-mobile-table-responsive">
+                        <table class="table table-hover table-sm mb-0 vehicle-mobile-table">
                             <thead class="jhq-thead">
                                 <tr>
                                     <th style="width:30px;">
@@ -257,7 +271,7 @@
                             {% endif %}
 
                                 {# Checkbox #}
-                                <td>
+                                <td class="mobile-table-select-cell">
                                     {% if event.show_checkbox %}
                                     <input type="checkbox" class="trip-checkbox" value="{{ event.trip.id }}"
                                            aria-label="Select trip {{ event.trip.id }}"
@@ -266,15 +280,18 @@
                                 </td>
 
                                 {# Date #}
-                                <td class="text-nowrap">
+                                <td data-label="Date" class="text-nowrap">
                                     <span class="fw-semibold">{{ event.date.strftime('%d %b') }}</span>
                                     {% if not event.is_continuation %}
                                     <span class="badge bg-secondary ms-1">{{ event.date.strftime('%a') }}</span>
                                     {% endif %}
+                                    <button type="button" class="trip-card-toggle" aria-expanded="false">
+                                        <span>Details &amp; actions</span><i class="bi bi-chevron-down" aria-hidden="true"></i>
+                                    </button>
                                 </td>
 
                                 {# Vehicle #}
-                                <td>
+                                <td data-label="Vehicle">
                                     {% if event.type in ('personal', 'business') and not event.is_continuation %}
                                         <span class="badge bg-primary" title="{{ event.trip.vehicle.name }} ({{ event.trip.vehicle.registration }})">
                                             {{ event.trip.vehicle.name }}
@@ -291,7 +308,14 @@
                                 </td>
 
                                 {# Type badge #}
-                                <td class="event-type-cell">
+                                <td data-label="Type" class="event-type-cell">
+                                    {% if event.type in ('personal', 'business') and not event.is_continuation %}
+                                        <span class="badge bg-primary trip-mobile-vehicle">{{ event.trip.vehicle.name }}</span>
+                                    {% elif event.type == 'fuel' %}
+                                        <span class="badge bg-primary trip-mobile-vehicle">{{ event.fill.vehicle.name }}</span>
+                                    {% elif event.type == 'forecasted' and event.vehicle %}
+                                        <span class="badge bg-primary trip-mobile-vehicle">{{ event.vehicle.name }}</span>
+                                    {% endif %}
                                     {% if event.type == 'personal' %}
                                         <span class="badge bg-primary"><i class="bi bi-person-fill"></i> Personal</span>
                                     {% elif event.type == 'business' %}
@@ -308,10 +332,11 @@
                                 </td>
 
                                 {# Description #}
-                                <td>
+                                <td data-label="Description">
                                     <div class="d-flex align-items-center gap-1 flex-wrap">
                                     {% if event.type in ('personal', 'business') %}
-                                        <small>{{ event.trip.journey_description[:50] if event.trip.journey_description else '—' }}</small>
+                                        <small class="trip-description-preview">{{ event.trip.journey_description[:50] if event.trip.journey_description else '—' }}</small>
+                                        <small class="trip-description-full">{{ event.trip.journey_description or '—' }}</small>
                                         {% if event.trip.school_holidays %}
                                             <span class="badge bg-light text-dark border">{{ event.trip.school_holidays }}</span>
                                         {% endif %}
@@ -322,13 +347,14 @@
                                         </small>
                                         {% if event.fill.is_partial_fill %}<span class="badge bg-secondary">Partial</span>{% endif %}
                                     {% elif event.type == 'forecasted' %}
-                                        <small class="text-muted fst-italic">{{ event.tx.description[:50] if event.tx.description else 'Upcoming fill' }}</small>
+                                        <small class="text-muted fst-italic trip-description-preview">{{ event.tx.description[:50] if event.tx.description else 'Upcoming fill' }}</small>
+                                        <small class="trip-description-full">{{ event.tx.description or 'Upcoming fill' }}</small>
                                     {% endif %}
                                     </div>
                                 </td>
 
                                 {# Miles / Cost #}
-                                <td class="text-end text-nowrap" style="min-width:80px;">
+                                <td data-label="Miles / Cost" class="text-end text-nowrap" style="min-width:80px;">
                                     {% if event.type in ('personal', 'business') %}
                                         <span class="fw-bold">{{ event.miles }} mi</span>
                                         {% if not event.is_continuation and event.trip.trip_cost %}
@@ -342,7 +368,7 @@
                                 </td>
 
                                 {# MPG column — pure numbers only #}
-                                <td class="text-end text-nowrap">
+                                <td data-label="MPG" class="text-end text-nowrap">
                                     {% if event.type in ('personal', 'business') and not event.is_continuation %}
                                         {% if event.trip.approx_mpg %}
                                         <span class="text-muted small">{{ "%.1f"|format(event.trip.approx_mpg) }} mpg</span>
@@ -355,7 +381,7 @@
                                 </td>
 
                                 {# Tank column #}
-                                <td>
+                                <td data-label="Tank">
                                     {% if event.tank_pct is not none %}
                                         {% set _ttip = event.tank_pct %}
                                         {% set _bar = 'bg-success' if _ttip > 50 else ('bg-warning' if _ttip > 25 else 'bg-danger') %}
@@ -371,14 +397,15 @@
                                             <div class="progress tank-bar rounded-pill flex-shrink-0" style="width:52px;"
                                                  title="{{ _label }}">
                                                 <div class="progress-bar {{ _bar }} rounded-pill" style="width:{{ [_ttip, 4]|max }}%;"></div>
+                                                <span class="tank-mobile-label">Tank {{ _label }}</span>
                                             </div>
-                                            <span class="small text-muted text-nowrap">{{ _label }}</span>
+                                            <span class="small text-muted text-nowrap tank-label-desktop">{{ _label }}</span>
                                         </div>
                                     {% endif %}
                                 </td>
 
                                 {# Actions #}
-                                <td class="jhq-row-actions">
+                                <td data-label="Actions" class="jhq-row-actions">
                                     <div class="d-flex align-items-center gap-1">
                                     {% if event.type in ('personal', 'business') and not event.is_continuation %}
                                         {% if event.fuel_expense %}
@@ -645,6 +672,16 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('#trip-log-panel .vehicle-mobile-table tbody tr').forEach(row => {
+        row.addEventListener('click', function (event) {
+            if (window.innerWidth > 767) return;
+            const toggle = event.target.closest('.trip-card-toggle');
+            if (event.target.closest('td:nth-child(9)')) return;
+            if (!toggle && event.target.closest('a, button, input, select, textarea, form, label')) return;
+            setTripCardExpanded(row, !row.classList.contains('trip-card-expanded'));
+        });
+    });
+
     // ── Edit trip modal ──────────────────────────────────────────────────────
     document.querySelectorAll('.edit-trip-btn').forEach(button => {
         button.addEventListener('click', function () {
@@ -708,6 +745,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+function setTripCardExpanded(row, expanded) {
+    row.classList.toggle('trip-card-expanded', expanded);
+    const toggle = row.querySelector('.trip-card-toggle');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.querySelector('span').textContent = expanded ? 'Less' : 'Details & actions';
+    toggle.querySelector('i').classList.toggle('bi-chevron-up', expanded);
+    toggle.querySelector('i').classList.toggle('bi-chevron-down', !expanded);
+}
+
 function toggleAllTrips(checkbox) {
     document.querySelectorAll('.trip-checkbox').forEach(cb => cb.checked = checkbox.checked);
     updateBulkDeleteButton();
@@ -717,7 +764,9 @@ function updateBulkDeleteButton() {
     const checked = document.querySelectorAll('.trip-checkbox:checked');
     const all     = document.querySelectorAll('.trip-checkbox');
     document.getElementById('bulkDeleteTripBtn').style.display = checked.length > 0 ? 'inline-block' : 'none';
+    document.getElementById('trip-header-actions').classList.toggle('trip-bulk-delete-visible', checked.length > 0);
     document.getElementById('selectedTripCount').textContent = checked.length;
+    document.getElementById('selectedTripCountMobile').textContent = checked.length;
     const sel = document.getElementById('selectAllTrips');
     if (sel) sel.checked = all.length > 0 && checked.length === all.length;
 }

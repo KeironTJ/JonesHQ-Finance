@@ -1,0 +1,584 @@
+.vehicle-section-navigation {
+    position: sticky;
+    top: var(--nav-height);
+    z-index: 1020;
+    margin: 0 -0.25rem;
+    padding: 0.4rem 0.25rem;
+    background: var(--bg-surface-1, var(--bg-surface));
+}
+
+.vehicle-page-nav {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-pill);
+    background: var(--bg-surface-2);
+}
+
+.vehicle-page-nav .nav-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vehicle-page-nav .nav-link:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-3);
+}
+
+.vehicle-page-nav .nav-link.active {
+    color: #fff;
+    background: var(--brand);
+    box-shadow: var(--shadow-sm);
+}
+
+.vehicle-page-nav .nav-link i { font-size: 1rem; }
+
+.vehicle-card-mobile-reg,
+.vehicle-card-mobile-meta,
+.vehicle-card-toggle { display: none; }
+
+.fuel-log-sticky-header {
+    position: sticky;
+    top: calc(var(--nav-height) + 3.4rem);
+    z-index: 1010;
+}
+
+@media (max-width: 991.98px) {
+    .vehicle-section-navigation {
+        top: 56px;
+        margin: 0 -0.75rem;
+        padding: 0.35rem 0.75rem;
+        background: var(--bg-surface-1, var(--bg-surface));
+        box-shadow: 0 5px 10px -9px rgba(0, 0, 0, 0.65);
+    }
+    .vehicle-page-nav {
+        display: flex;
+        width: 100%;
+        gap: 0.15rem;
+        margin-bottom: 0 !important;
+        border-radius: var(--radius-md, 0.75rem);
+    }
+    .vehicle-page-nav .nav-item { flex: 1 1 0; min-width: 0; }
+    .vehicle-page-nav .nav-link {
+        width: 100%;
+        min-height: 2.65rem;
+        gap: 0.35rem;
+        padding: 0.45rem 0.35rem;
+        font-size: 0.78rem;
+    }
+    .fuel-log-sticky-header {
+        top: calc(56px + 3.4rem);
+    }
+}
+
+@media (max-width: 767.98px) {
+    .vehicle-mobile-table-responsive { overflow-x: visible; }
+    .vehicle-mobile-table { display: block; border-collapse: separate; border-spacing: 0; }
+    .vehicle-mobile-table > thead { display: none; }
+    .vehicle-mobile-table > tbody { display: block; }
+    .vehicle-mobile-table > tbody > tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+        position: relative;
+        margin-bottom: 0.45rem;
+        padding: 0.25rem 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        background: var(--bs-table-bg, var(--bg-surface-1, var(--bg-surface)));
+    }
+    .vehicle-mobile-table > tbody > tr > td {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 0.1rem;
+        min-width: 0;
+        padding: 0.25rem 0.35rem;
+        border: 0;
+        text-align: left !important;
+        font-size: 0.84rem;
+        white-space: normal;
+    }
+    .vehicle-mobile-table > tbody > tr > td::before {
+        content: attr(data-label);
+        min-width: 0;
+        color: var(--text-secondary);
+        font-size: 0.61rem;
+        font-weight: 600;
+        text-align: left;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+    .vehicle-mobile-table > tbody > tr > td.mobile-table-empty {
+        display: block;
+        grid-column: 1 / -1;
+        text-align: center !important;
+    }
+    .vehicle-mobile-table > tbody > tr > td.mobile-table-select-cell {
+        position: absolute;
+        top: 0.35rem;
+        right: 0.45rem;
+        z-index: 1;
+        padding: 0;
+        border: 0;
+    }
+    .vehicle-mobile-table > tbody > tr > td.mobile-table-select-cell::before { content: none; }
+    .vehicle-mobile-table > tbody > tr > td.jhq-row-actions {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        justify-content: flex-end;
+        align-items: center;
+        border-top: 1px solid var(--border-color);
+        margin-top: 0.15rem;
+        padding-top: 0.35rem;
+    }
+    .vehicle-mobile-table > tbody > tr > td.jhq-row-actions::before { margin-right: auto; }
+
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            "identity identity"
+            "year tank"
+            "actions actions";
+        gap: 0.1rem 0.5rem;
+        padding: 0.4rem 0.6rem;
+        cursor: pointer;
+    }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card:hover {
+        border-color: var(--brand);
+    }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > td {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        width: auto;
+        min-width: 0;
+        padding: 0.2rem 0;
+        border: 0;
+        text-align: left !important;
+        font-size: 0.84rem;
+        white-space: normal;
+    }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > td::before { display: none; }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > .vehicle-card-name {
+        display: grid;
+        grid-area: identity;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        column-gap: 0.4rem;
+    }
+    .vehicle-card-title {
+        overflow: hidden;
+        font-size: 0.95rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .vehicle-card-mobile-reg {
+        display: inline-block;
+        justify-self: start;
+    }
+    .vehicle-card-mobile-meta {
+        display: block;
+        grid-column: 1 / -1;
+        overflow: hidden;
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        font-weight: 400;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .vehicle-card-toggle {
+        display: inline-flex;
+        grid-column: 1 / -1;
+        justify-self: start;
+        align-items: center;
+        gap: 0.2rem;
+        padding: 0.2rem 0.3rem;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.68rem;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+    .vehicle-card-toggle:hover { background: var(--bg-surface-2); }
+    .vehicle-card-toggle i { transition: transform 0.15s ease; }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > .vehicle-card-registration,
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > .vehicle-card-desktop-detail {
+        display: none;
+    }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > .vehicle-card-year { grid-area: year; }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > .vehicle-card-tank { grid-area: tank; }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > .vehicle-card-detail { display: none; }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card.vehicle-card-expanded > .vehicle-card-detail {
+        display: flex;
+    }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card.vehicle-card-expanded > .vehicle-card-detail::before {
+        display: block;
+        color: var(--text-secondary);
+        font-size: 0.62rem;
+        font-weight: 600;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card > .vehicle-card-actions { display: none; }
+    .vehicle-mobile-table > tbody > tr.vehicle-management-card.vehicle-card-expanded > .vehicle-card-actions {
+        display: flex;
+        grid-area: actions;
+        flex-direction: row;
+        justify-content: flex-end;
+        align-items: center;
+        border-top: 1px solid var(--border-color);
+        margin-top: 0.15rem;
+        padding-top: 0.3rem;
+    }
+    .vehicle-management-card.vehicle-card-expanded .vehicle-card-toggle i { transform: rotate(180deg); }
+
+    #fuel-log-panel .vehicle-mobile-table > tbody > tr.fuel-mobile-card {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            "date date"
+            "vehicle type"
+            "cost cost";
+        gap: 0.1rem 0.4rem;
+        padding: 0.35rem 0.55rem;
+        cursor: pointer;
+    }
+    #fuel-log-panel .vehicle-mobile-table > tbody > tr.fuel-mobile-card:hover {
+        border-color: var(--brand);
+    }
+    #fuel-log-panel .fuel-mobile-card > td {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        width: auto;
+        min-width: 0;
+        padding: 0.2rem 0;
+        border: 0;
+        text-align: left !important;
+        font-size: 0.84rem;
+        white-space: normal;
+    }
+    #fuel-log-panel .fuel-mobile-card > td::before { display: none; }
+    #fuel-log-panel .fuel-mobile-card > .fuel-card-date {
+        grid-area: date;
+        flex-direction: row;
+        align-items: center;
+        padding-right: 0.2rem;
+        font-weight: 600;
+    }
+    #fuel-log-panel .fuel-card-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-left: auto;
+        padding: 0.15rem 0.35rem;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 400;
+        white-space: nowrap;
+    }
+    #fuel-log-panel .fuel-card-toggle:hover { background: var(--bg-surface-2); }
+    #fuel-log-panel .fuel-mobile-card > .fuel-card-vehicle {
+        grid-area: vehicle;
+        justify-content: center;
+    }
+    #fuel-log-panel .fuel-mobile-card > .fuel-card-type {
+        grid-area: type;
+        align-items: flex-end;
+        justify-content: center;
+    }
+    #fuel-log-panel .fuel-mobile-card > .fuel-card-cost {
+        grid-area: cost;
+        flex-direction: row;
+        align-items: baseline;
+        gap: 0.5rem;
+        padding: 0.25rem 0;
+        border-top: 1px solid var(--border-color);
+    }
+    #fuel-log-panel .fuel-card-cost > .fw-bold { font-size: 1rem; }
+    #fuel-log-panel .fuel-card-inline-gallons {
+        display: inline;
+    }
+    #fuel-log-panel .fuel-card-inline-gallons {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+    }
+    #fuel-log-panel .fuel-card-inline-mpg {
+        display: inline;
+        margin-left: auto;
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    #fuel-log-panel .fuel-mobile-card > .fuel-card-detail,
+    #fuel-log-panel .fuel-mobile-card > .jhq-row-actions { display: none; }
+    #fuel-log-panel .vehicle-mobile-table > tbody > tr.fuel-mobile-card.fuel-card-expanded {
+        grid-template-areas:
+            "date date"
+            "vehicle type"
+            "cost cost"
+            "price mileage"
+            "distance cumulative"
+            "mpg mile-cost"
+            "days transaction"
+            "actions actions";
+        gap: 0.15rem 0.5rem;
+    }
+    #fuel-log-panel .fuel-mobile-card.fuel-card-expanded > .fuel-card-detail {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 0.25rem 0;
+    }
+    #fuel-log-panel .fuel-mobile-card.fuel-card-expanded > .fuel-card-detail::before {
+        display: block;
+        color: var(--text-secondary);
+        font-size: 0.62rem;
+        font-weight: 600;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(4) { grid-area: price; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(5) { grid-area: mileage; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(7) { grid-area: gallons; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(8) { grid-area: distance; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(9) { grid-area: cumulative; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(10) { grid-area: mpg; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(11) { grid-area: mile-cost; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(12) { grid-area: days; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(13) { grid-area: transaction; }
+    #fuel-log-panel .fuel-mobile-card > td:nth-child(7) { display: none; }
+    #fuel-log-panel .fuel-mobile-card.fuel-card-expanded > td:nth-child(7) { display: none; }
+    #fuel-log-panel .fuel-card-expanded .fuel-card-inline-mpg { display: none; }
+    #fuel-log-panel .fuel-mobile-card.fuel-card-expanded > .jhq-row-actions {
+        display: flex;
+        grid-area: actions;
+        flex-direction: row;
+        justify-content: flex-end;
+        align-items: center;
+        border-top: 1px solid var(--border-color);
+        margin-top: 0.15rem;
+        padding-top: 0.3rem;
+    }
+    #fuel-log-panel .fuel-card-expanded .fuel-card-toggle i { transform: rotate(180deg); }
+
+    #trip-log-panel .vehicle-mobile-table > tbody > tr {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        padding: 0.5rem 0.65rem;
+        cursor: pointer;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr:hover {
+        border-color: var(--brand);
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td {
+        width: 100%;
+        padding: 0.2rem 0;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td::before { display: none; }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td.mobile-table-select-cell {
+        top: 0.55rem;
+        right: 0.65rem;
+        width: auto;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(2) {
+        order: 1;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.35rem;
+        padding-right: 2rem;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(3) {
+        display: none;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(4) {
+        order: 2;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(4) > .badge {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    #trip-log-panel .trip-mobile-vehicle,
+    #trip-log-panel .trip-card-toggle { display: inline-flex; }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(6) {
+        order: 3;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: baseline;
+        gap: 0.75rem;
+        padding: 0.25rem 0;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(6)::before {
+        display: inline;
+        content: "Distance / cost";
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(6) > br { display: none; }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(8) {
+        order: 4;
+        padding: 0.15rem 0;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(8) > div {
+        width: 100%;
+    }
+    #trip-log-panel .vehicle-mobile-table .tank-bar {
+        position: relative;
+        width: 100% !important;
+        height: 1.15rem;
+        min-width: 0;
+        overflow: hidden;
+    }
+    #trip-log-panel .vehicle-mobile-table .tank-mobile-label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-primary, #fff);
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+        pointer-events: none;
+    }
+    #trip-log-panel .vehicle-mobile-table .tank-label-desktop { display: none; }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(5) {
+        order: 5;
+        display: block;
+        overflow: hidden;
+        padding: 0.2rem 0;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(5) > div {
+        display: block !important;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(5)::before { display: none; }
+    #trip-log-panel .vehicle-mobile-table .trip-description-full { display: none; }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(7) {
+        order: 6;
+        display: none;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr.trip-card-expanded > td:nth-child(5) {
+        overflow: visible;
+        white-space: normal;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr.trip-card-expanded .trip-description-preview { display: none; }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr.trip-card-expanded .trip-description-full { display: inline; }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr.trip-card-expanded > td:nth-child(5) > div {
+        display: flex !important;
+        flex-wrap: wrap;
+        white-space: normal;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr.trip-card-expanded > td:nth-child(7) {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-secondary);
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr.trip-card-expanded > td:nth-child(7)::before {
+        display: inline;
+        content: "MPG";
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr > td:nth-child(9) {
+        order: 7;
+        display: none;
+        justify-content: flex-end;
+        border-top: 1px solid var(--border-color);
+        margin-top: 0.15rem;
+        padding-top: 0.25rem;
+        padding-bottom: 0.1rem;
+    }
+    #trip-log-panel .vehicle-mobile-table > tbody > tr.trip-card-expanded > td:nth-child(9) {
+        display: flex;
+    }
+    #trip-log-panel .trip-card-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-left: auto;
+        padding: 0.15rem 0.35rem;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        white-space: nowrap;
+    }
+    #trip-log-panel .trip-card-toggle:hover { background: var(--bg-surface-2); }
+    #trip-log-panel .trip-card-expanded .trip-card-toggle i { transform: rotate(180deg); }
+
+    #trip-log-panel > .card > .card-header {
+        position: sticky;
+        top: calc(56px + 3.4rem);
+        z-index: 1010;
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 0.55rem;
+        padding: 0.65rem 0.75rem;
+        box-shadow: 0 5px 12px -10px rgba(0, 0, 0, 0.7);
+    }
+    #trip-log-panel > .card > .card-header > h5 {
+        font-size: 1rem;
+        line-height: 1.2;
+    }
+    #trip-log-panel > .card > .card-header > .d-flex {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.4rem !important;
+        width: 100%;
+    }
+    #trip-log-panel > .card > .card-header > .trip-bulk-delete-visible {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    #trip-log-panel > .card > .card-header > .d-flex > form {
+        min-width: 0;
+        width: 100%;
+    }
+    #trip-log-panel > .card > .card-header .btn {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.3rem;
+        width: 100%;
+        min-height: 2.35rem;
+        padding: 0.35rem 0.25rem;
+        font-size: 0.75rem;
+        white-space: nowrap;
+    }
+    #trip-log-panel .trip-action-label-full { display: none; }
+    #trip-log-panel .trip-action-label-short { display: inline; }
+}

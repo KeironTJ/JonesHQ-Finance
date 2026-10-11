@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid transaction-editor-page">
+<div class="container-fluid transaction-editor-page credit-card-transaction-editor">
     <div class="row">
         <div class="col-12">
             <header class="page-header transaction-editor-header">
@@ -15,9 +15,11 @@
                     <h1><i class="bi bi-pencil-square"></i> Edit Payment</h1>
                     <p class="page-subtitle mb-0">{{ card.card_name }}</p>
                 </div>
-                <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">{{ card.card_name }}</span>
-                </a>
+                <div class="transactions-header-actions credit-card-editor-links">
+                    <a href="{{ url_for('credit_cards.detail', id=card.id) }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> <span>{{ card.card_name }}</span>
+                    </a>
+                </div>
             </header>
 
             <div class="alert alert-info transaction-editor-notice">

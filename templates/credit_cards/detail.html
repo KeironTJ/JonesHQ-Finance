@@ -4,29 +4,30 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/transactions.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/credit-cards.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid transactions-page">
+<div class="container-fluid transactions-page credit-card-detail-page">
     <header class="page-header transactions-header">
         <div>
             <h1><i class="bi bi-credit-card"></i> {{ card.card_name }}</h1>
             <p class="page-subtitle mb-0">Review balances, transactions and promotional offers for this card.</p>
         </div>
-        <div class="transactions-header-actions">
+        <div class="transactions-header-actions credit-card-detail-actions">
             <a href="{{ url_for('credit_cards.index') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left"></i> <span class="d-none d-sm-inline">Cards</span>
+                <i class="bi bi-arrow-left"></i> <span>Cards</span>
             </a>
             {% if other_cards %}
             <a href="{{ url_for('credit_cards.create_balance_transfer', from_card_id=card.id) }}" class="btn btn-outline-primary">
-                <i class="bi bi-arrow-left-right"></i> <span class="d-none d-sm-inline">Balance Transfer</span>
+                <i class="bi bi-arrow-left-right"></i> <span>Balance Transfer</span>
             </a>
             {% endif %}
             <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#generateModal">
-                <i class="bi bi-calendar-plus"></i> <span class="d-none d-sm-inline">Generate Future</span>
+                <i class="bi bi-calendar-plus"></i> <span>Generate Future</span>
             </button>
             <a href="{{ url_for('credit_cards.edit', id=card.id) }}" class="btn btn-outline-secondary">
-                <i class="bi bi-pencil"></i> <span class="d-none d-sm-inline">Edit Card</span>
+                <i class="bi bi-pencil"></i> <span>Edit Card</span>
             </a>
             <a href="{{ url_for('credit_cards.add_transaction', id=card.id) }}" class="btn btn-primary">
                 <i class="bi bi-plus-lg"></i> Add transaction

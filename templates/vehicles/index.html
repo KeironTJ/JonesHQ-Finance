@@ -3,6 +3,7 @@
 {% block title %}My Garage{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/vehicle-tables.css') }}">
 <style>
 /* Page entrance animation */
 .jhq-page-enter { animation: jhqFadeSlide 0.18s ease both; }
@@ -42,6 +43,7 @@
     border-bottom: 2px solid var(--border-color);
     border-top: none;
 }
+
 </style>
 {% endblock %}
 
@@ -51,36 +53,29 @@
         <div class="col-12">
 
             <!-- Page header -->
-            <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="d-flex align-items-center mb-3">
                 <h1 class="mb-0"><i class="bi bi-car-front"></i> My Garage</h1>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#addFuelModal">
-                        <i class="bi bi-fuel-pump-fill"></i> Log Fill
-                    </button>
-                    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addVehicleModal">
-                        <i class="bi bi-plus-circle"></i> Add Vehicle
-                    </button>
-                </div>
             </div>
 
-            <!-- Page nav tabs (between pages) -->
-            <ul class="nav nav-tabs mb-3">
+            <nav class="vehicle-section-navigation" aria-label="Vehicle pages">
+            <ul class="nav vehicle-page-nav mb-3">
                 <li class="nav-item">
-                    <a class="nav-link active" href="{{ url_for('vehicles.index') }}">
-                        <i class="bi bi-speedometer2"></i> Overview
+                    <a class="nav-link active" href="{{ url_for('vehicles.index') }}" aria-current="page">
+                        <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Overview</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
-                        <i class="bi bi-fuel-pump-fill"></i> Fuel Log
+                        <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('vehicles.trips') }}">
-                        <i class="bi bi-map"></i> Trip Log
+                        <i class="bi bi-map" aria-hidden="true"></i><span>Trip Log</span>
                     </a>
                 </li>
             </ul>
+            </nav>
 
             <!-- Inner section pills (My Garage ↔ Manage) -->
             <ul class="nav vehicle-section-nav mb-4 gap-1" id="vehicleSectionNav" role="tablist">
@@ -132,25 +127,39 @@
                                             {{ vehicle.registration }} · {{ vehicle.make }} {{ vehicle.model }}{% if vehicle.year %} ({{ vehicle.year }}){% endif %} · {{ vehicle.fuel_type }}
                                         </small>
                                     </div>
-                                    <div class="d-flex gap-2 flex-shrink-0">
-                                        <a href="{{ url_for('vehicles.trips') }}?vehicle_id_trip={{ vehicle.id }}" class="btn btn-sm btn-light" title="Trip log">
-                                            <i class="bi bi-map"></i>
-                                        </a>
-                                        <a href="{{ url_for('vehicles.fuel') }}?vehicle_id={{ vehicle.id }}" class="btn btn-sm btn-light" title="Fuel log">
-                                            <i class="bi bi-fuel-pump-fill"></i>
-                                        </a>
-                                        <button class="btn btn-sm btn-light"
-                                                title="Edit vehicle"
-                                                onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
-                                            <i class="bi bi-pencil"></i>
+                                    <div class="dropdown flex-shrink-0">
+                                        <button class="btn btn-sm btn-light dropdown-toggle" type="button"
+                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="bi bi-three-dots" aria-hidden="true"></i><span class="ms-1">More</span>
                                         </button>
-                                        <form method="post" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=vehicle.id) }}" class="d-inline"
-                                              onsubmit="return confirm('Refresh fuel forecasts for {{ vehicle.name }}?');">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                            <button type="submit" class="btn btn-sm btn-warning" title="Refresh forecast">
-                                                <i class="bi bi-arrow-clockwise"></i>
-                                            </button>
-                                        </form>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <li>
+                                                <a class="dropdown-item" href="{{ url_for('vehicles.trips') }}?vehicle_id_trip={{ vehicle.id }}">
+                                                    <i class="bi bi-map me-2" aria-hidden="true"></i>Trip Log
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" href="{{ url_for('vehicles.fuel') }}?vehicle_id={{ vehicle.id }}">
+                                                    <i class="bi bi-fuel-pump-fill me-2" aria-hidden="true"></i>Fuel Log
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <button class="dropdown-item" type="button"
+                                                        onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                                    <i class="bi bi-pencil me-2" aria-hidden="true"></i>Edit Vehicle
+                                                </button>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <form method="post" action="{{ url_for('vehicles.refresh_forecasts', vehicle_id=vehicle.id) }}"
+                                                      onsubmit="return confirm('Refresh fuel forecasts for {{ vehicle.name }}?');">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                    <button type="submit" class="dropdown-item">
+                                                        <i class="bi bi-arrow-clockwise me-2" aria-hidden="true"></i>Refresh Forecast
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
                                     </div>
                                 </div>
 
@@ -253,7 +262,7 @@
 
                                     <!-- Quick log fill button -->
                                     <div class="mt-3 d-grid">
-                                        <button class="btn btn-outline-danger btn-sm"
+                                        <button class="btn btn-outline-success btn-sm"
                                                 data-bs-toggle="modal" data-bs-target="#addFuelModal"
                                                 onclick="document.getElementById('ovFuelVehicleSelect').value='{{ vehicle.id }}'; ovFuelPrefill();">
                                             <i class="bi bi-plus-circle me-1"></i>Log Fuel Fill
@@ -284,8 +293,8 @@
                         <div class="card-body p-0">
 
                             <!-- Active vehicles -->
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0">
+                            <div class="table-responsive vehicle-mobile-table-responsive">
+                                <table class="table table-hover align-middle mb-0 vehicle-mobile-table">
                                     <thead class="jhq-thead">
                                         <tr>
                                             <th>Vehicle</th>
@@ -299,14 +308,21 @@
                                     </thead>
                                     <tbody>
                                         {% for vehicle in all_vehicles if vehicle.is_active %}
-                                        <tr>
-                                            <td class="fw-semibold">{{ vehicle.name }}</td>
-                                            <td><span class="badge bg-primary">{{ vehicle.registration }}</span></td>
-                                            <td>{{ vehicle.make }} {{ vehicle.model }}</td>
-                                            <td>{{ vehicle.year or '—' }}</td>
-                                            <td>{{ vehicle.tank_size }} gal</td>
-                                            <td>{{ vehicle.fuel_type }}</td>
-                                            <td>
+                                        <tr class="vehicle-management-card">
+                                            <td data-label="Vehicle" class="fw-semibold vehicle-card-name">
+                                                <span class="vehicle-card-title">{{ vehicle.name }}</span>
+                                                <span class="vehicle-card-mobile-reg badge bg-primary">{{ vehicle.registration }}</span>
+                                                <small class="vehicle-card-mobile-meta">{{ vehicle.make }} {{ vehicle.model }} · {{ vehicle.fuel_type }}</small>
+                                                <button type="button" class="vehicle-card-toggle" aria-expanded="false">
+                                                    <span>Details &amp; actions</span><i class="bi bi-chevron-down" aria-hidden="true"></i>
+                                                </button>
+                                            </td>
+                                            <td data-label="Reg" class="vehicle-card-registration"><span class="badge bg-primary">{{ vehicle.registration }}</span></td>
+                                            <td data-label="Make / Model" class="vehicle-card-desktop-detail">{{ vehicle.make }} {{ vehicle.model }}</td>
+                                            <td data-label="Year" class="vehicle-card-detail vehicle-card-year">{{ vehicle.year or '—' }}</td>
+                                            <td data-label="Tank" class="vehicle-card-detail vehicle-card-tank">{{ vehicle.tank_size }} gal</td>
+                                            <td data-label="Fuel" class="vehicle-card-desktop-detail">{{ vehicle.fuel_type }}</td>
+                                            <td data-label="Actions" class="vehicle-card-actions">
                                                 <button class="btn btn-sm btn-outline-primary"
                                                         onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
                                                     <i class="bi bi-pencil"></i> Edit
@@ -321,7 +337,7 @@
                                             </td>
                                         </tr>
                                         {% else %}
-                                        <tr><td colspan="7" class="text-center text-muted py-3">No active vehicles.</td></tr>
+                                        <tr><td colspan="7" class="mobile-table-empty text-center text-muted py-3">No active vehicles.</td></tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
@@ -336,7 +352,8 @@
                                     <i class="bi bi-chevron-down me-1"></i>Inactive ({{ inactive|length }})
                                 </button>
                                 <div class="collapse mt-2" id="inactiveVehicles">
-                                    <table class="table table-sm table-hover align-middle mb-0">
+                                    <div class="table-responsive vehicle-mobile-table-responsive">
+                                    <table class="table table-sm table-hover align-middle mb-0 vehicle-mobile-table">
                                         <thead class="jhq-thead">
                                             <tr>
                                                 <th>Vehicle</th>
@@ -350,14 +367,21 @@
                                         </thead>
                                         <tbody class="text-muted">
                                             {% for vehicle in inactive %}
-                                            <tr>
-                                                <td class="fw-semibold">{{ vehicle.name }}</td>
-                                                <td><span class="badge bg-secondary">{{ vehicle.registration }}</span></td>
-                                                <td>{{ vehicle.make }} {{ vehicle.model }}</td>
-                                                <td>{{ vehicle.year or '—' }}</td>
-                                                <td>{{ vehicle.tank_size }} gal</td>
-                                                <td>{{ vehicle.fuel_type }}</td>
-                                                <td>
+                                            <tr class="vehicle-management-card">
+                                                <td data-label="Vehicle" class="fw-semibold vehicle-card-name">
+                                                    <span class="vehicle-card-title">{{ vehicle.name }}</span>
+                                                    <span class="vehicle-card-mobile-reg badge bg-secondary">{{ vehicle.registration }}</span>
+                                                    <small class="vehicle-card-mobile-meta">{{ vehicle.make }} {{ vehicle.model }} · {{ vehicle.fuel_type }}</small>
+                                                    <button type="button" class="vehicle-card-toggle" aria-expanded="false">
+                                                        <span>Details &amp; actions</span><i class="bi bi-chevron-down" aria-hidden="true"></i>
+                                                    </button>
+                                                </td>
+                                                <td data-label="Reg" class="vehicle-card-registration"><span class="badge bg-secondary">{{ vehicle.registration }}</span></td>
+                                                <td data-label="Make / Model" class="vehicle-card-desktop-detail">{{ vehicle.make }} {{ vehicle.model }}</td>
+                                                <td data-label="Year" class="vehicle-card-detail vehicle-card-year">{{ vehicle.year or '—' }}</td>
+                                                <td data-label="Tank" class="vehicle-card-detail vehicle-card-tank">{{ vehicle.tank_size }} gal</td>
+                                                <td data-label="Fuel" class="vehicle-card-desktop-detail">{{ vehicle.fuel_type }}</td>
+                                                <td data-label="Actions" class="vehicle-card-actions">
                                                     <button class="btn btn-sm btn-outline-secondary"
                                                             onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
                                                         <i class="bi bi-pencil"></i> Edit
@@ -367,6 +391,7 @@
                                             {% endfor %}
                                         </tbody>
                                     </table>
+                                    </div>
                                 </div>
                             </div>
                             {% endif %}
@@ -600,6 +625,25 @@
 
 {% block extra_js %}
 <script>
+document.querySelectorAll('.vehicle-management-card').forEach(row => {
+    row.addEventListener('click', function (event) {
+        if (window.innerWidth > 767 || event.target.closest('.vehicle-card-actions')) return;
+        const toggle = event.target.closest('.vehicle-card-toggle');
+        if (!toggle && event.target.closest('button, input, select, textarea, form, label, a')) return;
+        setVehicleCardExpanded(row, !row.classList.contains('vehicle-card-expanded'));
+    });
+});
+
+function setVehicleCardExpanded(row, expanded) {
+    row.classList.toggle('vehicle-card-expanded', expanded);
+    const toggle = row.querySelector('.vehicle-card-toggle');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.querySelector('span').textContent = expanded ? 'Less' : 'Details & actions';
+    toggle.querySelector('i').classList.toggle('bi-chevron-up', expanded);
+    toggle.querySelector('i').classList.toggle('bi-chevron-down', !expanded);
+}
+
 const OV_LAST_FILL = {{ last_fill_by_vehicle | tojson }};
 
 function ovFuelPrefill() {

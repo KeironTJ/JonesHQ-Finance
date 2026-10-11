@@ -2,11 +2,15 @@
 
 {% block title %}{% if card %}Edit{% else %}Add{% endif %} Credit Card - Family HQ{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/credit-cards.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="container">
+<div class="container credit-card-editor">
     <h1>{% if card %}Edit{% else %}Add{% endif %} Credit Card</h1>
     
-    <form method="POST" class="mt-4">
+    <form method="POST" class="credit-card-editor-form mt-4">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="row">
             <!-- Card Details -->
@@ -167,7 +171,7 @@
         </div>
         
         <!-- Submit Buttons -->
-        <div class="d-flex justify-content-between">
+        <div class="d-flex justify-content-between credit-card-editor-actions">
             <a href="{{ url_for('credit_cards.index') }}" class="btn btn-secondary">Cancel</a>
             <button type="submit" class="btn btn-primary">
                 <i class="bi bi-save"></i> {% if card %}Update{% else %}Add{% endif %} Credit Card

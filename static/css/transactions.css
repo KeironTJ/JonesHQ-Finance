@@ -549,7 +549,7 @@
   .cc-transaction-list .transactions-table,
   .cc-transaction-list .transactions-table tbody { display: block; width: 100%; }
   .cc-transaction-list .transactions-table thead { display: none; }
-  .cc-transaction-list .transactions-table tbody { padding: 0 0.75rem; }
+  .cc-transaction-list .transactions-table tbody { padding: 0 0.5rem; }
   .cc-transaction-list .transactions-table tbody tr {
     display: grid;
     grid-template-columns: 7rem minmax(0, 1fr) auto;
@@ -565,9 +565,9 @@
     background: transparent !important;
     box-shadow: none !important;
   }
-  .cc-transaction-list .txn-date { grid-column: 1; grid-row: 1; }
+  .cc-transaction-list .txn-date { grid-column: 1; grid-row: 1; color: var(--text-secondary); font-size: 0.75rem; }
   .cc-transaction-list .txn-type { grid-column: 2; grid-row: 1; text-align: left; }
-  .cc-transaction-list .txn-amount { grid-column: 3; grid-row: 1; }
+  .cc-transaction-list .txn-amount { grid-column: 3; grid-row: 1; font-size: 0.95rem; }
   .cc-transaction-list .txn-details { grid-column: 1 / 4; grid-row: 2; }
   .cc-transaction-list .txn-vendor { grid-column: 1 / 3; grid-row: 3; color: var(--text-secondary); font-size: 0.78rem; }
   .cc-transaction-list .txn-vendor::before { content: 'Vendor: '; color: var(--text-muted); }
@@ -604,6 +604,35 @@
   .active-filter-label { display: none; }
   .filter-chip { flex: 0 0 auto; }
   .transaction-filter-drawer { --bs-offcanvas-width: 100vw; }
+
+  .credit-card-detail-page .transactions-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .credit-card-detail-page .transactions-header h1 {
+    font-size: 1.5rem;
+    overflow-wrap: anywhere;
+  }
+  .credit-card-detail-page .credit-card-detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .credit-card-detail-page .credit-card-detail-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding-inline: 0.35rem;
+    font-size: 0.78rem;
+    white-space: normal;
+  }
+  .credit-card-detail-page .credit-card-detail-actions .btn-primary {
+    grid-column: 1 / -1;
+    margin-left: 0;
+  }
 
   .bulk-actions-panel { top: calc(var(--nav-height) + 0.25rem); }
   .bulk-actions-header { flex-wrap: wrap; }
@@ -683,6 +712,45 @@
   }
   .transactions-table .transaction-empty { grid-column: 1 / 4; }
 
+  .cc-transaction-list .transactions-table tbody tr {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "date amount"
+      "type amount"
+      "details details"
+      "vendor status"
+      "balance balance"
+      "actions actions";
+    gap: 0.3rem 0.65rem;
+    padding: 0.75rem 0.35rem;
+  }
+  .cc-transaction-list .txn-date { grid-area: date; }
+  .cc-transaction-list .txn-type { grid-area: type; }
+  .cc-transaction-list .txn-amount { grid-area: amount; align-self: center; }
+  .cc-transaction-list .txn-details { grid-area: details; }
+  .cc-transaction-list .txn-vendor { grid-area: vendor; }
+  .cc-transaction-list .txn-paid-status { grid-area: status; align-self: center; }
+  .cc-transaction-list .txn-running {
+    display: block !important;
+    grid-area: balance;
+    padding-top: 0.3rem !important;
+    border-top: 1px solid var(--border-color) !important;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+  }
+  .cc-transaction-list .txn-running::before { content: 'Balance: '; color: var(--text-muted); }
+  .cc-transaction-list .txn-actions { grid-area: actions; }
+  .cc-transaction-list .txn-actions .btn-group {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    width: 100%;
+  }
+  .cc-transaction-list .txn-actions .btn-group > .btn,
+  .cc-transaction-list .txn-actions .btn-group > form { min-width: 0; }
+  .cc-transaction-list .txn-actions .btn-group > form { display: flex; }
+  .cc-transaction-list .txn-actions .btn { width: 100%; min-height: 36px; }
+  .cc-transaction-list .transaction-empty { grid-column: 1 / -1; }
+
   .transactions-list-card .pagination .page-item:not(:first-child):not(:last-child):not(:nth-child(2)):not(:nth-last-child(2)) { display: none; }
 
   .consolidated-list-card .table-responsive { overflow: visible; }
@@ -722,6 +790,33 @@
 
   .transaction-editor-page { padding-inline: 0.75rem; }
   .transaction-editor-header { flex-direction: row; align-items: center; }
+  .credit-card-transaction-editor .transaction-editor-header,
+  .transfer-editor-page .transaction-editor-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .credit-card-transaction-editor .transaction-editor-header h1,
+  .transfer-editor-page .transaction-editor-header h1 { font-size: 1.5rem; }
+  .credit-card-editor-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .credit-card-editor-links .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding-inline: 0.35rem;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+  }
+  .credit-card-transfer-back {
+    align-self: flex-start;
+    min-height: 2.5rem;
+  }
   .transaction-editor-card > .card-body { padding: 1rem; }
   .transaction-form-actions {
     display: grid;

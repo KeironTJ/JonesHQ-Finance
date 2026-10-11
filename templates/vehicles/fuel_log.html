@@ -3,6 +3,7 @@
 {% block title %}Fuel Log{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/vehicle-tables.css') }}">
 <style>
 @keyframes jhqFadeSlide {
     from { opacity: 0; transform: translateY(12px); }
@@ -43,6 +44,8 @@
 
 /* Action button group */
 .jhq-row-actions { white-space: nowrap; }
+.fuel-card-toggle,
+.fuel-card-inline-gallons { display: none; }
 </style>
 {% endblock %}
 
@@ -52,28 +55,29 @@
         <div class="col-12">
             <h1 class="mb-4"><i class="bi bi-car-front"></i> My Garage</h1>
             
-            <!-- Navigation -->
-            <ul class="nav nav-tabs mb-4">
+            <nav class="vehicle-section-navigation" aria-label="Vehicle pages">
+            <ul class="nav vehicle-page-nav mb-4">
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('vehicles.index') }}">
-                        <i class="bi bi-speedometer2"></i> Overview
+                        <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Overview</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link active" href="{{ url_for('vehicles.fuel') }}">
-                        <i class="bi bi-fuel-pump-fill"></i> Fuel Log
+                    <a class="nav-link active" href="{{ url_for('vehicles.fuel') }}" aria-current="page">
+                        <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('vehicles.trips') }}">
-                        <i class="bi bi-map"></i> Trip Log
+                        <i class="bi bi-map" aria-hidden="true"></i><span>Trip Log</span>
                     </a>
                 </li>
             </ul>
+            </nav>
 
     <!-- Fuel Log Content -->
 <div id="fuel-log-panel"><div class="card shadow">
-    <div class="card-header bg-danger d-flex justify-content-between align-items-center">
+    <div class="card-header bg-danger d-flex justify-content-between align-items-center fuel-log-sticky-header">
         <h5 class="mb-0"><i class="bi bi-fuel-pump-fill me-2"></i>Fuel Log</h5>
         <div>
             {% if selected_vehicle_id %}
@@ -180,8 +184,8 @@
         </div>
         {% endif %}
 
-        <div class="table-responsive">
-            <table class="table table-hover table-sm align-middle">
+        <div class="table-responsive vehicle-mobile-table-responsive">
+            <table class="table table-hover table-sm align-middle vehicle-mobile-table">
                 <thead class="jhq-thead">
                     <tr>
                         <th>Date</th>
@@ -203,28 +207,39 @@
                 <tbody>
                     {% for fuel in fuel_records %}
                     {% set _days_since = (fuel.date - fuel.last_fill_date).days if fuel.last_fill_date else none %}
-                    <tr {% if fuel.linked_transaction_id %}class="table-success"{% endif %}>
-                        <td class="text-nowrap">{{ fuel.date.strftime('%d/%m/%Y') }}</td>
-                        <td><span class="badge bg-primary">{{ fuel.vehicle.registration }}</span></td>
-                        <td>
+                    <tr class="{% if fuel.linked_transaction_id %}table-success {% endif %}fuel-mobile-card">
+                        <td data-label="Date" class="text-nowrap fuel-card-date">
+                            {{ fuel.date.strftime('%d/%m/%Y') }}
+                            <button type="button" class="fuel-card-toggle" aria-expanded="false">
+                                <span>Details &amp; actions</span><i class="bi bi-chevron-down" aria-hidden="true"></i>
+                            </button>
+                        </td>
+                        <td data-label="Vehicle" class="fuel-card-vehicle"><span class="badge bg-primary">{{ fuel.vehicle.registration }}</span></td>
+                        <td data-label="Fill Type" class="fuel-card-type">
                             {% if fuel.is_partial_fill %}
                                 <span class="badge bg-warning text-dark" title="Partial fill — gallons added on top of existing level"><i class="bi bi-droplet-half"></i> Partial</span>
                             {% else %}
                                 <span class="badge bg-info text-dark" title="Full fill — tank topped up to capacity"><i class="bi bi-droplet-fill"></i> Full</span>
                             {% endif %}
                         </td>
-                        <td>{{ "%.1f"|format(fuel.price_per_litre) }}p</td>
-                        <td class="text-nowrap">{{ "{:,}".format(fuel.mileage) }}</td>
-                        <td class="text-nowrap">
+                        <td data-label="Price/L" class="fuel-card-detail">{{ "%.1f"|format(fuel.price_per_litre) }}p</td>
+                        <td data-label="Mileage" class="text-nowrap fuel-card-detail">{{ "{:,}".format(fuel.mileage) }}</td>
+                        <td data-label="Cost" class="text-nowrap fuel-card-cost">
                             {% if fuel.linked_transaction_id %}
                                 <i class="bi bi-receipt text-success" title="Linked transaction"></i>
                             {% endif %}
                             <span class="fw-bold text-danger">£{{ "%.2f"|format(fuel.cost) }}</span>
+                            <span class="fuel-card-inline-gallons">{{ "%.2f"|format(fuel.gallons) }} gal</span>
+                            {% if fuel.mpg and fuel.mpg > 0 %}
+                            <span class="fuel-card-inline-mpg">{{ "%.1f"|format(fuel.mpg) }} mpg</span>
+                            {% else %}
+                            <span class="fuel-card-inline-mpg">— mpg</span>
+                            {% endif %}
                         </td>
-                        <td>{{ "%.2f"|format(fuel.gallons) }}</td>
-                        <td>{{ fuel.actual_miles or 0 }}</td>
-                        <td>{{ "{:,}".format(fuel.actual_cumulative_miles or 0) }}</td>
-                        <td>
+                        <td data-label="Gallons" class="fuel-card-detail">{{ "%.2f"|format(fuel.gallons) }}</td>
+                        <td data-label="Miles Since" class="fuel-card-detail">{{ fuel.actual_miles or 0 }}</td>
+                        <td data-label="Cum. Miles" class="fuel-card-detail">{{ "{:,}".format(fuel.actual_cumulative_miles or 0) }}</td>
+                        <td data-label="MPG" class="fuel-card-detail">
                             {% if fuel.mpg and fuel.mpg > 0 %}
                                 {% set mpg_val = fuel.mpg|float %}
                                 {% set mpg_cls = 'bg-success' if mpg_val >= 40 else ('bg-warning text-dark' if mpg_val >= 30 else 'bg-danger') %}
@@ -233,8 +248,8 @@
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td>£{{ "%.2f"|format(fuel.price_per_mile or 0) }}</td>
-                        <td class="text-nowrap">
+                        <td data-label="£/Mile" class="fuel-card-detail">£{{ "%.2f"|format(fuel.price_per_mile or 0) }}</td>
+                        <td data-label="Days Since Fill" class="text-nowrap fuel-card-detail">
                             {% if _days_since is not none %}
                                 <span class="badge {% if _days_since <= 14 %}bg-success{% elif _days_since <= 28 %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
                                     {{ _days_since }}d
@@ -243,7 +258,7 @@
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td data-label="Transaction" class="fuel-card-detail">
                             {% if fuel.linked_transaction_id %}
                                 <a href="{{ url_for('transactions.index') }}?id={{ fuel.linked_transaction_id }}"
                                    class="btn btn-sm btn-success"
@@ -254,7 +269,7 @@
                                 <span class="text-muted small"><i class="bi bi-dash-circle"></i> None</span>
                             {% endif %}
                         </td>
-                        <td class="jhq-row-actions">
+                        <td data-label="Actions" class="jhq-row-actions">
                             <div class="btn-group btn-group-sm">
                                 <button class="btn btn-outline-secondary edit-fuel-btn"
                                         title="Edit"
@@ -451,6 +466,15 @@ document.getElementById('addFuelModal').addEventListener('hidden.bs.modal', func
 
 // Event listener for edit buttons
 document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('#fuel-log-panel .fuel-mobile-card').forEach(row => {
+        row.addEventListener('click', function (event) {
+            const toggle = event.target.closest('.fuel-card-toggle');
+            if (event.target.closest('td.jhq-row-actions')) return;
+            if (!toggle && event.target.closest('a, button, input, select, textarea, form, label')) return;
+            setFuelCardExpanded(row, !row.classList.contains('fuel-card-expanded'));
+        });
+    });
+
     document.querySelectorAll('.edit-fuel-btn').forEach(button => {
         button.addEventListener('click', function() {
             const id = this.dataset.id;
@@ -477,6 +501,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+function setFuelCardExpanded(row, expanded) {
+    row.classList.toggle('fuel-card-expanded', expanded);
+    const toggle = row.querySelector('.fuel-card-toggle');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.querySelector('span').textContent = expanded ? 'Less' : 'Details & actions';
+    toggle.querySelector('i').classList.toggle('bi-chevron-up', expanded);
+    toggle.querySelector('i').classList.toggle('bi-chevron-down', !expanded);
+}
 
 function calculateGallons(mode) {
     const pricePerLitre = parseFloat(document.getElementById(mode + '_price_per_litre').value);
