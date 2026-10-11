@@ -21,6 +21,7 @@ class CreditCardTransaction(db.Model):
     head_budget = db.Column(db.String(100))  # Main category
     sub_budget = db.Column(db.String(100))   # Sub category
     item = db.Column(db.String(255))  # Merchant/description
+    assigned_to = db.Column(db.String(100))
     
     # Transaction Type and Amount
     transaction_type = db.Column(db.String(50), nullable=False)  

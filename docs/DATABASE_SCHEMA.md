@@ -102,6 +102,10 @@ From your CREDIT CARD TRANSACTIONS sheet
 - `date`: Transaction date
 - `head_budget`, `sub_budget`: Category
 - `item`: Merchant
+- `assigned_to`: Optional family member or custom assignment label (same names as bank transactions)
+  - Available when adding/editing a card transaction; recurring entries retain the assignment.
+  - Shown in the card transaction list. Existing transactions remain unassigned.
+- `vendor_id`: Optional vendor; the add/edit form supports quick-add without leaving the page.
 - `transaction_type`: Purchase, Payment, Interest, Rewards
 - `amount`: Amount (negative for purchases, positive for payments)
 - `balance`: Card balance after transaction

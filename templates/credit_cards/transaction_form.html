@@ -80,10 +80,29 @@
                             <!-- Vendor -->
                             <div class="col-md-6 mb-3">
                                 <label for="vendor_id" class="form-label">Vendor</label>
-                                <select class="form-select" id="vendor_id" name="vendor_id">
-                                    <option value="">-- No vendor --</option>
-                                    {% for vendor in vendors %}
-                                    <option value="{{ vendor.id }}" {% if transaction and transaction.vendor_id == vendor.id %}selected{% endif %}>{{ vendor.name }}</option>
+                                <div class="input-group">
+                                    <select class="form-select" id="vendor_id" name="vendor_id">
+                                        <option value="">-- No vendor --</option>
+                                        {% for vendor in vendors %}
+                                        <option value="{{ vendor.id }}" {% if transaction and transaction.vendor_id == vendor.id %}selected{% endif %}>{{ vendor.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-outline-secondary" title="Quick-add a new vendor"
+                                            aria-label="Quick-add a new vendor" onclick="openQuickAddVendor('vendor_id')">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="assigned_to" class="form-label">Assigned To</label>
+                                <select class="form-select" id="assigned_to" name="assigned_to">
+                                    <option value="">Unassigned</option>
+                                    {% if transaction and transaction.assigned_to and transaction.assigned_to not in assignment_options %}
+                                    <option value="{{ transaction.assigned_to }}" selected>{{ transaction.assigned_to }}</option>
+                                    {% endif %}
+                                    {% for person_name in assignment_options %}
+                                    <option value="{{ person_name }}" {% if transaction and transaction.assigned_to == person_name %}selected{% endif %}>{{ person_name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
@@ -227,6 +246,11 @@
     </div>
 </div>
 
+{% include 'vendors/_quick_add_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/quick_add_vendor.js') }}"></script>
 <script>
 const planItemSelect = document.getElementById('plan_item_id');
 const newPlanItemTitle = document.getElementById('new_plan_item_title');

@@ -174,6 +174,7 @@
                                 {% set plan_item = transaction_plan_links.get(txn.id) %}
                                 {% if plan_item %}<a class="badge bg-success-subtle text-success-emphasis ms-1 text-decoration-none" href="{{ url_for('plans.detail', plan_id=plan_item.plan_id) }}"><i class="bi bi-journal-check"></i> {{ plan_item.plan.title }} · {{ plan_item.title }}</a>{% endif %}
                                 <div class="txn-meta">
+                                    {% if txn.assigned_to %}<span><i class="bi bi-person"></i> {{ txn.assigned_to }}</span>{% endif %}
                                     {% if txn.head_budget and txn.sub_budget %}<span><i class="bi bi-folder"></i> {{ txn.head_budget }} > {{ txn.sub_budget }}</span>{% endif %}
                                     {% if txn.bank_transaction_id %}<span><a href="{{ url_for('transactions.index') }}?id={{ txn.bank_transaction_id }}"><i class="bi bi-bank"></i> Bank #{{ txn.bank_transaction_id }}</a></span>{% endif %}
                                     {% if txn.linked_cc_transaction_id %}<span><a href="{{ url_for('credit_cards.detail', id=txn.linked_cc_transaction.credit_card_id) }}#cc-txn-{{ txn.linked_cc_transaction_id }}"><i class="bi bi-arrow-left-right"></i> {{ txn.linked_cc_transaction.credit_card.card_name }}</a></span>{% endif %}

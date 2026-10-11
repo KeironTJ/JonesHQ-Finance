@@ -330,6 +330,7 @@ class CreditCardService:
             transaction.month = transaction.date.strftime('%Y-%m')
         transaction.transaction_type = data.get('txn_type')
         transaction.item = data.get('txn_item')
+        transaction.assigned_to = data.get('assigned_to', transaction.assigned_to)
         transaction.amount = float(data.get('txn_amount'))
         vendor_id = int(data['vendor_id']) if data.get('vendor_id') else None
         transaction.vendor_id = family_get(Vendor, vendor_id).id if vendor_id else None
@@ -445,6 +446,7 @@ class CreditCardService:
                 head_budget=category.head_budget if category else None,
                 sub_budget=category.sub_budget if category else None,
                 item=item,
+                assigned_to=data.get('assigned_to', ''),
                 transaction_type=transaction_type,
                 amount=amount,
                 is_paid=is_paid,

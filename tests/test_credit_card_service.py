@@ -208,6 +208,7 @@ def test_create_recurring_credit_card_transactions(app, card, family_id, patch_f
         'txn_date': '2026-01-15',
         'txn_type': 'Purchase',
         'txn_item': 'Travel',
+        'assigned_to': 'Household',
         'txn_amount': '-25.00',
         'category_id': str(category.id),
         'txn_fixed': '0',
@@ -222,6 +223,35 @@ def test_create_recurring_credit_card_transactions(app, card, family_id, patch_f
     assert transactions[0].family_id == family_id
     assert transactions[0].head_budget == 'Work'
     assert transactions[1].month == '2026-02'
+    assert all(transaction.assigned_to == 'Household' for transaction in transactions)
+
+
+def test_credit_card_transaction_assignment_update_clear_and_preserve(
+    app, card, family_id, patch_family
+):
+    data = {
+        'txn_date': '2026-01-15',
+        'txn_type': 'Purchase',
+        'txn_item': 'Groceries',
+        'txn_amount': '-25.00',
+        'assigned_to': 'Household',
+    }
+    transaction = CreditCardService.create_transactions(card.id, data)[0]
+    assert transaction.assigned_to == 'Household'
+
+    data['assigned_to'] = 'Child'
+    CreditCardService.update_transaction(transaction.id, data)
+    db.session.refresh(transaction)
+    assert transaction.assigned_to == 'Child'
+
+    del data['assigned_to']
+    CreditCardService.update_transaction(transaction.id, data)
+    assert transaction.assigned_to == 'Child'
+
+    data['assigned_to'] = ''
+    CreditCardService.update_transaction(transaction.id, data)
+    db.session.refresh(transaction)
+    assert transaction.assigned_to == ''
 
 
 def test_create_credit_card_payment_links_bank_transaction(

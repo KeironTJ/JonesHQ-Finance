@@ -10,6 +10,7 @@ from models.transactions import Transaction
 from models.vendors import Vendor
 from models.plans import Plan, PlanItem
 from models.family import Family
+from models.family_assignment_labels import FamilyAssignmentLabel
 
 
 def _login(client, user_id):
@@ -111,22 +112,86 @@ def test_credit_card_transaction_create_and_edit_vendor(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
+    quick_add = client.post('/vendors/quick-add', json={'name': 'Quick Vendor'})
+    assert quick_add.status_code == 201
+    quick_vendor_id = quick_add.get_json()['id']
+    assert db.session.get(Vendor, quick_vendor_id).family_id == family.id
+
     response = client.post(f'/credit-cards/{card.id}/transaction/add', data={
         'txn_date': '2026-09-21', 'txn_type': 'Purchase',
         'txn_item': 'First purchase', 'txn_amount': '-70.00',
-        'vendor_id': str(first_vendor.id),
+        'vendor_id': str(quick_vendor_id),
+        'assigned_to': user.name,
     })
     transaction = CreditCardTransaction.query.one()
     assert response.status_code == 302
-    assert transaction.vendor_id == first_vendor.id
+    assert transaction.vendor_id == quick_vendor_id
+    assert transaction.assigned_to == user.name
 
+    quick_add = client.post('/vendors/quick-add', json={'name': 'Second Vendor'})
+    assert quick_add.status_code == 200
+    assert quick_add.get_json()['id'] == second_vendor.id
     response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
         'txn_date': '2026-09-21', 'txn_type': 'Purchase',
         'txn_item': 'Second purchase', 'txn_amount': '-70.00',
         'vendor_id': str(second_vendor.id),
+        'assigned_to': 'Household',
     })
     assert response.status_code == 302
     assert transaction.vendor_id == second_vendor.id
+    assert transaction.assigned_to == 'Household'
+
+    response = client.get(f'/credit-cards/{card.id}?is_paid=pending')
+    assert response.status_code == 200
+    assert b'Household' in response.data
+
+    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
+        'txn_date': '2026-09-21', 'txn_type': 'Purchase',
+        'txn_item': 'Second purchase', 'txn_amount': '-70.00',
+        'vendor_id': '', 'assigned_to': '',
+    })
+    assert response.status_code == 302
+    assert transaction.vendor_id is None
+    assert transaction.assigned_to == ''
+
+
+def test_credit_card_transaction_forms_share_quick_add_and_family_assignments(app, family, user):
+    card = CreditCard(
+        family_id=family.id, card_name='Form Card', annual_apr=24,
+        monthly_apr=2, min_payment_percent=2, credit_limit=5000,
+        current_balance=0, available_credit=5000, is_active=True,
+    )
+    transaction = CreditCardTransaction(
+        family_id=family.id, credit_card=card, date=date.today(),
+        transaction_type='Purchase', item='Groceries', amount=Decimal('-20.00'),
+        assigned_to='Retired label',
+    )
+    other_family = Family(name='Other Family')
+    db.session.add_all([card, transaction, other_family])
+    db.session.flush()
+    db.session.add_all([
+        FamilyAssignmentLabel(family_id=family.id, name='Child'),
+        FamilyAssignmentLabel(family_id=other_family.id, name='Foreign label'),
+    ])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    for url in [
+        f'/credit-cards/{card.id}/transaction/add',
+        f'/credit-cards/{card.id}/transaction/{transaction.id}/edit',
+    ]:
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"openQuickAddVendor('vendor_id')" in response.data
+        assert response.data.count(b'id="quickAddVendorModal"') == 1
+        assert b'js/quick_add_vendor.js' in response.data
+        assert b'name="assigned_to"' in response.data
+        assert b'<option value="Child"' in response.data
+        assert user.name.encode() in response.data
+        assert b'Foreign label' not in response.data
+
+    assert b'<option value="Retired label" selected>' in response.data
 
 
 def test_credit_card_detail_renders_plan_link_action_and_badge(app, family, user):
@@ -204,5 +269,4 @@ def test_deleting_credit_card_transaction_clears_plan_link(app, family, user):
 
     assert response.status_code == 302
     assert item.credit_card_transaction_id is None
-
 
