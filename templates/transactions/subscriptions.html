@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Subscriptions - Family HQ{% endblock %}
+
+{% block extra_css %}
+<style>
+    .subscriptions-table thead th {
+        padding-left: 0.65rem;
+        padding-right: 0.65rem;
+    }
+
+    .subscriptions-table tbody td {
+        vertical-align: middle;
+        padding: 0.4rem 0.65rem;
+    }
+
+    .subscription-main {
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+    }
+
+    .subscription-detail {
+        font-size: 0.75rem;
+        line-height: 1rem;
+        white-space: nowrap;
+        color: var(--text-secondary);
+    }
+
+    .subscription-actions {
+        justify-content: flex-end;
+        gap: 0.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <header class="page-header d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <h1><i class="bi bi-arrow-repeat"></i> Subscriptions</h1>
+            <p class="page-subtitle mb-0">
+                Manage recurring charges and keep a bounded forecast of pending transactions.
+            </p>
+        </div>
+        <a href="{{ url_for('transactions.create_subscription') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Add subscription
+        </a>
+    </header>
+
+    <div class="alert alert-info" role="note">
+        Each subscription generates pending entries up to its own 1–5 year planning horizon.
+        Set an end date to stop sooner. Editing or cancelling never changes paid transactions.
+    </div>
+
+    {% if subscriptions %}
+    <div class="table-responsive">
+        <table class="table table-hover subscriptions-table">
+            <thead>
+                <tr>
+                    <th scope="col">Subscription</th>
+                    <th scope="col">Account / card</th>
+                    <th scope="col">Amount</th>
+                    <th scope="col">Schedule</th>
+                    <th scope="col">Forecast</th>
+                    <th scope="col">Status</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for subscription in subscriptions %}
+                {% set summary = summaries[subscription.id] %}
+                <tr>
+                    <td>
+                        <div class="subscription-main"><strong>{{ subscription.name }}</strong></div>
+                        <div class="subscription-detail">
+                            {% if subscription.vendor %}{{ subscription.vendor.name }}{% endif %}
+                            {% if subscription.category %}
+                                {% if subscription.vendor %} · {% endif %}
+                                {{ subscription.category.head_budget }} — {{ subscription.category.sub_budget }}
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="subscription-main">{{ subscription.target_name }}</div>
+                    </td>
+                    <td>
+                        <div class="subscription-main">£{{ "%.2f"|format(subscription.amount|abs) }}</div>
+                    </td>
+                    <td>
+                        <div class="subscription-main">{{ subscription.frequency|replace('4weekly', 'every 4 weeks')|title }}</div>
+                        <div class="subscription-detail">
+                            {{ subscription.horizon_years }} year{{ 's' if subscription.horizon_years != 1 else '' }}
+                            {% if subscription.end_date %} · Ends {{ subscription.end_date.strftime('%d %b %Y') }}{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="subscription-main">{{ summary.pending_count }} pending</div>
+                        <div class="subscription-detail">
+                            {% if summary.next_date %}Next {{ summary.next_date.strftime('%d %b %Y') }}{% endif %}
+                            {% if summary.paid_count %} · {{ summary.paid_count }} paid kept{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="subscription-main"><span class="badge {{ 'text-bg-success' if subscription.is_active else 'text-bg-secondary' }}">
+                            {{ 'Active' if subscription.is_active else 'Paused' }}
+                        </span></div>
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <div class="subscription-main subscription-actions">
+                        <a href="{{ url_for('transactions.edit_subscription', id=subscription.id) }}"
+                           class="btn btn-sm btn-outline-primary">Edit</a>
+                        <form method="post" action="{{ url_for('transactions.toggle_subscription', id=subscription.id) }}"
+                              class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                {{ 'Pause' if subscription.is_active else 'Resume' }}
+                            </button>
+                        </form>
+                        <form method="post" action="{{ url_for('transactions.cancel_subscription', id=subscription.id) }}"
+                              class="d-inline" onsubmit="return confirm('Cancel this subscription and delete its remaining pending transactions? Paid transactions will be kept.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+                        </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-body py-5 text-center">
+            <i class="bi bi-arrow-repeat fs-1 text-body-secondary"></i>
+            <h2 class="h4 mt-3">No subscriptions yet</h2>
+            <p class="text-body-secondary">Create a subscription to schedule recurring bank or card charges.</p>
+            <a href="{{ url_for('transactions.create_subscription') }}" class="btn btn-primary">
+                Add your first subscription
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

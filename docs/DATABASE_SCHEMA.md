@@ -324,6 +324,20 @@ Historical account balances
 - `balance`: Balance amount
 - `balance_date`: Date of balance
 
+### 22. **Subscription** (subscriptions.py)
+Managed recurring bank-account or credit-card charges
+- `family_id`: Family boundary
+- `account_id` or `credit_card_id`: Exactly one charge destination; visibility follows the selected account or card owner
+- `amount`, `frequency`, `start_date`, optional `end_date`: Charge rule
+- `horizon_years`: Per-subscription forecast limit (1–5 years)
+- `category_id`, `vendor_id`: Optional classification (category required for bank entries)
+- `is_active`: Whether pending entries continue to be maintained
+
+Generated pending entries reference the subscription from
+`transactions.subscription_id` or
+`credit_card_transactions.subscription_id`. Paid entries are retained when a
+subscription changes or is cancelled.
+
 ## Key Design Decisions
 
 ### 1. **Normalized Structure**

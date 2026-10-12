@@ -28,6 +28,7 @@ from models.planned import PlannedTransaction
 from models.property import Property
 from models.property_valuation_snapshot import PropertyValuationSnapshot
 from models.settings import Settings
+from models.subscriptions import Subscription
 from models.tax_settings import TaxSettings
 from models.transactions import Transaction
 from models.trips import Trip
@@ -68,6 +69,7 @@ __all__ = [
     'Property',
     'PropertyValuationSnapshot',
     'Settings',
+    'Subscription',
     'TaxSettings',
     'Transaction',
     'Trip',

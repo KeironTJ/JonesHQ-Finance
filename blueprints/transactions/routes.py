@@ -15,7 +15,9 @@ from models.loans import Loan
 from models.settings import Settings
 from models.users import User
 from models.plans import Plan, PlanItem
+from models.subscriptions import Subscription
 from services.finance.payday_service import PaydayService
+from services.finance.subscription_service import SubscriptionService
 from services.finance.transaction_service import TransactionService
 from services.planning.plan_link_service import PlanLinkService
 from extensions import db
@@ -27,6 +29,128 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 def get_assigned_people_options():
     """Return family assignment options from members + custom family labels."""
     return get_assignment_options()
+
+
+def _subscription_form_options():
+    return {
+        'accounts': family_query(Account).filter_by(is_active=True).order_by(Account.name).all(),
+        'credit_cards': family_query(CreditCard).filter_by(is_active=True).order_by(
+            CreditCard.card_name
+        ).all(),
+        'categories': family_query(Category).order_by(
+            Category.head_budget, Category.sub_budget
+        ).all(),
+        'vendors': family_query(Vendor).filter_by(is_active=True).order_by(Vendor.name).all(),
+    }
+
+
+@transactions_bp.route('/transactions/subscriptions')
+def subscriptions():
+    """List active and paused subscription rules and keep their forecast populated."""
+    subscriptions = family_query(Subscription).order_by(
+        Subscription.is_active.desc(), Subscription.name
+    ).all()
+    for subscription in subscriptions:
+        if subscription.is_active:
+            SubscriptionService.sync_pending(subscription)
+    db.session.commit()
+
+    summaries = {}
+    for subscription in subscriptions:
+        bank = family_query(Transaction).filter_by(subscription_id=subscription.id)
+        card = family_query(CreditCardTransaction).filter_by(
+            subscription_id=subscription.id
+        )
+        bank_pending = bank.filter_by(is_paid=False).all()
+        card_pending = card.filter_by(is_paid=False).all()
+        bank_paid_count = bank.filter_by(is_paid=True).count()
+        card_paid_count = card.filter_by(is_paid=True).count()
+        pending_dates = [
+            transaction.transaction_date for transaction in bank_pending
+        ] + [transaction.date for transaction in card_pending]
+        summaries[subscription.id] = {
+            'pending_count': len(bank_pending) + len(card_pending),
+            'paid_count': bank_paid_count + card_paid_count,
+            'next_date': min(pending_dates) if pending_dates else None,
+        }
+    return render_template(
+        'transactions/subscriptions.html',
+        subscriptions=subscriptions,
+        summaries=summaries,
+        today=date.today(),
+    )
+
+
+@transactions_bp.route('/transactions/subscriptions/create', methods=['GET', 'POST'])
+def create_subscription():
+    if request.method == 'POST':
+        try:
+            SubscriptionService.create(request.form)
+            db.session.commit()
+            flash(
+                'Subscription created with pending transactions through its planning horizon.',
+                'success',
+            )
+            return redirect(url_for('transactions.subscriptions'))
+        except (ValueError, TypeError) as error:
+            db.session.rollback()
+            flash(f'Unable to create subscription: {error}', 'danger')
+    return render_template(
+        'transactions/subscription_form.html',
+        subscription=None,
+        target_type='bank',
+        today=date.today(),
+        **_subscription_form_options(),
+    )
+
+
+@transactions_bp.route('/transactions/subscriptions/<int:id>/edit', methods=['GET', 'POST'])
+def edit_subscription(id):
+    subscription = family_get_or_404(Subscription, id)
+    if request.method == 'POST':
+        try:
+            SubscriptionService.update(id, request.form)
+            db.session.commit()
+            flash(
+                'Subscription updated. Paid transactions were left unchanged.',
+                'success',
+            )
+            return redirect(url_for('transactions.subscriptions'))
+        except (ValueError, TypeError) as error:
+            db.session.rollback()
+            flash(f'Unable to update subscription: {error}', 'danger')
+    return render_template(
+        'transactions/subscription_form.html',
+        subscription=subscription,
+        target_type='credit_card' if subscription.credit_card_id else 'bank',
+        today=date.today(),
+        **_subscription_form_options(),
+    )
+
+
+@transactions_bp.route('/transactions/subscriptions/<int:id>/toggle', methods=['POST'])
+def toggle_subscription(id):
+    subscription = family_get_or_404(Subscription, id)
+    SubscriptionService.set_active(id, not subscription.is_active)
+    db.session.commit()
+    flash(
+        'Subscription resumed and its forecast refreshed.'
+        if subscription.is_active
+        else 'Subscription paused. Existing pending transactions were kept.',
+        'success',
+    )
+    return redirect(url_for('transactions.subscriptions'))
+
+
+@transactions_bp.route('/transactions/subscriptions/<int:id>/cancel', methods=['POST'])
+def cancel_subscription(id):
+    SubscriptionService.cancel(id)
+    db.session.commit()
+    flash(
+        'Subscription cancelled. Remaining pending transactions were deleted; paid transactions were kept.',
+        'success',
+    )
+    return redirect(url_for('transactions.subscriptions'))
 
 
 @transactions_bp.route('/transactions')
@@ -724,5 +848,3 @@ def consolidated():
         start_date=start_date,
         end_date=end_date,
     )
-
-

@@ -22,6 +22,7 @@ In any blueprint route or service function::
 """
 
 from flask_login import current_user
+from sqlalchemy import and_, or_
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +107,35 @@ def _apply_visibility(model, query):
 
     if hasattr(model, 'owner_id'):
         conditions.append((model.owner_id.is_(None)) | (model.owner_id == uid))
+
+    if getattr(model, '__tablename__', None) == 'subscriptions':
+        from models.accounts import Account
+        from models.credit_cards import CreditCard
+
+        account_owner_id = (
+            Account.query.with_entities(Account.owner_id)
+            .filter(Account.id == model.account_id)
+            .correlate(model)
+            .scalar_subquery()
+        )
+        card_owner_id = (
+            CreditCard.query.with_entities(CreditCard.owner_id)
+            .filter(CreditCard.id == model.credit_card_id)
+            .correlate(model)
+            .scalar_subquery()
+        )
+        conditions.append(
+            or_(
+                and_(
+                    model.account_id.is_not(None),
+                    or_(account_owner_id.is_(None), account_owner_id == uid),
+                ),
+                and_(
+                    model.credit_card_id.is_not(None),
+                    or_(card_owner_id.is_(None), card_owner_id == uid),
+                ),
+            )
+        )
 
     entry = _inherited_visibility_models().get(model)
     if entry:

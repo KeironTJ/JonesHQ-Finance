@@ -52,6 +52,12 @@ class CreditCardTransaction(db.Model):
 
     # Link to the paired transaction on the other card in a Balance Transfer
     linked_cc_transaction_id = db.Column(db.Integer, db.ForeignKey('credit_card_transactions.id', ondelete='SET NULL'), nullable=True)
+    subscription_id = db.Column(
+        db.Integer,
+        db.ForeignKey('subscriptions.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
     
     # Audit Fields
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

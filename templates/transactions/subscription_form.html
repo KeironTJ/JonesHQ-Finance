@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if subscription else 'Add' }} Subscription - Family HQ{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width: 860px;">
+    <header class="page-header mb-4">
+        <h1>{{ 'Edit' if subscription else 'Add' }} Subscription</h1>
+        <p class="page-subtitle">Scheduled entries stay pending until you mark them paid.</p>
+    </header>
+
+    <form method="post" class="card">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12">
+                    <label for="name" class="form-label">Subscription name</label>
+                    <input id="name" name="name" class="form-control" maxlength="255" required
+                           value="{{ request.form.get('name', subscription.name if subscription else '') }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="target_type" class="form-label">Charge from</label>
+                    {% set selected_target_type = request.form.get('target_type', target_type) %}
+                    <select id="target_type" name="target_type" class="form-select" required>
+                        <option value="bank" {% if selected_target_type == 'bank' %}selected{% endif %}>Bank account</option>
+                        <option value="credit_card" {% if selected_target_type == 'credit_card' %}selected{% endif %}>Credit card</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="amount" class="form-label">Charge amount (£)</label>
+                    <input id="amount" name="amount" type="number" min="0.01" step="0.01"
+                           class="form-control" required
+                           value="{{ request.form.get('amount', '%.2f'|format(subscription.amount|abs) if subscription else '') }}">
+                </div>
+                <div class="col-md-6" id="bank_target">
+                    <label for="account_id" class="form-label">Bank account</label>
+                    {% set selected_account = request.form.get('account_id', subscription.account_id|string if subscription and subscription.account_id else '') %}
+                    <select id="account_id" name="account_id" class="form-select">
+                        <option value="">Choose an account</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}" {% if selected_account == account.id|string %}selected{% endif %}>{{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6" id="card_target">
+                    <label for="credit_card_id" class="form-label">Credit card</label>
+                    {% set selected_card = request.form.get('credit_card_id', subscription.credit_card_id|string if subscription and subscription.credit_card_id else '') %}
+                    <select id="credit_card_id" name="credit_card_id" class="form-select">
+                        <option value="">Choose a card</option>
+                        {% for card in credit_cards %}
+                        <option value="{{ card.id }}" {% if selected_card == card.id|string %}selected{% endif %}>{{ card.card_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="category_id" class="form-label">Category{% if selected_target_type == 'bank' %} <span class="text-danger">*</span>{% endif %}</label>
+                    {% set selected_category = request.form.get('category_id', subscription.category_id|string if subscription and subscription.category_id else '') %}
+                    <select id="category_id" name="category_id" class="form-select">
+                        <option value="">No category</option>
+                        {% for category in categories %}
+                        <option value="{{ category.id }}" {% if selected_category == category.id|string %}selected{% endif %}>
+                            {{ category.head_budget }} — {{ category.sub_budget }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="vendor_id" class="form-label">Vendor (optional)</label>
+                    {% set selected_vendor = request.form.get('vendor_id', subscription.vendor_id|string if subscription and subscription.vendor_id else '') %}
+                    <div class="input-group">
+                        <select id="vendor_id" name="vendor_id" class="form-select">
+                            <option value="">No vendor</option>
+                            {% for vendor in vendors %}
+                            <option value="{{ vendor.id }}" {% if selected_vendor == vendor.id|string %}selected{% endif %}>{{ vendor.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-outline-secondary"
+                                title="Quick-add a new vendor" aria-label="Quick-add a new vendor"
+                                onclick="openQuickAddVendor('vendor_id')">
+                            <i class="bi bi-plus"></i> New
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label for="frequency" class="form-label">Frequency</label>
+                    {% set selected_frequency = request.form.get('frequency', subscription.frequency if subscription else 'monthly') %}
+                    <select id="frequency" name="frequency" class="form-select" required>
+                        {% for value, label in [('weekly', 'Weekly'), ('4weekly', 'Every 4 weeks'), ('monthly', 'Monthly'), ('quarterly', 'Quarterly'), ('yearly', 'Yearly')] %}
+                        <option value="{{ value }}" {% if selected_frequency == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="start_date" class="form-label">First charge date</label>
+                    <input id="start_date" name="start_date" type="date" class="form-control" required
+                           value="{{ request.form.get('start_date', subscription.start_date.isoformat() if subscription else today.isoformat()) }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="end_date" class="form-label">End date (optional)</label>
+                    <input id="end_date" name="end_date" type="date" class="form-control"
+                           value="{{ request.form.get('end_date', subscription.end_date.isoformat() if subscription and subscription.end_date else '') }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="horizon_years" class="form-label">Planning horizon</label>
+                    {% set selected_horizon = request.form.get('horizon_years', subscription.horizon_years|string if subscription else '1') %}
+                    <select id="horizon_years" name="horizon_years" class="form-select" required>
+                        {% for years in range(1, 6) %}
+                        <option value="{{ years }}" {% if selected_horizon == years|string %}selected{% endif %}>
+                            {{ years }} year{{ 's' if years != 1 else '' }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Entries are generated only through this many years ahead, or the earlier end date.</div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a href="{{ url_for('transactions.subscriptions') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">{{ 'Save changes' if subscription else 'Create subscription' }}</button>
+        </div>
+    </form>
+</div>
+{% include 'vendors/_quick_add_modal.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/quick_add_vendor.js') }}"></script>
+<script>
+    const targetType = document.getElementById('target_type');
+    const bankTarget = document.getElementById('bank_target');
+    const cardTarget = document.getElementById('card_target');
+    const accountSelect = document.getElementById('account_id');
+    const cardSelect = document.getElementById('credit_card_id');
+    const categorySelect = document.getElementById('category_id');
+
+    function updateTargetFields() {
+        const isBank = targetType.value === 'bank';
+        bankTarget.hidden = !isBank;
+        cardTarget.hidden = isBank;
+        accountSelect.required = isBank;
+        cardSelect.required = !isBank;
+        categorySelect.required = isBank;
+    }
+
+    targetType.addEventListener('change', updateTargetFields);
+    updateTargetFields();
+</script>
+{% endblock %}

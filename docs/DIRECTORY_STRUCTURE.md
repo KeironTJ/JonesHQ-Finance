@@ -34,6 +34,7 @@ Flask blueprints for modular route organization
 ### `/models/`
 SQLAlchemy database models
 - `accounts.py` - Account model
+- `subscriptions.py` - Managed recurring bank and credit-card charges
 - `balances.py` - Balance history
 - `budgets.py` - Budget model
 - `categories.py` - Category model
@@ -64,7 +65,7 @@ SQLAlchemy database models
 ### `/services/`
 Domain-oriented business logic layer. See [`services/README.md`](../services/README.md)
 for the package map and compatibility-import policy.
-- `finance/` - Accounts, categories, transactions, payday, balances, income, vendors, credit cards, and expenses
+- `finance/` - Accounts, categories, transactions, subscriptions, payday, balances, income, vendors, credit cards, and expenses
 - `household/` - Family and childcare workflows
 - `planning/` - Loans, mortgages, and pensions
 - `vehicles/` - Vehicles, fuel forecasting, and mileage

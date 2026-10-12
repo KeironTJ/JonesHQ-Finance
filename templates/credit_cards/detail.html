@@ -174,6 +174,7 @@
                                 {{ txn.item }}
                                 {% set plan_item = transaction_plan_links.get(txn.id) %}
                                 {% if plan_item %}<a class="badge bg-success-subtle text-success-emphasis ms-1 text-decoration-none" href="{{ url_for('plans.detail', plan_id=plan_item.plan_id) }}"><i class="bi bi-journal-check"></i> {{ plan_item.plan.title }} · {{ plan_item.title }}</a>{% endif %}
+                                {% if txn.subscription_id %}<a class="badge bg-primary-subtle text-primary-emphasis ms-1 text-decoration-none" href="{{ url_for('transactions.edit_subscription', id=txn.subscription_id) }}"><i class="bi bi-arrow-repeat"></i> Subscription</a>{% endif %}
                                 <div class="txn-meta">
                                     {% if txn.assigned_to %}<span><i class="bi bi-person"></i> {{ txn.assigned_to }}</span>{% endif %}
                                     {% if txn.head_budget and txn.sub_budget %}<span><i class="bi bi-folder"></i> {{ txn.head_budget }} > {{ txn.sub_budget }}</span>{% endif %}

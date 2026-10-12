@@ -27,6 +27,12 @@ class Transaction(db.Model):
     
     # Link to paired transfer transaction (for account-to-account transfers)
     linked_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'), nullable=True)
+    subscription_id = db.Column(
+        db.Integer,
+        db.ForeignKey('subscriptions.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
     
     # Computed fields for reporting
     year_month = db.Column(db.String(7))  # 2026-01

@@ -5,8 +5,8 @@ domain package rather than maintaining top-level redirect modules.
 
 ## Domains
 
-- `finance/` - accounts, categories, transactions, payday periods, balances,
-  income, vendors, credit cards, and expenses
+- `finance/` - accounts, categories, transactions, subscriptions, payday periods,
+  balances, income, vendors, credit cards, and expenses
 - `household/` - family and childcare workflows
 - `planning/` - loans, mortgages, and pensions
 - `vehicles/` - vehicles, fuel forecasting, and mileage

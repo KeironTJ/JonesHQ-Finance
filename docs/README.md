@@ -15,6 +15,7 @@ Complete documentation for the FamilyHQ Finance personal finance management syst
 - **[Security](SECURITY.md)** - Security controls and deployment expectations
 - **[Transaction Editing](TRANSACTION_EDITING.md)** - Transaction editing behavior
 - **[Integrated Transactions](INTEGRATED_TRANSACTIONS.md)** - Transaction and related-domain integration
+- **[Subscriptions](SUBSCRIPTIONS.md)** - Managed recurring bank and credit-card charges
 - **[Deployment](DEPLOYMENT.md)** - Deployment guidance
 - **[Directory Structure](DIRECTORY_STRUCTURE.md)** - Current repository layout
 

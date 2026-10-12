@@ -112,12 +112,34 @@
 /* Vertical alignment for all cells */
 .table > tbody > tr > td { vertical-align: middle; }
 
-.jhq-row-actions { white-space: nowrap; }
+.jhq-row-actions {
+    white-space: nowrap;
+    text-align: right;
+    width: 1%;
+}
+.jhq-row-actions .d-flex {
+    justify-content: flex-end;
+}
+.jhq-row-actions .btn {
+    padding: 0.28rem 0.55rem;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.jhq-row-actions .btn-group .btn {
+    padding: 0.28rem 0.55rem;
+}
+.jhq-row-actions .btn i {
+    font-size: 0.82rem;
+}
 .tank-bar { height: 10px; min-width: 52px; }
 .trip-mobile-vehicle,
 .trip-card-toggle,
 .tank-mobile-label,
-.trip-description-full { display: none; }
+.trip-description-full,
+.trip-action-label-short { display: none; }
 
 
 </style>
@@ -254,7 +276,7 @@
                                     <th class="text-end">Miles / Cost</th>
                                     <th class="text-end">MPG</th>
                                     <th style="min-width:100px;">Tank</th>
-                                    <th>Actions</th>
+                                    <th class="text-end pe-3">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -405,7 +427,7 @@
                                 </td>
 
                                 {# Actions #}
-                                <td data-label="Actions" class="jhq-row-actions">
+                                <td data-label="Actions" class="jhq-row-actions pe-3">
                                     <div class="d-flex align-items-center gap-1">
                                     {% if event.type in ('personal', 'business') and not event.is_continuation %}
                                         {% if event.fuel_expense %}
