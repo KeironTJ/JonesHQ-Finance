@@ -147,6 +147,85 @@ document.addEventListener('DOMContentLoaded', function () {
             document.body.appendChild(modal);
         }
     });
+
+    // ── Mobile navbar close-on-click-outside & link-click ────────────────────
+    const navCollapse = document.getElementById('navbarNav');
+    const toggler = document.querySelector('.navbar-toggler');
+
+    if (navCollapse && toggler) {
+        function isMobileNav() {
+            return window.getComputedStyle(toggler).display !== 'none';
+        }
+
+        function closeNav() {
+            if (navCollapse.classList.contains('show')) {
+                const bsCollapse = bootstrap.Collapse.getInstance(navCollapse) ||
+                    new bootstrap.Collapse(navCollapse, { toggle: false });
+                bsCollapse.hide();
+            }
+        }
+
+        // Close when clicking off the menu (outside navbar collapse and toggler)
+        document.addEventListener('click', function (event) {
+            if (!isMobileNav()) return;
+            if (!navCollapse.classList.contains('show')) return;
+
+            if (!navCollapse.contains(event.target) && !toggler.contains(event.target)) {
+                closeNav();
+                return;
+            }
+
+            const navLink = event.target.closest('a.nav-link:not(.dropdown-toggle), a.dropdown-item');
+            if (navLink && navCollapse.contains(navLink)) {
+                closeNav();
+            }
+        });
+
+        // Close on Escape key press
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && isMobileNav() && navCollapse.classList.contains('show')) {
+                closeNav();
+            }
+        });
+
+        // Clean up open dropdown menus and body state when the mobile navbar closes
+        navCollapse.addEventListener('hide.bs.collapse', function () {
+            document.body.classList.remove('mobile-nav-open');
+            navCollapse.querySelectorAll('.dropdown-toggle[aria-expanded="true"]').forEach(function (toggle) {
+                const bsDropdown = bootstrap.Dropdown.getInstance(toggle);
+                if (bsDropdown) {
+                    bsDropdown.hide();
+                } else {
+                    toggle.setAttribute('aria-expanded', 'false');
+                    toggle.classList.remove('show');
+                    const menu = toggle.nextElementSibling;
+                    if (menu && menu.classList.contains('dropdown-menu')) {
+                        menu.classList.remove('show');
+                    }
+                }
+            });
+        });
+
+        navCollapse.addEventListener('shown.bs.collapse', function () {
+            document.body.classList.add('mobile-nav-open');
+        });
+
+        navCollapse.addEventListener('hidden.bs.collapse', function () {
+            document.body.classList.remove('mobile-nav-open');
+        });
+
+        window.addEventListener('resize', function () {
+            if (!isMobileNav() && navCollapse.classList.contains('show')) {
+                const bsCollapse = bootstrap.Collapse.getInstance(navCollapse);
+                if (bsCollapse) {
+                    bsCollapse.hide();
+                } else {
+                    navCollapse.classList.remove('show');
+                }
+                document.body.classList.remove('mobile-nav-open');
+            }
+        });
+    }
 });
 
 // Helper function to format currency

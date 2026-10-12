@@ -1673,6 +1673,10 @@ body,
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
+body.mobile-nav-open {
+  cursor: pointer;
+}
+
 @media (max-width: 991.98px) {
   .navbar {
     height: auto;
@@ -1685,9 +1689,12 @@ body,
   .navbar-collapse {
     background: var(--nav-bg);
     border-top: 1px solid var(--nav-border);
-    padding: 0.5rem 0;
     margin: 0 -1rem;
     padding: 0.5rem 1rem;
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
   }
 }
 
