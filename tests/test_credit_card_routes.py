@@ -1,3 +1,4 @@
+from tests.auth_helpers import login_client
 from datetime import date
 from decimal import Decimal
 
@@ -14,9 +15,7 @@ from models.family_assignment_labels import FamilyAssignmentLabel
 
 
 def _login(client, user_id):
-    with client.session_transaction() as session:
-        session['_user_id'] = str(user_id)
-        session['_fresh'] = True
+    login_client(client, user_id)
 
 
 def test_credit_card_payment_route_creates_linked_bank_transaction(

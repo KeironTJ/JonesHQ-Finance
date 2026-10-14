@@ -39,7 +39,7 @@ def get_family_id():
             # (e.g. after db.session.remove()). Re-query to re-attach it.
             from extensions import db
             from models.users import User
-            user = db.session.get(User, current_user.get_id())
+            user = db.session.get(User, int(str(current_user.get_id()).split(':', 1)[0]))
             return user.family_id if user else None
     return None
 

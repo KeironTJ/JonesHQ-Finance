@@ -60,7 +60,7 @@ def test_successful_login_normalizes_email_and_clears_attempts(app, user):
     response = login(client, email=' ADMIN@EXAMPLE.COM ')
     assert response.status_code == 302
     with client.session_transaction() as session:
-        assert session['_user_id'] == str(user.id)
+        assert session['_user_id'].startswith(f'{user.id}:')
     db.session.refresh(user)
     assert user.failed_login_attempts == 0
     assert user.last_login is not None
@@ -145,7 +145,7 @@ def test_logout_requires_post_and_csrf(app, user, monkeypatch):
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     assert client.post('/logout').status_code == 400
     with client.session_transaction() as session:
-        assert session['_user_id'] == str(user.id)
+        assert session['_user_id'].startswith(f'{user.id}:')
     g.pop('csrf_token', None)
     page = client.get('/accounts')
     token = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()

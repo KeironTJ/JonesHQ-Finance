@@ -1,3 +1,4 @@
+from tests.auth_helpers import login_client
 from decimal import Decimal
 
 from extensions import db
@@ -6,9 +7,7 @@ from models.settings import Settings
 
 
 def _login(client, user_id):
-    with client.session_transaction() as session:
-        session['_user_id'] = str(user_id)
-        session['_fresh'] = True
+    login_client(client, user_id)
 
 
 def test_settings_preference_route_persists_json_value(app, family, user):

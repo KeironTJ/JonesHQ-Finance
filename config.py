@@ -10,6 +10,8 @@ class Config:
     def init_app(cls, app):
         if app.config['TRUSTED_PROXY_COUNT'] < 0:
             raise ValueError("TRUSTED_PROXY_COUNT must not be negative.")
+        if app.config['SESSION_IDLE_MINUTES'] < 1 or app.config['SESSION_ABSOLUTE_HOURS'] < 1:
+            raise ValueError("SESSION_IDLE_MINUTES and SESSION_ABSOLUTE_HOURS must be at least 1.")
 
     # Secret key for session management
     SECRET_KEY = os.environ.get('SECRET_KEY')
@@ -28,6 +30,10 @@ class Config:
     REMEMBER_COOKIE_SAMESITE = 'Lax'
     REMEMBER_COOKIE_DURATION = timedelta(days=7)
     REMEMBER_COOKIE_REFRESH_EACH_REQUEST = False
+    # Server-side session limits (non-"remember me" logins); remembered logins
+    # last REMEMBER_COOKIE_DURATION. All sessions can be revoked from Account security.
+    SESSION_IDLE_MINUTES = int(os.environ.get('SESSION_IDLE_MINUTES', '60'))
+    SESSION_ABSOLUTE_HOURS = int(os.environ.get('SESSION_ABSOLUTE_HOURS', '12'))
     
     # CSRF Protection
     WTF_CSRF_ENABLED = True

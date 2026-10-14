@@ -105,6 +105,16 @@ class UserAdminView(SecureModelView):
     column_labels = {'totp_enabled_at': '2FA enabled'}
 
 
+class UserSessionAdminView(ReadOnlyModelView):
+    """Signed-in sessions; the token hash is never shown."""
+    column_list = ['id', 'user', 'remember', 'created_at', 'last_seen_at', 'expires_at',
+                   'revoked_at', 'ip_address', 'user_agent']
+    column_exclude_list = ['token_hash']
+    column_details_exclude_list = ['token_hash']
+    column_export_exclude_list = ['token_hash']
+    column_default_sort = ('last_seen_at', True)
+
+
 class TransactionAdminView(SecureModelView):
     column_searchable_list = ['description', 'item', 'assigned_to']
     column_filters = ['transaction_date', 'payment_type', 'account_id', 'family_id']
@@ -178,7 +188,7 @@ def init_admin(app, db):
     )
 
     # ---- Import all models ------------------------------------------------
-    from models.users import User
+    from models.users import User, UserSession
     from models.family import Family, FamilyInvite, HouseholdInvite
     from models.accounts import Account
     from models.balances import Balance
@@ -216,6 +226,7 @@ def init_admin(app, db):
     admin.add_view(FamilyAdminView(Family, db.session, name='Families', category='Core'))
     admin.add_view(SecureModelView(FamilyInvite, db.session, name='Invites', category='Core'))
     admin.add_view(ReadOnlyModelView(HouseholdInvite, db.session, name='Household Invites', category='Core'))
+    admin.add_view(UserSessionAdminView(UserSession, db.session, name='Sessions', category='Core'))
 
     # Accounts & Transactions
     admin.add_view(AccountAdminView(Account, db.session, name='Accounts', category='Accounts'))

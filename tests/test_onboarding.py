@@ -1,3 +1,4 @@
+from tests.auth_helpers import login_client
 from extensions import db
 from models.accounts import Account
 from models.family import FamilyInvite
@@ -11,9 +12,7 @@ def _login(client, user_id):
     from flask import g
 
     g.pop('_login_user', None)
-    with client.session_transaction() as session:
-        session['_user_id'] = str(user_id)
-        session['_fresh'] = True
+    login_client(client, user_id)
 
 
 def test_household_onboarding_configures_essentials(app, family, user):

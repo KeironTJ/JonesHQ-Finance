@@ -1,3 +1,4 @@
+from tests.auth_helpers import login_client
 from datetime import date
 from decimal import Decimal
 
@@ -11,9 +12,7 @@ from models.transactions import Transaction
 
 
 def _login(client, user_id):
-    with client.session_transaction() as session:
-        session['_user_id'] = str(user_id)
-        session['_fresh'] = True
+    login_client(client, user_id)
 
 
 def test_loan_payment_toggle_route_syncs_bank_payment(app, family, user):

@@ -1,3 +1,4 @@
+from tests.auth_helpers import login_client
 from datetime import date
 from decimal import Decimal
 
@@ -190,9 +191,7 @@ def test_subscription_templates_compile(app):
 def test_subscription_routes_create_and_list_rule(app, family, user):
     account, category = _add_bank_target(family)
     client = app.test_client()
-    with client.session_transaction() as session:
-        session['_user_id'] = str(user.id)
-        session['_fresh'] = True
+    login_client(client, user.id)
 
     response = client.get('/transactions/subscriptions')
     assert response.status_code == 200

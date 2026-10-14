@@ -16,7 +16,7 @@ import json
 from datetime import datetime, timezone
 
 from flask import render_template, redirect, url_for, flash, request, abort
-from flask_login import login_required, current_user, login_user
+from flask_login import login_required, current_user
 
 from blueprints.family import family_bp
 from extensions import db, limiter
@@ -27,6 +27,7 @@ from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTION
 from utils.db_helpers import family_query, get_family_id
 from services.household.family_service import FamilyService
 from services.platform.auth_service import AuthService
+from services.platform.user_session_service import UserSessionService
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -264,7 +265,7 @@ def join(token):
         invite.mark_used(user)
         db.session.commit()
 
-        login_user(user)
+        UserSessionService.start(user)
         flash(f'Welcome to the family, {name}!', 'success')
         return redirect(url_for('onboarding.index'))
 

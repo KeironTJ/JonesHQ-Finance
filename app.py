@@ -90,14 +90,18 @@ def create_app(config_name=None):
     # User loader callback for Flask-Login
     @login_manager.user_loader
     def load_user(user_id):
-        from models.users import User
-        if not isinstance(user_id, str) or not user_id.isascii() or not user_id.isdecimal():
-            return None
-        user = db.session.get(User, int(user_id))
-        if user is not None and user.is_active:
-            user = db.session.merge(user)
-            return user
-        return None
+        from services.platform.user_session_service import UserSessionService
+        return UserSessionService.load_user(user_id)
+
+    @app.before_request
+    def refresh_user_session():
+        from flask import request
+        from flask_login import current_user
+        if request.endpoint == 'static':
+            return
+        if current_user.is_authenticated:
+            from services.platform.user_session_service import UserSessionService
+            UserSessionService.touch(current_user)
     
     # Import models to ensure they're registered with SQLAlchemy
     with app.app_context():
@@ -154,6 +158,7 @@ def create_app(config_name=None):
     # Site admins must have two-factor login before using the app
     _two_factor_exempt_endpoints = {
         'static', 'auth.logout', 'auth.account_security', 'auth.two_factor_setup',
+        'auth.revoke_session', 'auth.revoke_other_sessions',
     }
 
     @app.before_request
@@ -369,8 +374,28 @@ def register_commands(app):
             click.echo(f'ERROR: No user found with email {email}', err=True)
             raise SystemExit(1)
         TwoFactorService.reset(user)
+        from services.platform.user_session_service import UserSessionService
+        UserSessionService.revoke_all(user)
         note = ' They are a site admin, so they will be asked to set it up again at next login.' if user.is_site_admin else ''
-        click.echo(f'Two-factor login reset for {user.email}.{note}')
+        click.echo(f'Two-factor login reset and all sessions signed out for {user.email}.{note}')
+
+    @app.cli.group('sessions')
+    def sessions_cli():
+        """Manage signed-in sessions."""
+        pass
+
+    @sessions_cli.command('revoke')
+    @click.argument('email')
+    def revoke_user_sessions(email):
+        """Sign a user out of every browser and device."""
+        from models.users import User
+        from services.platform.user_session_service import UserSessionService
+        user = User.query.filter_by(email=email.strip().lower()).first()
+        if not user:
+            click.echo(f'ERROR: No user found with email {email}', err=True)
+            raise SystemExit(1)
+        count = UserSessionService.revoke_all(user)
+        click.echo(f'Signed {user.email} out of {count} session(s).')
 
 
 if __name__ == '__main__':

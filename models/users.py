@@ -42,6 +42,8 @@ class User(UserMixin, db.Model):
     totp_last_step = db.Column(db.Integer, nullable=True)
     recovery_codes = db.relationship('UserRecoveryCode', back_populates='user',
                                      lazy='dynamic', cascade='all, delete-orphan')
+    sessions = db.relationship('UserSession', back_populates='user',
+                               lazy='dynamic', cascade='all, delete-orphan')
 
     # Family / multi-user fields
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
@@ -117,6 +119,12 @@ class User(UserMixin, db.Model):
     def two_factor_enabled(self):
         return self.totp_enabled_at is not None and bool(self.totp_secret)
 
+    def get_id(self):
+        # Flask-Login stores this in the session and remember cookie; the token ties
+        # the login to a revocable UserSession row.
+        token = getattr(self, '_session_token', None)
+        return f'{self.id}:{token}' if token else str(self.id)
+
     def get_allowed_sections(self):
         """Return the set of section keys this user may access.
 
@@ -149,6 +157,27 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.email}>'
+
+
+class UserSession(db.Model):
+    """Server-side record of one signed-in browser. Only a SHA-256 hash of the token is stored."""
+    __tablename__ = 'user_sessions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    remember = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, nullable=False)
+    last_seen_at = db.Column(db.DateTime, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    ip_address = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+
+    user = db.relationship('User', back_populates='sessions')
+
+    def __repr__(self):
+        return f'<UserSession {self.id} user={self.user_id}>'
 
 
 class UserRecoveryCode(db.Model):

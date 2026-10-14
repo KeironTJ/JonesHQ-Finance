@@ -106,9 +106,8 @@ def check_section_access():
         user_id = session.get('_user_id')
         if not user_id:
             return
-        from extensions import db
-        from models.users import User
-        user = db.session.get(User, int(user_id))
+        from services.platform.user_session_service import UserSessionService
+        user = UserSessionService.load_user(user_id)
         if user is None:
             return
         login_user(user, fresh=False)

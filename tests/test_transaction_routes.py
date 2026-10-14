@@ -1,3 +1,4 @@
+from tests.auth_helpers import login_client
 from decimal import Decimal
 from datetime import date
 
@@ -10,9 +11,7 @@ from models.plans import Plan, PlanItem
 
 
 def _login(client, user_id):
-    with client.session_transaction() as session:
-        session['_user_id'] = str(user_id)
-        session['_fresh'] = True
+    login_client(client, user_id)
 
 
 def test_transaction_index_renders_compact_filters(app, family, user):

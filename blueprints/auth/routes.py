@@ -6,7 +6,7 @@ from hashlib import sha256
 import time
 
 from flask import abort, render_template, redirect, url_for, flash, request, current_app, session
-from flask_login import login_user, logout_user, current_user, login_required
+from flask_login import logout_user, current_user, login_required
 from flask_limiter.util import get_remote_address
 from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,6 +17,7 @@ from models.users import User
 from services.platform.auth_service import AuthService
 from services.platform.household_invite_service import HouseholdInviteService
 from services.platform.two_factor_service import TwoFactorService
+from services.platform.user_session_service import UserSessionService
 
 
 def _login_account_key():
@@ -70,7 +71,7 @@ def login():
                     'started': int(time.time()),
                 }
                 return redirect(url_for('auth.two_factor_login'))
-            login_user(user, remember=form.remember.data)
+            UserSessionService.start(user, remember=form.remember.data)
             flash(f'Welcome back, {user.name}!', 'success')
             return redirect(_safe_next_page())
     
@@ -122,7 +123,7 @@ def two_factor_login():
             flash(str(error) or 'That code is not valid.', 'danger')
         else:
             session.pop('2fa_pending', None)
-            login_user(user, remember=pending.get('remember', False))
+            UserSessionService.start(user, remember=pending.get('remember', False))
             flash(f'Welcome back, {user.name}!', 'success')
             if method == 'recovery':
                 remaining = TwoFactorService.remaining_recovery_codes(user)
@@ -140,7 +141,34 @@ def account_security():
         password_form=PasswordConfirmForm(),
         two_factor_required=TwoFactorService.is_required(current_user),
         remaining_codes=TwoFactorService.remaining_recovery_codes(current_user) if current_user.two_factor_enabled else 0,
+        sessions=UserSessionService.list_active(current_user),
     )
+
+
+@auth_bp.route('/account/security/sessions/<int:session_id>/revoke', methods=['POST'])
+@login_required
+@limiter.limit("30 per hour")
+def revoke_session(session_id):
+    try:
+        was_current = UserSessionService.revoke(current_user, session_id)
+    except ValueError as error:
+        flash(str(error) or 'Unable to sign out that session.', 'danger')
+        return redirect(url_for('auth.account_security'))
+    if was_current:
+        _clear_browser_login()
+        flash('You have been signed out.', 'info')
+        return redirect(url_for('auth.login'))
+    flash('That device has been signed out.', 'success')
+    return redirect(url_for('auth.account_security'))
+
+
+@auth_bp.route('/account/security/sessions/revoke-others', methods=['POST'])
+@login_required
+@limiter.limit("30 per hour")
+def revoke_other_sessions():
+    count = UserSessionService.revoke_others(current_user)
+    flash(f'Signed out of {count} other session{"" if count == 1 else "s"}.', 'success')
+    return redirect(url_for('auth.account_security'))
 
 
 @auth_bp.route('/account/security/two-factor/setup', methods=['GET', 'POST'])
@@ -158,7 +186,12 @@ def two_factor_setup():
         except ValueError as error:
             flash(str(error) or 'That code is not valid.', 'danger')
         else:
-            flash('Two-factor login is now on.', 'success')
+            # Sessions that started before 2FA was turned on did not pass a code
+            signed_out = UserSessionService.revoke_others(current_user)
+            message = 'Two-factor login is now on.'
+            if signed_out:
+                message += f' {signed_out} other session{"" if signed_out == 1 else "s"} signed out.'
+            flash(message, 'success')
             return render_template('auth/recovery_codes.html', codes=codes)
 
     uri = TwoFactorService.provisioning_uri(current_user)
@@ -242,7 +275,7 @@ def register():
             current_app.logger.exception('Account registration failed.')
             flash('An error occurred while creating your account. Please try again.', 'danger')
         else:
-            login_user(user)
+            UserSessionService.start(user)
             flash(f'Welcome to {family.name}! Your household has been created.', 'success')
             return redirect(url_for('onboarding.index'))
 
@@ -300,13 +333,18 @@ def revoke_household_invite(invite_id):
 @login_required
 def logout():
     """User logout"""
+    UserSessionService.revoke_current(current_user)
+    _clear_browser_login()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('auth.login'))
+
+
+def _clear_browser_login():
     logout_user()
     remember = session.get('_remember')
     session.clear()
     if remember == 'clear':
         session['_remember'] = 'clear'
-    flash('You have been logged out.', 'info')
-    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/intro')

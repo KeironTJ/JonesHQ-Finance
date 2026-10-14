@@ -65,8 +65,8 @@ See [Deployment setup](../deployment/README.md).
   rejected before creating a household.
 - Post-login redirects accept only local absolute paths, not external URLs,
   schemes, backslashes, or control characters.
-- Logout requires a CSRF-protected POST. It clears the current session and
-  remember-me cookie; it does not revoke other devices.
+- Logout requires a CSRF-protected POST. It revokes the current server-side session and
+  clears the session and remember-me cookie. Other devices stay signed in unless you sign them out (see below).
 - Deactivated users cannot be restored from an existing session or remember cookie.
 - Production session and remember-me cookies use Secure, HttpOnly, and SameSite=Lax.
   Remember-me cookies last seven days and are not renewed on every request.
@@ -94,10 +94,9 @@ flask household-invite revoke <id>
 Family member invites (`/family/join/<token>`) are unchanged.
 
 Flask sessions are still signed client-side cookies, not encrypted storage.
-Never store financial records or authentication secrets in them. The configured
-session lifetime is not a server-enforced idle timeout or a revocation mechanism.
-Deleting or expiring the current browser's cookie does not invalidate a stolen
-copy of it.
+Never store financial records or authentication secrets in them. Login itself is
+controlled by a server-side session record (see **Signed-in sessions**), so a
+stolen cookie stops working once that session is revoked or expires.
 
 ## Two-factor login
 
@@ -127,17 +126,45 @@ sudo -u joneshq bash -c "cd /home/joneshq/joneshq-finance && venv/bin/flask two-
 
 The user can then sign in with their password and set it up again.
 
-Known limitation: "remember me" cookies issued before a user turned on 2FA stay
-valid until they expire. Revocable sessions are planned to fix this.
+Turning 2FA on signs out every other session for that user, including
+"remember me" logins that never passed a code. The reset command above also
+signs the user out everywhere.
+
+## Signed-in sessions
+
+Every login creates a row in `user_sessions`. The browser holds a random token
+inside its session and remember-me cookies; the database stores only its SHA-256
+hash. Each request checks that row, so a session can be ended from the server
+at any time.
+
+- A normal login ends after `SESSION_IDLE_MINUTES` of inactivity (default 60) or
+  `SESSION_ABSOLUTE_HOURS` after sign-in (default 12), whichever comes first.
+- A "remember me" login lasts 7 days (`REMEMBER_COOKIE_DURATION`) with no idle timeout.
+- Activity (`last_seen_at` and IP) is recorded at most once a minute.
+- **Account security → Signed-in devices** lists active sessions with browser,
+  device, IP and last activity. Users can sign out one device or all other devices.
+- Site admins can view all sessions (without token hashes) under **Admin → Core → Sessions**.
+- Revoked and expired rows are deleted 30 days later, the next time that user signs in.
+
+Sign a user out everywhere from the server (e.g. a lost laptop):
+
+```bash
+sudo -u joneshq bash -c "cd /home/joneshq/joneshq-finance && venv/bin/flask sessions revoke user@example.com"
+```
+
+Sessions from before this feature are not recognised, so everyone is signed out
+once when it is deployed.
 
 ## Validation
 
 ```powershell
-venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py
+venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_user_sessions.py
 ```
 
 Tests cover rejected and successful logins, lockout expiry, safe redirects,
 IP/account throttling, invitation policy, two-factor setup/login/recovery/replay,
+session revocation and idle/absolute expiry,
+session revocation and idle/absolute expiry,
 logout/CSRF, cookie attributes, deactivation, cache headers, and production validation.
 
 Before deploying, verify HTTPS cookie attributes and rate limits through the real
@@ -150,8 +177,7 @@ correct proxy configuration.
 - Choose managed identity, self-hosted identity, or continued local authentication.
 - Add verified email ownership and safe recovery with dependable email delivery.
 - Add passkeys as an alternative to authenticator-app codes.
-- Add revocable sessions, idle/absolute expiry, logout everywhere, and sensitive-action
-  reauthentication.
+- Add change password and sensitive-action reauthentication.
 - Review household isolation, exports, administrative access, and member removal.
 - Add security notifications and audit events.
 - Inventory browser storage and external assets; provide accurate privacy/storage
