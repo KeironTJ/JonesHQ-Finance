@@ -82,6 +82,24 @@ class ChangePasswordForm(FlaskForm):
     submit = SubmitField('Change password')
 
 
+class ForgotPasswordForm(FlaskForm):
+    email = StringField('Email', filters=[lambda value: value.strip().lower() if value else value], validators=[
+        DataRequired(message='Email is required'),
+        Email(message='Invalid email address'),
+        Length(max=120),
+    ])
+    submit = SubmitField('Email me a reset link')
+
+
+class ResetPasswordForm(FlaskForm):
+    new_password = PasswordField('New password', validators=[
+        DataRequired(message='New password is required'),
+        Length(max=200),
+    ])
+    confirm_password = PasswordField('Confirm new password', validators=[DataRequired(message='Please confirm your new password')])
+    submit = SubmitField('Set new password')
+
+
 class HouseholdInviteForm(FlaskForm):
     """Site-admin form for issuing a one-time household invite"""
     email = StringField('Restrict to email (optional)', filters=[lambda value: value.strip().lower() if value else value],

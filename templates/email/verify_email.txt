@@ -1,0 +1,9 @@
+Hi {{ user.name }},
+
+Please confirm this is your email address for Family HQ by opening this link within {{ days }} days:
+
+{{ link }}
+
+If you didn't create a Family HQ account, you can ignore this email.
+
+Family HQ

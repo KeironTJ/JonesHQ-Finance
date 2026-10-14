@@ -27,6 +27,7 @@ from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTION
 from utils.db_helpers import family_query, get_family_id
 from services.household.family_service import FamilyService
 from services.platform.auth_service import AuthService
+from services.platform.email_verification_service import EmailVerificationService
 from services.platform.user_session_service import UserSessionService
 from utils.reauth import recent_auth_required
 
@@ -271,6 +272,7 @@ def join(token):
         db.session.commit()
 
         UserSessionService.start(user, method='family invite')
+        EmailVerificationService.send_verification(user)
         flash(f'Welcome to the family, {name}!', 'success')
         return redirect(url_for('onboarding.index'))
 

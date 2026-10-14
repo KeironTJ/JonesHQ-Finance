@@ -1,0 +1,20 @@
+Hi {{ user.name }},
+
+There was a security change on your Family HQ account:
+
+    {{ label }}
+    When:   {{ when.strftime('%d %b %Y %H:%M') }} UTC
+{%- if device %}
+    Device: {{ device }}
+{%- endif %}
+{%- if ip_address %}
+    IP:     {{ ip_address }}
+{%- endif %}
+
+If this was you, there's nothing to do.
+
+If it wasn't, change your password straight away and sign out other devices:
+
+{{ security_link }}
+
+Family HQ

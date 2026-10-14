@@ -68,6 +68,13 @@ def main():
     print("OK: production configuration is valid and Redis is reachable.")
     print(f"    Rate-limit storage: {env['RATELIMIT_STORAGE_URI']}")
     print(f"    Trusted proxies:    {env.get('TRUSTED_PROXY_COUNT', '0')}")
+    if app.config.get('MAIL_SERVER'):
+        print(f"    Email:              {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']} "
+              f"from {app.config['MAIL_FROM']}")
+        print(f"    Links point at:     {app.config['APP_BASE_URL']}")
+        print("    Send a test with:   flask email test you@example.com")
+    else:
+        print("    Email:              off (password reset by email and security alerts disabled)")
     return 0
 
 

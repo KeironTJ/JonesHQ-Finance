@@ -177,16 +177,45 @@ once when it is deployed.
   Site admins can search all events under **Admin → Core → Security events**.
 - Events older than `SECURITY_EVENT_RETENTION_DAYS` (365) are deleted when anyone signs in.
 
+## Email: password reset, confirmation and security alerts
+
+Email is off until `MAIL_SERVER` and `MAIL_FROM` are set (see `.env.example`).
+Any SMTP provider works; Resend's free tier is the documented example. In
+production `APP_BASE_URL` must be an `https://` address: every emailed link is
+built from it, never from the request's Host header.
+
+- **Forgot password?** on the sign-in page emails a reset link. The response is
+  the same whether or not the address has an account. Limited to 5 requests per
+  hour per IP and 3 per hour per email address.
+- Reset links are signed with `SECRET_KEY`, expire after `PASSWORD_RESET_MINUTES`
+  (60), and stop working once the password changes, so each works once. Opening
+  the link moves the token into the session and redirects to `/reset-password`,
+  so it isn't left in browser history or sent as a Referer.
+- Resetting a password clears any lockout and signs out every device. Two-factor
+  login is still required at the next sign-in.
+- New accounts (household registration and family invites) get a confirmation
+  email. Unconfirmed users can resend it from **Account security**. A reset
+  link received by email also confirms the address.
+- Security alert emails are sent for: sign-in from a browser not seen before
+  (not the first sign-in), password changed or reset, two-factor login turned
+  on, off or reset, and new recovery codes.
+- Email is sent in a background thread so pages don't wait on SMTP; failures are
+  logged. Check delivery with `flask email test you@example.com`.
+- Without email, or for someone who can't reach their inbox, the server admin can
+  run `flask users reset-link user@example.com` and pass the link on privately.
+  It lasts `ADMIN_PASSWORD_RESET_HOURS` (24) and also works once.
+
 ## Validation
 
 ```powershell
-venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_user_sessions.py tests\test_account_security.py
+venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_user_sessions.py tests\test_account_security.py tests\test_account_email.py
 ```
 
 Tests cover rejected and successful logins, lockout expiry, safe redirects,
 IP/account throttling, invitation policy, two-factor setup/login/recovery/replay,
 session revocation and idle/absolute expiry, change password, password confirmation
-for sensitive actions, security events,
+for sensitive actions, security events, password reset by email and admin link,
+email confirmation, security alert emails,
 logout/CSRF, cookie attributes, deactivation, cache headers, and production validation.
 
 Before deploying, verify HTTPS cookie attributes and rate limits through the real
@@ -197,14 +226,12 @@ correct proxy configuration.
 ## Remaining work before wider public registration
 
 - Choose managed identity, self-hosted identity, or continued local authentication.
-- Add verified email ownership and safe recovery with dependable email delivery.
 - Add passkeys as an alternative to authenticator-app codes.
 - Review household isolation, exports, administrative access, and member removal.
-- Add email security notifications (new sign-in, password changed).
 - Inventory browser storage and external assets; provide accurate privacy/storage
   notices and consent controls where required.
 - Verify backups, restore procedures, monitoring, and dependency maintenance.
 
 Household registration is invite-only by default. Registration and invitation
 validation can still reveal to an invite holder that an email is already
-registered. SMTP, email verification, and password recovery are not yet implemented.
+registered. Email confirmation is not yet required to use the app.

@@ -1,0 +1,5 @@
+This is a test email from Family HQ.
+
+If you can read this, outgoing email is working.
+
+Sent from: {{ base_url or 'unknown' }}

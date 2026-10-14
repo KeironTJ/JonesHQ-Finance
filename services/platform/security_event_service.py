@@ -30,6 +30,21 @@ EVENT_LABELS = {
 	'family_invite_revoked': 'Family invite revoked',
 	'family_member_updated': 'Family member permissions changed',
 	'family_member_removed': 'Family member removed',
+	'password_reset_requested': 'Password reset email requested',
+	'password_reset': 'Password reset with a reset link',
+	'password_reset_link_created': 'Password reset link created by the server admin',
+	'email_verified': 'Email address verified',
+}
+
+# Events that also send the user an email, with the alert subject.
+ALERT_SUBJECTS = {
+	'login_success': 'New sign-in to your Family HQ account',
+	'password_changed': 'Your Family HQ password was changed',
+	'password_reset': 'Your Family HQ password was reset',
+	'two_factor_enabled': 'Two-factor login turned on for Family HQ',
+	'two_factor_disabled': 'Two-factor login turned off for Family HQ',
+	'two_factor_reset': 'Two-factor login reset for Family HQ',
+	'recovery_codes_regenerated': 'New Family HQ recovery codes created',
 }
 
 
@@ -48,6 +63,12 @@ class SecurityEventService:
 		in_request = has_request_context()
 		if user is None and in_request and current_user.is_authenticated:
 			user = current_user
+		user_agent = ((request.user_agent.string or '')[:255] or None) if in_request else None
+		try:
+			send_alert = SecurityEventService._should_alert(event_type, user, details, user_agent)
+		except SQLAlchemyError:
+			db.session.rollback()
+			send_alert = False
 		try:
 			db.session.add(SecurityEvent(
 				user_id=getattr(user, 'id', None),
@@ -55,7 +76,7 @@ class SecurityEventService:
 				event_type=event_type,
 				details=(details or '')[:255] or None,
 				ip_address=((request.remote_addr or '')[:64] or None) if in_request else None,
-				user_agent=((request.user_agent.string or '')[:255] or None) if in_request else None,
+				user_agent=user_agent,
 				created_at=_now(),
 			))
 			if event_type == 'login_success':
@@ -64,6 +85,41 @@ class SecurityEventService:
 		except SQLAlchemyError:
 			db.session.rollback()
 			current_app.logger.exception('Failed to record security event %s', event_type)
+		if send_alert:
+			SecurityEventService._send_alert(event_type, user, user_agent, in_request)
+
+	@staticmethod
+	def _should_alert(event_type, user, details, user_agent):
+		if event_type not in ALERT_SUBJECTS or not getattr(user, 'email', None):
+			return False
+		if event_type != 'login_success':
+			return True
+		# Only alert for a browser this user hasn't signed in from before, and not on their first sign-in.
+		if (details or '').startswith(('registration', 'family invite')):
+			return False
+		previous = SecurityEvent.query.filter_by(user_id=user.id, event_type='login_success')
+		if previous.first() is None:
+			return False
+		return previous.filter(SecurityEvent.user_agent == user_agent).first() is None
+
+	@staticmethod
+	def _send_alert(event_type, user, user_agent, in_request):
+		from services.platform.email_service import EmailService
+		from services.platform.user_session_service import describe_user_agent
+		try:
+			if not EmailService.is_configured():
+				return
+			EmailService.send(
+				user.email, ALERT_SUBJECTS[event_type], 'security_alert',
+				user=user,
+				label=EVENT_LABELS[event_type],
+				when=_now(),
+				device=describe_user_agent(user_agent) if user_agent else None,
+				ip_address=(request.remote_addr if in_request else None),
+				security_link=EmailService.external_url('auth.account_security'),
+			)
+		except Exception:
+			current_app.logger.exception('Failed to send security alert %s', event_type)
 
 	@staticmethod
 	def _prune():

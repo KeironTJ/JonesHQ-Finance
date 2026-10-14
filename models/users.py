@@ -31,6 +31,9 @@ class User(UserMixin, db.Model):
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime)
 
+    # Set when the user proves they own their email address (verification or reset link)
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+
     # Site-level superuser flag - controls access to Flask-Admin (/admin)
     # Completely separate from 'role' which is a family-level concept.
     is_site_admin = db.Column(db.Boolean, default=False, server_default='0', nullable=False)

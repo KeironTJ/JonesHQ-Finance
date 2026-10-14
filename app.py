@@ -159,6 +159,7 @@ def create_app(config_name=None):
     _two_factor_exempt_endpoints = {
         'static', 'auth.logout', 'auth.account_security', 'auth.two_factor_setup',
         'auth.revoke_session', 'auth.revoke_other_sessions', 'auth.reauthenticate',
+        'auth.verify_email', 'auth.resend_verification', 'auth.reset_password', 'auth.reset_password_token',
     }
 
     @app.before_request
@@ -398,6 +399,46 @@ def register_commands(app):
             raise SystemExit(1)
         count = UserSessionService.revoke_all(user, reason='server command')
         click.echo(f'Signed {user.email} out of {count} session(s).')
+
+    @app.cli.group('email')
+    def email_cli():
+        """Outgoing email."""
+        pass
+
+    @email_cli.command('test')
+    @click.argument('address')
+    def send_test_email(address):
+        """Send a test email to check the MAIL_* settings."""
+        from services.platform.email_service import EmailService
+        if not EmailService.is_configured():
+            click.echo('ERROR: Email is not configured. Set MAIL_SERVER and MAIL_FROM.', err=True)
+            raise SystemExit(1)
+        try:
+            EmailService.send(address, 'Family HQ test email', 'test', wait=True,
+                              base_url=app.config.get('APP_BASE_URL'))
+        except Exception as error:
+            click.echo(f'ERROR: Sending failed: {error}', err=True)
+            raise SystemExit(1)
+        click.echo(f'Test email sent to {address} via {app.config["MAIL_SERVER"]}.')
+
+    @app.cli.group('users')
+    def users_cli():
+        """Manage user accounts."""
+        pass
+
+    @users_cli.command('reset-link')
+    @click.argument('email')
+    def user_reset_link(email):
+        """Create a password reset link to pass on to a user yourself."""
+        from services.platform.password_reset_service import PasswordResetService
+        try:
+            user, link, hours = PasswordResetService.create_admin_link(email)
+        except ValueError as error:
+            click.echo(f'ERROR: {error}', err=True)
+            raise SystemExit(1)
+        click.echo(f'Password reset link for {user.email} (works once, expires in {hours} hours):')
+        click.echo(link)
+        click.echo('Send it to them privately. Two-factor login, if on, is still required afterwards.')
 
 
 if __name__ == '__main__':

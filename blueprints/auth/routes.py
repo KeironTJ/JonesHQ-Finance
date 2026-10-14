@@ -12,13 +12,16 @@ from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
 from .forms import (
-    ChangePasswordForm, HouseholdInviteForm, LoginForm, PasswordConfirmForm, ReauthenticateForm,
-    RegisterForm, TwoFactorCodeForm,
+    ChangePasswordForm, ForgotPasswordForm, HouseholdInviteForm, LoginForm, PasswordConfirmForm,
+    ReauthenticateForm, RegisterForm, ResetPasswordForm, TwoFactorCodeForm,
 )
 from extensions import db, limiter
 from models.users import User
 from services.platform.auth_service import AuthService
+from services.platform.email_service import EmailService
+from services.platform.email_verification_service import EmailVerificationService
 from services.platform.household_invite_service import HouseholdInviteService
+from services.platform.password_reset_service import PasswordResetService
 from services.platform.security_event_service import SecurityEventService
 from services.platform.two_factor_service import TwoFactorService
 from services.platform.user_session_service import UserSessionService
@@ -150,6 +153,7 @@ def account_security():
         sessions=UserSessionService.list_active(current_user),
         change_password_form=ChangePasswordForm(formdata=None),
         events=SecurityEventService.recent_for_user(current_user),
+        email_enabled=EmailService.is_configured(),
     )
 
 
@@ -333,10 +337,104 @@ def register():
             flash('An error occurred while creating your account. Please try again.', 'danger')
         else:
             UserSessionService.start(user, method='registration')
+            EmailVerificationService.send_verification(user)
             flash(f'Welcome to {family.name}! Your household has been created.', 'success')
             return redirect(url_for('onboarding.index'))
 
     return render_template('auth/register.html', form=form, invite=invite)
+
+
+RESET_SESSION_KEY = 'password_reset_token'
+
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+@limiter.limit("5 per hour", methods=["POST"])
+@limiter.limit("3 per hour", key_func=_login_account_key, methods=["POST"])
+def forgot_password():
+    """Request a password reset email"""
+    if current_user.is_authenticated:
+        return redirect(url_for('auth.account_security'))
+    if not EmailService.is_configured():
+        return render_template('auth/forgot_password.html', form=None)
+
+    form = ForgotPasswordForm()
+    if form.validate_on_submit():
+        try:
+            PasswordResetService.request_reset({'email': form.email.data})
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Password reset request failed.')
+        # Same response whether or not the account exists.
+        flash('If that email belongs to an account, a reset link is on its way. '
+              'Check your inbox (and spam folder).', 'info')
+        return redirect(url_for('auth.login'))
+    return render_template('auth/forgot_password.html', form=form)
+
+
+@auth_bp.route('/reset-password/<token>')
+@limiter.limit("20 per hour")
+def reset_password_token(token):
+    """Move the reset token out of the URL so it can't leak via history or Referer"""
+    session[RESET_SESSION_KEY] = token[:500]
+    return redirect(url_for('auth.reset_password'))
+
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+@limiter.limit("10 per hour", methods=["POST"])
+def reset_password():
+    """Choose a new password using a reset link"""
+    token = session.get(RESET_SESSION_KEY)
+    if not token or PasswordResetService.get_user(token) is None:
+        session.pop(RESET_SESSION_KEY, None)
+        return render_template('auth/reset_password.html', form=None)
+
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        try:
+            PasswordResetService.reset_password(token, {
+                'new_password': form.new_password.data,
+                'confirm_password': form.confirm_password.data,
+            })
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error) or 'Unable to reset your password.', 'danger')
+        else:
+            session.pop(RESET_SESSION_KEY, None)
+            if current_user.is_authenticated:
+                logout_user()
+            flash('Your password has been reset and all devices were signed out. Sign in with your new password.',
+                  'success')
+            return redirect(url_for('auth.login'))
+    return render_template('auth/reset_password.html', form=form)
+
+
+@auth_bp.route('/verify-email/<token>')
+@limiter.limit("20 per hour")
+def verify_email(token):
+    """Confirm an email address from a verification link"""
+    try:
+        EmailVerificationService.verify(token)
+    except ValueError as error:
+        flash(str(error), 'danger')
+    else:
+        flash('Thanks, your email address is confirmed.', 'success')
+    if current_user.is_authenticated:
+        return redirect(url_for('auth.account_security'))
+    return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/account/security/verify-email', methods=['POST'])
+@login_required
+@limiter.limit("3 per hour", key_func=_current_user_key)
+def resend_verification():
+    """Send a fresh verification email to the signed-in user"""
+    if current_user.email_verified_at is not None:
+        flash('Your email address is already confirmed.', 'info')
+    elif EmailVerificationService.send_verification(current_user):
+        flash(f'Verification email sent to {current_user.email}.', 'success')
+    else:
+        flash('Email is not set up on this server.', 'warning')
+    return redirect(url_for('auth.account_security'))
 
 
 def _require_site_admin():

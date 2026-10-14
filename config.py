@@ -3,6 +3,10 @@ import secrets
 from datetime import timedelta
 
 
+def _env_flag(name, default):
+    return os.environ.get(name, default).strip().lower() in ('1', 'true', 'yes')
+
+
 class Config:
     """Base configuration"""
 
@@ -14,6 +18,10 @@ class Config:
             raise ValueError("SESSION_IDLE_MINUTES and SESSION_ABSOLUTE_HOURS must be at least 1.")
         if app.config['REAUTH_WINDOW_MINUTES'] < 1:
             raise ValueError("REAUTH_WINDOW_MINUTES must be at least 1.")
+        if app.config['MAIL_SERVER'] and not app.config['MAIL_FROM']:
+            raise ValueError("MAIL_FROM must be set when MAIL_SERVER is configured.")
+        if app.config['MAIL_USE_SSL'] and app.config['MAIL_USE_TLS']:
+            raise ValueError("Set only one of MAIL_USE_SSL and MAIL_USE_TLS.")
 
     # Secret key for session management
     SECRET_KEY = os.environ.get('SECRET_KEY')
@@ -86,6 +94,22 @@ class Config:
     TWO_FACTOR_ISSUER = 'Family HQ'
     TWO_FACTOR_PENDING_SECONDS = 300
 
+    # Outgoing email (e.g. Resend SMTP). Email features are off until MAIL_SERVER is set.
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', '').strip()
+    MAIL_PORT = int(os.environ.get('MAIL_PORT', '465'))
+    MAIL_USE_SSL = _env_flag('MAIL_USE_SSL', 'true')
+    MAIL_USE_TLS = _env_flag('MAIL_USE_TLS', 'false')
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '').strip()
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
+    MAIL_FROM = os.environ.get('MAIL_FROM', '').strip()
+    MAIL_TIMEOUT_SECONDS = 15
+    # Public address used in emailed links, e.g. https://finance.joneshq.co.uk.
+    # Never derived from the request Host header, which an attacker can control.
+    APP_BASE_URL = os.environ.get('APP_BASE_URL', '').strip().rstrip('/')
+    PASSWORD_RESET_MINUTES = 60
+    ADMIN_PASSWORD_RESET_HOURS = 24
+    EMAIL_VERIFY_DAYS = 3
+
 
 class DevelopmentConfig(Config):
     """Development configuration"""
@@ -131,6 +155,8 @@ class ProductionConfig(Config):
         storage_uri = app.config.get('RATELIMIT_STORAGE_URI') or ''
         if not storage_uri.startswith(('redis://', 'rediss://')):
             raise ValueError("RATELIMIT_STORAGE_URI must point to a shared Redis backend in production.")
+        if app.config.get('MAIL_SERVER') and not app.config.get('APP_BASE_URL', '').startswith('https://'):
+            raise ValueError("APP_BASE_URL must be set to your https:// address when email is configured.")
         
         # Warn if using SQLite in production
         if 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', ''):
@@ -146,6 +172,12 @@ class TestingConfig(Config):
     WTF_CSRF_ENABLED = False
     RATELIMIT_STORAGE_URI = 'memory://'
     TRUSTED_PROXY_COUNT = 0
+    # Tests capture email in EmailService's outbox instead of sending it
+    MAIL_SERVER = 'smtp.test.invalid'
+    MAIL_USE_SSL = True
+    MAIL_USE_TLS = False
+    MAIL_FROM = 'Family HQ <noreply@example.com>'
+    APP_BASE_URL = 'https://finance.example.com'
 
 
 # Configuration dictionary
