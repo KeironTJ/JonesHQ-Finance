@@ -71,6 +71,10 @@ class Config:
     ALLOW_OPEN_REGISTRATION = os.environ.get('ALLOW_OPEN_REGISTRATION', 'false').strip().lower() in ('1', 'true', 'yes')
     HOUSEHOLD_INVITE_DAYS = 7
 
+    # Two-factor login
+    TWO_FACTOR_ISSUER = 'Family HQ'
+    TWO_FACTOR_PENDING_SECONDS = 300
+
 
 class DevelopmentConfig(Config):
     """Development configuration"""

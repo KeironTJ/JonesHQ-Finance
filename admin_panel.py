@@ -13,18 +13,22 @@ from flask_login import current_user
 # Base secure views
 # ---------------------------------------------------------------------------
 
+def _is_verified_site_admin():
+    return current_user.is_authenticated and current_user.is_site_admin and current_user.two_factor_enabled
+
+
 class SecureAdminIndexView(AdminIndexView):
     """Admin home page - checks for admin role before rendering."""
 
     @expose('/')
     def index(self):
-        if not current_user.is_authenticated or not current_user.is_site_admin:
+        if not _is_verified_site_admin():
             flash('Admin access required.', 'danger')
             return redirect(url_for('auth.intro'))
         return super().index()
 
     def is_accessible(self):
-        return current_user.is_authenticated and current_user.is_site_admin
+        return _is_verified_site_admin()
 
     def inaccessible_callback(self, name, **kwargs):
         flash('Admin access required.', 'danger')
@@ -65,7 +69,7 @@ class SecureModelView(ModelView):
         return columns
 
     def is_accessible(self):
-        return current_user.is_authenticated and current_user.is_site_admin
+        return _is_verified_site_admin()
 
     def inaccessible_callback(self, name, **kwargs):
         flash('Admin access required.', 'danger')
@@ -86,15 +90,19 @@ class ReadOnlyModelView(SecureModelView):
 
 class UserAdminView(SecureModelView):
     """Users - hide password hash, show useful columns."""
-    column_exclude_list = ['password_hash']
-    form_excluded_columns = ['password_hash']
+    _secret_columns = ['password_hash', 'totp_secret', 'totp_last_step', 'recovery_codes']
+    column_exclude_list = _secret_columns
+    column_details_exclude_list = _secret_columns
+    column_export_exclude_list = _secret_columns
+    form_excluded_columns = _secret_columns + ['totp_enabled_at']
     column_searchable_list = ['email', 'name', 'member_name']
     column_filters = ['role', 'is_active', 'is_site_admin', 'family_id']
     column_list = [
         'id', 'name', 'email', 'role', 'is_active', 'is_site_admin',
         'family_id', 'member_name', 'last_login', 'created_at',
-        'failed_login_attempts', 'locked_until',
+        'failed_login_attempts', 'locked_until', 'totp_enabled_at',
     ]
+    column_labels = {'totp_enabled_at': '2FA enabled'}
 
 
 class TransactionAdminView(SecureModelView):

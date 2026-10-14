@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}Two-factor sign in - Family HQ{% endblock %}
+
+{% block content %}
+<div class="jhq-hero jhq-auth-hero">
+    <div style="width:100%;max-width:420px;">
+        <div class="auth-card">
+            <div class="auth-card-brand">
+                <div class="brand-icon mb-2">
+                    <i class="bi bi-shield-lock"></i>
+                </div>
+                <h2>Two-factor sign in</h2>
+                <p>Enter the 6-digit code from your authenticator app</p>
+            </div>
+            <div class="auth-card-body">
+                <form method="POST" action="{{ url_for('auth.two_factor_login') }}">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.code.label(class="form-label") }}
+                        {{ form.code(class="form-control form-control-lg text-center" + (" is-invalid" if form.code.errors else ""),
+                                     placeholder="123 456", autofocus=True, autocomplete="one-time-code",
+                                     inputmode="text", spellcheck="false") }}
+                        {% if form.code.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.code.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Lost your device? Enter one of your recovery codes instead.</div>
+                    </div>
+                    {{ form.submit(class="btn btn-primary w-100") }}
+                </form>
+                <hr class="my-3">
+                <p class="text-center mb-0" style="font-size:0.85rem;">
+                    <a href="{{ url_for('auth.login') }}" class="text-decoration-none">
+                        <i class="bi bi-arrow-left me-1"></i> Back to sign in
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

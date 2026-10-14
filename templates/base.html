@@ -221,6 +221,10 @@
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('auth.account_security') }}">
+                                <i class="bi bi-shield-lock"></i> Account security
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="POST" action="{{ url_for('auth.logout') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

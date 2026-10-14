@@ -3,16 +3,20 @@ Authentication Routes
 Login, logout, and user management with security features
 """
 from hashlib import sha256
+import time
 
 from flask import abort, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, current_user, login_required
+from flask_limiter.util import get_remote_address
 from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
-from .forms import HouseholdInviteForm, LoginForm, RegisterForm
+from .forms import HouseholdInviteForm, LoginForm, PasswordConfirmForm, RegisterForm, TwoFactorCodeForm
 from extensions import db, limiter
+from models.users import User
 from services.platform.auth_service import AuthService
 from services.platform.household_invite_service import HouseholdInviteService
+from services.platform.two_factor_service import TwoFactorService
 
 
 def _login_account_key():
@@ -57,11 +61,149 @@ def login():
         except ValueError as error:
             flash(str(error) or 'Invalid email or password.', 'danger')
         else:
+            if user.two_factor_enabled:
+                session.pop('2fa_pending', None)
+                session['2fa_pending'] = {
+                    'user_id': user.id,
+                    'remember': bool(form.remember.data),
+                    'next': _safe_next_page(),
+                    'started': int(time.time()),
+                }
+                return redirect(url_for('auth.two_factor_login'))
             login_user(user, remember=form.remember.data)
             flash(f'Welcome back, {user.name}!', 'success')
             return redirect(_safe_next_page())
     
     return render_template('auth/login.html', form=form)
+
+
+def _pending_two_factor():
+    pending = session.get('2fa_pending')
+    if not isinstance(pending, dict):
+        return None
+    max_age = current_app.config.get('TWO_FACTOR_PENDING_SECONDS', 300)
+    if int(time.time()) - int(pending.get('started', 0)) > max_age:
+        session.pop('2fa_pending', None)
+        return None
+    return pending
+
+
+def _two_factor_user_key():
+    pending = session.get('2fa_pending')
+    if isinstance(pending, dict) and pending.get('user_id'):
+        return f"2fa-user:{pending['user_id']}"
+    return f"2fa-ip:{get_remote_address()}"
+
+
+@auth_bp.route('/login/two-factor', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
+@limiter.limit("5 per 15 minutes", key_func=_two_factor_user_key, methods=["POST"])
+def two_factor_login():
+    """Second login step: authenticator or recovery code"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+
+    pending = _pending_two_factor()
+    if pending is None:
+        flash('Your sign-in has expired. Please log in again.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    user = db.session.get(User, pending.get('user_id'))
+    if user is None or not user.is_active or user.is_locked() or not user.two_factor_enabled:
+        session.pop('2fa_pending', None)
+        flash('Please log in again.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    form = TwoFactorCodeForm()
+    if form.validate_on_submit():
+        try:
+            method = TwoFactorService.verify_login(user, {'code': form.code.data})
+        except ValueError as error:
+            flash(str(error) or 'That code is not valid.', 'danger')
+        else:
+            session.pop('2fa_pending', None)
+            login_user(user, remember=pending.get('remember', False))
+            flash(f'Welcome back, {user.name}!', 'success')
+            if method == 'recovery':
+                remaining = TwoFactorService.remaining_recovery_codes(user)
+                flash(f'You used a recovery code. {remaining} remaining - generate new ones from Account security if you are running low.', 'warning')
+            return redirect(pending.get('next') or url_for('dashboard.index'))
+
+    return render_template('auth/two_factor_login.html', form=form)
+
+
+@auth_bp.route('/account/security')
+@login_required
+def account_security():
+    return render_template(
+        'auth/account_security.html',
+        password_form=PasswordConfirmForm(),
+        two_factor_required=TwoFactorService.is_required(current_user),
+        remaining_codes=TwoFactorService.remaining_recovery_codes(current_user) if current_user.two_factor_enabled else 0,
+    )
+
+
+@auth_bp.route('/account/security/two-factor/setup', methods=['GET', 'POST'])
+@login_required
+@limiter.limit("10 per minute", methods=["POST"])
+def two_factor_setup():
+    if current_user.two_factor_enabled:
+        return redirect(url_for('auth.account_security'))
+
+    TwoFactorService.begin_setup(current_user)
+    form = TwoFactorCodeForm()
+    if form.validate_on_submit():
+        try:
+            codes = TwoFactorService.confirm_setup(current_user, {'code': form.code.data})
+        except ValueError as error:
+            flash(str(error) or 'That code is not valid.', 'danger')
+        else:
+            flash('Two-factor login is now on.', 'success')
+            return render_template('auth/recovery_codes.html', codes=codes)
+
+    uri = TwoFactorService.provisioning_uri(current_user)
+    return render_template(
+        'auth/two_factor_setup.html',
+        form=form,
+        qr_svg=TwoFactorService.qr_code_svg(uri),
+        secret=current_user.totp_secret,
+        required=TwoFactorService.is_required(current_user),
+    )
+
+
+@auth_bp.route('/account/security/two-factor/recovery-codes', methods=['POST'])
+@login_required
+@limiter.limit("5 per 15 minutes")
+def two_factor_regenerate_codes():
+    form = PasswordConfirmForm()
+    if form.validate_on_submit():
+        try:
+            codes = TwoFactorService.regenerate_recovery_codes(current_user, {'password': form.password.data})
+        except ValueError as error:
+            flash(str(error) or 'Unable to create new recovery codes.', 'danger')
+        else:
+            flash('New recovery codes created. Your old codes no longer work.', 'success')
+            return render_template('auth/recovery_codes.html', codes=codes)
+    else:
+        flash('Enter your password to continue.', 'danger')
+    return redirect(url_for('auth.account_security'))
+
+
+@auth_bp.route('/account/security/two-factor/disable', methods=['POST'])
+@login_required
+@limiter.limit("5 per 15 minutes")
+def two_factor_disable():
+    form = PasswordConfirmForm()
+    if form.validate_on_submit():
+        try:
+            TwoFactorService.disable(current_user, {'password': form.password.data, 'code': form.code.data})
+        except ValueError as error:
+            flash(str(error) or 'Unable to turn off two-factor login.', 'danger')
+        else:
+            flash('Two-factor login has been turned off.', 'success')
+    else:
+        flash('Enter your password and a code to continue.', 'danger')
+    return redirect(url_for('auth.account_security'))
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])

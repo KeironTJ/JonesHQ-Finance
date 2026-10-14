@@ -99,15 +99,46 @@ session lifetime is not a server-enforced idle timeout or a revocation mechanism
 Deleting or expiring the current browser's cookie does not invalidate a stolen
 copy of it.
 
+## Two-factor login
+
+Any user can turn on authenticator-app (TOTP) two-factor login from
+**Account security** in the user menu. It is **required for site admins**: a
+site admin without it is redirected to setup on every page, and `/admin` refuses
+access until it is on.
+
+- Setup shows a QR code and a manual setup key. The first valid 6-digit code
+  turns it on and shows 10 single-use recovery codes once.
+- Login becomes password, then a 6-digit code (or a recovery code). The
+  password-verified step expires after 5 minutes. The code step is rate-limited
+  per IP and per account (5 attempts per 15 minutes).
+- Codes are accepted for one 30-second step either side of the current one.
+  Each code can only be used once, which protects against replay.
+- Recovery codes are stored as SHA-256 hashes. Regenerating them needs the
+  password, and turning 2FA off needs the password and a code. Site admins
+  can't turn it off.
+- The TOTP secret is stored unencrypted in the `users` table, so protect the
+  database and backups. It is hidden from the admin panel lists, forms and exports.
+
+Lost device and recovery codes: on the server, run
+
+```bash
+sudo -u joneshq bash -c "cd /home/joneshq/joneshq-finance && venv/bin/flask two-factor reset user@example.com"
+```
+
+The user can then sign in with their password and set it up again.
+
+Known limitation: "remember me" cookies issued before a user turned on 2FA stay
+valid until they expire. Revocable sessions are planned to fix this.
+
 ## Validation
 
 ```powershell
-venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py
+venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py
 ```
 
 Tests cover rejected and successful logins, lockout expiry, safe redirects,
-IP/account throttling, invitation policy, logout/CSRF, cookie attributes,
-deactivation, cache headers, and production validation.
+IP/account throttling, invitation policy, two-factor setup/login/recovery/replay,
+logout/CSRF, cookie attributes, deactivation, cache headers, and production validation.
 
 Before deploying, verify HTTPS cookie attributes and rate limits through the real
 reverse proxy, including requests distributed across workers. Automated local
@@ -118,7 +149,7 @@ correct proxy configuration.
 
 - Choose managed identity, self-hosted identity, or continued local authentication.
 - Add verified email ownership and safe recovery with dependable email delivery.
-- Add MFA/passkeys and secure recovery procedures.
+- Add passkeys as an alternative to authenticator-app codes.
 - Add revocable sessions, idle/absolute expiry, logout everywhere, and sensitive-action
   reauthentication.
 - Review household isolation, exports, administrative access, and member removal.
@@ -129,4 +160,4 @@ correct proxy configuration.
 
 Household registration is invite-only by default. Registration and invitation
 validation can still reveal to an invite holder that an email is already
-registered. MFA, SMTP, verification, and password recovery are not yet implemented.
+registered. SMTP, email verification, and password recovery are not yet implemented.

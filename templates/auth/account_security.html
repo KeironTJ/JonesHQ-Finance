@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Account security - Family HQ{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-lg-8 col-xl-6">
+        <h1 class="h3 mb-4"><i class="bi bi-shield-lock me-2"></i>Account security</h1>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Two-factor login</h2>
+                {% if current_user.two_factor_enabled %}
+                    <p class="mb-2">
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>On</span>
+                        since {{ current_user.totp_enabled_at.strftime('%d %b %Y') }}
+                    </p>
+                    <p class="text-muted mb-0">
+                        You have <strong>{{ remaining_codes }}</strong> unused recovery code{{ '' if remaining_codes == 1 else 's' }}.
+                        {% if remaining_codes <= 3 %}<span class="text-danger">Generate new ones soon.</span>{% endif %}
+                    </p>
+                {% else %}
+                    <p class="mb-2"><span class="badge bg-secondary">Off</span></p>
+                    <p class="text-muted">
+                        Add a second step to sign in using an authenticator app such as Microsoft Authenticator,
+                        Google Authenticator, 1Password or Bitwarden. Someone who learns your password still
+                        can't get in without your phone.
+                    </p>
+                    <a href="{{ url_for('auth.two_factor_setup') }}" class="btn btn-primary">
+                        <i class="bi bi-phone me-1"></i> Turn on two-factor login
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if current_user.two_factor_enabled %}
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">New recovery codes</h2>
+                <p class="text-muted">Creates 10 new codes. Your old codes stop working straight away.</p>
+                <form method="POST" action="{{ url_for('auth.two_factor_regenerate_codes') }}" class="row g-2 align-items-end">
+                    {{ password_form.hidden_tag() }}
+                    <div class="col-sm-8">
+                        {{ password_form.password.label(class="form-label") }}
+                        {{ password_form.password(class="form-control", autocomplete="current-password", id="regen-password") }}
+                    </div>
+                    <div class="col-sm-4">
+                        <button type="submit" class="btn btn-outline-primary w-100">Generate</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Turn off two-factor login</h2>
+                {% if two_factor_required %}
+                    <p class="text-muted mb-0">Site admins must keep two-factor login turned on.</p>
+                {% else %}
+                    <p class="text-muted">Your account will be protected by your password only.</p>
+                    <form method="POST" action="{{ url_for('auth.two_factor_disable') }}" class="row g-2 align-items-end">
+                        {{ password_form.hidden_tag() }}
+                        <div class="col-sm-5">
+                            {{ password_form.password.label(class="form-label") }}
+                            {{ password_form.password(class="form-control", autocomplete="current-password", id="disable-password") }}
+                        </div>
+                        <div class="col-sm-4">
+                            {{ password_form.code.label(class="form-label") }}
+                            {{ password_form.code(class="form-control", autocomplete="one-time-code", id="disable-code", required=True) }}
+                        </div>
+                        <div class="col-sm-3">
+                            <button type="submit" class="btn btn-outline-danger w-100">Turn off</button>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

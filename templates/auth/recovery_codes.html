@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Recovery codes - Family HQ{% endblock %}
+
+{% block extra_css %}
+<style>
+    .recovery-codes { font-family: var(--bs-font-monospace); font-size: 1.05rem; letter-spacing: 0.05em; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-lg-8 col-xl-6">
+        <h1 class="h3 mb-3"><i class="bi bi-key me-2"></i>Your recovery codes</h1>
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <strong>Save these now - they will not be shown again.</strong>
+            Each code works once and lets you sign in if you lose your phone. Keep them in a password
+            manager or print them and store them somewhere safe.
+        </div>
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="row recovery-codes" id="recovery-codes">
+                    {% for code in codes %}
+                    <div class="col-6 py-1">{{ code }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary" id="copy-recovery-codes">
+                <i class="bi bi-clipboard me-1"></i> Copy
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="print-recovery-codes">
+                <i class="bi bi-printer me-1"></i> Print
+            </button>
+            <a href="{{ url_for('auth.account_security') }}" class="btn btn-primary ms-auto">I've saved them</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const codes = {{ codes | tojson }};
+        const copyButton = document.getElementById('copy-recovery-codes');
+        copyButton.addEventListener('click', function () {
+            navigator.clipboard.writeText(codes.join('\n')).then(function () {
+                copyButton.innerHTML = '<i class="bi bi-check me-1"></i> Copied';
+            });
+        });
+        document.getElementById('print-recovery-codes').addEventListener('click', function () {
+            window.print();
+        });
+    })();
+</script>
+{% endblock %}

@@ -151,6 +151,23 @@ def create_app(config_name=None):
         from utils.permissions import check_section_access
         check_section_access()
 
+    # Site admins must have two-factor login before using the app
+    _two_factor_exempt_endpoints = {
+        'static', 'auth.logout', 'auth.account_security', 'auth.two_factor_setup',
+    }
+
+    @app.before_request
+    def require_site_admin_two_factor():
+        from flask import redirect, request, url_for
+        from flask_login import current_user
+        if (
+            current_user.is_authenticated
+            and current_user.is_site_admin
+            and not current_user.two_factor_enabled
+            and request.endpoint not in _two_factor_exempt_endpoints
+        ):
+            return redirect(url_for('auth.two_factor_setup'))
+
     # ── Jinja2 custom filter ────────────────────────────────────────────
     import json as _json
 
@@ -335,6 +352,25 @@ def register_commands(app):
             click.echo(f'ERROR: {error}', err=True)
             raise SystemExit(1)
         click.echo(f'Invite {invite_id} revoked.')
+
+    @app.cli.group('two-factor')
+    def two_factor():
+        """Manage two-factor login."""
+        pass
+
+    @two_factor.command('reset')
+    @click.argument('email')
+    def reset_two_factor(email):
+        """Turn off two-factor login for a user who has lost their device and recovery codes."""
+        from models.users import User
+        from services.platform.two_factor_service import TwoFactorService
+        user = User.query.filter_by(email=email.strip().lower()).first()
+        if not user:
+            click.echo(f'ERROR: No user found with email {email}', err=True)
+            raise SystemExit(1)
+        TwoFactorService.reset(user)
+        note = ' They are a site admin, so they will be asked to set it up again at next login.' if user.is_site_admin else ''
+        click.echo(f'Two-factor login reset for {user.email}.{note}')
 
 
 if __name__ == '__main__':

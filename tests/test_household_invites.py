@@ -155,9 +155,12 @@ def test_invite_admin_page_requires_site_admin(app, user):
 
 
 def test_site_admin_can_create_and_revoke_invite(app, user):
-    user.is_site_admin = True
-    db.session.commit()
     client = _login(app, user)
+    # Site admins must have two-factor login; set it directly after the password login
+    user.is_site_admin = True
+    user.totp_secret = 'JBSWY3DPEHPK3PXP'
+    user.totp_enabled_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.session.commit()
 
     response = client.post('/site-admin/household-invites', data={'email': '', 'note': 'Smiths', 'days': 3})
     assert response.status_code == 200

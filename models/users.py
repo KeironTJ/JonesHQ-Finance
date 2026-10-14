@@ -35,6 +35,14 @@ class User(UserMixin, db.Model):
     # Completely separate from 'role' which is a family-level concept.
     is_site_admin = db.Column(db.Boolean, default=False, server_default='0', nullable=False)
 
+    # Two-factor login (TOTP). A secret without totp_enabled_at is a pending setup.
+    totp_secret = db.Column(db.String(64), nullable=True)
+    totp_enabled_at = db.Column(db.DateTime, nullable=True)
+    # Last accepted 30-second time step, so a code cannot be replayed
+    totp_last_step = db.Column(db.Integer, nullable=True)
+    recovery_codes = db.relationship('UserRecoveryCode', back_populates='user',
+                                     lazy='dynamic', cascade='all, delete-orphan')
+
     # Family / multi-user fields
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     default_account_id = db.Column(
@@ -105,6 +113,10 @@ class User(UserMixin, db.Model):
         """True if the user has the 'admin' role."""
         return self.role == 'admin'
 
+    @property
+    def two_factor_enabled(self):
+        return self.totp_enabled_at is not None and bool(self.totp_secret)
+
     def get_allowed_sections(self):
         """Return the set of section keys this user may access.
 
@@ -137,3 +149,19 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.email}>'
+
+
+class UserRecoveryCode(db.Model):
+    """Single-use two-factor recovery code. Only a SHA-256 hash is stored."""
+    __tablename__ = 'user_recovery_codes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    code_hash = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship('User', back_populates='recovery_codes')
+
+    def __repr__(self):
+        return f'<UserRecoveryCode {self.id} user={self.user_id}>'

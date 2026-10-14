@@ -50,6 +50,22 @@ class RegisterForm(FlaskForm):
             raise ValidationError('Passwords must match')
 
 
+class TwoFactorCodeForm(FlaskForm):
+    """Authenticator app or recovery code"""
+    code = StringField('Authentication code', validators=[
+        DataRequired(message='Enter the code from your authenticator app'),
+        Length(max=40)
+    ])
+    submit = SubmitField('Verify')
+
+
+class PasswordConfirmForm(FlaskForm):
+    """Re-enter password (and optionally a code) before a sensitive change"""
+    password = PasswordField('Current password', validators=[DataRequired(message='Password is required')])
+    code = StringField('Authentication code', validators=[Optional(), Length(max=40)])
+    submit = SubmitField('Confirm')
+
+
 class HouseholdInviteForm(FlaskForm):
     """Site-admin form for issuing a one-time household invite"""
     email = StringField('Restrict to email (optional)', filters=[lambda value: value.strip().lower() if value else value],
