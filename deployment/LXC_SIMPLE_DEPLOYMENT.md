@@ -110,13 +110,28 @@ pip install gunicorn
 nano .env.production
 ```
 
-Add to `.env.production`:
+Generate a secret key first (copy the long hex output):
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Add to `.env.production`, pasting the generated value. Do **not** write `$(...)` in this
+file: systemd reads it literally and does not run commands.
 ```bash
 FLASK_ENV=production
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+SECRET_KEY=paste-the-64-character-hex-value-here
 DATABASE_URL=sqlite:////home/joneshq/app/instance/joneshq_finance.db
 SESSION_COOKIE_SECURE=True
 SESSION_COOKIE_HTTPONLY=True
+```
+
+Then set up Redis (stores login rate-limit counters only; see `deployment/README.md`).
+This also adds `RATELIMIT_STORAGE_URI` and `TRUSTED_PROXY_COUNT` to `.env.production`:
+```bash
+exit  # back to root
+bash /home/joneshq/app/deployment/setup_redis.sh /home/joneshq/app
+su - joneshq && cd ~/app && source venv/bin/activate
+venv/bin/python deployment/check_production_config.py   # expect "OK"
 ```
 
 Save and continue:
@@ -396,7 +411,8 @@ chown -R joneshq:joneshq /home/joneshq/app/
 - [ ] Python and dependencies installed
 - [ ] App files uploaded/cloned
 - [ ] Virtual environment created
-- [ ] `.env.production` configured with new SECRET_KEY
+- [ ] `.env.production` configured with a generated SECRET_KEY (not `$(...)`)
+- [ ] Redis set up (`setup_redis.sh`) and `check_production_config.py` reports OK
 - [ ] Database initialized (`flask db upgrade`)
 - [ ] User accounts created
 - [ ] Systemd service running (`systemctl status joneshq-finance`)

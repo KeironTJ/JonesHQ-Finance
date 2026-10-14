@@ -74,6 +74,14 @@ sudo -u $APP_USER bash -c "cd $APP_DIR && git pull origin main"
 echo "Step 2: Installing/updating Python dependencies..."
 sudo -u $APP_USER bash -c "cd $APP_DIR && source venv/bin/activate && pip install -r requirements.txt"
 
+echo "Step 2b: Verifying production configuration and Redis..."
+if ! sudo -u $APP_USER bash -c "cd $APP_DIR && venv/bin/python deployment/check_production_config.py"; then
+    echo "ERROR: Production configuration is not ready. Rolling back code (service not restarted)."
+    echo "If Redis is not set up yet, run: bash $APP_DIR/deployment/setup_redis.sh"
+    rollback_code
+    exit 1
+fi
+
 echo "Step 3: Backing up database before migration..."
 bash $APP_DIR/deployment/backup.sh
 BACKUP_FILE=$(ls -t $BACKUP_DIR/joneshq_finance_*.db.gz 2>/dev/null | head -1)

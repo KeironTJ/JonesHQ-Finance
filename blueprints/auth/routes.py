@@ -2,28 +2,44 @@
 Authentication Routes
 Login, logout, and user management with security features
 """
-from flask import render_template, redirect, url_for, flash, request
+from hashlib import sha256
+
+from flask import render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, current_user, login_required
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from urllib.parse import urlparse
-from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote, urlsplit
+from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
 from .forms import LoginForm, RegisterForm
 from models.users import User
-from models.family import Family
-from extensions import db
+from extensions import db, limiter
 from services.platform.auth_service import AuthService
 
-# Initialize rate limiter
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri="memory://"
-)
+
+def _login_account_key():
+    email = request.form.get('email', '').strip().lower()
+    return sha256(email.encode('utf-8')).hexdigest()
+
+
+def _safe_next_page():
+    target = request.args.get('next', '')
+    decoded = unquote(target)
+    if (
+        not decoded.startswith('/') or decoded.startswith('//')
+        or '\\' in decoded or any(ord(char) < 32 or ord(char) == 127 for char in decoded)
+    ):
+        return url_for('dashboard.index')
+    try:
+        parsed = urlsplit(decoded)
+    except ValueError:
+        return url_for('dashboard.index')
+    if parsed.scheme or parsed.netloc:
+        return url_for('dashboard.index')
+    return target
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
-@limiter.limit("10 per minute")  # Rate limit login attempts
+@limiter.limit("10 per minute", methods=["POST"])
+@limiter.limit("20 per hour", key_func=_login_account_key, methods=["POST"])
 def login():
     """User login page with security features"""
     # Redirect if already logged in
@@ -33,57 +49,23 @@ def login():
     form = LoginForm()
     
     if form.validate_on_submit():
-        email = form.email.data.strip().lower()
-        password = form.password.data
-        remember = form.remember.data
-        
-        # Find user
-        user = User.query.filter_by(email=email).first()
-        
-        if user:
-            # Check if account is locked
-            if user.is_locked():
-                minutes_left = int((user.locked_until - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 60) + 1
-                flash(f'Account temporarily locked due to multiple failed login attempts. Try again in {minutes_left} minutes.', 'danger')
-                return render_template('auth/login.html', form=form)
-            
-            # Check if user is active
-            if not user.is_active:
-                flash('This account has been deactivated. Please contact support.', 'danger')
-                return render_template('auth/login.html', form=form)
-            
-            # Check password
-            if user.check_password(password):
-                # Successful login
-                login_user(user, remember=remember)
-                user.update_last_login()
-                user.reset_failed_logins()
-                
-                flash(f'Welcome back, {user.name}!', 'success')
-                
-                # Redirect to next page or dashboard
-                next_page = request.args.get('next')
-                if not next_page or urlparse(next_page).netloc != '':
-                    next_page = url_for('dashboard.index')
-                
-                return redirect(next_page)
-            else:
-                # Failed login - record attempt
-                user.record_failed_login()
-                remaining = max(0, 5 - user.failed_login_attempts)
-                if remaining > 0:
-                    flash(f'Invalid email or password. {remaining} attempts remaining before lockout.', 'danger')
-                else:
-                    flash('Account locked due to too many failed attempts.', 'danger')
+        try:
+            user = AuthService.authenticate({
+                'email': form.email.data,
+                'password': form.password.data,
+            })
+        except ValueError as error:
+            flash(str(error) or 'Invalid email or password.', 'danger')
         else:
-            # User not found - generic error to prevent user enumeration
-            flash('Invalid email or password.', 'danger')
+            login_user(user, remember=form.remember.data)
+            flash(f'Welcome back, {user.name}!', 'success')
+            return redirect(_safe_next_page())
     
     return render_template('auth/login.html', form=form)
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
-@limiter.limit("5 per hour")
+@limiter.limit("5 per hour", methods=["POST"])
 def register():
     """Public household registration — creates a new Family + admin User"""
     if current_user.is_authenticated:
@@ -95,13 +77,6 @@ def register():
         # Check email is not already taken
         if User.query.filter_by(email=form.email.data.strip().lower()).first():
             flash('An account with that email already exists. Please log in.', 'warning')
-            return render_template('auth/register.html', form=form)
-
-        # Validate password strength
-        from .forms import validate_password_strength
-        is_valid, error_msg = validate_password_strength(form.password.data)
-        if not is_valid:
-            flash(error_msg, 'danger')
             return render_template('auth/register.html', form=form)
 
         try:
@@ -117,17 +92,26 @@ def register():
             flash(f'Welcome to {family.name}! Your household has been created.', 'success')
             return redirect(url_for('onboarding.index'))
 
-        except Exception as e:
+        except (ValueError, TypeError) as error:
             db.session.rollback()
+            flash(str(error) or 'Unable to create your account.', 'danger')
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.exception('Account registration failed.')
             flash('An error occurred while creating your account. Please try again.', 'danger')
 
     return render_template('auth/register.html', form=form)
 
 
-@auth_bp.route('/logout')
+@auth_bp.route('/logout', methods=['POST'])
+@login_required
 def logout():
     """User logout"""
     logout_user()
+    remember = session.get('_remember')
+    session.clear()
+    if remember == 'clear':
+        session['_remember'] = 'clear'
     flash('You have been logged out.', 'info')
     return redirect(url_for('auth.login'))
 

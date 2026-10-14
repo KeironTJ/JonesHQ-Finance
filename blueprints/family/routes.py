@@ -19,13 +19,14 @@ from flask import render_template, redirect, url_for, flash, request, abort
 from flask_login import login_required, current_user, login_user
 
 from blueprints.family import family_bp
-from extensions import db
+from extensions import db, limiter
 from models.family import Family, FamilyInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
 from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTIONS
 from utils.db_helpers import family_query, get_family_id
 from services.household.family_service import FamilyService
+from services.platform.auth_service import AuthService
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -213,6 +214,7 @@ def remove_member(member_id):
 # ── Public join route ─────────────────────────────────────────────────────────
 
 @family_bp.route('/join/<token>', methods=['GET', 'POST'])
+@limiter.limit("5 per hour", methods=["POST"])
 def join(token):
     """Public registration page linked from an invite token."""
     invite = FamilyInvite.query.filter_by(token=token).first_or_404()
@@ -236,8 +238,9 @@ def join(token):
             errors.append('Password is required.')
         if password != confirm:
             errors.append('Passwords do not match.')
-        if len(password) < 8:
-            errors.append('Password must be at least 8 characters.')
+        valid_password, password_error = AuthService.validate_password_strength(password)
+        if not valid_password:
+            errors.append(password_error)
         if User.query.filter_by(email=email).first():
             errors.append('An account with that email already exists.')
 

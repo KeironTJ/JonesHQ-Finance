@@ -1,12 +1,68 @@
+import re
+from datetime import datetime, timezone
+
+from flask import current_app
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from extensions import db
 from models.family import Family
 from models.users import User
 from models.tax_settings import TaxSettings
 
 
+_DUMMY_PASSWORD_HASH = generate_password_hash('not-a-user-password')
+
+
 class AuthService:
 	@staticmethod
+	def validate_password_strength(password):
+		errors = []
+		min_length = current_app.config.get('PASSWORD_MIN_LENGTH', 10)
+		if len(password) < min_length:
+			errors.append(f"at least {min_length} characters")
+		requirements = (
+			('PASSWORD_REQUIRE_UPPERCASE', r'[A-Z]', "an uppercase letter"),
+			('PASSWORD_REQUIRE_LOWERCASE', r'[a-z]', "a lowercase letter"),
+			('PASSWORD_REQUIRE_DIGIT', r'\d', "a number"),
+			('PASSWORD_REQUIRE_SPECIAL', r'[!@#$%^&*(),.?":{}|<>]', "a special character (!@#$%^&*(),.?\":{}|<>)"),
+		)
+		for setting, pattern, message in requirements:
+			if current_app.config.get(setting, True) and not re.search(pattern, password):
+				errors.append(message)
+		if errors:
+			return False, f"Password must contain {', '.join(errors)}"
+		return True, None
+
+	@staticmethod
+	def authenticate(data):
+		email = data.get('email', '').strip().lower()
+		password = data.get('password', '')
+		user = User.query.filter_by(email=email).first()
+		if user is None:
+			check_password_hash(_DUMMY_PASSWORD_HASH, password)
+			raise ValueError('Invalid email or password.')
+
+		password_matches = user.check_password(password)
+		if not user.is_active or user.is_locked():
+			raise ValueError('Invalid email or password.')
+		if not password_matches:
+			if user.locked_until is not None:
+				user.failed_login_attempts = 0
+				user.locked_until = None
+			user.record_failed_login()
+			raise ValueError('Invalid email or password.')
+
+		user.failed_login_attempts = 0
+		user.locked_until = None
+		user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
+		db.session.commit()
+		return user
+
+	@staticmethod
 	def register_user(household_name, email, name, password):
+		valid, error = AuthService.validate_password_strength(password)
+		if not valid:
+			raise ValueError(error)
 		family = Family(name=household_name.strip())
 		db.session.add(family)
 		db.session.flush()

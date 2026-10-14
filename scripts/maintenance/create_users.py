@@ -4,6 +4,7 @@ Creates initial user accounts for accessing the application
 """
 import sys
 import os
+import getpass
 
 # Add the project root to the path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -12,6 +13,7 @@ sys.path.insert(0, project_root)
 from app import create_app
 from extensions import db
 from models.users import User
+from services.platform.auth_service import AuthService
 
 
 def create_users():
@@ -46,15 +48,16 @@ def create_users():
                 continue
             
             name = input("Full Name: ").strip()
-            password = input("Password: ").strip()
-            confirm_password = input("Confirm Password: ").strip()
+            password = getpass.getpass("Password: ")
+            confirm_password = getpass.getpass("Confirm Password: ")
             
             if password != confirm_password:
                 print("❌ Passwords don't match!")
                 continue
             
-            if len(password) < 8:
-                print("❌ Password must be at least 8 characters!")
+            valid_password, password_error = AuthService.validate_password_strength(password)
+            if not valid_password:
+                print(f"❌ {password_error}")
                 continue
             
             users_to_create.append({

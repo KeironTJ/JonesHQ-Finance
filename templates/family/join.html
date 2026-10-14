@@ -35,7 +35,9 @@
                     <div class="mb-3">
                         <label class="form-label" for="password">Password</label>
                         <input type="password" class="form-control" id="password" name="password"
-                               placeholder="At least 8 characters" required minlength="8">
+                               placeholder="At least {{ config.PASSWORD_MIN_LENGTH }} characters"
+                               required minlength="{{ config.PASSWORD_MIN_LENGTH }}" autocomplete="new-password">
+                        <div class="form-text">Use uppercase, lowercase, a number, and a special character.</div>
                     </div>
 
                     <div class="mb-4">

@@ -16,14 +16,14 @@
             </div>
             <!-- Form body -->
             <div class="auth-card-body">
-                <form method="POST" action="{{ url_for('auth.login') }}">
+                <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next')) }}">
                     {{ form.hidden_tag() }}
 
                     <div class="mb-3">
                         {{ form.email.label(class="form-label") }}
                         {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""),
                                       placeholder="your.email@example.com",
-                                      autofocus=True) }}
+                                      autofocus=True, autocomplete="username") }}
                         {% if form.email.errors %}
                             <div class="invalid-feedback">
                                 {% for error in form.email.errors %}{{ error }}{% endfor %}
@@ -34,7 +34,7 @@
                     <div class="mb-3">
                         {{ form.password.label(class="form-label") }}
                         {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
-                                        placeholder="Enter your password") }}
+                                        placeholder="Enter your password", autocomplete="current-password") }}
                         {% if form.password.errors %}
                             <div class="invalid-feedback">
                                 {% for error in form.password.errors %}{{ error }}{% endfor %}

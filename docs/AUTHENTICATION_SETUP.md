@@ -1,178 +1,112 @@
-# 🔐 Authentication System - Setup Complete!
+# Authentication setup and current limitations
 
-## ✅ What Was Added
+The application uses Flask-Login, Werkzeug password hashing, and Flask-WTF CSRF
+protection. This is a hardened password-login foundation, not a complete public
+financial-service identity system.
 
-1. **User Authentication** - Flask-Login integration
-2. **User Model** - Email, password, name, activity status
-3. **Login/Logout Pages** - Clean, branded interface
-4. **Route Protection** - All pages require authentication
-5. **Production Config** - Security settings for deployment
-6. **User Management** - Scripts to create accounts
+## Local development
 
----
-
-## 🚀 Getting Started
-
-### 1. Create Your User Accounts
-
-Run this from the project root:
-```powershell
-python -m scripts.create_initial_users
-```
-
-This will prompt you to create 2 user accounts (you and your wife).
-
-### 2. Start the Application
+From the repository root:
 
 ```powershell
-python -m flask run
+venv\Scripts\python.exe -m scripts.create_initial_users
+venv\Scripts\python.exe -m flask run
 ```
 
-### 3. Access the Login Page
+Open `http://127.0.0.1:5000/login`. Development uses an in-memory rate-limit
+backend and does not require SMTP or Redis.
 
-Open: **http://127.0.0.1:5000/login**
+## Production prerequisites
 
-Login with the credentials you just created!
+Install `requirements.txt`, select `FLASK_ENV=production`, and configure:
 
----
+| Setting | Requirement |
+| --- | --- |
+| `SECRET_KEY` | Stable random secret, at least 32 characters |
+| `DATABASE_URL` or `SQLALCHEMY_DATABASE_URI` | Application database connection |
+| `RATELIMIT_STORAGE_URI` | Shared private Redis backend, using `redis://` or `rediss://` |
+| `TRUSTED_PROXY_COUNT` | `0` by default; `1` for the supplied single nginx proxy |
 
-## 🔒 Security Features
+For example, generate a secret locally:
 
-### Current Protection:
-✅ Password hashing (Werkzeug PBKDF2)
-✅ Session-based authentication
-✅ Login required on all routes
-✅ HTTPS-ready (secure cookies in production)
-✅ User activity tracking (last login)
-✅ Remember me functionality
-
-### What You Need to Do Before Deployment:
-1. Generate a strong SECRET_KEY:
-   ```powershell
-   python -c "import secrets; print(secrets.token_hex(32))"
-   ```
-2. Set environment variable: `$env:SECRET_KEY = "your-generated-key"`
-3. Set: `$env:FLASK_ENV = "production"`
-4. Use HTTPS (required for secure cookies)
-
----
-
-## 📁 Files Added/Modified
-
-### New Files:
-- `models/users.py` - User model
-- `blueprints/auth/` - Authentication blueprint
-- `templates/auth/login.html` - Login page
-- `scripts/create_initial_users.py` - User creation script
-- `docs/DEPLOYMENT.md` - Full deployment guide
-
-### Modified Files:
-- `app.py` - Flask-Login initialization
-- `extensions.py` - Added login_manager
-- `config.py` - Enhanced production config
-- `requirements.txt` - Added Flask-Login
-- `templates/base.html` - Added user menu with logout
-- All blueprint `__init__.py` files - Added @login_required
-
----
-
-## 👥 Managing Users
-
-### Create New Users
 ```powershell
-python -m scripts.create_initial_users
+venv\Scripts\python.exe -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### Check Existing Users
+Store it in the deployment environment, not source control. Startup fails when
+required production settings are missing, the secret is too short, or rate-limit
+storage is not Redis. Redis connection failures are not silently ignored.
+
+On an existing server, run `deployment/setup_redis.sh` once to install Redis and add
+these settings; `deployment/check_production_config.py` verifies them (and is run
+automatically by `quick_update.sh` before restarting). See `deployment/README.md`.
+
+Only trust forwarded headers when the application server is reachable exclusively
+through the configured trusted proxies. Review the actual proxy chain before
+changing the count; nginx plus another proxy is not the single-proxy example.
+See [Deployment setup](../deployment/README.md).
+
+## Current controls
+
+- Login POSTs: 10 per minute per client IP and 20 per hour per normalized email.
+  Email-based rate-limit keys are hashed; these limits also apply to unknown users.
+- Registration and invitation-join POSTs: 5 per hour per client IP, per endpoint.
+  Invitation tokens share an endpoint limit rather than creating separate buckets.
+- Existing general request limits remain in place. Authentication GETs do not
+  consume POST-attempt buckets. Exceeding a limit returns HTTP 429.
+- Five failed password attempts lock an account for 15 minutes. Login failures
+  use the same public message for incorrect, unknown, locked, and inactive accounts.
+  Expired lockouts start a new failure window. Unknown users still incur a password
+  hash check; this is not a guarantee of identical response timing.
+- Registration, invited-member signup, and account-creation scripts use the same
+  configured password policy: at least 10 characters with uppercase, lowercase,
+  number, and supported special character. Existing passwords are not invalidated.
+- Login business rules live in `AuthService`. Invalid registration passwords are
+  rejected before creating a household.
+- Post-login redirects accept only local absolute paths, not external URLs,
+  schemes, backslashes, or control characters.
+- Logout requires a CSRF-protected POST. It clears the current session and
+  remember-me cookie; it does not revoke other devices.
+- Deactivated users cannot be restored from an existing session or remember cookie.
+- Production session and remember-me cookies use Secure, HttpOnly, and SameSite=Lax.
+  Remember-me cookies last seven days and are not renewed on every request.
+- Non-static application responses use `Cache-Control: no-store`.
+
+Flask sessions are still signed client-side cookies, not encrypted storage.
+Never store financial records or authentication secrets in them. The configured
+session lifetime is not a server-enforced idle timeout or a revocation mechanism.
+Deleting or expiring the current browser's cookie does not invalidate a stolen
+copy of it.
+
+## Validation
+
 ```powershell
-python -c "from app import create_app; from models.users import User; app=create_app(); app.app_context().push(); users = User.query.all(); print('\n'.join([f'{u.name} ({u.email})' for u in users]))"
+venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py
 ```
 
-### Deactivate a User
-```powershell
-python -c "from app import create_app; from models.users import User; from extensions import db; app=create_app(); app.app_context().push(); user = User.query.filter_by(email='user@example.com').first(); user.is_active = False; db.session.commit(); print('User deactivated')"
-```
+Tests cover rejected and successful logins, lockout expiry, safe redirects,
+IP/account throttling, invitation policy, logout/CSRF, cookie attributes,
+deactivation, cache headers, and production validation.
 
----
+Before deploying, verify HTTPS cookie attributes and rate limits through the real
+reverse proxy, including requests distributed across workers. Automated local
+tests use memory storage; they do not prove production Redis availability or
+correct proxy configuration.
 
-## 🌐 Deployment to JonesHQ.co.uk
+## Remaining work before wider public registration
 
-See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for complete deployment instructions including:
+- Choose managed identity, self-hosted identity, or continued local authentication.
+- Add verified email ownership and safe recovery with dependable email delivery.
+- Add MFA/passkeys and secure recovery procedures.
+- Add revocable sessions, idle/absolute expiry, logout everywhere, and sensitive-action
+  reauthentication.
+- Review household isolation, exports, administrative access, and member removal.
+- Add security notifications and audit events.
+- Inventory browser storage and external assets; provide accurate privacy/storage
+  notices and consent controls where required.
+- Verify backups, restore procedures, monitoring, and dependency maintenance.
 
-- Web server configuration (Nginx)
-- SSL/HTTPS setup (Let's Encrypt)
-- Systemd service
-- Database migration (SQLite → PostgreSQL)
-- Security hardening
-- Backup strategies
-
-**Quick deployment checklist:**
-1. ✅ Generate SECRET_KEY
-2. ✅ Set FLASK_ENV=production
-3. ✅ Set up HTTPS
-4. ✅ Configure reverse proxy (Nginx/Apache)
-5. ✅ Create user accounts
-6. ✅ Set up automatic backups
-
----
-
-## 🔮 Future Enhancements (PRO Version)
-
-When you're ready to build the multi-tenant SaaS version:
-
-### Phase 1: Multi-Tenancy
-- Add `Household` model
-- Add `household_id` to all financial models
-- Household invitation system
-- Separate data by household
-
-### Phase 2: User Management
-- Password reset via email
-- Email verification
-- User roles (owner, member, viewer)
-- Activity audit log
-
-### Phase 3: SaaS Features
-- Subscription management
-- Payment processing (Stripe)
-- Usage limits by tier
-- Public marketing site
-
-### Phase 4: Advanced Features
-- Mobile app
-- Real-time sync
-- Bank integrations (Open Banking API)
-- AI-powered insights
-
----
-
-## 🆘 Troubleshooting
-
-### "Can't access any pages"
-- Check if users are created: Run user check command above
-- Try accessing /login directly
-- Check terminal for errors
-
-### "Invalid credentials" error
-- Email is case-sensitive during creation but lowercase on login
-- Passwords must match exactly
-- Create a new user if forgotten password
-
-### "ModuleNotFoundError"
-- Ensure you're in project root directory
-- Reinstall: `pip install -r requirements.txt`
-
----
-
-## 📞 Next Steps
-
-1. **Test locally** - Create users and test login/logout
-2. **Review security** - Check [docs/SECURITY.md](docs/SECURITY.md)
-3. **Plan deployment** - Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-4. **Consider enhancements** - VPN, IP whitelist, or Cloudflare Access
-
----
-
-**Your application is now secure and ready for personal use!** 🎉
-
-When you're ready to deploy to JonesHQ.co.uk, follow the deployment guide. For now, enjoy your protected finance app!
+Public registration remains available. Registration and invitation validation can
+still reveal that an email is already registered; generic login messages alone
+do not solve signup enumeration. MFA, SMTP, verification, and password recovery
+are not implemented by this foundation update.

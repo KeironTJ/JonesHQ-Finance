@@ -2,12 +2,88 @@
 
 This directory contains production deployment configurations for JonesHQ Finance.
 
+## Required authentication settings
+
+Before restarting production after the authentication hardening update:
+
+- Install the updated `requirements.txt` (includes the Redis client).
+- Set `SECRET_KEY` to a stable, randomly generated secret of at least 32 characters.
+  Do not rotate it casually: changing it invalidates existing signed sessions.
+- Set `DATABASE_URL` or `SQLALCHEMY_DATABASE_URI`.
+- Run a private Redis service and set `RATELIMIT_STORAGE_URI`, for example
+  `redis://127.0.0.1:6379/0`. Use the same backend and database for all app workers.
+  Do not expose Redis publicly; use authentication/TLS when appropriate.
+- With the supplied single nginx reverse proxy, set `TRUSTED_PROXY_COUNT=1`.
+  The default is `0` (forwarded headers are ignored). Only enable this when
+  Gunicorn is inaccessible directly and the proxy supplies trusted forwarding
+  headers. Additional proxies require reviewing the chain, not guessing a count.
+- Use the production configuration and HTTPS. Both session and remember-me
+  cookies are Secure, HttpOnly, and SameSite=Lax in production.
+
+Production startup now rejects missing settings and in-memory rate-limit storage.
+Redis errors are not silently bypassed: an unavailable backend can prevent requests
+from succeeding. Monitor Redis availability. Development and tests use memory storage.
+
+See [Authentication setup](../docs/AUTHENTICATION_SETUP.md) for limits, tests,
+and the remaining public-launch work. No SMTP or database migration is required
+for this foundation update.
+
+## Upgrading an existing server (Redis setup)
+
+**What is Redis?** A small in-memory service. Here it only holds short-lived login
+attempt counters (e.g. "this IP tried 6 times this minute") so that both Gunicorn
+workers share the same limits. It stores no financial data, needs no maintenance, and
+only listens inside the app container. If it is lost or restarted, counters reset.
+
+Run these once, as root, inside the app's Proxmox container **before** the next update
+(the updated app refuses to start in production without Redis):
+
+```bash
+cd /home/joneshq/joneshq-finance
+sudo -u joneshq git fetch origin
+sudo -u joneshq git show origin/main:deployment/setup_redis.sh > /tmp/setup_redis.sh
+bash /tmp/setup_redis.sh            # installs Redis, updates .env.production
+bash deployment/quick_update.sh     # deploys the update as normal
+```
+
+`setup_redis.sh` is safe to re-run. It:
+
+- installs `redis-server`, restricts it to localhost and checks it responds;
+- backs up `.env.production`, then adds `RATELIMIT_STORAGE_URI` and `TRUSTED_PROXY_COUNT`
+  (asks how many proxies; Nginx Proxy Manager alone = `1`);
+- replaces a missing/weak `SECRET_KEY`, including a literal `$(python3 ...)` line from
+  older guides (systemd never ran that command, so it was a guessable fixed string).
+  This logs everyone out once;
+- makes the app service start after Redis. It does not restart the app.
+
+`quick_update.sh` now runs `deployment/check_production_config.py` before restarting
+and rolls back the code if settings or Redis are not ready, so the live site stays up.
+You can run the check yourself at any time:
+
+```bash
+sudo -u joneshq bash -c "cd /home/joneshq/joneshq-finance && venv/bin/python deployment/check_production_config.py"
+```
+
+If Redis fails to start in an unprivileged LXC with `226/NAMESPACE`, enable
+Proxmox → container → Options → Features → **Nesting**, then re-run the setup script.
+
+Also restrict port 8000 so only the Nginx Proxy Manager host can reach it (Proxmox
+firewall or `ufw allow from <NPM-IP> to any port 8000`); otherwise LAN devices could
+bypass HTTPS and spoof forwarded client IPs.
+
+After updating, check through the public URL: login works, the browser shows the
+session cookie as Secure/HttpOnly, and 11 rapid wrong-password attempts return
+"Too many requests".
+
 ## Files
 
 - **nginx.conf** - Nginx reverse proxy configuration
 - **joneshq-finance.service** - Systemd service file
 - **gunicorn_config.py** - Gunicorn WSGI server configuration
 - **deploy.sh** - Automated deployment script
+- **quick_update.sh** - Pull, verify, test, migrate and restart an existing install
+- **setup_redis.sh** - One-time Redis setup for login rate limiting
+- **check_production_config.py** - Verifies `.env.production` and Redis before restarts
 - **backup.sh** - Database backup script
 
 ## Quick Start

@@ -8,7 +8,8 @@ class Config:
 
     @classmethod
     def init_app(cls, app):
-        pass
+        if app.config['TRUSTED_PROXY_COUNT'] < 0:
+            raise ValueError("TRUSTED_PROXY_COUNT must not be negative.")
 
     # Secret key for session management
     SECRET_KEY = os.environ.get('SECRET_KEY')
@@ -23,15 +24,22 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_DURATION = timedelta(days=7)
+    REMEMBER_COOKIE_REFRESH_EACH_REQUEST = False
     
     # CSRF Protection
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = None  # No time limit for small user base
     
     # Rate Limiting
-    RATELIMIT_STORAGE_URL = 'memory://'
+    RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI', 'memory://')
     RATELIMIT_STRATEGY = 'fixed-window'
     RATELIMIT_HEADERS_ENABLED = True
+    RATELIMIT_SWALLOW_ERRORS = False
+    RATELIMIT_IN_MEMORY_FALLBACK_ENABLED = False
+    TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', '0'))
     
     # Security Headers
     SECURITY_HEADERS = {
@@ -84,6 +92,7 @@ class ProductionConfig(Config):
     SESSION_COOKIE_SECURE = True  # Requires HTTPS
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = True
     
     # Additional security headers
     PREFERRED_URL_SCHEME = 'https'
@@ -96,6 +105,13 @@ class ProductionConfig(Config):
         # Ensure SECRET_KEY is set in production
         if not app.config.get('SECRET_KEY'):
             raise ValueError("SECRET_KEY environment variable must be set in production!")
+        if len(app.config['SECRET_KEY']) < 32:
+            raise ValueError("SECRET_KEY must contain at least 32 characters in production.")
+        if not app.config.get('SQLALCHEMY_DATABASE_URI'):
+            raise ValueError("SQLALCHEMY_DATABASE_URI must be set using DATABASE_URL or SQLALCHEMY_DATABASE_URI.")
+        storage_uri = app.config.get('RATELIMIT_STORAGE_URI') or ''
+        if not storage_uri.startswith(('redis://', 'rediss://')):
+            raise ValueError("RATELIMIT_STORAGE_URI must point to a shared Redis backend in production.")
         
         # Warn if using SQLite in production
         if 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', ''):
@@ -109,6 +125,8 @@ class TestingConfig(Config):
     SECRET_KEY = 'test-only-secret-key'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
+    RATELIMIT_STORAGE_URI = 'memory://'
+    TRUSTED_PROXY_COUNT = 0
 
 
 # Configuration dictionary

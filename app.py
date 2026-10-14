@@ -44,6 +44,16 @@ def create_app(config_name=None):
     
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+    config[config_name].init_app(app)
+
+    if app.config['TRUSTED_PROXY_COUNT']:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=app.config['TRUSTED_PROXY_COUNT'],
+            x_proto=app.config['TRUSTED_PROXY_COUNT'],
+            x_host=0,
+        )
 
     # Ensure Jinja template edits are picked up immediately in development.
     if app.debug or app.config.get('TESTING'):
@@ -63,9 +73,13 @@ def create_app(config_name=None):
     @app.after_request
     def add_security_headers(response):
         """Add security headers to all responses"""
+        from flask import request
+
         headers = app.config.get('SECURITY_HEADERS', {})
         for header, value in headers.items():
             response.headers[header] = value
+        if request.endpoint != 'static':
+            response.headers['Cache-Control'] = 'no-store'
         return response
     
     # Configure Flask-Login
@@ -77,10 +91,13 @@ def create_app(config_name=None):
     @login_manager.user_loader
     def load_user(user_id):
         from models.users import User
+        if not isinstance(user_id, str) or not user_id.isascii() or not user_id.isdecimal():
+            return None
         user = db.session.get(User, int(user_id))
-        if user is not None:
+        if user is not None and user.is_active:
             user = db.session.merge(user)
-        return user
+            return user
+        return None
     
     # Import models to ensure they're registered with SQLAlchemy
     with app.app_context():
