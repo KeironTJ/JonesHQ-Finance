@@ -184,6 +184,10 @@ Any SMTP provider works; Resend's free tier is the documented example. In
 production `APP_BASE_URL` must be an `https://` address: every emailed link is
 built from it, never from the request's Host header.
 
+Quote sender values containing spaces or angle brackets, for example
+`MAIL_FROM='Family HQ <noreply@yourdomain.co.uk>'`. This also keeps the assignment
+valid when loading the environment file in Bash.
+
 - **Forgot password?** on the sign-in page emails a reset link. The response is
   the same whether or not the address has an account. Limited to 5 requests per
   hour per IP and 3 per hour per email address.
