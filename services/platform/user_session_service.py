@@ -7,6 +7,7 @@ from flask_login import login_user
 
 from extensions import db
 from models.users import User, UserSession
+from services.platform.security_event_service import SecurityEventService
 
 
 TOUCH_INTERVAL = timedelta(seconds=60)
@@ -64,6 +65,7 @@ class UserSessionService:
 			expires_at=now + UserSessionService._lifetime(remember),
 			ip_address=(ip_address or '')[:64] or None,
 			user_agent=(user_agent or '')[:255] or None,
+			reauthenticated_at=now,
 		)
 		db.session.add(record)
 		UserSession.query.filter(
@@ -74,7 +76,7 @@ class UserSessionService:
 		return record, token
 
 	@staticmethod
-	def start(user, remember=False):
+	def start(user, remember=False, method='password'):
 		"""Create a session record for this browser and log the user in with it."""
 		record, token = UserSessionService.create(
 			user, remember=remember,
@@ -83,6 +85,8 @@ class UserSessionService:
 		)
 		UserSessionService._attach(user, record, token)
 		login_user(user, remember=bool(remember))
+		details = method + (', remembered' if remember else '')
+		SecurityEventService.record('login_success', user=user, details=details)
 		return record
 
 	@staticmethod
@@ -90,6 +94,7 @@ class UserSessionService:
 		user._session_token = token
 		user._session_id = record.id
 		user._session_last_seen = record.last_seen_at
+		user._session_reauth_at = record.reauthenticated_at
 
 	@staticmethod
 	def is_live(record, now=None):
@@ -167,6 +172,7 @@ class UserSessionService:
 			db.session.rollback()
 			raise ValueError('That session was not found or has already ended.')
 		db.session.commit()
+		SecurityEventService.record('session_revoked', user=user)
 		return session_id == getattr(user, '_session_id', None)
 
 	@staticmethod
@@ -176,6 +182,7 @@ class UserSessionService:
 			UserSession.query.filter(UserSession.id == session_id, UserSession.revoked_at.is_(None)).update(
 				{UserSession.revoked_at: _now()}, synchronize_session=False)
 			db.session.commit()
+			SecurityEventService.record('signed_out', user=user)
 
 	@staticmethod
 	def revoke_others(user):
@@ -186,14 +193,38 @@ class UserSessionService:
 			query = query.filter(UserSession.id != current_id)
 		count = query.update({UserSession.revoked_at: _now()}, synchronize_session=False)
 		db.session.commit()
+		if count:
+			SecurityEventService.record('other_sessions_revoked', user=user, details=f'{count} session(s)')
 		return count
 
 	@staticmethod
-	def revoke_all(user):
+	def revoke_all(user, reason=None):
 		count = (
 			UserSession.query
 			.filter(UserSession.user_id == user.id, UserSession.revoked_at.is_(None))
 			.update({UserSession.revoked_at: _now()}, synchronize_session=False)
 		)
 		db.session.commit()
+		details = f'{count} session(s)' + (f' - {reason}' if reason else '')
+		SecurityEventService.record('all_sessions_revoked', user=user, details=details)
 		return count
+
+	@staticmethod
+	def is_recently_authenticated(user):
+		"""True if the password was entered in this session within REAUTH_WINDOW_MINUTES."""
+		reauth_at = getattr(user, '_session_reauth_at', None)
+		if reauth_at is None:
+			return False
+		window = timedelta(minutes=current_app.config['REAUTH_WINDOW_MINUTES'])
+		return _now() - reauth_at < window
+
+	@staticmethod
+	def mark_reauthenticated(user):
+		session_id = getattr(user, '_session_id', None)
+		if session_id is None:
+			return
+		now = _now()
+		UserSession.query.filter_by(id=session_id).update(
+			{UserSession.reauthenticated_at: now}, synchronize_session=False)
+		db.session.commit()
+		user._session_reauth_at = now

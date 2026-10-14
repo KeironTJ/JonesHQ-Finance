@@ -158,7 +158,7 @@ def create_app(config_name=None):
     # Site admins must have two-factor login before using the app
     _two_factor_exempt_endpoints = {
         'static', 'auth.logout', 'auth.account_security', 'auth.two_factor_setup',
-        'auth.revoke_session', 'auth.revoke_other_sessions',
+        'auth.revoke_session', 'auth.revoke_other_sessions', 'auth.reauthenticate',
     }
 
     @app.before_request
@@ -374,8 +374,10 @@ def register_commands(app):
             click.echo(f'ERROR: No user found with email {email}', err=True)
             raise SystemExit(1)
         TwoFactorService.reset(user)
+        from services.platform.security_event_service import SecurityEventService
         from services.platform.user_session_service import UserSessionService
-        UserSessionService.revoke_all(user)
+        SecurityEventService.record('two_factor_reset', user=user)
+        UserSessionService.revoke_all(user, reason='two-factor reset')
         note = ' They are a site admin, so they will be asked to set it up again at next login.' if user.is_site_admin else ''
         click.echo(f'Two-factor login reset and all sessions signed out for {user.email}.{note}')
 
@@ -394,7 +396,7 @@ def register_commands(app):
         if not user:
             click.echo(f'ERROR: No user found with email {email}', err=True)
             raise SystemExit(1)
-        count = UserSessionService.revoke_all(user)
+        count = UserSessionService.revoke_all(user, reason='server command')
         click.echo(f'Signed {user.email} out of {count} session(s).')
 
 

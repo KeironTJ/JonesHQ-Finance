@@ -173,11 +173,33 @@ class UserSession(db.Model):
     revoked_at = db.Column(db.DateTime, nullable=True)
     ip_address = db.Column(db.String(64), nullable=True)
     user_agent = db.Column(db.String(255), nullable=True)
+    # Last time the password was entered in this session; sensitive actions need it to be recent
+    reauthenticated_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship('User', back_populates='sessions')
 
     def __repr__(self):
         return f'<UserSession {self.id} user={self.user_id}>'
+
+
+class SecurityEvent(db.Model):
+    """Audit trail of sign-ins and security-relevant account changes."""
+    __tablename__ = 'security_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    family_id = db.Column(db.Integer, db.ForeignKey('families.id', ondelete='SET NULL'), nullable=True, index=True)
+    event_type = db.Column(db.String(50), nullable=False, index=True)
+    details = db.Column(db.String(255), nullable=True)
+    ip_address = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, index=True,
+                           default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    user = db.relationship('User')
+
+    def __repr__(self):
+        return f'<SecurityEvent {self.event_type} user={self.user_id}>'
 
 
 class UserRecoveryCode(db.Model):

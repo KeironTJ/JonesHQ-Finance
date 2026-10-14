@@ -66,6 +66,22 @@ class PasswordConfirmForm(FlaskForm):
     submit = SubmitField('Confirm')
 
 
+class ReauthenticateForm(FlaskForm):
+    """Confirm the current password before a sensitive action"""
+    password = PasswordField('Password', validators=[DataRequired(message='Password is required')])
+    submit = SubmitField('Confirm')
+
+
+class ChangePasswordForm(FlaskForm):
+    current_password = PasswordField('Current password', validators=[DataRequired(message='Current password is required')])
+    new_password = PasswordField('New password', validators=[
+        DataRequired(message='New password is required'),
+        Length(max=200),
+    ])
+    confirm_password = PasswordField('Confirm new password', validators=[DataRequired(message='Please confirm your new password')])
+    submit = SubmitField('Change password')
+
+
 class HouseholdInviteForm(FlaskForm):
     """Site-admin form for issuing a one-time household invite"""
     email = StringField('Restrict to email (optional)', filters=[lambda value: value.strip().lower() if value else value],

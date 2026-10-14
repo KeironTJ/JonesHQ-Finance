@@ -32,7 +32,7 @@ from models.subscriptions import Subscription
 from models.tax_settings import TaxSettings
 from models.transactions import Transaction
 from models.trips import Trip
-from models.users import User, UserRecoveryCode, UserSession
+from models.users import SecurityEvent, User, UserRecoveryCode, UserSession
 from models.vehicles import Vehicle
 from models.vendors import Vendor, VendorType
 

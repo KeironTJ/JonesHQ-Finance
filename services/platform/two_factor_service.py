@@ -12,6 +12,7 @@ from flask import current_app
 
 from extensions import db
 from models.users import User, UserRecoveryCode
+from services.platform.security_event_service import SecurityEventService
 
 
 RECOVERY_CODE_COUNT = 10
@@ -127,6 +128,7 @@ class TwoFactorService:
 		user.totp_enabled_at = _now()
 		codes = TwoFactorService._replace_recovery_codes(user)
 		db.session.commit()
+		SecurityEventService.record('two_factor_enabled', user=user)
 		return codes
 
 	@staticmethod
@@ -141,6 +143,7 @@ class TwoFactorService:
 			method = 'recovery'
 		else:
 			db.session.rollback()
+			SecurityEventService.record('two_factor_failed', user=user)
 			raise ValueError(INVALID_CODE_MESSAGE)
 		db.session.commit()
 		return method
@@ -148,6 +151,7 @@ class TwoFactorService:
 	@staticmethod
 	def _check_password(user, password):
 		if not password or not user.check_password(password):
+			SecurityEventService.record('password_confirm_failed', user=user)
 			raise ValueError('Your password was not correct.')
 
 	@staticmethod
@@ -157,6 +161,7 @@ class TwoFactorService:
 		TwoFactorService._check_password(user, data.get('password'))
 		codes = TwoFactorService._replace_recovery_codes(user)
 		db.session.commit()
+		SecurityEventService.record('recovery_codes_regenerated', user=user)
 		return codes
 
 	@staticmethod
@@ -168,6 +173,7 @@ class TwoFactorService:
 		TwoFactorService._check_password(user, data.get('password'))
 		TwoFactorService.verify_login(user, data)
 		TwoFactorService.reset(user)
+		SecurityEventService.record('two_factor_disabled', user=user)
 
 	@staticmethod
 	def reset(user):

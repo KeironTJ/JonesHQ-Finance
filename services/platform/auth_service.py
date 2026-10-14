@@ -9,6 +9,8 @@ from models.family import Family
 from models.users import User
 from models.tax_settings import TaxSettings
 from services.platform.household_invite_service import HouseholdInviteService
+from services.platform.security_event_service import SecurityEventService
+from services.platform.user_session_service import UserSessionService
 
 
 _DUMMY_PASSWORD_HASH = generate_password_hash('not-a-user-password')
@@ -51,6 +53,9 @@ class AuthService:
 				user.failed_login_attempts = 0
 				user.locked_until = None
 			user.record_failed_login()
+			SecurityEventService.record('login_failed', user=user)
+			if user.is_locked():
+				SecurityEventService.record('account_locked', user=user)
 			raise ValueError('Invalid email or password.')
 
 		user.failed_login_attempts = 0
@@ -58,6 +63,38 @@ class AuthService:
 		user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
 		db.session.commit()
 		return user
+
+	@staticmethod
+	def reauthenticate(user, data):
+		"""Confirm the signed-in user's password so sensitive actions are allowed for a while."""
+		password = data.get('password') or ''
+		if not password or not user.check_password(password):
+			SecurityEventService.record('password_confirm_failed', user=user)
+			raise ValueError('Your password was not correct.')
+		UserSessionService.mark_reauthenticated(user)
+		SecurityEventService.record('reauthenticated', user=user)
+
+	@staticmethod
+	def change_password(user, data):
+		"""Change the password and sign out every other session. Returns how many were signed out."""
+		current_password = data.get('current_password') or ''
+		new_password = data.get('new_password') or ''
+		if not current_password or not user.check_password(current_password):
+			SecurityEventService.record('password_confirm_failed', user=user, details='change password')
+			raise ValueError('Your current password was not correct.')
+		if new_password != (data.get('confirm_password') or ''):
+			raise ValueError('The new passwords do not match.')
+		if user.check_password(new_password):
+			raise ValueError('Choose a password different from your current one.')
+		valid, error = AuthService.validate_password_strength(new_password)
+		if not valid:
+			raise ValueError(error)
+		user.set_password(new_password)
+		db.session.commit()
+		signed_out = UserSessionService.revoke_others(user)
+		UserSessionService.mark_reauthenticated(user)
+		SecurityEventService.record('password_changed', user=user)
+		return signed_out
 
 	@staticmethod
 	def registration_is_open():

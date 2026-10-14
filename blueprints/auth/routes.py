@@ -11,13 +11,18 @@ from flask_limiter.util import get_remote_address
 from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
-from .forms import HouseholdInviteForm, LoginForm, PasswordConfirmForm, RegisterForm, TwoFactorCodeForm
+from .forms import (
+    ChangePasswordForm, HouseholdInviteForm, LoginForm, PasswordConfirmForm, ReauthenticateForm,
+    RegisterForm, TwoFactorCodeForm,
+)
 from extensions import db, limiter
 from models.users import User
 from services.platform.auth_service import AuthService
 from services.platform.household_invite_service import HouseholdInviteService
+from services.platform.security_event_service import SecurityEventService
 from services.platform.two_factor_service import TwoFactorService
 from services.platform.user_session_service import UserSessionService
+from utils.reauth import recent_auth_required
 
 
 def _login_account_key():
@@ -123,7 +128,8 @@ def two_factor_login():
             flash(str(error) or 'That code is not valid.', 'danger')
         else:
             session.pop('2fa_pending', None)
-            UserSessionService.start(user, remember=pending.get('remember', False))
+            UserSessionService.start(user, remember=pending.get('remember', False),
+                                     method='recovery code' if method == 'recovery' else 'two-factor')
             flash(f'Welcome back, {user.name}!', 'success')
             if method == 'recovery':
                 remaining = TwoFactorService.remaining_recovery_codes(user)
@@ -142,7 +148,57 @@ def account_security():
         two_factor_required=TwoFactorService.is_required(current_user),
         remaining_codes=TwoFactorService.remaining_recovery_codes(current_user) if current_user.two_factor_enabled else 0,
         sessions=UserSessionService.list_active(current_user),
+        change_password_form=ChangePasswordForm(formdata=None),
+        events=SecurityEventService.recent_for_user(current_user),
     )
+
+
+def _current_user_key():
+    if current_user.is_authenticated:
+        return f"user:{current_user.get_id().split(':', 1)[0]}"
+    return f"ip:{get_remote_address()}"
+
+
+@auth_bp.route('/account/confirm', methods=['GET', 'POST'])
+@login_required
+@limiter.limit("10 per minute", methods=["POST"])
+@limiter.limit("5 per 15 minutes", key_func=_current_user_key, methods=["POST"])
+def reauthenticate():
+    """Ask for the password again before a sensitive action"""
+    form = ReauthenticateForm()
+    if form.validate_on_submit():
+        try:
+            AuthService.reauthenticate(current_user, {'password': form.password.data})
+        except ValueError as error:
+            flash(str(error) or 'Your password was not correct.', 'danger')
+        else:
+            return redirect(_safe_next_page())
+    return render_template('auth/reauthenticate.html', form=form)
+
+
+@auth_bp.route('/account/security/password', methods=['POST'])
+@login_required
+@limiter.limit("5 per 15 minutes", key_func=_current_user_key)
+def change_password():
+    form = ChangePasswordForm()
+    if not form.validate_on_submit():
+        errors = [message for messages in form.errors.values() for message in messages]
+        flash(errors[0] if errors else 'Unable to change your password.', 'danger')
+        return redirect(url_for('auth.account_security'))
+    try:
+        signed_out = AuthService.change_password(current_user, {
+            'current_password': form.current_password.data,
+            'new_password': form.new_password.data,
+            'confirm_password': form.confirm_password.data,
+        })
+    except ValueError as error:
+        flash(str(error) or 'Unable to change your password.', 'danger')
+    else:
+        message = 'Your password has been changed.'
+        if signed_out:
+            message += f' {signed_out} other session{"" if signed_out == 1 else "s"} signed out.'
+        flash(message, 'success')
+    return redirect(url_for('auth.account_security'))
 
 
 @auth_bp.route('/account/security/sessions/<int:session_id>/revoke', methods=['POST'])
@@ -173,6 +229,7 @@ def revoke_other_sessions():
 
 @auth_bp.route('/account/security/two-factor/setup', methods=['GET', 'POST'])
 @login_required
+@recent_auth_required
 @limiter.limit("10 per minute", methods=["POST"])
 def two_factor_setup():
     if current_user.two_factor_enabled:
@@ -275,7 +332,7 @@ def register():
             current_app.logger.exception('Account registration failed.')
             flash('An error occurred while creating your account. Please try again.', 'danger')
         else:
-            UserSessionService.start(user)
+            UserSessionService.start(user, method='registration')
             flash(f'Welcome to {family.name}! Your household has been created.', 'success')
             return redirect(url_for('onboarding.index'))
 
@@ -289,6 +346,7 @@ def _require_site_admin():
 
 @auth_bp.route('/site-admin/household-invites', methods=['GET', 'POST'])
 @login_required
+@recent_auth_required
 def household_invites():
     """Site-admin page for issuing one-time household invite links"""
     _require_site_admin()
@@ -305,6 +363,7 @@ def household_invites():
         except ValueError as error:
             flash(str(error) or 'Unable to create invite.', 'danger')
         else:
+            SecurityEventService.record('household_invite_created', details=form.email.data or form.note.data)
             new_link = url_for('auth.register', invite=token, _external=True)
             form = HouseholdInviteForm(formdata=None)
 
@@ -318,6 +377,7 @@ def household_invites():
 
 @auth_bp.route('/site-admin/household-invites/<int:invite_id>/revoke', methods=['POST'])
 @login_required
+@recent_auth_required
 def revoke_household_invite(invite_id):
     _require_site_admin()
     try:
@@ -325,6 +385,7 @@ def revoke_household_invite(invite_id):
     except ValueError as error:
         flash(str(error) or 'Unable to revoke invite.', 'danger')
     else:
+        SecurityEventService.record('household_invite_revoked', details=f'invite {invite_id}')
         flash('Invite revoked.', 'success')
     return redirect(url_for('auth.household_invites'))
 

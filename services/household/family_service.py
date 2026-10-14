@@ -4,6 +4,8 @@ from extensions import db
 from models.family import FamilyInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
+from services.platform.security_event_service import SecurityEventService
+from services.platform.user_session_service import UserSessionService
 
 
 class FamilyService:
@@ -52,6 +54,7 @@ class FamilyService:
         )
         db.session.add(invite)
         db.session.commit()
+        SecurityEventService.record('family_invite_created', details=f'{member_name} ({role})')
         return invite
 
     @staticmethod
@@ -59,8 +62,10 @@ class FamilyService:
         invite = FamilyInvite.query.filter_by(
             id=invite_id, family_id=family_id
         ).first_or_404()
+        member_name = invite.member_name
         db.session.delete(invite)
         db.session.commit()
+        SecurityEventService.record('family_invite_revoked', details=member_name)
 
     @staticmethod
     def update_member(member_id, family_id, current_user_id, role, member_name, sections):
@@ -74,6 +79,7 @@ class FamilyService:
         if member.role != 'admin':
             member.set_allowed_sections(sections)
         db.session.commit()
+        SecurityEventService.record('family_member_updated', details=f'{member.name} ({member.role})')
         return member
 
     @staticmethod
@@ -87,4 +93,6 @@ class FamilyService:
         member.role = 'member'
         member.allowed_sections = None
         db.session.commit()
+        UserSessionService.revoke_all(member, reason='removed from family')
+        SecurityEventService.record('family_member_removed', details=name)
         return name

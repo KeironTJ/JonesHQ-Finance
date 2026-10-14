@@ -12,6 +12,8 @@ class Config:
             raise ValueError("TRUSTED_PROXY_COUNT must not be negative.")
         if app.config['SESSION_IDLE_MINUTES'] < 1 or app.config['SESSION_ABSOLUTE_HOURS'] < 1:
             raise ValueError("SESSION_IDLE_MINUTES and SESSION_ABSOLUTE_HOURS must be at least 1.")
+        if app.config['REAUTH_WINDOW_MINUTES'] < 1:
+            raise ValueError("REAUTH_WINDOW_MINUTES must be at least 1.")
 
     # Secret key for session management
     SECRET_KEY = os.environ.get('SECRET_KEY')
@@ -34,6 +36,9 @@ class Config:
     # last REMEMBER_COOKIE_DURATION. All sessions can be revoked from Account security.
     SESSION_IDLE_MINUTES = int(os.environ.get('SESSION_IDLE_MINUTES', '60'))
     SESSION_ABSOLUTE_HOURS = int(os.environ.get('SESSION_ABSOLUTE_HOURS', '12'))
+    # Sensitive actions need the password to have been entered within this many minutes
+    REAUTH_WINDOW_MINUTES = int(os.environ.get('REAUTH_WINDOW_MINUTES', '15'))
+    SECURITY_EVENT_RETENTION_DAYS = 365
     
     # CSRF Protection
     WTF_CSRF_ENABLED = True

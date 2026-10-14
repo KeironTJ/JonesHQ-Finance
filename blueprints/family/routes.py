@@ -28,6 +28,7 @@ from utils.db_helpers import family_query, get_family_id
 from services.household.family_service import FamilyService
 from services.platform.auth_service import AuthService
 from services.platform.user_session_service import UserSessionService
+from utils.reauth import recent_auth_required
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -131,6 +132,7 @@ def delete_assignment_label(label_id):
 
 @family_bp.route('/invite', methods=['POST'])
 @login_required
+@recent_auth_required
 def create_invite():
     _require_admin()
 
@@ -164,6 +166,7 @@ def create_invite():
 
 @family_bp.route('/invite/<int:invite_id>/revoke', methods=['POST'])
 @login_required
+@recent_auth_required
 def revoke_invite(invite_id):
     _require_admin()
 
@@ -174,6 +177,7 @@ def revoke_invite(invite_id):
 
 @family_bp.route('/members/<int:member_id>/update', methods=['POST'])
 @login_required
+@recent_auth_required
 def update_member(member_id):
     _require_admin()
 
@@ -197,6 +201,7 @@ def update_member(member_id):
 
 @family_bp.route('/members/<int:member_id>/remove', methods=['POST'])
 @login_required
+@recent_auth_required
 def remove_member(member_id):
     _require_admin()
 
@@ -265,7 +270,7 @@ def join(token):
         invite.mark_used(user)
         db.session.commit()
 
-        UserSessionService.start(user)
+        UserSessionService.start(user, method='family invite')
         flash(f'Welcome to the family, {name}!', 'success')
         return redirect(url_for('onboarding.index'))
 

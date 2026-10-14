@@ -13,8 +13,21 @@ from flask_login import current_user
 # Base secure views
 # ---------------------------------------------------------------------------
 
-def _is_verified_site_admin():
+def _is_two_factor_site_admin():
     return current_user.is_authenticated and current_user.is_site_admin and current_user.two_factor_enabled
+
+
+def _is_verified_site_admin():
+    from services.platform.user_session_service import UserSessionService
+    return _is_two_factor_site_admin() and UserSessionService.is_recently_authenticated(current_user)
+
+
+def _deny_admin_access():
+    if _is_two_factor_site_admin():
+        from utils.reauth import reauthentication_redirect
+        return reauthentication_redirect()
+    flash('Admin access required.', 'danger')
+    return redirect(url_for('auth.intro'))
 
 
 class SecureAdminIndexView(AdminIndexView):
@@ -23,16 +36,14 @@ class SecureAdminIndexView(AdminIndexView):
     @expose('/')
     def index(self):
         if not _is_verified_site_admin():
-            flash('Admin access required.', 'danger')
-            return redirect(url_for('auth.intro'))
+            return _deny_admin_access()
         return super().index()
 
     def is_accessible(self):
         return _is_verified_site_admin()
 
     def inaccessible_callback(self, name, **kwargs):
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('auth.intro'))
+        return _deny_admin_access()
 
 
 class SecureModelView(ModelView):
@@ -72,8 +83,7 @@ class SecureModelView(ModelView):
         return _is_verified_site_admin()
 
     def inaccessible_callback(self, name, **kwargs):
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('auth.intro'))
+        return _deny_admin_access()
 
 
 class ReadOnlyModelView(SecureModelView):
@@ -113,6 +123,14 @@ class UserSessionAdminView(ReadOnlyModelView):
     column_details_exclude_list = ['token_hash']
     column_export_exclude_list = ['token_hash']
     column_default_sort = ('last_seen_at', True)
+
+
+class SecurityEventAdminView(ReadOnlyModelView):
+    """Security audit trail."""
+    column_list = ['created_at', 'event_type', 'user', 'family_id', 'details', 'ip_address', 'user_agent']
+    column_filters = ['event_type', 'user_id', 'family_id', 'created_at']
+    column_searchable_list = ['event_type', 'details', 'ip_address']
+    column_default_sort = ('created_at', True)
 
 
 class TransactionAdminView(SecureModelView):
@@ -188,7 +206,7 @@ def init_admin(app, db):
     )
 
     # ---- Import all models ------------------------------------------------
-    from models.users import User, UserSession
+    from models.users import SecurityEvent, User, UserSession
     from models.family import Family, FamilyInvite, HouseholdInvite
     from models.accounts import Account
     from models.balances import Balance
@@ -227,6 +245,7 @@ def init_admin(app, db):
     admin.add_view(SecureModelView(FamilyInvite, db.session, name='Invites', category='Core'))
     admin.add_view(ReadOnlyModelView(HouseholdInvite, db.session, name='Household Invites', category='Core'))
     admin.add_view(UserSessionAdminView(UserSession, db.session, name='Sessions', category='Core'))
+    admin.add_view(SecurityEventAdminView(SecurityEvent, db.session, name='Security events', category='Core'))
 
     # Accounts & Transactions
     admin.add_view(AccountAdminView(Account, db.session, name='Accounts', category='Accounts'))

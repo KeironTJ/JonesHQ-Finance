@@ -155,16 +155,38 @@ sudo -u joneshq bash -c "cd /home/joneshq/joneshq-finance && venv/bin/flask sess
 Sessions from before this feature are not recognised, so everyone is signed out
 once when it is deployed.
 
+## Change password, password confirmation and security log
+
+- **Account security → Change password** needs the current password and a new one
+  that meets the password policy. It signs out every other device.
+- Sensitive actions ask for the password again if it wasn't entered in the last
+  `REAUTH_WINDOW_MINUTES` (default 15) in this session: turning on two-factor
+  login, household invites, family invites, editing or removing family members,
+  and the `/admin` panel. The time is counted from the last password entry and
+  doesn't slide with activity. "Remember me" sessions keep their original sign-in
+  time, so they are asked once that is older than the window. Form posts can't be replayed, so the user goes
+  back to the page they came from and submits again. Password confirmation is
+  rate-limited (5 per 15 minutes per user) but doesn't count towards lockout.
+- Removing a family member signs them out of every device straight away.
+- Security events are stored in `security_events`: sign-ins, failed sign-ins
+  and lockouts, sign-outs and revoked sessions, password confirmations and
+  changes, two-factor changes, invites and family member changes, and the
+  server reset commands. Each row has the user, household, IP and browser.
+  Failed sign-ins for unknown emails are not recorded.
+- **Account security → Recent security activity** shows a user their last 20 events.
+  Site admins can search all events under **Admin → Core → Security events**.
+- Events older than `SECURITY_EVENT_RETENTION_DAYS` (365) are deleted when anyone signs in.
+
 ## Validation
 
 ```powershell
-venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_user_sessions.py
+venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_user_sessions.py tests\test_account_security.py
 ```
 
 Tests cover rejected and successful logins, lockout expiry, safe redirects,
 IP/account throttling, invitation policy, two-factor setup/login/recovery/replay,
-session revocation and idle/absolute expiry,
-session revocation and idle/absolute expiry,
+session revocation and idle/absolute expiry, change password, password confirmation
+for sensitive actions, security events,
 logout/CSRF, cookie attributes, deactivation, cache headers, and production validation.
 
 Before deploying, verify HTTPS cookie attributes and rate limits through the real
@@ -177,9 +199,8 @@ correct proxy configuration.
 - Choose managed identity, self-hosted identity, or continued local authentication.
 - Add verified email ownership and safe recovery with dependable email delivery.
 - Add passkeys as an alternative to authenticator-app codes.
-- Add change password and sensitive-action reauthentication.
 - Review household isolation, exports, administrative access, and member removal.
-- Add security notifications and audit events.
+- Add email security notifications (new sign-in, password changed).
 - Inventory browser storage and external assets; provide accurate privacy/storage
   notices and consent controls where required.
 - Verify backups, restore procedures, monitoring, and dependency maintenance.

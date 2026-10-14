@@ -9,6 +9,33 @@
 
         <div class="card mb-4">
             <div class="card-body">
+                <h2 class="h5">Change password</h2>
+                <p class="text-muted">Changing your password signs out every other device.</p>
+                <form method="POST" action="{{ url_for('auth.change_password') }}">
+                    {{ change_password_form.hidden_tag() }}
+                    <input type="text" name="username" value="{{ current_user.email }}" autocomplete="username" hidden>
+                    <div class="mb-2">
+                        {{ change_password_form.current_password.label(class="form-label") }}
+                        {{ change_password_form.current_password(class="form-control", autocomplete="current-password", required=True) }}
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-sm-6">
+                            {{ change_password_form.new_password.label(class="form-label") }}
+                            {{ change_password_form.new_password(class="form-control", autocomplete="new-password", required=True) }}
+                        </div>
+                        <div class="col-sm-6">
+                            {{ change_password_form.confirm_password.label(class="form-label") }}
+                            {{ change_password_form.confirm_password(class="form-control", autocomplete="new-password", required=True) }}
+                        </div>
+                        <div class="form-text">At least 10 characters, including uppercase, lowercase, a number and a special character.</div>
+                    </div>
+                    {{ change_password_form.submit(class="btn btn-primary") }}
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
                 <h2 class="h5">Two-factor login</h2>
                 {% if current_user.two_factor_enabled %}
                     <p class="mb-2">
@@ -127,6 +154,45 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5 mb-1">Recent security activity</h2>
+                <p class="text-muted" style="font-size:0.875rem;">
+                    Sign-ins and security changes on your account. If something looks wrong, change your password.
+                </p>
+                {% if events %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>When</th>
+                                <th>Event</th>
+                                <th>Device</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in events %}
+                            <tr>
+                                <td class="text-nowrap">{{ event.created_at.strftime('%d %b %Y %H:%M') }} UTC</td>
+                                <td>
+                                    {{ event.label }}
+                                    {% if event.details %}<div class="text-muted" style="font-size:0.8rem;">{{ event.details }}</div>{% endif %}
+                                </td>
+                                <td>
+                                    {{ event.device or 'Unknown device' }}
+                                    {% if event.ip_address %}<div class="text-muted" style="font-size:0.8rem;">{{ event.ip_address }}</div>{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No activity recorded yet.</p>
+                {% endif %}
             </div>
         </div>
     </div>
