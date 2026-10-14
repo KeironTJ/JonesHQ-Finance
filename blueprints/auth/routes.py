@@ -4,15 +4,15 @@ Login, logout, and user management with security features
 """
 from hashlib import sha256
 
-from flask import render_template, redirect, url_for, flash, request, current_app, session
+from flask import abort, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
-from .forms import LoginForm, RegisterForm
-from models.users import User
+from .forms import HouseholdInviteForm, LoginForm, RegisterForm
 from extensions import db, limiter
 from services.platform.auth_service import AuthService
+from services.platform.household_invite_service import HouseholdInviteService
 
 
 def _login_account_key():
@@ -67,31 +67,31 @@ def login():
 @auth_bp.route('/register', methods=['GET', 'POST'])
 @limiter.limit("5 per hour", methods=["POST"])
 def register():
-    """Public household registration — creates a new Family + admin User"""
+    """Household registration — requires a one-time invite unless open registration is enabled"""
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
 
     form = RegisterForm()
+    if request.method == 'GET':
+        form.invite_token.data = request.args.get('invite', '')
+
+    invite = None
+    if not AuthService.registration_is_open():
+        invite = HouseholdInviteService.get_valid_invite(form.invite_token.data)
+        if invite is None:
+            return render_template('auth/register.html', form=None, invite_required=True)
+        if request.method == 'GET' and invite.email:
+            form.email.data = invite.email
 
     if form.validate_on_submit():
-        # Check email is not already taken
-        if User.query.filter_by(email=form.email.data.strip().lower()).first():
-            flash('An account with that email already exists. Please log in.', 'warning')
-            return render_template('auth/register.html', form=form)
-
         try:
-            family, user = AuthService.register_user(
-                form.household_name.data,
-                form.email.data,
-                form.name.data,
-                form.password.data,
-            )
-
-            # Log the new user in
-            login_user(user)
-            flash(f'Welcome to {family.name}! Your household has been created.', 'success')
-            return redirect(url_for('onboarding.index'))
-
+            family, user = AuthService.register_household({
+                'household_name': form.household_name.data,
+                'email': form.email.data,
+                'name': form.name.data,
+                'password': form.password.data,
+                'invite_token': form.invite_token.data,
+            })
         except (ValueError, TypeError) as error:
             db.session.rollback()
             flash(str(error) or 'Unable to create your account.', 'danger')
@@ -99,8 +99,59 @@ def register():
             db.session.rollback()
             current_app.logger.exception('Account registration failed.')
             flash('An error occurred while creating your account. Please try again.', 'danger')
+        else:
+            login_user(user)
+            flash(f'Welcome to {family.name}! Your household has been created.', 'success')
+            return redirect(url_for('onboarding.index'))
 
-    return render_template('auth/register.html', form=form)
+    return render_template('auth/register.html', form=form, invite=invite)
+
+
+def _require_site_admin():
+    if not current_user.is_site_admin:
+        abort(403)
+
+
+@auth_bp.route('/site-admin/household-invites', methods=['GET', 'POST'])
+@login_required
+def household_invites():
+    """Site-admin page for issuing one-time household invite links"""
+    _require_site_admin()
+    form = HouseholdInviteForm()
+    new_link = None
+
+    if form.validate_on_submit():
+        try:
+            _, token = HouseholdInviteService.create_invite({
+                'email': form.email.data,
+                'note': form.note.data,
+                'days': form.days.data,
+            }, created_by_id=current_user.id)
+        except ValueError as error:
+            flash(str(error) or 'Unable to create invite.', 'danger')
+        else:
+            new_link = url_for('auth.register', invite=token, _external=True)
+            form = HouseholdInviteForm(formdata=None)
+
+    return render_template(
+        'auth/household_invites.html',
+        form=form,
+        invites=HouseholdInviteService.list_invites(),
+        new_link=new_link,
+    )
+
+
+@auth_bp.route('/site-admin/household-invites/<int:invite_id>/revoke', methods=['POST'])
+@login_required
+def revoke_household_invite(invite_id):
+    _require_site_admin()
+    try:
+        HouseholdInviteService.revoke_invite(invite_id)
+    except ValueError as error:
+        flash(str(error) or 'Unable to revoke invite.', 'danger')
+    else:
+        flash('Invite revoked.', 'success')
+    return redirect(url_for('auth.household_invites'))
 
 
 @auth_bp.route('/logout', methods=['POST'])

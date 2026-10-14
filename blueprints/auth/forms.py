@@ -3,8 +3,8 @@ Authentication Forms
 CSRF-protected forms for login
 """
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField
-from wtforms.validators import DataRequired, Email, Length, ValidationError
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, HiddenField, IntegerField
+from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional, ValidationError
 from services.platform.auth_service import AuthService
 
 
@@ -23,6 +23,7 @@ class LoginForm(FlaskForm):
 
 class RegisterForm(FlaskForm):
     """Household registration form"""
+    invite_token = HiddenField()
     household_name = StringField('Household Name', validators=[
         DataRequired(message='Household name is required'),
         Length(min=2, max=100, message='Household name must be between 2 and 100 characters')
@@ -47,6 +48,18 @@ class RegisterForm(FlaskForm):
     def validate_confirm_password(self, field):
         if field.data != self.password.data:
             raise ValidationError('Passwords must match')
+
+
+class HouseholdInviteForm(FlaskForm):
+    """Site-admin form for issuing a one-time household invite"""
+    email = StringField('Restrict to email (optional)', filters=[lambda value: value.strip().lower() if value else value],
+                        validators=[Optional(), Email(message='Invalid email address'), Length(max=120)])
+    note = StringField('Note (optional)', validators=[Optional(), Length(max=200)])
+    days = IntegerField('Expires after (days)', default=7, validators=[
+        DataRequired(message='Expiry is required'),
+        NumberRange(min=1, max=30, message='Expiry must be between 1 and 30 days')
+    ])
+    submit = SubmitField('Create invite link')
 
 
 def validate_password_strength(password):

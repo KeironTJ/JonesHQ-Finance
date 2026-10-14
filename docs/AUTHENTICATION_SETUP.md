@@ -72,6 +72,27 @@ See [Deployment setup](../deployment/README.md).
   Remember-me cookies last seven days and are not renewed on every request.
 - Non-static application responses use `Cache-Control: no-store`.
 
+## Household invites (invite-only registration)
+
+New households can only register with a one-time invite link unless
+`ALLOW_OPEN_REGISTRATION=true` is set in the environment (default: off).
+Invites are single-use, expire after 1-30 days (default 7), can be restricted
+to one email address, and can be revoked. Only a SHA-256 hash of each token is
+stored, so the link is shown once when created. A failed registration (weak
+password, existing email) does not consume the invite.
+
+Issue invites as a site admin from the account menu → **Household invites**
+(`/site-admin/household-invites`), or on the server:
+
+```bash
+flask site-admin grant you@example.com          # once, to see the menu item
+flask household-invite create --note "Smiths" --email smiths@example.com --base-url https://your-domain
+flask household-invite list
+flask household-invite revoke <id>
+```
+
+Family member invites (`/family/join/<token>`) are unchanged.
+
 Flask sessions are still signed client-side cookies, not encrypted storage.
 Never store financial records or authentication secrets in them. The configured
 session lifetime is not a server-enforced idle timeout or a revocation mechanism.
@@ -81,7 +102,7 @@ copy of it.
 ## Validation
 
 ```powershell
-venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py
+venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py
 ```
 
 Tests cover rejected and successful logins, lockout expiry, safe redirects,
@@ -106,7 +127,6 @@ correct proxy configuration.
   notices and consent controls where required.
 - Verify backups, restore procedures, monitoring, and dependency maintenance.
 
-Public registration remains available. Registration and invitation validation can
-still reveal that an email is already registered; generic login messages alone
-do not solve signup enumeration. MFA, SMTP, verification, and password recovery
-are not implemented by this foundation update.
+Household registration is invite-only by default. Registration and invitation
+validation can still reveal to an invite holder that an email is already
+registered. MFA, SMTP, verification, and password recovery are not yet implemented.

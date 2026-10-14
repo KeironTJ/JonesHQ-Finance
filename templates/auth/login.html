@@ -55,11 +55,17 @@
                 <p class="text-center mb-1" style="font-size:0.8rem;color:var(--text-muted);">
                     <i class="bi bi-shield-lock me-1"></i> Secure access for authorised users only
                 </p>
+                {% if config.ALLOW_OPEN_REGISTRATION %}
                 <p class="text-center mb-0" style="font-size:0.85rem;">
                     <a href="{{ url_for('auth.register') }}" class="text-decoration-none">
                         <i class="bi bi-house-heart me-1"></i> Create your household
                     </a>
                 </p>
+                {% else %}
+                <p class="text-center mb-0" style="font-size:0.85rem;color:var(--text-muted);">
+                    New households join by invitation.
+                </p>
+                {% endif %}
             </div>
         </div>
 

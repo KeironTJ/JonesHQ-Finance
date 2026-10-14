@@ -17,6 +17,17 @@
             <!-- Form body -->
             <div class="auth-card-body">
 
+                {% if invite_required %}
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-envelope-paper me-1"></i>
+                    New households can join by invitation only.
+                </div>
+                <p class="mb-0" style="font-size:0.9rem;">
+                    If you were sent an invite link, open it exactly as you received it. Invite links
+                    can be used once and expire after a few days. If yours has stopped working, ask the
+                    person who invited you for a new one.
+                </p>
+                {% else %}
                 <form method="POST" action="{{ url_for('auth.register') }}">
                     {{ form.hidden_tag() }}
 
@@ -48,7 +59,8 @@
                     <div class="mb-3">
                         {{ form.email.label(class="form-label fw-semibold") }}
                         {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""),
-                                     placeholder="your.email@example.com") }}
+                                     placeholder="your.email@example.com", autocomplete="email",
+                                     readonly=(invite is not none and invite.email is not none)) }}
                         {% if form.email.errors %}
                             <div class="invalid-feedback">
                                 {% for error in form.email.errors %}{{ error }}{% endfor %}
@@ -81,6 +93,7 @@
 
                     {{ form.submit(class="btn btn-success w-100 btn-lg") }}
                 </form>
+                {% endif %}
 
                 <hr class="my-3">
 

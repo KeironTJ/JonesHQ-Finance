@@ -8,6 +8,7 @@ from extensions import db
 from models.family import Family
 from models.users import User
 from models.tax_settings import TaxSettings
+from services.platform.household_invite_service import HouseholdInviteService
 
 
 _DUMMY_PASSWORD_HASH = generate_password_hash('not-a-user-password')
@@ -59,10 +60,48 @@ class AuthService:
 		return user
 
 	@staticmethod
+	def registration_is_open():
+		return bool(current_app.config.get('ALLOW_OPEN_REGISTRATION'))
+
+	@staticmethod
+	def register_household(data):
+		"""Register a new household, enforcing a one-time invite unless registration is open."""
+		email = (data.get('email') or '').strip().lower()
+		invite = None
+		if not AuthService.registration_is_open():
+			invite = HouseholdInviteService.get_valid_invite(data.get('invite_token'))
+			if invite is None:
+				raise ValueError('This invite link is invalid, has expired or has already been used.')
+			if invite.email and invite.email != email:
+				raise ValueError('This invite was issued for a different email address.')
+
+		valid, error = AuthService.validate_password_strength(data.get('password') or '')
+		if not valid:
+			raise ValueError(error)
+		if User.query.filter_by(email=email).first():
+			raise ValueError('An account with that email already exists. Please log in.')
+
+		if invite is not None:
+			HouseholdInviteService.claim_invite(invite)
+		family, user = AuthService._create_household(
+			data.get('household_name') or '', email, data.get('name') or '', data.get('password') or ''
+		)
+		if invite is not None:
+			invite.used_by_id = user.id
+		db.session.commit()
+		return family, user
+
+	@staticmethod
 	def register_user(household_name, email, name, password):
 		valid, error = AuthService.validate_password_strength(password)
 		if not valid:
 			raise ValueError(error)
+		family, user = AuthService._create_household(household_name, email, name, password)
+		db.session.commit()
+		return family, user
+
+	@staticmethod
+	def _create_household(household_name, email, name, password):
 		family = Family(name=household_name.strip())
 		db.session.add(family)
 		db.session.flush()
@@ -105,5 +144,5 @@ class AuthService:
 		)
 		user.set_password(password)
 		db.session.add(user)
-		db.session.commit()
+		db.session.flush()
 		return family, user

@@ -3,6 +3,7 @@ Family and FamilyInvite models for multi-user support.
 A Family groups users together into a shared data pool.
 FamilyInvites are token-based links that allow new members to join.
 """
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from extensions import db
@@ -76,3 +77,48 @@ class FamilyInvite(db.Model):
 
     def __repr__(self):
         return f'<FamilyInvite {self.token[:8]}… role={self.role}>'
+
+
+class HouseholdInvite(db.Model):
+    """One-time invite allowing a new household to register.
+
+    Only a SHA-256 hash of the token is stored, so database access alone
+    cannot be used to redeem an invite.
+    """
+    __tablename__ = 'household_invites'
+
+    id = db.Column(db.Integer, primary_key=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), nullable=True)
+    note = db.Column(db.String(200), nullable=True)
+
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    used_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+    used_by = db.relationship('User', foreign_keys=[used_by_id])
+
+    @staticmethod
+    def hash_token(token):
+        return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+    @property
+    def status(self):
+        if self.used_at is not None:
+            return 'used'
+        if self.revoked_at is not None:
+            return 'revoked'
+        if datetime.now(timezone.utc).replace(tzinfo=None) > self.expires_at:
+            return 'expired'
+        return 'active'
+
+    @property
+    def is_valid(self):
+        return self.status == 'active'
+
+    def __repr__(self):
+        return f'<HouseholdInvite {self.id} {self.status}>'

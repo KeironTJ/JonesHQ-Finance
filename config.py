@@ -67,6 +67,10 @@ class Config:
     MAX_LOGIN_ATTEMPTS = 5
     LOCKOUT_DURATION = timedelta(minutes=15)
 
+    # New households need a one-time invite unless this is explicitly enabled
+    ALLOW_OPEN_REGISTRATION = os.environ.get('ALLOW_OPEN_REGISTRATION', 'false').strip().lower() in ('1', 'true', 'yes')
+    HOUSEHOLD_INVITE_DAYS = 7
+
 
 class DevelopmentConfig(Config):
     """Development configuration"""

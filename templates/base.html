@@ -215,6 +215,12 @@
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
+                            {% if current_user.is_site_admin %}
+                            <li><a class="dropdown-item" href="{{ url_for('auth.household_invites') }}">
+                                <i class="bi bi-envelope-plus"></i> Household invites
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li>
                                 <form method="POST" action="{{ url_for('auth.logout') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}Household Invites - Family HQ{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-envelope-plus"></i> Household Invites</h1>
+        <span class="badge bg-secondary fs-6">Site admin</span>
+    </div>
+
+    {% if new_link %}
+    <div class="alert alert-success">
+        <h5 class="alert-heading"><i class="bi bi-link-45deg"></i> Invite link created</h5>
+        <p class="mb-2">Copy this link now and send it to the new household. It will not be shown again
+            and can be used once.</p>
+        <div class="input-group">
+            <input type="text" class="form-control font-monospace" id="newInviteLink" value="{{ new_link }}" readonly>
+            <button class="btn btn-outline-secondary" type="button" id="copyInviteLink">
+                <i class="bi bi-clipboard"></i> Copy
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-plus-circle"></i> New invite</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('auth.household_invites') }}" class="row g-3 align-items-end">
+                {{ form.hidden_tag() }}
+                {% for field in [form.email, form.note, form.days] %}
+                <div class="{{ 'col-md-2' if field.name == 'days' else 'col-md-4' }}">
+                    {{ field.label(class="form-label") }}
+                    {{ field(class="form-control" + (" is-invalid" if field.errors else "")) }}
+                    {% for error in field.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+                </div>
+                {% endfor %}
+                <div class="col-md-2">
+                    {{ form.submit(class="btn btn-primary w-100") }}
+                </div>
+            </form>
+            <div class="form-text mt-2">
+                Restricting to an email means only that address can register with the link.
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Invites</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Created</th>
+                        <th>Email</th>
+                        <th>Note</th>
+                        <th>Expires</th>
+                        <th>Status</th>
+                        <th>Used by</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for invite in invites %}
+                    {% set status = invite.status %}
+                    <tr>
+                        <td>{{ invite.created_at.strftime('%d %b %Y %H:%M') }}</td>
+                        <td class="small">{{ invite.email or 'Any' }}</td>
+                        <td class="small">{{ invite.note or '—' }}</td>
+                        <td>{{ invite.expires_at.strftime('%d %b %Y %H:%M') }}</td>
+                        <td>
+                            <span class="badge {{ {'active': 'bg-success', 'used': 'bg-primary', 'revoked': 'bg-danger'}.get(status, 'bg-secondary') }}">
+                                {{ status|capitalize }}
+                            </span>
+                        </td>
+                        <td class="small">{{ invite.used_by.email if invite.used_by else '—' }}</td>
+                        <td class="text-end">
+                            {% if status == 'active' %}
+                            <form method="POST" action="{{ url_for('auth.revoke_household_invite', invite_id=invite.id) }}"
+                                  onsubmit="return confirm('Revoke this invite link?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Revoke</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center text-muted py-3">No invites yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const button = document.getElementById('copyInviteLink');
+    if (!button) return;
+    button.addEventListener('click', function () {
+        const input = document.getElementById('newInviteLink');
+        input.select();
+        navigator.clipboard.writeText(input.value).then(function () {
+            button.innerHTML = '<i class="bi bi-check2"></i> Copied';
+        });
+    });
+});
+</script>
+{% endblock %}

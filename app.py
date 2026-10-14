@@ -289,6 +289,53 @@ def register_commands(app):
         for u in admins:
             click.echo(f'{u.id:<5} {u.name:<25} {u.email:<40} {str(u.is_active):<8}')
 
+    @app.cli.group('household-invite')
+    def household_invite():
+        """Manage one-time invites for new households."""
+        pass
+
+    @household_invite.command('create')
+    @click.option('--email', default='', help='Only allow this email address to register.')
+    @click.option('--note', default='', help='Reminder of who the invite is for.')
+    @click.option('--days', default=7, show_default=True, help='Days until the link expires (1-30).')
+    @click.option('--base-url', default='', help='Public site address, e.g. https://finance.example.com')
+    def create_household_invite(email, note, days, base_url):
+        """Create a one-time household invite link."""
+        from services.platform.household_invite_service import HouseholdInviteService
+        try:
+            invite, token = HouseholdInviteService.create_invite({'email': email, 'note': note, 'days': days})
+        except ValueError as error:
+            click.echo(f'ERROR: {error}', err=True)
+            raise SystemExit(1)
+        click.echo(f'Invite {invite.id} created, expires {invite.expires_at:%d %b %Y %H:%M} UTC.')
+        click.echo('Send this link (shown once only):')
+        click.echo(f'{base_url.rstrip("/")}/register?invite={token}')
+
+    @household_invite.command('list')
+    def list_household_invites():
+        """List household invites."""
+        from services.platform.household_invite_service import HouseholdInviteService
+        invites = HouseholdInviteService.list_invites()
+        if not invites:
+            click.echo('No household invites found.')
+            return
+        click.echo(f'{"ID":<5} {"Status":<9} {"Email":<35} {"Expires":<18} Note')
+        for invite in invites:
+            click.echo(f'{invite.id:<5} {invite.status:<9} {(invite.email or "Any"):<35} '
+                       f'{invite.expires_at:%d %b %Y %H:%M}  {invite.note or ""}')
+
+    @household_invite.command('revoke')
+    @click.argument('invite_id', type=int)
+    def revoke_household_invite(invite_id):
+        """Revoke an active household invite by ID."""
+        from services.platform.household_invite_service import HouseholdInviteService
+        try:
+            HouseholdInviteService.revoke_invite(invite_id)
+        except ValueError as error:
+            click.echo(f'ERROR: {error}', err=True)
+            raise SystemExit(1)
+        click.echo(f'Invite {invite_id} revoked.')
+
 
 if __name__ == '__main__':
     app = create_app()

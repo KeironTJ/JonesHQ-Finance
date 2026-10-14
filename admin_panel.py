@@ -171,7 +171,7 @@ def init_admin(app, db):
 
     # ---- Import all models ------------------------------------------------
     from models.users import User
-    from models.family import Family, FamilyInvite
+    from models.family import Family, FamilyInvite, HouseholdInvite
     from models.accounts import Account
     from models.balances import Balance
     from models.budgets import Budget
@@ -207,6 +207,7 @@ def init_admin(app, db):
     admin.add_view(UserAdminView(User, db.session, name='Users', category='Core'))
     admin.add_view(FamilyAdminView(Family, db.session, name='Families', category='Core'))
     admin.add_view(SecureModelView(FamilyInvite, db.session, name='Invites', category='Core'))
+    admin.add_view(ReadOnlyModelView(HouseholdInvite, db.session, name='Household Invites', category='Core'))
 
     # Accounts & Transactions
     admin.add_view(AccountAdminView(Account, db.session, name='Accounts', category='Accounts'))

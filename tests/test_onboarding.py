@@ -107,11 +107,14 @@ def test_household_onboarding_can_be_paused_and_resumed(app, family, user):
 
 def test_registration_redirects_new_household_to_onboarding(app):
     from flask import g
+    from services.platform.household_invite_service import HouseholdInviteService
 
     g.pop('_login_user', None)
     client = app.test_client()
+    _, token = HouseholdInviteService.create_invite({})
 
     response = client.post('/register', data={
+        'invite_token': token,
         'household_name': 'New Household',
         'name': 'New Admin',
         'email': 'new-admin@example.com',
