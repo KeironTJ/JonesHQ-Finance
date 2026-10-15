@@ -211,6 +211,13 @@ valid when loading the environment file in Bash.
 
 ## Validation
 
+Werkzeug is pinned to 3.1.9, replacing 3.0.1, which was affected by the
+development-debugger advisory
+[CVE-2024-34069](https://github.com/pallets/werkzeug/security/advisories/GHSA-2g68-c3qc-8985).
+Install the updated requirements in each environment; changing the pin alone
+does not update a running server. Never expose the development debugger in
+production. This targeted upgrade is not a complete dependency security audit.
+
 ```powershell
 venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_user_sessions.py tests\test_account_security.py tests\test_account_email.py
 ```
