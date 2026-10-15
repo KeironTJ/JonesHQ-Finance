@@ -3,9 +3,6 @@
    Light / Dark mode via [data-theme="dark"] on <html>
    ============================================================ */
 
-/* ── Google Font (Inter) ─────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 /* ── Design Tokens — Light (default) ────────────────────── */
 :root {
   /* Backgrounds */
@@ -72,7 +69,7 @@
   --t-slow:  0.35s ease;
 
   /* Typography */
-  --font:     'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font:     system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 }
 
@@ -2654,4 +2651,3 @@ tr.editing-highlight {
   margin-bottom: 1.75rem;
   font-size: 0.95rem;
 }
-

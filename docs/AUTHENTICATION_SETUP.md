@@ -232,8 +232,12 @@ correct proxy configuration.
 - Choose managed identity, self-hosted identity, or continued local authentication.
 - Add passkeys as an alternative to authenticator-app codes.
 - Review household isolation, exports, administrative access, and member removal.
-- Inventory browser storage and external assets; provide accurate privacy/storage
-  notices and consent controls where required.
+- The public `/cookies` notice describes application cookies, local-storage
+  preferences and account email delivery. Main-app Bootstrap, icons and Chart.js
+  assets are bundled locally with upstream licenses under `static/vendor/`;
+  system fonts replace Google Fonts. Flask-Admin uses its package's local assets.
+  Maintain this inventory when adding features. A full operator privacy policy
+  and any consent requirements still need review before wider registration.
 - Verify backups, restore procedures, monitoring, and dependency maintenance.
 
 Household registration is invite-only by default. Registration and invitation

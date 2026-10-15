@@ -33,6 +33,11 @@ def _login_account_key():
     return sha256(email.encode('utf-8')).hexdigest()
 
 
+@auth_bp.route('/cookies')
+def storage_notice():
+    return render_template('auth/storage_notice.html')
+
+
 def _safe_next_page():
     target = request.args.get('next', '')
     decoded = unquote(target)

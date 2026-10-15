@@ -399,7 +399,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
 <script>
 const chartPayload = {{ chart_payload | safe }};
 const ctx = document.getElementById('vendorSpendChart');

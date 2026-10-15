@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}Cookies and browser storage - Family HQ{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-lg-9">
+        <h1 class="h3">Cookies and browser storage</h1>
+        <p>Family HQ uses cookies to support sign-in and protect forms, and browser storage
+            to remember display preferences. No advertising or analytics trackers are
+            included in the application.</p>
+
+        <h2 class="h5 mt-4">Sign-in and security cookies</h2>
+        <div class="table-responsive">
+            <table class="table">
+                <thead><tr><th scope="col">Cookie</th><th scope="col">Purpose</th><th scope="col">Lifetime</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <th scope="row"><code>session</code></th>
+                        <td>Signed session state, including sign-in, form protection, security
+                            challenges, temporary reset-link tokens and on-screen messages.
+                            Signed does not mean encrypted.</td>
+                        <td>A browser-session cookie by default. Server-side login limits
+                            also apply independently.</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><code>remember_token</code></th>
+                        <td>Keeps you signed in when you choose Remember Me.</td>
+                        <td>Up to {{ config.REMEMBER_COOKIE_DURATION.days }} days by default,
+                            unless the session expires or is revoked earlier.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p>In production, these cookies are Secure (HTTPS only), HttpOnly (not accessible
+            to page scripts) and SameSite=Lax. Ordinary sign-ins have an idle limit of
+            {{ config.SESSION_IDLE_MINUTES }} minutes and an absolute limit of
+            {{ config.SESSION_ABSOLUTE_HOURS }} hours. Remember Me sessions have a separate
+            maximum lifetime. You can revoke signed-in devices from Account security.</p>
+
+        <h2 class="h5 mt-4">Display preferences stored in your browser</h2>
+        <ul>
+            <li><code>jhq-theme</code>: your light, dark or automatic theme preference.</li>
+            <li><code>categories.openSections</code> and <code>vendors.openSections</code>:
+                identifiers for expanded sections on those pages.</li>
+        </ul>
+        <p>These local-storage preferences have no automatic expiry and remain after
+            signing out. They are browser-specific, not account-specific. Clear this
+            site's data in your browser settings to remove them. Clearing cookies will
+            also sign this browser out. Blocking cookies prevents normal sign-in and
+            form protection; your browser may restore session cookies when restoring tabs.</p>
+
+        <h2 class="h5 mt-4">External services and account emails</h2>
+        <p>The application serves its styles, scripts, icons and chart library locally
+            and uses your device's system fonts. It does not need Google Fonts or a
+            public asset CDN for these resources.</p>
+        <p>When outgoing email is configured, the configured email provider processes
+            recipient addresses and account messages such as confirmation links,
+            password resets and security alerts. Security alerts may include the time,
+            IP address and browser description. This is server-side email delivery,
+            not a browser tracking cookie.</p>
+        <p class="text-muted">This notice describes the application's cookies and browser
+            storage. It is not a complete privacy policy for financial records,
+            operational logs, backups, or services added by the site operator.</p>
+    </div>
+</div>
+{% endblock %}
