@@ -123,10 +123,13 @@ class SecurityEventService:
 			current_app.logger.exception('Failed to send security alert %s', event_type)
 
 	@staticmethod
-	def _prune():
+	def _prune(dry_run=False, now=None):
 		days = current_app.config.get('SECURITY_EVENT_RETENTION_DAYS', 365)
-		SecurityEvent.query.filter(SecurityEvent.created_at < _now() - timedelta(days=days)).delete(
-			synchronize_session=False)
+		if not isinstance(days, int) or isinstance(days, bool) or days < 1:
+			raise ValueError('SECURITY_EVENT_RETENTION_DAYS must be a positive integer.')
+		query = SecurityEvent.query.filter(
+			SecurityEvent.created_at < (now or _now()) - timedelta(days=days))
+		return query.count() if dry_run else query.delete(synchronize_session=False)
 
 	@staticmethod
 	def recent_for_user(user, limit=20):

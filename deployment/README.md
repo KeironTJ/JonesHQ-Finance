@@ -151,6 +151,63 @@ environment loading shown above, then confirm the message arrived. Health probes
 do not send emails or contact SMTP. Configure future outage notifications on
 another machine and use a channel independent of the app's SMTP provider.
 
+## Daily retention cleanup
+
+The server-only `flask maintenance cleanup` command deletes:
+
+- security events strictly older than `SECURITY_EVENT_RETENTION_DAYS` (365 days);
+- session records whose absolute expiry or revocation is strictly more than
+  30 days ago. Idle expiry alone is not used for deletion.
+
+It operates across all households, including inactive users, without depending
+on anyone signing in again. Financial records, users, invites and recovery codes
+are untouched. Both tables are cleaned in one transaction; database failures
+roll back the transaction and exit non-zero. `--dry-run` counts matching records
+without deleting or committing. Concurrent activity can change counts between
+preview and execution.
+
+After deploying the code, preview as root inside the LXC:
+
+```bash
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && set -a && . ./.env.production && venv/bin/flask maintenance cleanup --dry-run'
+```
+
+Review the counts before enabling deletion. Install the units once (the update
+script does **not** enable them automatically):
+
+```bash
+cd /home/joneshq/joneshq-finance
+sudo cp deployment/joneshq-maintenance.service deployment/joneshq-maintenance.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start joneshq-maintenance.service
+sudo journalctl -u joneshq-maintenance.service -n 50 --no-pager
+sudo systemctl enable --now joneshq-maintenance.timer
+sudo systemctl list-timers --all joneshq-maintenance.timer --no-pager
+```
+
+Starting the service above performs a real cleanup. The timer runs daily at
+03:15 UTC with up to 15 minutes of randomized delay. `Persistent=true` schedules
+a catch-up when the timer is activated after missing a run. The one-shot service
+does not run in a Gunicorn worker, loads `.env.production`, runs as `joneshq`, and
+forces production configuration. It requires a valid production configuration
+and access to the database; it does not send mail or need to probe Redis.
+Paths match the supplied SQLite LXC layout; adapt them if your installation differs.
+
+After later changes to the unit files, copy them again, run `daemon-reload` and
+restart the timer. To pause scheduled deletion:
+
+```bash
+sudo systemctl disable --now joneshq-maintenance.timer
+```
+
+Verify runs periodically with `journalctl -u joneshq-maintenance.service`.
+`RETENTION_CLEANUP_COMPLETED` records counts, while `RETENTION_CLEANUP_FAILED`
+marks errors. A successful one-shot service normally becomes inactive afterwards;
+check the exit result/journal, not whether it remains running. There are no
+automatic failure notifications yet. Existing sign-in-triggered cleanup remains
+as a fallback. Removing rows from the live database does not erase retained backup
+copies or operational log files, and does not necessarily shrink the SQLite file.
+
 ## Files
 
 - **nginx.conf** - Nginx reverse proxy configuration
@@ -161,6 +218,7 @@ another machine and use a channel independent of the app's SMTP provider.
 - **setup_redis.sh** - One-time Redis setup for login rate limiting
 - **check_production_config.py** - Verifies `.env.production` and Redis before restarts
 - **backup.sh** - Database backup script
+- **joneshq-maintenance.service / .timer** - Optional daily security-log/session retention job
 
 ## Quick Start
 

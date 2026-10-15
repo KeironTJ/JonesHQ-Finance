@@ -68,12 +68,19 @@ class UserSessionService:
 			reauthenticated_at=now,
 		)
 		db.session.add(record)
-		UserSession.query.filter(
-			UserSession.user_id == user.id,
-			(UserSession.expires_at < now - PRUNE_AFTER) | (UserSession.revoked_at < now - PRUNE_AFTER),
-		).delete(synchronize_session=False)
+		UserSessionService.prune(user=user, now=now)
 		db.session.commit()
 		return record, token
+
+	@staticmethod
+	def prune(user=None, dry_run=False, now=None):
+		"""Prune expired/revoked records without committing; no user means all users (CLI maintenance)."""
+		cutoff = (now or _now()) - PRUNE_AFTER
+		query = UserSession.query.filter(
+			(UserSession.expires_at < cutoff) | (UserSession.revoked_at < cutoff))
+		if user is not None:
+			query = query.filter(UserSession.user_id == user.id)
+		return query.count() if dry_run else query.delete(synchronize_session=False)
 
 	@staticmethod
 	def start(user, remember=False, method='password'):

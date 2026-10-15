@@ -1,0 +1,22 @@
+[Unit]
+Description=JonesHQ Finance security event and session retention cleanup
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=joneshq
+Group=joneshq
+WorkingDirectory=/home/joneshq/joneshq-finance
+EnvironmentFile=/home/joneshq/joneshq-finance/.env.production
+Environment="FLASK_ENV=production"
+ExecStart=/home/joneshq/joneshq-finance/venv/bin/flask --app app maintenance cleanup
+TimeoutStartSec=300
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/joneshq/joneshq-finance/instance /home/joneshq/joneshq-finance/logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=joneshq-maintenance

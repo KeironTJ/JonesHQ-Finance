@@ -176,6 +176,8 @@ once when it is deployed.
 - **Account security → Recent security activity** shows a user their last 20 events.
   Site admins can search all events under **Admin → Core → Security events**.
 - Events older than `SECURITY_EVENT_RETENTION_DAYS` (365) are deleted when anyone signs in.
+  Enable the optional daily systemd retention timer to clean up even without sign-ins
+  (see [deployment setup](../deployment/README.md#daily-retention-cleanup)).
 
 ## Email: password reset, confirmation and security alerts
 
@@ -247,8 +249,12 @@ are not exported automatically. No downloaded files are retained by the app.
 Member removal is not account erasure: it clears household membership and revokes
 sessions, leaving the account and financial records in place. Private records
 keep their owner. There is not yet a designed self-service account/household
-deletion flow. Security-event cleanup is sign-in-triggered (365 days by default);
-old session cleanup runs when that user creates a session, not on a schedule.
+deletion flow. Security-event cleanup runs on sign-in (365 days by default);
+old session cleanup runs when that user creates a session. The server command
+`flask maintenance cleanup` also cleans both across all households, with
+`--dry-run` for preview. It retains sessions until more than 30 days after absolute
+expiry or revocation, not merely idle expiry. The optional daily systemd timer
+must be installed and enabled separately; it is not activated by deployment.
 Backup retention and operator privacy/deletion policies remain separate.
 
 ## Validation

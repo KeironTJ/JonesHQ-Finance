@@ -268,6 +268,29 @@ def register_error_handlers(app):
 def register_commands(app):
     """Register Flask CLI commands."""
 
+    @app.cli.group('maintenance')
+    def maintenance_cli():
+        """Server-only retention maintenance."""
+        pass
+
+    @maintenance_cli.command('cleanup')
+    @click.option('--dry-run', is_flag=True, help='Count eligible records without deleting them.')
+    def cleanup_retained_records(dry_run):
+        """Remove security events and expired/revoked sessions beyond retention."""
+        from sqlalchemy.exc import SQLAlchemyError
+        from services.platform.retention_service import RetentionService
+        try:
+            counts = RetentionService.cleanup(dry_run=dry_run)
+        except ValueError as error:
+            raise click.ClickException(str(error)) from error
+        except SQLAlchemyError as error:
+            raise click.ClickException(
+                'Retention cleanup failed; no changes were committed. Check database availability and logs.'
+            ) from error
+        click.echo('Preview only; no records deleted.' if dry_run else 'Retention cleanup completed.')
+        for name, count in counts.items():
+            click.echo(f'{name}: {count}')
+
     @app.cli.command('health')
     def health_check():
         """Check database and rate-limit storage without exposing settings."""
