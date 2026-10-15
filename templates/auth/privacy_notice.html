@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}Privacy notice - Family HQ{% endblock %}
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-lg-9">
+        <h1 class="h3">Privacy notice</h1>
+        <p class="text-muted">Last updated: 15 October 2026</p>
+
+        <h2 class="h5 mt-4">Who operates this service</h2>
+        <p>Family HQ is operated by Keiron Jones, the controller responsible for personal
+            data processed to run this service. The application server is hosted in the
+            United Kingdom. The service is intended for public use, with new-household
+            registration currently controlled by invitations.</p>
+        <p>For privacy questions, corrections or requests, email
+            <a href="mailto:keirontj@gmail.com">keirontj@gmail.com</a>.
+            Do not email passwords, authenticator secrets, recovery codes or full financial
+            exports. We may need to verify your identity before acting on a request.</p>
+
+        <h2 class="h5 mt-4">What information is processed and where it comes from</h2>
+        <ul>
+            <li><strong>Accounts and households:</strong> names, email addresses, household
+                membership, display names, roles, section permissions and invitations.</li>
+            <li><strong>Financial and household records:</strong> information you or other
+                household members enter or import, such as accounts, transactions,
+                balances, income, expenses, loans, credit cards, pensions, property,
+                mortgages, vehicles, mileage, budgets and plans. Childcare features can
+                include children's names, school year groups, activities, dates and costs.
+                Descriptions and free text may identify other people.</li>
+            <li><strong>Authentication and security:</strong> password hashes, two-factor
+                configuration, hashed recovery codes and session tokens, sign-in and
+                security events, IP addresses, browser descriptions and timestamps.</li>
+            <li><strong>Technical and support information:</strong> requests handled by the
+                server/proxy, operational errors, rate-limit information, support emails
+                and information you choose to send when asking for help.</li>
+        </ul>
+        <p>Household administrators and other members may supply information about you,
+            even if you do not have a login account. Only enter information you are
+            authorised to share and need for household finance management. Avoid
+            unnecessary sensitive details, bank-login credentials and full payment-card
+            numbers in descriptions or support messages.</p>
+
+        <h2 class="h5 mt-4">Why information is used</h2>
+        <p>Account and financial information is used to provide the service you request:
+            manage household access, store and display records, calculate summaries and
+            projections, and support exports and account management. The operator relies
+            on performance of the service agreement for processing necessary to provide
+            those features to account holders.</p>
+        <p>The operator relies on legitimate interests in keeping the service secure and
+            reliable for sign-in protection, abuse prevention, security investigations,
+            troubleshooting and operational backups. Records may also concern people
+            who are not account holders; the operator must assess the appropriate basis
+            for that processing rather than treating another member's entry as their consent.
+            You can object to processing based on legitimate interests using the contact above.</p>
+        <p>Providing account details is necessary to create and secure a login. Financial
+            features depend on the records supplied. We do not use a consent checkbox as
+            the basis for these core activities. The app does not include advertising or
+            analytics trackers. Its financial projections are informational, not automated
+            lending or eligibility decisions.</p>
+
+        <h2 class="h5 mt-4">Who can access information</h2>
+        <ul>
+            <li><strong>Household members:</strong> shared records are visible according to
+                their section permissions. Records marked private are normally visible
+                only to their owner through the ordinary application and export views.
+                Children of a private record inherit its visibility where supported.</li>
+            <li><strong>Shared bank history:</strong> marking an income, expense, loan or
+                card private does not hide a linked transaction on a shared bank account.
+                Shared amounts, names and descriptions can still reveal personal details.</li>
+            <li><strong>Household administrators:</strong> manage membership and permissions.
+                They do not gain ordinary viewing/export access to another member's private
+                records, but one active administrator can delete the entire household,
+                including everyone's private records, without other members' approval.</li>
+            <li><strong>Operator and site administrators:</strong> server/database access and
+                site-level administration can access records across households, including
+                private records. Private visibility is not encryption that hides data from
+                the operator.</li>
+            <li><strong>Service providers:</strong> Resend handles outgoing account email;
+                the operator's email service handles support/privacy correspondence.
+                Providers process the information needed for those communications.</li>
+        </ul>
+        <p>Keep downloaded exports secure. The app cannot recall copies downloaded or
+            shared by you or another household member.</p>
+
+        <h2 class="h5 mt-4">Emails and processing outside the UK</h2>
+        <p>Account confirmation, password resets and security alerts are sent through
+            Resend. It processes recipient addresses and message contents, including
+            time-limited account links. Security alerts may contain an IP address,
+            time and browser description. These account messages are not financial exports.</p>
+        <p>UK application hosting does not mean all processing stays in the UK. Email
+            delivery, support email and provider subprocessors may involve other countries.
+            Applicable processing locations and international-transfer safeguards are
+            not documented in this notice. Contact the operator for
+            current details before relying on UK-only processing.</p>
+
+        <h2 class="h5 mt-4">How long information is kept</h2>
+        <ul>
+            <li><strong>Accounts and financial records:</strong> there is no automatic
+                inactivity-based deletion. Records remain until removed through the app
+                or dealt with following a request. Removing a member from a household
+                is not account or record erasure.</li>
+            <li><strong>Security events:</strong> events older than
+                {{ config.SECURITY_EVENT_RETENTION_DAYS }} days are eligible for cleanup.
+                Cleanup runs on sign-in and through scheduled server maintenance; this is
+                not a guarantee of deletion at an exact time.</li>
+            <li><strong>Session records:</strong> eligible for cleanup more than 30 days
+                after absolute expiry or revocation. Idle sign-out alone does not immediately
+                remove the record. Individual account deletion removes its session records.</li>
+            <li><strong>Backups and operational logs:</strong> no fixed retention period is
+                currently set. Deleted data may remain in backups and operational logs;
+                an immediate purge or a specific final-erasure date cannot be promised.</li>
+            <li><strong>Email and correspondence:</strong> provider-held messages and
+                support/privacy correspondence are outside app deletion. Their retention
+                periods are not specified here; contact the operator for details.</li>
+        </ul>
+
+        <h2 class="h5 mt-4">Exports and deletion: important differences</h2>
+        <p><strong>Download your data</strong> in Account security exports your profile
+            and supported financial fields visible to you. It is not a complete copy of
+            every record about you, a full-household export or a restorable backup.
+            Other members' private records, security logs and some supporting metadata
+            are excluded. Contact the operator if you need a wider personal-data response.</p>
+        <p><strong>Delete your account</strong> removes your login, sessions, recovery codes
+            and privately owned financial domains and their children, including owned
+            records in former households. Shared history remains, with links to deleted
+            records detached. Names and free text are not anonymised. Prior security events
+            remain under normal retention without the user-account link and may still
+            identify you through details such as IP addresses. The last household
+            administrator must appoint another active administrator first; site
+            administrators must have their site role revoked before self-deletion.</p>
+        <p><strong>Delete this household</strong> in Family Management removes all of that
+            household's shared and private records, including records owned by former
+            members. Current members retain their login accounts, passwords and two-factor
+            settings, but membership/permissions are cleared and all their sessions are
+            revoked. Retained security events lose their household link, not their user
+            link. Members can sign back in and use a fresh invite to join another household.</p>
+        <p>Neither deletion option erases backups, operational logs, email-provider copies
+            or previously downloaded files. Browser display preferences also remain
+            until cleared in the browser.</p>
+
+        <h2 class="h5 mt-4">Your choices and rights</h2>
+        <p>You can edit supported records, change visibility where available, revoke devices,
+            export data and review deletion from the app. You may also contact the operator
+            to request access, correction, erasure, restriction or portability of personal
+            data, or to object to processing based on legitimate interests. Rights depend
+            on the circumstances and applicable law; in-app export/deletion is not the
+            only way to make a request. We aim to respond within the applicable legal
+            timeframe, normally one month, and explain any lawful extension or refusal.</p>
+        <p>You can complain to the UK's
+            <a href="https://ico.org.uk/make-a-complaint/" rel="noreferrer">Information Commissioner's Office (ICO)</a>.
+            You can contact us first, but do not have to do so.</p>
+
+        <h2 class="h5 mt-4">Cookies, security and changes</h2>
+        <p>See <a href="{{ url_for('auth.storage_notice') }}">Cookies and browser storage</a>
+            for sign-in cookies, session limits and display preferences. Password hashing,
+            HTTPS cookie settings, access controls and session revocation help protect
+            information, but cannot eliminate every security risk.</p>
+        <p>This notice describes the current service and operator choices. The update date
+            will change when the notice is revised. Outstanding provider-transfer and
+            retention arrangements described above still need operator review; this notice
+            is not a claim that those arrangements have been verified.</p>
+    </div>
+</div>
+{% endblock %}

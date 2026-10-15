@@ -91,6 +91,8 @@
                         {% endif %}
                     </div>
 
+                    <p class="small">Read the <a href="{{ url_for('auth.privacy_notice') }}">privacy notice</a>
+                        before creating your household, including who can access records and deletion limitations.</p>
                     {{ form.submit(class="btn btn-success w-100 btn-lg") }}
                 </form>
                 {% endif %}

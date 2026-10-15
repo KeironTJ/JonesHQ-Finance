@@ -39,6 +39,11 @@ def storage_notice():
     return render_template('auth/storage_notice.html')
 
 
+@auth_bp.route('/privacy')
+def privacy_notice():
+    return render_template('auth/privacy_notice.html')
+
+
 @auth_bp.route('/healthz')
 @limiter.exempt
 def health():

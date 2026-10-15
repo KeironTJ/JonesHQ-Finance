@@ -160,7 +160,7 @@ def create_app(config_name=None):
 
     # Site admins must have two-factor login before using the app
     _two_factor_exempt_endpoints = {
-        'auth.storage_notice',
+        'auth.storage_notice', 'auth.privacy_notice',
         'static', 'auth.logout', 'auth.account_security', 'auth.two_factor_setup',
         'auth.revoke_session', 'auth.revoke_other_sessions', 'auth.reauthenticate',
         'auth.verify_email', 'auth.resend_verification', 'auth.reset_password', 'auth.reset_password_token',

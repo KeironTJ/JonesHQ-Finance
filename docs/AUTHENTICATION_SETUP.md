@@ -211,6 +211,31 @@ valid when loading the environment file in Bash.
   run `flask users reset-link user@example.com` and pass the link on privately.
   It lasts `ADMIN_PASSWORD_RESET_HOURS` (24) and also works once.
 
+## Public privacy notice
+
+`/privacy` is public, linked in the shared footer, storage notice, household
+registration and family-join form. It remains accessible before mandatory
+site-admin two-factor setup. It describes operator access (not just household
+visibility), exports, individual/household deletion, retained history and security
+events, email processing, rights/contact and retention limitations.
+
+The published operator details are Keiron Jones, `keirontj@gmail.com`, UK
+application hosting, public-service audience with invitation-controlled signup,
+and Resend for outgoing email. The operator selected service delivery as the basis
+for necessary account-holder features and legitimate interests for security,
+abuse prevention and operational backups. These are operator policy statements,
+not a legal-compliance certification. Review the basis for records about
+non-account-holders, especially children, before broader public use.
+
+No fixed backup/operational-log retention has been confirmed. The notice says so
+explicitly; provider/support-email retention and international processing
+locations/safeguards are not specified. The operator must verify provider
+arrangements and set appropriate retention rather than treating publication
+as resolving those issues. Do not promise UK-only processing simply because the
+application server is in the UK. Update the template/date when operator details,
+providers, retention, purposes or behaviour change. Security-event retention is
+rendered from configuration. No consent checkbox, tracking or migration is added.
+
 ## User-visible data export and lifecycle limitations
 
 **Account security → Download JSON export** returns the signed-in user's profile

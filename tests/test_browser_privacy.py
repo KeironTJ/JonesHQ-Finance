@@ -56,7 +56,56 @@ def test_notice_accessible_before_required_two_factor_setup(app, user):
     client = app.test_client()
     login_client(client, user.id)
     assert client.get('/cookies').status_code == 200
+    assert client.get('/privacy').status_code == 200
     g.pop('_login_user', None)
+
+
+def test_privacy_notice_public_complete_and_serves_local_assets(app):
+    g.pop('_login_user', None)
+    client = app.test_client()
+    response = client.get('/privacy')
+    assert response.status_code == 200
+    assert response.mimetype == 'text/html'
+    body = b' '.join(response.data.split())
+    for content in (
+        b'Keiron Jones', b'United Kingdom', b'mailto:keirontj@gmail.com',
+        b'Resend', b'legitimate interests', b'performance of the service agreement',
+        b"including everyone's private records", b'not encryption', b'no fixed retention period',
+        b'Names and free text are not anonymised', b'former households',
+        b'Current members retain their login accounts', b'international-transfer',
+        b'Information Commissioner', b'href="/cookies"',
+    ):
+        assert content in body
+    assert_local_assets(client, response.get_data(as_text=True))
+
+
+@pytest.mark.parametrize('path', ['/login', '/register', '/cookies'])
+def test_privacy_notice_linked_on_public_pages(app, path):
+    g.pop('_login_user', None)
+    response = app.test_client().get(path)
+    assert response.status_code == 200
+    assert b'href="/privacy"' in response.data
+
+
+def test_privacy_notice_linked_before_family_join(app, user, family):
+    from models import FamilyInvite
+
+    invite = FamilyInvite(family_id=family.id, created_by_id=user.id, member_name='Invitee')
+    db.session.add(invite)
+    db.session.commit()
+    g.pop('_login_user', None)
+    response = app.test_client().get(f'/family/join/{invite.token}')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert body.index('href="/privacy"') < body.index('Create Account &amp; Join')
+
+
+def test_privacy_notice_renders_configured_security_retention(app, monkeypatch):
+    monkeypatch.setitem(app.config, 'SECURITY_EVENT_RETENTION_DAYS', 42)
+    g.pop('_login_user', None)
+    response = app.test_client().get('/privacy')
+    assert b'42 days are eligible for cleanup' in response.data
+    assert b'365 days' not in response.data
 
 
 @pytest.mark.parametrize('path', [
