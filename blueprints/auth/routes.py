@@ -3,9 +3,10 @@ Authentication Routes
 Login, logout, and user management with security features
 """
 from hashlib import sha256
+import json
 import time
 
-from flask import abort, render_template, redirect, url_for, flash, request, current_app, session, jsonify
+from flask import abort, render_template, redirect, url_for, flash, request, current_app, session, jsonify, Response
 from flask_login import logout_user, current_user, login_required
 from flask_limiter.util import get_remote_address
 from urllib.parse import unquote, urlsplit
@@ -174,6 +175,30 @@ def _current_user_key():
     if current_user.is_authenticated:
         return f"user:{current_user.get_id().split(':', 1)[0]}"
     return f"ip:{get_remote_address()}"
+
+
+@auth_bp.route('/account/security/export', methods=['POST'])
+@login_required
+@recent_auth_required
+@limiter.limit("2 per hour", key_func=_current_user_key)
+def export_data():
+    from services.platform.data_export_service import DataExportService
+    try:
+        payload = DataExportService.create(current_user)
+        body = json.dumps(payload, ensure_ascii=True, indent=2)
+    except ValueError as error:
+        flash(str(error) or 'Unable to export your data.', 'danger')
+        return redirect(url_for('auth.account_security'))
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Data export failed.')
+        flash('Unable to export your data. Please try again.', 'danger')
+        return redirect(url_for('auth.account_security'))
+    SecurityEventService.record('data_exported', details='user-visible source data')
+    return Response(body, mimetype='application/json', headers={
+        'Content-Disposition': 'attachment; filename="family-hq-export.json"',
+        'Cache-Control': 'no-store',
+    })
 
 
 @auth_bp.route('/account/confirm', methods=['GET', 'POST'])

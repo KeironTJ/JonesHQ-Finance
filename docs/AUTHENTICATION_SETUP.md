@@ -209,6 +209,48 @@ valid when loading the environment file in Bash.
   run `flask users reset-link user@example.com` and pass the link on privately.
   It lasts `ADMIN_PASSWORD_RESET_HOURS` (24) and also works once.
 
+## User-visible data export and lifecycle limitations
+
+**Account security → Download JSON export** returns the signed-in user's profile
+and explicitly allowlisted financial fields from supported sections. It uses
+family-scoped queries and record visibility; household and site admins do not
+gain access to other members' private records through this download. Shared
+accounts still include their visible transactions, regardless of privacy on a
+linked income or other source record.
+
+The POST requires CSRF protection and a recent password confirmation, is limited
+to two downloads per hour per user, and records a `data_exported` security event.
+The response is an attachment with `Cache-Control: no-store`. Downloads contain
+sensitive personal and financial information: keep them secure after saving.
+
+The version-1 JSON format includes `exported_at`, `profile`, `sections`, `data`,
+`excluded` and `notes`. Data tables are keyed by their database table names, with
+IDs for cross-references. Decimal amounts are strings and dates use ISO 8601.
+Linked rows may be absent when the user lacks access. It is not a restorable
+database backup or a guaranteed point-in-time snapshot; avoid concurrent edits
+while downloading.
+
+Supported source data covers accounts and balances, transactions/subscriptions/
+planned transactions, categories/budgets, vendors/types, credit cards and
+promotions/transactions, loans/payments/term changes, income and recurring income,
+pensions/snapshots, properties/mortgages and their snapshots/payments,
+vehicles/fuel/trips, expenses, childcare and plans/items. Sections not granted to
+the user are omitted altogether.
+
+Explicit exclusions include other users' profiles, credentials, two-factor
+secrets, recovery codes, sessions, invites, security events, server configuration,
+settings, logs and backups. Cached totals, net-worth snapshots, monthly summaries
+and reimbursement/calendar metadata are also excluded. The service's explicit
+field list must be reviewed when adding models or fields; new database columns
+are not exported automatically. No downloaded files are retained by the app.
+
+Member removal is not account erasure: it clears household membership and revokes
+sessions, leaving the account and financial records in place. Private records
+keep their owner. There is not yet a designed self-service account/household
+deletion flow. Security-event cleanup is sign-in-triggered (365 days by default);
+old session cleanup runs when that user creates a session, not on a schedule.
+Backup retention and operator privacy/deletion policies remain separate.
+
 ## Validation
 
 Werkzeug is pinned to 3.1.9, replacing 3.0.1, which was affected by the

@@ -34,6 +34,7 @@ EVENT_LABELS = {
 	'password_reset': 'Password reset with a reset link',
 	'password_reset_link_created': 'Password reset link created by the server admin',
 	'email_verified': 'Email address verified',
+	'data_exported': 'Downloaded a data export',
 }
 
 # Events that also send the user an email, with the alert subject.
