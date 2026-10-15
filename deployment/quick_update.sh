@@ -68,6 +68,12 @@ fi
 
 PREV_COMMIT=$(sudo -u $APP_USER bash -c "cd $APP_DIR && git rev-parse HEAD")
 
+# This updater's backup selection and restore path are SQLite-specific.
+if ! sudo -u $APP_USER bash -c "cd $APP_DIR && venv/bin/python deployment/rehearse_update_guard.py"; then
+    echo "ERROR: Update stopped before pulling code. PostgreSQL backup/restore cutover is not ready."
+    exit 1
+fi
+
 echo "Step 1: Pulling latest changes from origin/main..."
 sudo -u $APP_USER bash -c "cd $APP_DIR && git pull origin main"
 

@@ -1,6 +1,8 @@
 from tests.auth_helpers import login_client
 from decimal import Decimal
 from datetime import date
+import pytest
+from sqlalchemy import event
 
 from extensions import db
 from models.accounts import Account
@@ -12,6 +14,47 @@ from models.plans import Plan, PlanItem
 
 def _login(client, user_id):
     login_client(client, user_id)
+
+
+@pytest.mark.parametrize('sort', ['asc', 'desc'])
+def test_index_aggregate_has_no_row_ordering_and_counts_all_filtered_rows(app, family, user, monkeypatch, sort):
+    account = Account(family_id=family.id, name='Current', account_type='Current')
+    category = Category(family_id=family.id, name='General', category_type='expense')
+    db.session.add_all([account, category])
+    db.session.flush()
+    for day, amount, paid in ((1, 100, False), (2, -25, False), (3, 999, True)):
+        db.session.add(Transaction(
+            family_id=family.id, account_id=account.id, category_id=category.id,
+            transaction_date=date(2026, 1, day), amount=amount, is_paid=paid))
+    db.session.commit()
+    captured = {}
+
+    def render(template, **context):
+        captured.update(context)
+        return 'rendered'
+
+    monkeypatch.setattr('blueprints.transactions.routes.render_template', render)
+    client = app.test_client()
+    _login(client, user.id)
+    aggregates = []
+
+    def check_aggregate(connection, cursor, statement, parameters, context, executemany):
+        if ' AS income' in statement and ' AS expenses' in statement:
+            aggregates.append(statement)
+            assert 'ORDER BY' not in statement.upper()
+
+    event.listen(db.engine, 'before_cursor_execute', check_aggregate)
+    try:
+        response = client.get(f'/transactions?is_paid=pending&per_page=1&sort={sort}')
+    finally:
+        event.remove(db.engine, 'before_cursor_execute', check_aggregate)
+    assert response.status_code == 200
+    assert len(aggregates) == 1
+    assert captured['total_count'] == 2
+    assert captured['total_income'] == 100
+    assert captured['total_expenses'] == 25
+    assert len(captured['transactions']) == 1
+    assert captured['transactions'][0].amount == (100 if sort == 'asc' else -25)
 
 
 def test_transaction_index_renders_compact_filters(app, family, user):

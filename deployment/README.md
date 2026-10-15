@@ -2,6 +2,15 @@
 
 This directory contains production deployment configurations for JonesHQ Finance.
 
+## PostgreSQL preparation
+
+Production remains on SQLite until an explicit, verified cutover. See
+[PostgreSQL rehearsal](POSTGRES_REHEARSAL.md) for same-LXC setup, a read-only source
+check and copying a consistent snapshot into an empty disposable PostgreSQL database.
+Install `requirements-postgres.txt` only for that work. The existing quick updater
+refuses non-SQLite configurations because its database restore is SQLite-specific;
+PostgreSQL-aware backup/restore and final cutover remain prerequisites.
+
 ## Required authentication settings
 
 Before restarting production after the authentication hardening update:

@@ -17,5 +17,4 @@ qrcode==8.2
 # Production server (install manually: pip install gunicorn)
 # gunicorn==21.2.0
 
-# Optional: PostgreSQL support
-# psycopg2-binary==2.9.9
+# Optional PostgreSQL rehearsal: pip install -r requirements-postgres.txt

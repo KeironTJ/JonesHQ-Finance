@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Explicit SQLAlchemy URL: postgresql+psycopg://
+psycopg[binary]>=3.2,<4

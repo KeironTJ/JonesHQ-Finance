@@ -158,7 +158,15 @@ sudo certbot --nginx -d joneshq.co.uk -d www.joneshq.co.uk
 
 ## 📊 Database Migration (SQLite to PostgreSQL)
 
-If you want to move from SQLite to PostgreSQL:
+**Use the [PostgreSQL rehearsal runbook](../deployment/POSTGRES_REHEARSAL.md)
+instead of the historical commands below. Do not execute those commands or change
+production's database URL yet.** The new tooling validates a read-only SQLite
+snapshot and imports it into an empty disposable PostgreSQL database. PostgreSQL
+application checks, backup/restore and updater rollback are still prerequisites
+to production cutover. Install the optional `requirements-postgres.txt` driver
+and use an explicit `postgresql+psycopg://` URL for rehearsal.
+
+### Historical outline (obsolete; not a cutover procedure)
 
 ### 1. Install PostgreSQL
 ```bash

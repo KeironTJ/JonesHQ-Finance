@@ -233,7 +233,7 @@ def index():
     transactions = pagination.items
 
     # --- Summary stats via a single aggregation query (no full row scan) ---
-    stats = query.with_entities(
+    stats = query.order_by(None).with_entities(
         func.count(Transaction.id).label('total'),
         func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)).label('income'),
         func.sum(case((Transaction.amount < 0, Transaction.amount), else_=0)).label('expenses'),
