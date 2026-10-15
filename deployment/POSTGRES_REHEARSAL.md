@@ -2,8 +2,8 @@
 
 **Do not change production's `DATABASE_URL` yet.** These steps prepare a disposable
 database in the same LXC. The running application and maintenance timer stay on
-SQLite. PostgreSQL backup/restore, updater rollback and final cutover still need
-implementation and a restore rehearsal before switching live.
+SQLite. Production data-cleanup policy, application validation, LXC restore
+coverage and a final cutover plan are still required before switching live.
 
 The transfer tool refuses non-PostgreSQL targets, databases without the
 `_rehearsal` suffix, URL query overrides and nonempty target schemas. It never
@@ -127,16 +127,81 @@ table/column privately before changing source data.
 Keep production on SQLite until all of these are ready:
 
 - PostgreSQL application-level validation and migration-head/schema comparison.
-- PostgreSQL-aware backup, verified `pg_restore`, and updater rollback.
+- Verified PostgreSQL dump/restore and an agreed manual update-recovery procedure.
+- LXC backups that include PostgreSQL data/WAL, are stored outside the container,
+  and have been restored and checked.
 - A maintenance window stopping app writers and the retention timer.
 - A final fresh snapshot/import with the app stopped, not this older rehearsal.
 - Deliberate production configuration switch and database/Redis health checks.
 - A rollback decision before allowing writes. Returning to SQLite after accepting
   PostgreSQL writes loses those writes unless they are deliberately reconciled.
 
-The existing quick updater now refuses a non-SQLite configuration **before pulling
-code** because its backup selection and restore commands are SQLite-specific.
-Do not bypass that guard as a substitute for implementing the cutover.
+## 7. Updates and recovery after a future PostgreSQL cutover
+
+LXC backups remain the main disaster-recovery system; this change does not add a
+scheduled database backup or change `backup.sh`. Do not schedule the SQLite-only
+`backup.sh` after a PostgreSQL cutover: it would back up the obsolete SQLite file.
+Check existing cron jobs/timers as part of cutover.
+
+Deploy the new updater/helper files while production is still on SQLite. The
+updater validates the backend before pulling, supports `postgresql+psycopg` URLs
+with an explicit database name and no query parameters, and installs
+`requirements-postgres.txt` on PostgreSQL. The Linux app user must be able to
+authenticate to PostgreSQL (local peer authentication is suitable for this LXC).
+Install matching PostgreSQL client tools, including `pg_dump` and `pg_restore`.
+The maintenance scripts explicitly use UTF8 client encoding. Do not use shell
+`source` on `.env.production`; the helpers parse it literally like the existing
+configuration checker.
+
+For PostgreSQL, `quick_update.sh`:
+
+1. Records the current commit and a private environment-file copy in a unique
+   `/home/joneshq/backups/postgres-update-*` directory.
+2. Stops the retention timer/service and the app before creating `database.dump`.
+   Records the timer's prior active state in `maintenance-timer-active` (1 or 0).
+   Stop any other independently configured writers before running the updater.
+3. Creates a custom-format PostgreSQL dump as the app user and verifies its
+   archive listing. A failed dump is removed and the update stops before pulling.
+4. Pulls code, installs dependencies, checks configuration and runs tests.
+5. Runs migrations using `.env.production`, not Flask's default development
+   database, then restarts the app and checks health.
+6. Restarts the retention timer only if it was previously active.
+
+**On any failure after maintenance begins, the app and retention jobs are left
+stopped. There is no automatic PostgreSQL restore or code rollback.** Review the
+reported recovery directory/previous commit before restarting. An archive listing
+is not a restore test; perform the separate restore rehearsal before cutover.
+Only treat `database.dump` as confirmed if the helper reported success.
+An incomplete-update marker at
+`/home/joneshq/backups/postgres-update-incomplete` records the recovery directory
+and blocks subsequent updater runs until an operator resolves the failure.
+
+Manual recovery checklist:
+
+- Keep the app, retention jobs and any other writers stopped. Preserve logs and
+  the failed database for diagnosis; do not delete it or blindly reset code.
+- Decide whether a forward fix is safer. Dependency/test failures before
+  migration do not themselves require restoring the database.
+- If restore is needed, create a **new**, explicitly named UTF8 database owned
+  by the app role, using `template0` and the original locale. Never restore over
+  the failed database as the first recovery step.
+- Restore the confirmed dump to that empty database with
+  `pg_restore --single-transaction --exit-on-error`, as the app user. Verify the
+  migration version, rows, sequences and application behavior before using it.
+- Restore the recorded compatible code/dependencies and review the saved
+  environment file privately. Deliberately point `.env.production` at the
+  recovered database; retain all original credentials/settings securely.
+- Check production configuration, restart the app, verify health/login and only
+  then re-enable the retention timer if it was previously enabled.
+- Once recovery is confirmed, remove only the reviewed
+  `/home/joneshq/backups/postgres-update-incomplete` marker to permit updates again.
+- If any writes were accepted after the recovery dump (including during the
+  startup health-check window), reconcile those writes before a restore-based
+  recovery. A dump is a point-in-time copy, not zero-data-loss rollback.
+
+Recovery directories contain credentials and personal data. They are not
+automatically pruned; set an explicit retention policy and remove only reviewed,
+specifically named recovery directories after recovery is no longer needed.
 
 Rehearsal snapshots contain real personal data. Remove only the explicitly named
 rehearsal file/database when no longer needed, after verifying their exact identity.
