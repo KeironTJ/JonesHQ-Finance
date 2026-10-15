@@ -5,6 +5,7 @@ This is rehearsal tooling, not a production cutover command. Never prints data o
 import argparse
 from decimal import Decimal, InvalidOperation
 from itertools import zip_longest
+import math
 import os
 from pathlib import Path
 import sqlite3
@@ -78,6 +79,32 @@ def source_schema_checks(connection, metadata, head):
             raise ValueError(f'Source columns do not match the model: {table.name}.')
 
 
+def valid_source_numeric(value, numeric, dialect):
+    try:
+        number = Decimal(str(value))
+        unit = Decimal(1).scaleb(-numeric.scale)
+        if not number.is_finite():
+            return False
+        rounded = number.quantize(unit)
+        if abs(rounded) >= Decimal(10) ** (numeric.precision - numeric.scale):
+            return False
+        if number == rounded:
+            return True
+        if dialect.name != 'sqlite' or not isinstance(value, float):
+            return False
+        # SQLite's decimal-text conversion can land one binary float step away.
+        # Require both a sub-scale ULP bound and the exact intended typed value.
+        step = math.ulp(value)
+        processor = numeric.result_processor(dialect, None)
+        return (
+            Decimal.from_float(step) < unit / 2
+            and abs(value - float(rounded)) <= step
+            and processor is not None and processor(value) == rounded
+        )
+    except (InvalidOperation, TypeError, ValueError, OverflowError):
+        return False
+
+
 def source_checks(connection, metadata, head):
     if connection.exec_driver_sql('PRAGMA integrity_check').scalars().all() != ['ok']:
         raise ValueError('SQLite integrity check failed. Do not migrate this snapshot.')
@@ -105,16 +132,7 @@ def source_checks(connection, metadata, head):
                 raw = connection.exec_driver_sql(
                     f'SELECT "{column.name}" FROM "{table.name}" WHERE "{column.name}" IS NOT NULL')
                 for (value,) in raw:
-                    try:
-                        number = Decimal(str(value))
-                        unit = Decimal(1).scaleb(-column.type.scale)
-                        valid = (
-                            number.is_finite() and number == number.quantize(unit)
-                            and abs(number) < Decimal(10) ** (column.type.precision - column.type.scale)
-                        )
-                    except (InvalidOperation, TypeError, ValueError):
-                        valid = False
-                    if not valid:
+                    if not valid_source_numeric(value, column.type, connection.dialect):
                         raise ValueError(
                             f'Source precision requires review in {table.name}.{column.name}; '
                             'automatic financial rounding is refused.')

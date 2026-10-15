@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+import math
 import os
 
 import pytest
@@ -94,6 +95,51 @@ def test_invalid_source_fails_before_target_access(source_file, sql, message, ca
     engine.dispose()
     assert rehearsal.main(['--source', str(source_file), '--import-to-rehearsal']) == 1
     assert message in capsys.readouterr().err
+
+
+def test_sqlite_single_step_storage_noise_preserves_typed_numeric_value(source_file):
+    from sqlalchemy import Numeric
+
+    engine = rehearsal.sqlite_source(source_file)
+    try:
+        with engine.connect() as connection:
+            numeric = Numeric(14, 8)
+            intended = Decimal('4096.12345678')
+            stored = math.nextafter(float(intended), math.inf)
+            assert Decimal(str(stored)) != Decimal(str(stored)).quantize(Decimal('0.00000001'))
+            assert rehearsal.valid_source_numeric(stored, numeric, connection.dialect)
+            assert numeric.result_processor(connection.dialect, None)(stored) == intended
+            # A generic epsilon must not permit actual ninth-decimal precision.
+            assert not rehearsal.valid_source_numeric(4096.123456781, numeric, connection.dialect)
+            assert not rehearsal.valid_source_numeric(1.234, Numeric(10, 2), connection.dialect)
+            assert not rehearsal.valid_source_numeric(1000000.0, numeric, connection.dialect)
+            assert not rehearsal.valid_source_numeric(float('inf'), numeric, connection.dialect)
+            assert not rehearsal.valid_source_numeric(float('nan'), numeric, connection.dialect)
+    finally:
+        engine.dispose()
+
+
+def test_source_checks_accept_only_representation_noise_in_eight_decimal_column():
+    from sqlalchemy import Column, Integer, MetaData, Numeric, Table
+
+    metadata = MetaData()
+    sample = Table('sample', metadata, Column('id', Integer, primary_key=True),
+                   Column('quantity', Numeric(14, 8)))
+    engine = create_engine('sqlite://')
+    try:
+        with engine.begin() as connection:
+            metadata.create_all(connection)
+            connection.exec_driver_sql('CREATE TABLE alembic_version (version_num TEXT)')
+            connection.exec_driver_sql('INSERT INTO alembic_version VALUES (?)', ('test-head',))
+            stored = math.nextafter(float('4096.12345678'), math.inf)
+            connection.exec_driver_sql('INSERT INTO sample VALUES (?, ?)', (1, stored))
+            assert rehearsal.source_checks(connection, metadata, 'test-head') == {'sample': 1}
+            assert connection.execute(select(sample.c.quantity)).scalar_one() == Decimal('4096.12345678')
+            connection.exec_driver_sql('UPDATE sample SET quantity = ?', (4096.123456781,))
+            with pytest.raises(ValueError, match='precision requires review'):
+                rehearsal.source_checks(connection, metadata, 'test-head')
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.parametrize('url', [

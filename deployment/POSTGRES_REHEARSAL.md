@@ -122,6 +122,13 @@ It refuses existing output files and the source path. In the copy only, it:
 - Validates integrity, all foreign keys, schema, migration head, numeric scale
   **and capacity**, booleans and text lengths before reporting success.
 
+SQLite decimal-to-binary storage can introduce a one-ULP representation difference
+even after explicit rounding. Validation accepts this only when the difference is
+at most one binary float step, that step is less than half the declared decimal
+unit, and SQLAlchemy reads exactly the intended rounded Decimal. This is not a
+general epsilon or permission to accept genuine excess decimal precision.
+The final PostgreSQL transfer still compares every typed row exactly.
+
 Unreviewed defects fail closed. Failed output created by this invocation is
 removed; existing files are never overwritten. The tool neither connects to
 PostgreSQL nor changes production configuration. Keep the report with the private
