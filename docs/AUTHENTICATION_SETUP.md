@@ -248,8 +248,50 @@ are not exported automatically. No downloaded files are retained by the app.
 
 Member removal is not account erasure: it clears household membership and revokes
 sessions, leaving the account and financial records in place. Private records
-keep their owner. There is not yet a designed self-service account/household
-deletion flow. Security-event cleanup runs on sign-in (365 days by default);
+keep their owner.
+
+### Individual account deletion
+
+Account security links to a deletion review at `/account/security/delete`.
+Deletion requires recent password confirmation, the current password again,
+CSRF protection and the exact phrase `DELETE MY ACCOUNT`. POST attempts are
+limited to three per 15 minutes per user. Review counts are recalculated on
+submission. Only the signed-in user can delete their account.
+
+The operation deletes the user, all their sessions/recovery codes and their
+privately owned accounts, cards, income/recurring income, expenses, loans,
+pensions, vehicles and plans. Domain children are deleted with their parent,
+including private account/card transactions, subscriptions, balances, payments,
+snapshots, fuel records, trips and plan items. Records still owned in former
+households are included, even after household membership has been removed.
+
+Shared records and other members' private records remain. Nullable links to
+deleted records are detached, including shared bank entries linked to a private
+income, expense, loan or card. Amounts, balances, names and free text in retained
+history are not anonymised; shared records are not recalculated or regenerated.
+Authored family-join invites are deleted and pending authored household-registration
+invites are revoked. Prior security events remain under normal retention with
+their user link removed; IP addresses or other identifying details may remain.
+
+The last household administrator must appoint another active administrator first.
+Site administrators must first have their role revoked on the server with
+`flask site-admin revoke EMAIL`. A household-row write serializes this deletion
+path's administrator checks; it is not a global lock for unrelated membership edits.
+Inconsistent household links or unhandled required/private-owner dependencies
+block deletion rather than exposing records or removing another household's data.
+Deletion uses one transaction and rolls back on database failure. Success signs
+out this browser, clears its remember cookie and invalidates all other sessions.
+
+This is not household deletion or complete erasure of every copy. Backups,
+operational logs, email-provider records, previously downloaded copies and
+browser display preferences are outside this operation. Whole-household
+deletion and operator privacy/deletion policies remain separate work.
+No database migration is required. When adding owned models, domain children or
+foreign keys, review the deletion plan/order and test with foreign keys enabled.
+
+### Retention cleanup
+
+Security-event cleanup runs on sign-in (365 days by default);
 old session cleanup runs when that user creates a session. The server command
 `flask maintenance cleanup` also cleans both across all households, with
 `--dry-run` for preview. It retains sessions until more than 30 days after absolute

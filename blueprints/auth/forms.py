@@ -91,6 +91,12 @@ class ForgotPasswordForm(FlaskForm):
     submit = SubmitField('Email me a reset link')
 
 
+class DeleteAccountForm(FlaskForm):
+    password = PasswordField('Current password', validators=[DataRequired(), Length(max=200)])
+    confirmation = StringField('Type DELETE MY ACCOUNT', validators=[DataRequired(), Length(max=40)])
+    submit = SubmitField('Permanently delete my account')
+
+
 class ResetPasswordForm(FlaskForm):
     new_password = PasswordField('New password', validators=[
         DataRequired(message='New password is required'),

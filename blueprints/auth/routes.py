@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
 from .forms import (
-    ChangePasswordForm, ForgotPasswordForm, HouseholdInviteForm, LoginForm, PasswordConfirmForm,
+    ChangePasswordForm, DeleteAccountForm, ForgotPasswordForm, HouseholdInviteForm, LoginForm, PasswordConfirmForm,
     ReauthenticateForm, RegisterForm, ResetPasswordForm, TwoFactorCodeForm,
 )
 from extensions import db, limiter
@@ -175,6 +175,42 @@ def _current_user_key():
     if current_user.is_authenticated:
         return f"user:{current_user.get_id().split(':', 1)[0]}"
     return f"ip:{get_remote_address()}"
+
+
+@auth_bp.route('/account/security/delete', methods=['GET', 'POST'])
+@login_required
+@recent_auth_required
+@limiter.limit("3 per 15 minutes", key_func=_current_user_key, methods=["POST"])
+def delete_account():
+    from services.platform.account_deletion_service import AccountDeletionService
+    form = DeleteAccountForm()
+    counts = {}
+    blocked_reason = None
+    try:
+        counts = AccountDeletionService.preview(current_user)
+    except ValueError as error:
+        blocked_reason = str(error)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Account deletion preview failed.')
+        blocked_reason = 'Unable to check linked records. Please try again.'
+    if blocked_reason is None and form.validate_on_submit():
+        try:
+            AccountDeletionService.delete_account(current_user, {
+                'password': form.password.data, 'confirmation': form.confirmation.data,
+            })
+        except ValueError as error:
+            flash(str(error) or 'Unable to delete your account.', 'danger')
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.exception('Account deletion failed.')
+            flash('Unable to delete your account. No deletion was committed. Please try again.', 'danger')
+        else:
+            _clear_browser_login()
+            flash('Your account and privately owned records have been deleted. Shared household history remains.', 'success')
+            return redirect(url_for('auth.login'))
+    return render_template(
+        'auth/delete_account.html', form=form, counts=counts, blocked_reason=blocked_reason)
 
 
 @auth_bp.route('/account/security/export', methods=['POST'])

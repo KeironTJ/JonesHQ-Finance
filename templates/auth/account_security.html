@@ -8,25 +8,6 @@
         <h1 class="h3 mb-4"><i class="bi bi-shield-lock me-2"></i>Account security</h1>
 
         <div class="card mb-4">
-            <div class="card-body">
-                <h2 class="h5">Download your data</h2>
-                <p>Download a JSON copy of your profile and supported financial records
-                    visible to you. Household, section and private-record permissions
-                    still apply. This is not a database backup.</p>
-                <p class="text-muted">The file contains sensitive financial data. Store it
-                    securely. It excludes credentials, other users' profiles, security logs,
-                    settings, cached totals and some supporting metadata. Exact exclusions
-                    are listed inside the download. Avoid editing records while exporting.</p>
-                <form method="POST" action="{{ url_for('auth.export_data') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-outline-primary">Download JSON export</button>
-                </form>
-                <div class="form-text">Requires a recent password confirmation.
-                    Limited to two downloads per hour.</div>
-            </div>
-        </div>
-
-        <div class="card mb-4">
             <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
                     <h2 class="h5 mb-1">Email address</h2>
@@ -234,6 +215,36 @@
                 {% else %}
                 <p class="text-muted mb-0">No activity recorded yet.</p>
                 {% endif %}
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Download your data</h2>
+                <p>Download a JSON copy of your profile and supported financial records
+                    visible to you. Household, section and private-record permissions
+                    still apply. This is not a database backup.</p>
+                <p class="text-muted">The file contains sensitive financial data. Store it
+                    securely. It excludes credentials, other users' profiles, security logs,
+                    settings, cached totals and some supporting metadata. Exact exclusions
+                    are listed inside the download. Avoid editing records while exporting.</p>
+                <form method="POST" action="{{ url_for('auth.export_data') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-primary">Download JSON export</button>
+                </form>
+                <div class="form-text">Requires a recent password confirmation.
+                    Limited to two downloads per hour.</div>
+            </div>
+        </div>
+
+        <div class="card border-danger mb-4">
+            <div class="card-body">
+                <h2 class="h5">Delete your account</h2>
+                <p>Review permanent deletion of your account and privately owned financial
+                    records. Shared household history and retained backups are not erased.</p>
+                <a href="{{ url_for('auth.delete_account') }}" class="btn btn-outline-danger">
+                    Review account deletion
+                </a>
             </div>
         </div>
     </div>
