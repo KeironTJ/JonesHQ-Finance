@@ -75,6 +75,82 @@ After updating, check through the public URL: login works, the browser shows the
 session cookie as Secure/HttpOnly, and 11 rapid wrong-password attempts return
 "Too many requests".
 
+## Health checks and operational logs
+
+### Readiness
+
+`GET /healthz` performs a read-only `SELECT 1` against the configured database and
+checks the configured rate-limit storage (Redis in production). It returns only:
+
+- HTTP 200: `{"status":"ok"}`
+- HTTP 503: `{"status":"unavailable"}`
+
+The response is not cached, does not require login and does not expose connection
+strings, versions, user data or failure details. It bypasses login-session loading
+and rate limiting so a failed backend can be reported instead of blocking the
+check. Checks run against shared backends, not worker-local status counters.
+This checks connectivity, not migration correctness, data integrity, disk capacity,
+SMTP delivery or backup freshness. Backend connection timeouts still apply.
+
+From the LXC:
+
+```bash
+curl --fail --show-error --max-time 10 http://127.0.0.1:8000/healthz
+```
+
+Also check `https://finance.joneshq.co.uk/healthz` from outside the LXC to exercise
+DNS, HTTPS and the reverse proxy. An external monitor should check every 60 seconds,
+require HTTP 200 and the `ok` status, and alert after repeated failures rather than
+one missed probe. Set a request timeout. No external monitor or alerts are installed
+by these changes.
+
+For component-level output, as root in the LXC:
+
+```bash
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && set -a && . ./.env.production && venv/bin/flask health'
+```
+
+This command exits 1 if either component fails, otherwise 0. Keep shell-sourced
+environment values quoted where necessary. The update script now uses `/healthz`
+for its post-restart check.
+
+### Email failures
+
+Real SMTP attempts produce searchable application log markers:
+
+- `MAIL_SMTP_ACCEPTED`: the SMTP server accepted the message, **not** proof it
+  reached the inbox. Review Resend's delivery/bounce information separately.
+- `MAIL_DELIVERY_FAILED error_type=...`: SMTP delivery failed. Both synchronous
+  test sends and background sends are covered. This marker excludes addresses,
+  message bodies, reset links, API keys and provider error text.
+
+Testing-mode captured messages do not represent SMTP attempts. Disabled email
+does not generate a success marker. Background sends are still best-effort:
+there is no durable queue, automatic retry, historical health counter or automatic
+notification. Worker shutdown can interrupt a pending send.
+
+Check recent events without copying sensitive log contents into public channels:
+
+```bash
+sudo journalctl -u joneshq-finance --since '24 hours ago' --no-pager
+sudo grep -E 'MAIL_DELIVERY_FAILED|MAIL_SMTP_ACCEPTED|HEALTH_.*FAILED|HEALTH_.*UNAVAILABLE' \
+    /home/joneshq/joneshq-finance/logs/joneshq_finance.log | tail -n 50
+```
+
+The application file is shared by CLI runs and workers; it is a diagnostic log,
+not a durable multi-worker event store. For worker/service problems also inspect:
+
+```bash
+sudo systemctl is-active joneshq-finance redis-server
+sudo journalctl -u redis-server --since '1 hour ago' --no-pager
+sudo tail -n 100 /home/joneshq/joneshq-finance/logs/error.log
+```
+
+For an end-to-end email check, use `flask email test YOUR_ADDRESS` with the same
+environment loading shown above, then confirm the message arrived. Health probes
+do not send emails or contact SMTP. Configure future outage notifications on
+another machine and use a channel independent of the app's SMTP provider.
+
 ## Files
 
 - **nginx.conf** - Nginx reverse proxy configuration

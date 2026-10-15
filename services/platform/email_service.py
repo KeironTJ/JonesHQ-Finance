@@ -55,7 +55,7 @@ class EmailService:
 			EmailService.outbox().append(message)
 			return True
 		if wait:
-			EmailService._deliver(app, message)
+			EmailService._deliver_logged(app, message)
 			return True
 		if not has_request_context():
 			# CLI commands exit straight away, which would kill a background thread mid-send.
@@ -67,9 +67,19 @@ class EmailService:
 	@staticmethod
 	def _deliver_in_background(app, message):
 		try:
-			EmailService._deliver(app, message)
+			EmailService._deliver_logged(app, message)
 		except Exception:
-			app.logger.exception('Failed to send email "%s"', message['Subject'])
+			# The delivery boundary has logged the failure; background work cannot raise to the request.
+			pass
+
+	@staticmethod
+	def _deliver_logged(app, message):
+		try:
+			EmailService._deliver(app, message)
+		except Exception as error:
+			app.logger.error('MAIL_DELIVERY_FAILED error_type=%s', type(error).__name__)
+			raise
+		app.logger.info('MAIL_SMTP_ACCEPTED')
 
 	@staticmethod
 	def _deliver(app, message):

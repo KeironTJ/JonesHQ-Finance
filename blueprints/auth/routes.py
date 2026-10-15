@@ -5,7 +5,7 @@ Login, logout, and user management with security features
 from hashlib import sha256
 import time
 
-from flask import abort, render_template, redirect, url_for, flash, request, current_app, session
+from flask import abort, render_template, redirect, url_for, flash, request, current_app, session, jsonify
 from flask_login import logout_user, current_user, login_required
 from flask_limiter.util import get_remote_address
 from urllib.parse import unquote, urlsplit
@@ -36,6 +36,14 @@ def _login_account_key():
 @auth_bp.route('/cookies')
 def storage_notice():
     return render_template('auth/storage_notice.html')
+
+
+@auth_bp.route('/healthz')
+@limiter.exempt
+def health():
+    from services.platform.health_service import HealthService
+    healthy = all(HealthService.check().values())
+    return jsonify(status='ok' if healthy else 'unavailable'), 200 if healthy else 503
 
 
 def _safe_next_page():

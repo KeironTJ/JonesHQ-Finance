@@ -17,7 +17,7 @@ APP_USER="joneshq"
 SERVICE_NAME="joneshq-finance"
 BACKUP_DIR="/home/joneshq/backups"
 LOCK_FILE="/var/lock/joneshq-quick-update.lock"
-HEALTH_URL="http://127.0.0.1:8000/login"
+HEALTH_URL="http://127.0.0.1:8000/healthz"
 BACKUP_FILE=""
 PREV_COMMIT=""
 

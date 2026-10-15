@@ -97,7 +97,7 @@ def create_app(config_name=None):
     def refresh_user_session():
         from flask import request
         from flask_login import current_user
-        if request.endpoint == 'static':
+        if request.endpoint in ('static', 'auth.health'):
             return
         if current_user.is_authenticated:
             from services.platform.user_session_service import UserSessionService
@@ -152,6 +152,9 @@ def create_app(config_name=None):
     @app.before_request
     def enforce_section_access():
         """Abort 403 when a member tries to access a forbidden section."""
+        from flask import request
+        if request.endpoint == 'auth.health':
+            return
         from utils.permissions import check_section_access
         check_section_access()
 
@@ -167,6 +170,8 @@ def create_app(config_name=None):
     def require_site_admin_two_factor():
         from flask import redirect, request, url_for
         from flask_login import current_user
+        if request.endpoint == 'auth.health':
+            return
         if (
             current_user.is_authenticated
             and current_user.is_site_admin
@@ -262,6 +267,17 @@ def register_error_handlers(app):
 
 def register_commands(app):
     """Register Flask CLI commands."""
+
+    @app.cli.command('health')
+    def health_check():
+        """Check database and rate-limit storage without exposing settings."""
+        from services.platform.health_service import HealthService
+        checks = HealthService.check()
+        for name, healthy in checks.items():
+            click.echo(f'{name}: {"OK" if healthy else "FAILED"}')
+        click.echo('Email delivery is not checked; use flask email test ADDRESS.')
+        if not all(checks.values()):
+            raise SystemExit(1)
 
     @app.cli.group()
     def site_admin():
