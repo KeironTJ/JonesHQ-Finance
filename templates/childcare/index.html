@@ -444,6 +444,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }, 200);
                 } else {
                     console.error('Update failed:', data.error);
+                    alert(data.error || 'Failed to update activity. Please try again.');
                     // Revert UI on error
                     this.dataset.active = (!occurred).toString();
                     if (!occurred) {

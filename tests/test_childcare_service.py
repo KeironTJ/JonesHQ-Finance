@@ -1,13 +1,124 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from flask import g
+
 from extensions import db
-from models.childcare import Child, ChildActivityType
+from models.childcare import Child, ChildActivityType, DailyChildcareActivity
+from models.family import Family
 from models.accounts import Account
 from models.transactions import Transaction
 from models.childcare import MonthlyChildcareSummary
 from models.categories import Category
 from services.household.childcare_service import ChildcareService
+from tests.auth_helpers import login_client
+
+
+@pytest.fixture
+def activity_records(family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    other_family = Family(name='Other household')
+    db.session.add(other_family)
+    db.session.flush()
+    children = [
+        Child(family_id=family.id, name='Own child'),
+        Child(family_id=family.id, name='Sibling'),
+        Child(family_id=other_family.id, name='Other household child'),
+    ]
+    db.session.add_all(children)
+    db.session.flush()
+    types = [
+        ChildActivityType(family_id=child.family_id, child_id=child.id,
+                          name='Club', cost=Decimal('12.50'))
+        for child in children
+    ]
+    db.session.add_all(types)
+    db.session.commit()
+    return children, types
+
+
+@pytest.mark.parametrize('child_index,type_index', [
+    (2, 2), (0, 2), (2, 0), (0, 1), (None, 0), (0, None),
+])
+def test_daily_activity_rejects_invalid_references(activity_records, child_index, type_index):
+    children, types = activity_records
+    child_id = children[child_index].id if child_index is not None else -1
+    type_id = types[type_index].id if type_index is not None else -1
+    with pytest.raises(ValueError, match='Invalid child or activity type'):
+        ChildcareService.update_daily_activity(date(2026, 1, 5), child_id, type_id, True)
+    assert DailyChildcareActivity.query.count() == 0
+
+
+def test_daily_activity_assigns_family_and_preserves_updates(activity_records, family):
+    children, types = activity_records
+    activity = ChildcareService.update_daily_activity(
+        date(2026, 1, 5), children[0].id, types[0].id, True)
+    assert activity.family_id == family.id
+    assert activity.actual_cost == Decimal('12.50')
+    updated = ChildcareService.update_daily_activity(
+        date(2026, 1, 5), children[0].id, types[0].id, False, Decimal('8.25'))
+    assert updated.id == activity.id
+    assert updated.occurred is False
+    assert updated.actual_cost == Decimal('8.25')
+    assert DailyChildcareActivity.query.count() == 1
+
+
+def test_daily_activity_rejects_existing_cross_household_reference(activity_records, family):
+    children, types = activity_records
+    activity = DailyChildcareActivity(
+        family_id=family.id, date=date(2026, 1, 5),
+        child_id=children[2].id, activity_type_id=types[2].id, occurred=False)
+    db.session.add(activity)
+    db.session.commit()
+    with pytest.raises(ValueError, match='Invalid child or activity type'):
+        ChildcareService.update_daily_activity(
+            activity.date, activity.child_id, activity.activity_type_id, True)
+    db.session.refresh(activity)
+    assert activity.occurred is False
+
+
+def test_daily_activity_bulk_workflows_preserve_family_scope(activity_records, family):
+    children, types = activity_records
+    types[0].occurs_monday = True
+    db.session.commit()
+    assert ChildcareService.apply_templates_to_month(2026, 1) == 4
+    assert ChildcareService.copy_previous_month(2026, 2) == 4
+    ChildcareService.bulk_update_week(
+        date(2026, 3, 2), children[0].id, {'Monday': [types[0].id]})
+    activities = DailyChildcareActivity.query.all()
+    assert len(activities) == 9
+    assert all(
+        activity.family_id == family.id
+        and activity.child_id == children[0].id
+        and activity.activity_type_id == types[0].id
+        for activity in activities
+    )
+
+
+@pytest.mark.parametrize('child_index,type_index', [(2, 2), (0, 2), (2, 0), (0, 1), (0, 0)])
+def test_daily_activity_endpoint_scopes_references(app, user, activity_records, child_index, type_index):
+    children, types = activity_records
+    client = app.test_client()
+    login_client(client, user.id)
+    g.pop('_login_user', None)
+    response = client.post('/childcare/update_activity', json={
+        'date': '2026-01-05', 'child_id': children[child_index].id,
+        'activity_type_id': types[type_index].id, 'occurred': True,
+    })
+    g.pop('_login_user', None)
+    if child_index == type_index == 0:
+        assert response.status_code == 200
+        assert response.get_json() == {
+            'success': True, 'daily_total': 12.5, 'monthly_total': 12.5, 'cost': 12.5,
+        }
+        assert DailyChildcareActivity.query.one().family_id == user.family_id
+    else:
+        assert response.status_code == 400
+        assert response.get_json() == {
+            'success': False, 'error': 'Invalid child or activity type selected.',
+        }
+        assert DailyChildcareActivity.query.count() == 0
 
 
 def test_childcare_setup_crud_assigns_family_and_normalizes_day(app, family, monkeypatch):

@@ -74,12 +74,15 @@ def update_activity():
     activity_type_id = int(data['activity_type_id'])
     occurred = data['occurred']
     
-    activity = ChildcareService.update_daily_activity(
-        activity_date,
-        child_id,
-        activity_type_id,
-        occurred
-    )
+    try:
+        activity = ChildcareService.update_daily_activity(
+            activity_date,
+            child_id,
+            activity_type_id,
+            occurred
+        )
+    except ValueError as error:
+        return jsonify({'success': False, 'error': str(error)}), 400
     
     # Recalculate daily total for this child
     day_activities = family_query(DailyChildcareActivity).filter_by(

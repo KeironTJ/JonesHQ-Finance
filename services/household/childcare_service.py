@@ -34,6 +34,9 @@ Primary entry points
   apply_templates_to_month()      — populate a month from weekly templates
   copy_previous_month()           — copy previous month's pattern
   get_annual_costs()              — annual totals by child
+
+Daily activity writes validate both parent records against the current family
+and require the activity type to belong to the selected child.
 """
 from models.childcare import Child, ChildActivityType, DailyChildcareActivity, MonthlyChildcareSummary
 from models.transactions import Transaction
@@ -281,6 +284,11 @@ class ChildcareService:
     @staticmethod
     def update_daily_activity(date, child_id, activity_type_id, occurred, cost_override=None):
         """Update or create a daily activity record"""
+        child = family_get(Child, child_id)
+        activity_type = family_get(ChildActivityType, activity_type_id)
+        if child is None or activity_type is None or activity_type.child_id != child.id:
+            raise ValueError('Invalid child or activity type selected.')
+
         activity = family_query(DailyChildcareActivity).filter_by(
             date=date,
             child_id=child_id,
@@ -289,6 +297,7 @@ class ChildcareService:
         
         if not activity:
             activity = DailyChildcareActivity(
+                family_id=child.family_id,
                 date=date,
                 child_id=child_id,
                 activity_type_id=activity_type_id,
