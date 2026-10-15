@@ -22,7 +22,7 @@ class MortgageSnapshot(db.Model):
     # Interest calculations
     interest_charge = db.Column(db.Numeric(10, 2), nullable=False)  # Interest charged this month
     principal_paid = db.Column(db.Numeric(10, 2), nullable=False)  # Amount that reduced principal
-    interest_rate = db.Column(db.Numeric(5, 4))  # Monthly rate used
+    interest_rate = db.Column(db.Numeric(9, 8))  # Monthly rate used
     
     # Property valuation and equity
     property_valuation = db.Column(db.Numeric(10, 2))  # Property value this month

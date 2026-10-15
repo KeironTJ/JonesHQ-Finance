@@ -24,9 +24,9 @@ class Trip(db.Model):
     school_holidays = db.Column(db.String(50))
     
     # Fuel calculation
-    approx_mpg = db.Column(db.Numeric(6, 2))
-    gallons_used = db.Column(db.Numeric(8, 2))
-    cumulative_gallons = db.Column(db.Numeric(8, 2))
+    approx_mpg = db.Column(db.Numeric(12, 8))
+    gallons_used = db.Column(db.Numeric(14, 8))
+    cumulative_gallons = db.Column(db.Numeric(14, 8))
     trip_cost = db.Column(db.Numeric(10, 2))
     fuel_cost = db.Column(db.Numeric(10, 2))
     

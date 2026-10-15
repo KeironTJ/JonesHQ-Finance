@@ -11,7 +11,7 @@ class PensionSnapshot(db.Model):
     
     review_date = db.Column(db.Date, nullable=False)
     value = db.Column(db.Numeric(10, 2), nullable=False)
-    growth_percent = db.Column(db.Numeric(10, 4))  # % growth since last snapshot
+    growth_percent = db.Column(db.Numeric(14, 8))  # % growth since last snapshot
     
     # Projection flags and scenario data
     is_projection = db.Column(db.Boolean, default=False)  # True if this is a future projection

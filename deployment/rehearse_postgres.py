@@ -65,11 +65,7 @@ def ordered_tables(metadata):
     return result
 
 
-def source_checks(connection, metadata, head):
-    if connection.exec_driver_sql('PRAGMA integrity_check').scalars().all() != ['ok']:
-        raise ValueError('SQLite integrity check failed. Do not migrate this snapshot.')
-    if connection.exec_driver_sql('PRAGMA foreign_key_check').first() is not None:
-        raise ValueError('SQLite contains broken foreign keys. Repair and take a new snapshot.')
+def source_schema_checks(connection, metadata, head):
     inspector = inspect(connection)
     expected = set(metadata.tables) | {'alembic_version'}
     if set(inspector.get_table_names()) != expected or inspector.get_view_names():
@@ -80,6 +76,15 @@ def source_checks(connection, metadata, head):
     for table in metadata.tables.values():
         if {column['name'] for column in inspector.get_columns(table.name)} != set(table.c.keys()):
             raise ValueError(f'Source columns do not match the model: {table.name}.')
+
+
+def source_checks(connection, metadata, head):
+    if connection.exec_driver_sql('PRAGMA integrity_check').scalars().all() != ['ok']:
+        raise ValueError('SQLite integrity check failed. Do not migrate this snapshot.')
+    if connection.exec_driver_sql('PRAGMA foreign_key_check').first() is not None:
+        raise ValueError('SQLite contains broken foreign keys. Repair and take a new snapshot.')
+    source_schema_checks(connection, metadata, head)
+    for table in metadata.tables.values():
         for column in table.columns:
             if isinstance(column.type, String) and column.type.length:
                 oversized = connection.exec_driver_sql(
@@ -103,7 +108,10 @@ def source_checks(connection, metadata, head):
                     try:
                         number = Decimal(str(value))
                         unit = Decimal(1).scaleb(-column.type.scale)
-                        valid = number.is_finite() and number == number.quantize(unit)
+                        valid = (
+                            number.is_finite() and number == number.quantize(unit)
+                            and abs(number) < Decimal(10) ** (column.type.precision - column.type.scale)
+                        )
                     except (InvalidOperation, TypeError, ValueError):
                         valid = False
                     if not valid:

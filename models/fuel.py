@@ -15,8 +15,8 @@ class FuelRecord(db.Model):
     gallons = db.Column(db.Numeric(8, 2), nullable=False)
     actual_miles = db.Column(db.Integer)  # Miles since last fill
     actual_cumulative_miles = db.Column(db.Integer)  # Total miles tracked
-    mpg = db.Column(db.Numeric(6, 2))  # Calculated MPG
-    price_per_mile = db.Column(db.Numeric(6, 2))  # Cost per mile
+    mpg = db.Column(db.Numeric(12, 8))  # Calculated MPG
+    price_per_mile = db.Column(db.Numeric(12, 8))  # Calculated unit cost, not a posted amount
     last_fill_date = db.Column(db.Date)  # Previous fill date
     is_partial_fill = db.Column(db.Boolean, default=False, nullable=False)  # True = partial fill; False = full fill (tank topped up)
     linked_transaction_id = db.Column(db.Integer, db.ForeignKey('transactions.id'))  # Link to actual transaction

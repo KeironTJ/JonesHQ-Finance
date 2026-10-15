@@ -12,7 +12,7 @@ class Loan(db.Model):
     principal = db.Column(db.Numeric(10, 2), nullable=False)   # Original principal (same as loan_value)
     current_balance = db.Column(db.Numeric(10, 2), nullable=False)
     annual_apr = db.Column(db.Numeric(5, 2), nullable=False)
-    monthly_apr = db.Column(db.Numeric(5, 2), nullable=False)
+    monthly_apr = db.Column(db.Numeric(11, 8), nullable=False)
     monthly_payment = db.Column(db.Numeric(10, 2), nullable=False)
     calculated_payment = db.Column(db.Numeric(10, 2))  # Calculated vs actual
     start_date = db.Column(db.Date, nullable=False)

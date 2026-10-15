@@ -24,7 +24,7 @@ class PropertyValuationSnapshot(db.Model):
     value = db.Column(db.Numeric(12, 2), nullable=False)
 
     # % change since previous actual snapshot (calculated on save)
-    change_percent = db.Column(db.Numeric(10, 4))
+    change_percent = db.Column(db.Numeric(14, 8))
 
     # Projection fields
     is_projection = db.Column(db.Boolean, default=False)

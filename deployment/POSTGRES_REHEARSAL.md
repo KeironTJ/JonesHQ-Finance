@@ -39,7 +39,7 @@ local peer authentication without a password in shell history:
 
 ```bash
 sudo -u postgres createuser --no-superuser --no-createdb --no-createrole joneshq
-sudo -u postgres createdb --owner=joneshq joneshq_finance_rehearsal
+sudo -u postgres createdb --owner=joneshq --template=template0 --encoding=UTF8 --lc-collate=C --lc-ctype=C joneshq_finance_rehearsal
 sudo -u joneshq psql -X -d joneshq_finance_rehearsal -c "SELECT current_user, current_database();"
 ```
 
@@ -75,6 +75,64 @@ This opens SQLite read-only and pins a read transaction. It checks integrity,
 foreign keys, table/column coverage, booleans, numeric precision and migration
 head, printing aggregate counts only. The source is never upgraded or modified.
 
+### Approved legacy-data preparation
+
+The reviewed policy keeps posted money at its existing scale (normally pennies)
+and widens these calculated fields to eight decimal places, retaining their
+existing whole-number capacity:
+
+- `fuel_records.mpg`, `fuel_records.price_per_mile`
+- `trips.approx_mpg`, `trips.gallons_used`, `trips.cumulative_gallons`
+- `loans.monthly_apr`, `mortgage_snapshots.interest_rate`
+- `pension_snapshots.growth_percent`, `property_valuation_snapshots.change_percent`
+
+Migration `a24c6e8f1032` changes the PostgreSQL column types. On SQLite it deliberately
+does not rebuild tables: SQLite does not enforce NUMERIC precision/scale, and the
+raw stored values must remain intact. Models use the wider scale when reading;
+calculated results may therefore differ from the old two-decimal intermediate
+values. The migration does not recalculate historical records or round SQLite data.
+Narrowing the PostgreSQL types on downgrade can round values; take a recovery dump.
+
+After deploying this migration **while production is still SQLite**, take a fresh
+snapshot at the new head. Do not reuse the earlier rounded rehearsal copy: its
+discarded precision cannot be recovered by widening its schema.
+
+Report the changes without writing:
+
+```bash
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && venv/bin/python deployment/prepare_postgres_source.py --source /home/joneshq/postgres-rehearsal/fresh-source.db'
+```
+
+With the reviewed policy approved, prepare a **new** copy:
+
+```bash
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && venv/bin/python deployment/prepare_postgres_source.py --source /home/joneshq/postgres-rehearsal/fresh-source.db --output /home/joneshq/postgres-rehearsal/prepared-source.db --apply-reviewed-policy'
+```
+
+This command pins a read-only source transaction and uses SQLite's backup API.
+It refuses existing output files and the source path. In the copy only, it:
+
+- Clears orphan card-category IDs only when there are no possible same-family
+  exact head/sub-budget matches; it preserves all denormalized labels.
+- Converts valid oversized ISO `YYYY-Www` card week labels into `ww-YYYY`.
+- Rounds excess precision with `ROUND_HALF_EVEN` only in explicitly reviewed
+  columns, using the current money/quantity/rate scales.
+- Prints per-column affected counts, maximum rounding differences and signed
+  aggregate rounding deltas, without individual records.
+- Validates integrity, all foreign keys, schema, migration head, numeric scale
+  **and capacity**, booleans and text lengths before reporting success.
+
+Unreviewed defects fail closed. Failed output created by this invocation is
+removed; existing files are never overwritten. The tool neither connects to
+PostgreSQL nor changes production configuration. Keep the report with the private
+migration artifacts. Review the report before importing, especially financial
+aggregate deltas; do not equate a successful copy with application validation.
+
+For a final cutover, stop **all** app/background writers before the fresh snapshot
+and keep them stopped through preparation, import, validation and the deliberate
+configuration switch. A snapshot taken while production runs is rehearsal only.
+Use an empty new target; never clear the previous successful rehearsal database.
+
 ## 4. Run the actual PostgreSQL integration test
 
 Before the full snapshot import, test the PostgreSQL path with synthetic data.
@@ -83,7 +141,7 @@ even on success. It exercises exact typed values, cyclic links, sequence reset
 and transaction rollback on the actual PostgreSQL backend:
 
 ```bash
-sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && PG_REHEARSAL_DATABASE_URL=postgresql+psycopg:///joneshq_finance_rehearsal venv/bin/python -m pytest -q tests/test_postgres_rehearsal.py'
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && PGCLIENTENCODING=UTF8 PG_REHEARSAL_DATABASE_URL=postgresql+psycopg:///joneshq_finance_rehearsal venv/bin/python -m pytest -q tests/test_postgres_rehearsal.py'
 ```
 
 Install the existing development requirements first if pytest is missing:
@@ -93,7 +151,7 @@ Do not run this against another database or use a production connection string.
 ## 5. Import the private snapshot into the empty rehearsal database
 
 ```bash
-sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && PG_REHEARSAL_DATABASE_URL=postgresql+psycopg:///joneshq_finance_rehearsal venv/bin/python deployment/rehearse_postgres.py --source /home/joneshq/postgres-rehearsal/source.db --import-to-rehearsal'
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && PGCLIENTENCODING=UTF8 PG_REHEARSAL_DATABASE_URL=postgresql+psycopg:///joneshq_finance_rehearsal venv/bin/python deployment/rehearse_postgres.py --source /home/joneshq/postgres-rehearsal/prepared-source.db --import-to-rehearsal'
 ```
 
 The target schema is created from the current registered SQLAlchemy models, not
