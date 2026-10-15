@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Delete household - Family HQ{% endblock %}
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-lg-8">
+        <h1 class="h3">Permanently delete {{ current_user.family.name }}</h1>
+        <div class="alert alert-danger">
+            This cannot be undone in the app. You are deleting this entire household,
+            not just your account. One household administrator can confirm this action.
+        </div>
+        <ul>
+            <li>All shared and private household financial records, including records owned
+                by other members or former members, will be deleted.</li>
+            <li>Household settings, categories, childcare records, plans, snapshots, cached
+                summaries and household join invites are also deleted.</li>
+            <li>Every member, including inactive members, keeps their login account, password,
+                two-factor settings and recovery codes. All their sessions are revoked,
+                membership and household permissions are cleared, and everyone is signed out.</li>
+            <li>Other households and records outside this household are not deleted.
+                Prior security events remain under normal retention without their household link.
+                They may still contain identifying details.</li>
+            <li>Backups, operational logs, email-provider records, downloaded copies and
+                browser display preferences are not erased.</li>
+        </ul>
+        <p><a href="{{ url_for('auth.account_security') }}">Download your data from Account security</a>
+            first. Each member must export their own private data if they want a copy:
+            your export does not include other members' private records.
+            Let everyone know before continuing.</p>
+        {% if blocked_reason %}
+        <div class="alert alert-warning" role="alert">{{ blocked_reason }}</div>
+        {% else %}
+        <h2 class="h5">Members who will lose household access</h2>
+        <ul>
+            {% for member in preview.members %}
+            <li>{{ member.name }} ({{ member.email }}){% if not member.is_active %} - inactive{% endif %}</li>
+            {% endfor %}
+        </ul>
+        <h2 class="h5">Records currently selected for deletion</h2>
+        <p class="text-muted">Counts and permissions are checked again on submission.</p>
+        <dl class="row">
+            {% for name, count in preview.counts.items() %}
+            <dt class="col-8">{{ name }}</dt><dd class="col-4">{{ count }}</dd>
+            {% endfor %}
+        </dl>
+        <form method="POST" action="{{ url_for('family.delete_household') }}">
+            {{ form.hidden_tag() }}
+            {% for error in form.family_id.errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+            <input type="text" name="username" value="{{ current_user.email }}" autocomplete="username" hidden>
+            <div class="mb-3">
+                {{ form.password.label(class="form-label") }}
+                {{ form.password(class="form-control", autocomplete="current-password", required=True) }}
+                {% for error in form.password.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="mb-3">
+                {{ form.confirmation.label(class="form-label") }}
+                {{ form.confirmation(class="form-control", autocomplete="off", required=True) }}
+                {% for error in form.confirmation.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            {{ form.submit(class="btn btn-danger") }}
+        </form>
+        {% endif %}
+        <p class="mt-3"><a href="{{ url_for('family.index') }}">Cancel and return to Family Management</a></p>
+    </div>
+</div>
+{% endblock %}

@@ -30,6 +30,7 @@ EVENT_LABELS = {
 	'family_invite_revoked': 'Family invite revoked',
 	'family_member_updated': 'Family member permissions changed',
 	'family_member_removed': 'Family member removed',
+	'household_deleted': 'Household deleted; login account retained',
 	'password_reset_requested': 'Password reset email requested',
 	'password_reset': 'Password reset with a reset link',
 	'password_reset_link_created': 'Password reset link created by the server admin',

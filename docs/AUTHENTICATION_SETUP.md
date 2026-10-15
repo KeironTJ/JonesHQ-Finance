@@ -284,10 +284,54 @@ out this browser, clears its remember cookie and invalidates all other sessions.
 
 This is not household deletion or complete erasure of every copy. Backups,
 operational logs, email-provider records, previously downloaded copies and
-browser display preferences are outside this operation. Whole-household
-deletion and operator privacy/deletion policies remain separate work.
+browser display preferences are outside this operation. Operator privacy/deletion
+policies remain separate work.
 No database migration is required. When adding owned models, domain children or
 foreign keys, review the deletion plan/order and test with foreign keys enabled.
+
+### Whole-household deletion
+
+Family Management has a separate deletion review at `/family/delete`, below the
+ordinary management controls. One active administrator of that household can
+confirm deletion, including other members' private records; other administrators
+do not need to approve. The page lists affected members and table counts without
+showing their private financial contents.
+
+The review requires recent authentication, the current password, CSRF protection,
+the exact phrase `DELETE THIS HOUSEHOLD` and a hidden reviewed household ID.
+Attempts are limited to three per 15 minutes per user. Authorization, membership
+and counts are rechecked under a household-row write on submission. A different
+household cannot be selected through form/query parameters.
+
+All records scoped to that household are deleted, including private records owned
+by current or former members, financial children, childcare, properties/mortgages,
+categories, vendors, settings, cached summaries and family-join invites. Global
+templates and other households remain unchanged. New household tables require an
+explicit deletion-rule review; inconsistent incoming cross-household links or
+unhandled required dependencies block deletion. Data deletion, membership clearing,
+session revocation and audit recording commit in one transaction or roll back together.
+Avoid concurrent data/membership changes during deletion; this path is not a
+global lock for unrelated application writers.
+
+Every current member (including inactive members) retains their login account,
+active/inactive status, password, email, site-admin flag, two-factor configuration
+and recovery codes. Household membership, role, section grants, display name and
+default account are cleared; all their sessions are revoked. Former members'
+accounts/sessions are not changed. Existing security events retain their user link
+but lose the deleted household link; each current member receives a retained
+`household_deleted` event. Operational logs record a completion marker without
+financial details. Backups, logs, provider records and downloaded copies remain
+outside this operation and follow separate retention policies.
+
+The administrator's export does **not** include other members' private data.
+Members should download their own exports before deletion if wanted; the review
+warns about this. There is no automatic full-household export or emailed backup.
+After signing back in, detached users land on Account security. They can accept
+a fresh family-join invite while signed in, following recent password confirmation,
+using the same account. This consumes the invite once, assigns its permissions
+and revokes prior sessions before starting a new one. Ordinary registration still
+creates new accounts; it does not recreate households for an existing email.
+No migration or additional scheduled job is required.
 
 ### Retention cleanup
 

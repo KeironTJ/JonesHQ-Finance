@@ -235,6 +235,17 @@
         </div>
     </div>
     {% endif %}
+
+    <div class="card border-danger mb-4">
+        <div class="card-body">
+            <h2 class="h5">Delete this household</h2>
+            <p>Delete all shared and private household records, including other members'
+                private records. Login accounts remain, but everyone loses household access.</p>
+            <a href="{{ url_for('family.delete_household') }}" class="btn btn-outline-danger">
+                Review household deletion
+            </a>
+        </div>
+    </div>
 </div>
 
 <!-- ── Create Invite Modal ──────────────────────────────────────────── -->

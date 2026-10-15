@@ -17,6 +17,14 @@
                     ({{ invite.role }}).
                 </p>
 
+                {% if current_user.is_authenticated %}
+                <p>Join using your existing account: <strong>{{ current_user.email }}</strong>.
+                    Your password and two-factor settings will not change.</p>
+                <form method="POST" action="{{ url_for('family.join', token=token) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-success w-100">Join with my existing account</button>
+                </form>
+                {% else %}
                 <form method="POST" action="{{ url_for('family.join', token=token) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
@@ -54,8 +62,9 @@
                 <hr class="my-4">
                 <p class="text-center text-muted small">
                     Already have an account?
-                    <a href="{{ url_for('auth.login') }}">Sign in</a>
+                    <a href="{{ url_for('auth.login', next=url_for('family.join', token=token)) }}">Sign in</a>
                 </p>
+                {% endif %}
             </div>
         </div>
     </div>

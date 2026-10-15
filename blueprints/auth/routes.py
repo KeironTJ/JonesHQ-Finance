@@ -47,20 +47,20 @@ def health():
     return jsonify(status='ok' if healthy else 'unavailable'), 200 if healthy else 503
 
 
-def _safe_next_page():
+def _safe_next_page(default_endpoint='dashboard.index'):
     target = request.args.get('next', '')
     decoded = unquote(target)
     if (
         not decoded.startswith('/') or decoded.startswith('//')
         or '\\' in decoded or any(ord(char) < 32 or ord(char) == 127 for char in decoded)
     ):
-        return url_for('dashboard.index')
+        return url_for(default_endpoint)
     try:
         parsed = urlsplit(decoded)
     except ValueError:
-        return url_for('dashboard.index')
+        return url_for(default_endpoint)
     if parsed.scheme or parsed.netloc:
-        return url_for('dashboard.index')
+        return url_for(default_endpoint)
     return target
 
 
@@ -71,7 +71,7 @@ def login():
     """User login page with security features"""
     # Redirect if already logged in
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard.index'))
+        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'dashboard.index'))
     
     form = LoginForm()
     
@@ -84,18 +84,19 @@ def login():
         except ValueError as error:
             flash(str(error) or 'Invalid email or password.', 'danger')
         else:
+            default_endpoint = 'auth.account_security' if user.family_id is None else 'dashboard.index'
             if user.two_factor_enabled:
                 session.pop('2fa_pending', None)
                 session['2fa_pending'] = {
                     'user_id': user.id,
                     'remember': bool(form.remember.data),
-                    'next': _safe_next_page(),
+                    'next': _safe_next_page(default_endpoint),
                     'started': int(time.time()),
                 }
                 return redirect(url_for('auth.two_factor_login'))
             UserSessionService.start(user, remember=form.remember.data)
             flash(f'Welcome back, {user.name}!', 'success')
-            return redirect(_safe_next_page())
+            return redirect(_safe_next_page(default_endpoint))
     
     return render_template('auth/login.html', form=form)
 
@@ -124,7 +125,7 @@ def _two_factor_user_key():
 def two_factor_login():
     """Second login step: authenticator or recovery code"""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard.index'))
+        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'dashboard.index'))
 
     pending = _pending_two_factor()
     if pending is None:

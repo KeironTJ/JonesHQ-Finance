@@ -13,6 +13,7 @@ from models import (
     UserRecoveryCode, UserSession, Vehicle,
 )
 from models.expense_calendar import ExpenseCalendarEntry
+from services.platform.deletion_helpers import deletion_references
 from utils.db_helpers import get_current_user_id
 
 
@@ -88,36 +89,7 @@ class AccountDeletionService:
 
     @staticmethod
     def _references(plan):
-        """Validate incoming foreign keys before detaching any nullable references."""
-        references = []
-        delete_order = {model.__table__: index for index, model in enumerate(DELETE_ORDER)}
-        for table in db.metadata.tables.values():
-            for column in table.columns:
-                for foreign_key in column.foreign_keys:
-                    targets = plan.get(foreign_key.column.table, {})
-                    if not targets:
-                        continue
-                    condition = column.in_(targets)
-                    deleting = plan.get(table, {})
-                    rows = db.session.execute(select(table).where(condition)).mappings().all()
-                    if not rows:
-                        continue
-                    surviving = [row for row in rows if row['id'] not in deleting]
-                    if not column.nullable:
-                        if surviving:
-                            raise ValueError('Linked records prevent safe account deletion. Contact the site administrator.')
-                        continue
-                    if surviving and column.name == 'owner_id' and foreign_key.column.table == User.__table__:
-                        raise ValueError('Private records require a reviewed deletion rule. Contact the site administrator.')
-                    if foreign_key.column.table != User.__table__:
-                        for row in surviving:
-                            if 'family_id' in row and row['family_id'] != targets[row[column.name]]:
-                                raise ValueError('Linked household data is inconsistent. Contact the site administrator before deletion.')
-                    if table in delete_order and delete_order[table] < delete_order[foreign_key.column.table]:
-                        # Rows deleted first need no detachment (subscriptions require a funding target).
-                        condition &= table.c.id.not_in(deleting)
-                    references.append((table, column, condition))
-        return references
+        return deletion_references(plan, [model.__table__ for model in DELETE_ORDER])
 
     @staticmethod
     def preview(user):

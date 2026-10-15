@@ -115,6 +115,8 @@ def check_section_access():
 
     if not authenticated:
         return  # Flask-Login login_required takes care of this
+    if request.endpoint == 'family.join' and user.family_id is None:
+        return  # Detached accounts can accept a new invite, not manage a household.
     if user.is_admin:
         return  # admins have unrestricted access
 

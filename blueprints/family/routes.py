@@ -15,10 +15,12 @@ Public route (no login required):
 import json
 from datetime import datetime, timezone
 
-from flask import render_template, redirect, url_for, flash, request, abort
+from flask import render_template, redirect, url_for, flash, request, abort, current_app
 from flask_login import login_required, current_user
+from sqlalchemy.exc import SQLAlchemyError
 
 from blueprints.family import family_bp
+from blueprints.family.forms import DeleteHouseholdForm
 from extensions import db, limiter
 from models.family import Family, FamilyInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
@@ -26,6 +28,7 @@ from models.users import User
 from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTIONS
 from utils.db_helpers import family_query, get_family_id
 from services.household.family_service import FamilyService
+from services.household.household_deletion_service import HouseholdDeletionService
 from services.platform.auth_service import AuthService
 from services.platform.email_verification_service import EmailVerificationService
 from services.platform.user_session_service import UserSessionService
@@ -218,7 +221,73 @@ def remove_member(member_id):
     return redirect(url_for('family.index'))
 
 
+@family_bp.route('/delete', methods=['GET', 'POST'])
+@login_required
+@recent_auth_required
+@limiter.limit(
+    "3 per 15 minutes", key_func=lambda: f"household-delete:{current_user.id}", methods=["POST"])
+def delete_household():
+    _require_admin()
+    if current_user.family_id is None:
+        abort(403)
+    form = DeleteHouseholdForm()
+    if request.method == 'GET':
+        form.family_id.data = str(current_user.family_id)
+    preview = {}
+    blocked_reason = None
+    try:
+        preview = HouseholdDeletionService.preview(current_user)
+    except ValueError as error:
+        blocked_reason = str(error)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Household deletion preview failed.')
+        blocked_reason = 'Unable to check household records. Please try again.'
+    if blocked_reason is None and form.validate_on_submit():
+        try:
+            HouseholdDeletionService.delete_household(current_user, {
+                'password': form.password.data, 'confirmation': form.confirmation.data,
+                'family_id': form.family_id.data,
+            })
+        except ValueError as error:
+            flash(str(error) or 'Unable to delete this household.', 'danger')
+        except SQLAlchemyError:
+            current_app.logger.exception('Household deletion failed.')
+            flash('Unable to delete this household. No deletion was committed. Please try again.', 'danger')
+        else:
+            from blueprints.auth.routes import _clear_browser_login
+            _clear_browser_login()
+            flash('The household and its records have been deleted. Login accounts remain. Everyone has been signed out.', 'success')
+            return redirect(url_for('auth.login'))
+    return render_template(
+        'family/delete_household.html', form=form, preview=preview, blocked_reason=blocked_reason)
+
+
 # ── Public join route ─────────────────────────────────────────────────────────
+
+@login_required
+@recent_auth_required
+def _join_existing(invite, token):
+    if current_user.family_id is not None:
+        flash('You already belong to a household.', 'danger')
+        return redirect(url_for('auth.account_security'))
+    if request.method == 'POST':
+        user = db.session.get(User, current_user.id)
+        if user is None:
+            abort(401)
+        try:
+            FamilyService.join_existing(user, {'token': token})
+        except ValueError as error:
+            flash(str(error) or 'Unable to join this household.', 'danger')
+        except SQLAlchemyError:
+            current_app.logger.exception('Joining a household with an existing account failed.')
+            flash('Unable to join this household. Please try again.', 'danger')
+        else:
+            UserSessionService.start(user, method='family invite')
+            flash('You have joined the household using your existing account.', 'success')
+            return redirect(url_for('onboarding.index'))
+    return render_template('family/join.html', invite=invite, token=token)
+
 
 @family_bp.route('/join/<token>', methods=['GET', 'POST'])
 @limiter.limit("5 per hour", methods=["POST"])
@@ -229,6 +298,9 @@ def join(token):
     if not invite.is_valid:
         flash('This invite link has expired or has already been used.', 'danger')
         return redirect(url_for('auth.login'))
+
+    if current_user.is_authenticated:
+        return _join_existing(invite, token)
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
