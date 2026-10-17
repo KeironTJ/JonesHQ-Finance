@@ -53,7 +53,7 @@ class TestPasswordHashing:
 class TestSectionPermissions:
     def test_admin_can_access_any_section(self, app, user):
         """Admin role bypasses all section restrictions."""
-        assert user.is_admin is True
+        assert user.is_household_owner is True
         for section in ('transactions', 'income', 'settings', 'family', 'credit_cards'):
             assert user.can_access_section(section) is True, \
                 f"Admin should be able to access '{section}'"

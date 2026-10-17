@@ -457,13 +457,13 @@
 {% endif %}
 {% endfor %}
 
-<!-- Admin Recovery Tools (admin users only) -->
-{% if current_user.is_admin %}
+<!-- Recovery tools (household owners only) -->
+{% if current_user.is_household_owner %}
 <div class="card mb-4 border-secondary">
     <div class="card-header bg-secondary text-white" style="cursor: pointer;"
          data-bs-toggle="collapse" data-bs-target="#adminRecoveryBody" aria-expanded="false">
         <h5 class="mb-0">
-            <i class="bi bi-chevron-down me-2"></i>Admin Recovery Tools
+            <i class="bi bi-chevron-down me-2"></i>Owner Recovery Tools
         </h5>
     </div>
     <div class="collapse" id="adminRecoveryBody">

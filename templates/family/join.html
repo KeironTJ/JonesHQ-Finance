@@ -18,7 +18,7 @@
                 </p>
 
                 <p class="small">Read the <a href="{{ url_for('auth.privacy_notice') }}">privacy notice</a>
-                    before joining, especially shared-record visibility and household administrator deletion powers.</p>
+                    before joining, especially shared-record visibility and household owner deletion powers.</p>
                 {% if current_user.is_authenticated %}
                 <p>Join using your existing account: <strong>{{ current_user.email }}</strong>.
                     Your password and two-factor settings will not change.</p>

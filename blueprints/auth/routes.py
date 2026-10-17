@@ -6,14 +6,14 @@ from hashlib import sha256
 import json
 import time
 
-from flask import abort, render_template, redirect, url_for, flash, request, current_app, session, jsonify, Response
+from flask import render_template, redirect, url_for, flash, request, current_app, session, jsonify, Response
 from flask_login import logout_user, current_user, login_required
 from flask_limiter.util import get_remote_address
 from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
 from .forms import (
-    ChangePasswordForm, DeleteAccountForm, ForgotPasswordForm, HouseholdInviteForm, LoginForm, PasswordConfirmForm,
+    ChangePasswordForm, DeleteAccountForm, ForgotPasswordForm, LoginForm, PasswordConfirmForm,
     ReauthenticateForm, RegisterForm, ResetPasswordForm, TwoFactorCodeForm,
 )
 from extensions import db, limiter
@@ -24,6 +24,7 @@ from services.platform.email_verification_service import EmailVerificationServic
 from services.platform.household_invite_service import HouseholdInviteService
 from services.platform.password_reset_service import PasswordResetService
 from services.platform.security_event_service import SecurityEventService
+from services.platform.site_settings_service import SiteSettingsService
 from services.platform.two_factor_service import TwoFactorService
 from services.platform.user_session_service import UserSessionService
 from utils.reauth import recent_auth_required
@@ -387,6 +388,10 @@ def register():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
 
+    if SiteSettingsService.household_signups_paused():
+        return render_template('auth/register.html', form=None,
+                               signups_paused_message=SiteSettingsService.signups_paused_message())
+
     form = RegisterForm()
     if request.method == 'GET':
         form.invite_token.data = request.args.get('invite', '')
@@ -515,57 +520,6 @@ def resend_verification():
     else:
         flash('Email is not set up on this server.', 'warning')
     return redirect(url_for('auth.account_security'))
-
-
-def _require_site_admin():
-    if not current_user.is_site_admin:
-        abort(403)
-
-
-@auth_bp.route('/site-admin/household-invites', methods=['GET', 'POST'])
-@login_required
-@recent_auth_required
-def household_invites():
-    """Site-admin page for issuing one-time household invite links"""
-    _require_site_admin()
-    form = HouseholdInviteForm()
-    new_link = None
-
-    if form.validate_on_submit():
-        try:
-            _, token = HouseholdInviteService.create_invite({
-                'email': form.email.data,
-                'note': form.note.data,
-                'days': form.days.data,
-            }, created_by_id=current_user.id)
-        except ValueError as error:
-            flash(str(error) or 'Unable to create invite.', 'danger')
-        else:
-            SecurityEventService.record('household_invite_created', details=form.email.data or form.note.data)
-            new_link = url_for('auth.register', invite=token, _external=True)
-            form = HouseholdInviteForm(formdata=None)
-
-    return render_template(
-        'auth/household_invites.html',
-        form=form,
-        invites=HouseholdInviteService.list_invites(),
-        new_link=new_link,
-    )
-
-
-@auth_bp.route('/site-admin/household-invites/<int:invite_id>/revoke', methods=['POST'])
-@login_required
-@recent_auth_required
-def revoke_household_invite(invite_id):
-    _require_site_admin()
-    try:
-        HouseholdInviteService.revoke_invite(invite_id)
-    except ValueError as error:
-        flash(str(error) or 'Unable to revoke invite.', 'danger')
-    else:
-        SecurityEventService.record('household_invite_revoked', details=f'invite {invite_id}')
-        flash('Invite revoked.', 'success')
-    return redirect(url_for('auth.household_invites'))
 
 
 @auth_bp.route('/logout', methods=['POST'])

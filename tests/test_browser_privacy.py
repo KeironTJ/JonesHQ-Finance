@@ -128,7 +128,7 @@ def test_admin_assets_are_local(app, user):
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get('/admin/')
+    response = client.get('/site-admin/console/')
     assert response.status_code == 200
     assert_local_assets(client, response.get_data(as_text=True))
     g.pop('_login_user', None)

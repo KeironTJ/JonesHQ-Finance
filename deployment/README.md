@@ -357,14 +357,24 @@ Run it after each deployment and before onboarding new households. Any reported
 `table.column` count is pre-existing data that needs investigation; do not
 delete rows without a fresh dump.
 
-## Operator console
+## Site admin area
 
-`/admin` is for operator tasks only: deactivate, reactivate, unlock or sign out
-users; view households, invites (without tokens), sessions and security events;
-and edit the global tax-year templates. It does not show household financial
-data and can't create, edit or delete users. Every user action is recorded as a
-security event. See
-[AUTHENTICATION_SETUP.md](../docs/AUTHENTICATION_SETUP.md#operator-console-admin).
+`/site-admin` is the operator area, separate from your own household's pages.
+It needs `is_site_admin` (`flask site-admin grant EMAIL`), two-factor login and a
+recent password confirmation. The old `/admin` address redirects there.
+
+- **Overview**: service counts and the effective, non-secret configuration,
+  including database engine and migration revision.
+- **Household invites**: one-time registration links for new households.
+- **Service settings**: pause new household sign-ups and set an announcement
+  banner. These are stored in the `site_settings` table (migration
+  `b3e5d7f9a1c2`), take effect immediately without a restart and are audited.
+- **Users & audit console** (`/site-admin/console`): deactivate, reactivate,
+  unlock or sign out users; view households, invites (without tokens), sessions
+  and security events; edit the global tax-year templates. It doesn't show
+  household financial data and can't create, edit or delete users.
+
+See [AUTHENTICATION_SETUP.md](../docs/AUTHENTICATION_SETUP.md#site-admin-area-site-admin).
 
 ## Files
 

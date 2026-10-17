@@ -103,6 +103,8 @@ class AuthService:
 	@staticmethod
 	def register_household(data):
 		"""Register a new household, enforcing a one-time invite unless registration is open."""
+		from services.platform.site_settings_service import SiteSettingsService
+		SiteSettingsService.ensure_household_signups_open()
 		email = (data.get('email') or '').strip().lower()
 		invite = None
 		if not AuthService.registration_is_open():

@@ -58,7 +58,7 @@ class AccountDeletionService:
                 User.role == 'admin', User.is_active.is_(True),
             )).first()
             if replacement is None:
-                raise ValueError('Appoint another active household administrator before deleting your account.')
+                raise ValueError('Appoint another active household owner before deleting your account.')
 
     @staticmethod
     def _plan(user):
@@ -77,7 +77,7 @@ class AccountDeletionService:
             ).where(getattr(child, foreign_key).in_(parents)))
             for row_id, family_id, parent_id in rows:
                 if family_id != parents[parent_id]:
-                    raise ValueError('Linked household data is inconsistent. Contact the site administrator before deletion.')
+                    raise ValueError('Linked household data is inconsistent. Contact the service operator before deletion.')
                 plan.setdefault(child.__table__, {})[row_id] = family_id
         for model, foreign_key in (
             (FamilyInvite, 'created_by_id'), (UserSession, 'user_id'), (UserRecoveryCode, 'user_id'),

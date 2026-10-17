@@ -1,0 +1,50 @@
+{% extends 'site_admin/base.html' %}
+
+{% block site_admin_title %}Service settings{% endblock %}
+
+{% block site_admin_content %}
+<div class="card" style="max-width: 760px;">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-sliders"></i> Service settings</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">These apply to every household and take effect immediately. Each change is
+            recorded in the security log.</p>
+        <form method="POST" action="{{ url_for('site_admin.settings') }}">
+            {{ form.hidden_tag() }}
+
+            <h6 class="mt-2">New households</h6>
+            <div class="form-check form-switch mb-2">
+                {{ form.household_signups_paused(class="form-check-input", role="switch") }}
+                {{ form.household_signups_paused.label(class="form-check-label") }}
+            </div>
+            <div class="form-text mb-2">Blocks household registration, even with a valid invite link. Existing
+                households, sign-ins and family member invites are not affected.</div>
+            <div class="mb-4">
+                {{ form.signups_paused_message.label(class="form-label") }}
+                {{ form.signups_paused_message(class="form-control" + (" is-invalid" if form.signups_paused_message.errors else ""),
+                                               placeholder="New household sign-ups are paused at the moment. Please try again later.") }}
+                {% for error in form.signups_paused_message.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+            </div>
+
+            <h6>Announcement banner</h6>
+            <div class="mb-3">
+                {{ form.announcement.label(class="form-label") }}
+                {{ form.announcement(class="form-control" + (" is-invalid" if form.announcement.errors else ""), rows=3) }}
+                {% for error in form.announcement.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+                <div class="form-text">Shown at the top of every page, including sign-in, e.g. planned maintenance.
+                    Plain text only.</div>
+            </div>
+            <div class="mb-4" style="max-width: 280px;">
+                {{ form.announcement_level.label(class="form-label") }}
+                {{ form.announcement_level(class="form-select") }}
+            </div>
+
+            {{ form.submit(class="btn btn-primary") }}
+        </form>
+    </div>
+    {% if site_settings.updated_at %}
+    <div class="card-footer small text-muted">Last changed {{ site_settings.updated_at.strftime('%d %b %Y %H:%M') }} UTC</div>
+    {% endif %}
+</div>
+{% endblock %}

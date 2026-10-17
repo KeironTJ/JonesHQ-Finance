@@ -1,0 +1,13 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+<h3>Site admin console</h3>
+<p>Read-only records for the whole service, with audited account actions.</p>
+<ul>
+    <li><strong>Operator &rarr; Users</strong>: deactivate, reactivate, unlock or sign out a user.</li>
+    <li><strong>Operator &rarr; Households, invites, sessions, security events</strong>: read-only.</li>
+    <li><strong>Reference &rarr; Tax year templates</strong>: the defaults new households copy.</li>
+</ul>
+<p class="text-muted">Household invites and service settings are on the
+    <a href="{{ url_for('site_admin.index') }}">site admin overview</a>.</p>
+{% endblock %}

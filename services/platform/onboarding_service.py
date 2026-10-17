@@ -36,7 +36,7 @@ class OnboardingService:
     @staticmethod
     def get_context():
         user, family = OnboardingService._current_user_and_family()
-        if user.is_admin and family.onboarding_version < ONBOARDING_VERSION:
+        if user.is_household_owner and family.onboarding_version < ONBOARDING_VERSION:
             mode = 'household'
         elif user.onboarding_version < ONBOARDING_VERSION:
             mode = 'personal'
@@ -53,8 +53,8 @@ class OnboardingService:
     @staticmethod
     def complete_household(data):
         user, family = OnboardingService._current_user_and_family()
-        if not user.is_admin:
-            raise ValueError('Only a household admin can complete household setup.')
+        if not user.is_household_owner:
+            raise ValueError('Only a household owner can complete household setup.')
 
         try:
             payday_day = int(data.get('payday_day', 15))

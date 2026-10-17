@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}{% block site_admin_title %}Overview{% endblock %} · Site admin - Family HQ{% endblock %}
+
+{% block extra_css %}
+<style>
+    .site-admin-banner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.85rem 1.1rem;
+        margin: 1rem 0 1.25rem;
+        border-radius: 0.6rem;
+        color: #fff;
+        background: repeating-linear-gradient(135deg, #7f1d1d 0 18px, #991b1b 18px 36px);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    .site-admin-banner .site-admin-label {
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+    .site-admin-tabs .nav-link.active {
+        border-color: var(--clr-danger) var(--clr-danger) transparent;
+        color: var(--clr-danger);
+        font-weight: 600;
+    }
+</style>
+{% block site_admin_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="site-admin-banner" role="note">
+    <div>
+        <span class="site-admin-label"><i class="bi bi-shield-shaded me-1"></i> Site admin</span>
+        <span class="ms-2">You are managing the Family HQ service for all households. Your own household's finances are not part of this area.</span>
+    </div>
+    <a class="btn btn-sm btn-light" href="{{ url_for('dashboard.index') }}">
+        <i class="bi bi-arrow-left"></i> Back to my household
+    </a>
+</div>
+
+<ul class="nav nav-tabs site-admin-tabs mb-4">
+    {% for endpoint, label, icon in [
+        ('site_admin.index', 'Overview', 'bi-speedometer'),
+        ('site_admin.household_invites', 'Household invites', 'bi-envelope-plus'),
+        ('site_admin.settings', 'Service settings', 'bi-sliders'),
+    ] %}
+    <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}" href="{{ url_for(endpoint) }}">
+            <i class="bi {{ icon }}"></i> {{ label }}
+        </a>
+    </li>
+    {% endfor %}
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('admin.index') }}">
+            <i class="bi bi-people"></i> Users &amp; audit console
+        </a>
+    </li>
+</ul>
+
+{% block site_admin_content %}{% endblock %}
+{% endblock %}

@@ -81,7 +81,7 @@ to one email address, and can be revoked. Only a SHA-256 hash of each token is
 stored, so the link is shown once when created. A failed registration (weak
 password, existing email) does not consume the invite.
 
-Issue invites as a site admin from the account menu → **Household invites**
+Issue invites from the account menu → **Site admin area → Household invites**
 (`/site-admin/household-invites`), or on the server:
 
 ```bash
@@ -102,8 +102,8 @@ stolen cookie stops working once that session is revoked or expires.
 
 Any user can turn on authenticator-app (TOTP) two-factor login from
 **Account security** in the user menu. It is **required for site admins**: a
-site admin without it is redirected to setup on every page, and `/admin` refuses
-access until it is on.
+site admin without it is redirected to setup on every page, and the site admin
+area (`/site-admin`) refuses access until it is on.
 
 - Setup shows a QR code and a manual setup key. The first valid 6-digit code
   turns it on and shows 10 single-use recovery codes once.
@@ -143,7 +143,7 @@ at any time.
 - Activity (`last_seen_at` and IP) is recorded at most once a minute.
 - **Account security → Signed-in devices** lists active sessions with browser,
   device, IP and last activity. Users can sign out one device or all other devices.
-- Site admins can view all sessions (without token hashes) under **Admin → Operator → Sessions**.
+- Site admins can view all sessions (without token hashes) under **Site admin area → Users & audit console → Operator → Sessions**.
 - Revoked and expired rows are deleted 30 days later, the next time that user signs in.
 
 Sign a user out everywhere from the server (e.g. a lost laptop):
@@ -161,8 +161,8 @@ once when it is deployed.
   that meets the password policy. It signs out every other device.
 - Sensitive actions ask for the password again if it wasn't entered in the last
   `REAUTH_WINDOW_MINUTES` (default 15) in this session: turning on two-factor
-  login, household invites, family invites, editing or removing family members,
-  and the `/admin` panel. The time is counted from the last password entry and
+  login, household invites, service settings, family invites, editing or removing family members,
+  and the site admin area. The time is counted from the last password entry and
   doesn't slide with activity. "Remember me" sessions keep their original sign-in
   time, so they are asked once that is older than the window. Form posts can't be replayed, so the user goes
   back to the page they came from and submits again. Password confirmation is
@@ -174,36 +174,69 @@ once when it is deployed.
   server reset commands. Each row has the user, household, IP and browser.
   Failed sign-ins for unknown emails are not recorded.
 - **Account security → Recent security activity** shows a user their last 20 events.
-  Site admins can search all events under **Admin → Operator → Security events**.
+  Site admins can search all events under **Site admin area → Users & audit console → Operator → Security events**.
 
-## Operator console (`/admin`)
-
-`/admin` is limited to site admins who have two-factor login turned on and have
-confirmed their password recently. It is an operator console, not a data browser:
-
-- **No household financial data.** Accounts, transactions, budgets, income,
-  pensions, loans, settings and every other household table are not exposed. Use
-  the app itself (scoped to your own household) or the server for investigations.
-- **Users** is read-only, with secrets excluded (password hash, two-factor secret,
-  recovery codes). Bulk actions: **Deactivate** (blocks sign-in and signs out
-  every device; you can't deactivate yourself), **Reactivate**, **Unlock** (clears
-  failed-sign-in lockout) and **Sign out everywhere**. Each action is recorded as
-  a security event (`account_deactivated`, `account_reactivated`,
-  `account_unlocked`, `all_sessions_revoked`) with "by site admin <id>".
-- **Households, Member invites, Household invites, Sessions** and **Security
-  events** are read-only. Invite tokens and token hashes are never shown, so the
-  console can't be used to join a household.
-- **Reference → Tax year templates** edits only the global tax rows
-  (`family_id` empty) that new households copy and that act as the fallback.
-  Each household's own tax settings are edited by that household in Settings.
-- All console forms and bulk actions carry Flask-Admin CSRF tokens.
-
-Create, edit and delete aren't available for users in the console. Use
-**Account security**, family member management, household deletion or the `flask`
-server commands so validation and audit logging still apply.
 - Events older than `SECURITY_EVENT_RETENTION_DAYS` (365) are deleted when anyone signs in.
   Enable the optional daily systemd retention timer to clean up even without sign-ins
   (see [deployment setup](../deployment/README.md#daily-retention-cleanup)).
+
+## Roles: household owner vs site admin
+
+There are two unrelated kinds of "admin". Neither grants the other's powers.
+
+| | Household owner | Site admin (service operator) |
+|---|---|---|
+| Stored as | `users.role = 'admin'` (`User.is_household_owner`) | `users.is_site_admin` |
+| Who | Whoever registers a household, plus anyone they make an owner | You, the operator. Granted only on the server: `flask site-admin grant EMAIL` |
+| Scope | Their own household only (`family_id`) | The service as a whole, never household finances |
+| Where | **Family & members**, Settings, household deletion | **Site admin area** (`/site-admin`) |
+| Requirements | None beyond sign-in | Two-factor login and a recent password confirmation |
+
+The operator normally also owns their own household and uses the app like any
+other customer. The user menu separates **Your household**, **Your account** and
+**Site admin (all households)**; every site-admin page carries a red striped
+banner with **Back to my household**.
+
+## Site admin area (`/site-admin`)
+
+Only site admins with two-factor login turned on and a recent password
+confirmation can open it. Nothing here shows household financial data.
+
+- **Overview** (`/site-admin/`): counts (households, active/deactivated/locked
+  users, sessions, open household invites, failed sign-ins in 24 hours) and the
+  effective server configuration from `.env.production` (registration mode, email,
+  session limits, retention, rate-limit storage scheme, database engine and
+  migration). Read-only; secrets are never shown.
+- **Household invites** (`/site-admin/household-invites`): one-time registration
+  links for new households.
+- **Service settings** (`/site-admin/settings`): switches stored in the
+  `site_settings` table that take effect immediately:
+  - **Pause new household sign-ups**: blocks household registration even with a
+    valid invite and shows an optional message instead. Existing households,
+    sign-ins and family member invites are unaffected.
+  - **Announcement**: plain-text banner (information, warning or urgent) at the
+    top of every app page, including sign-in. Leave blank to remove it.
+
+  Changes are recorded as a `site_settings_updated` security event.
+- **Users & audit console** (`/site-admin/console`, Flask-Admin; the old `/admin`
+  address redirects to the site admin area):
+  - **Users** is read-only, with secrets excluded (password hash, two-factor
+    secret, recovery codes). Bulk actions: **Deactivate** (blocks sign-in and
+    signs out every device; you can't deactivate yourself), **Reactivate**,
+    **Unlock** (clears failed-sign-in lockout) and **Sign out everywhere**. Each
+    is recorded as a security event (`account_deactivated`,
+    `account_reactivated`, `account_unlocked`, `all_sessions_revoked`) with
+    "by site admin <id>".
+  - **Households, Member invites, Household invites, Sessions** and **Security
+    events** are read-only. Invite tokens and token hashes are never shown, so
+    the console can't be used to join a household.
+  - **Reference → Tax year templates** edits only the global tax rows
+    (`family_id` empty) that new households copy and that act as the fallback.
+    Each household's own tax settings are edited by that household in Settings.
+  - All console forms and bulk actions carry Flask-Admin CSRF tokens. Users
+    can't be created, edited or deleted there; use **Account security**, family
+    member management, household deletion or the `flask` server commands so
+    validation and audit logging still apply.
 
 ## Email: password reset, confirmation and security alerts
 
@@ -324,7 +357,7 @@ Authored family-join invites are deleted and pending authored household-registra
 invites are revoked. Prior security events remain under normal retention with
 their user link removed; IP addresses or other identifying details may remain.
 
-The last household administrator must appoint another active administrator first.
+The last household owner must make another active member an owner first.
 Site administrators must first have their role revoked on the server with
 `flask site-admin revoke EMAIL`. A household-row write serializes this deletion
 path's administrator checks; it is not a global lock for unrelated membership edits.

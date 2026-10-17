@@ -1,0 +1,72 @@
+{% extends 'site_admin/base.html' %}
+
+{% block site_admin_title %}Overview{% endblock %}
+
+{% block site_admin_content %}
+<div class="row g-3 mb-4">
+    {% for label, value, icon in [
+        ('Households', stats.households, 'bi-house'),
+        ('Active users', stats.active_users, 'bi-person-check'),
+        ('Deactivated users', stats.inactive_users, 'bi-person-x'),
+        ('Locked out now', stats.locked_users, 'bi-lock'),
+        ('Signed-in sessions', stats.active_sessions, 'bi-laptop'),
+        ('Open household invites', stats.active_household_invites, 'bi-envelope-open'),
+        ('Failed sign-ins (24h)', stats.failed_sign_ins_24h, 'bi-exclamation-triangle'),
+        ('Site admins', stats.site_admins, 'bi-shield-shaded'),
+    ] %}
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small"><i class="bi {{ icon }}"></i> {{ label }}</div>
+                <div class="fs-3 fw-semibold">{{ value }}</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-sliders"></i> Service settings</h5>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('site_admin.settings') }}">Change</a>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">New household sign-ups</dt>
+                    <dd class="col-sm-7">
+                        {% if site_settings.household_signups_paused %}
+                        <span class="badge bg-warning text-dark">Paused</span>
+                        {% else %}
+                        <span class="badge bg-success">Accepting (with invite)</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-5">Announcement</dt>
+                    <dd class="col-sm-7">{{ site_settings.announcement or 'None' }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-hdd-stack"></i> Server configuration</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        {% for label, value in configuration %}
+                        <tr><th class="ps-3 fw-normal text-muted">{{ label }}</th><td>{{ value }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer small text-muted">
+                Read-only. These come from <code>.env.production</code> on the server and change with
+                a restart. Secrets are never shown.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

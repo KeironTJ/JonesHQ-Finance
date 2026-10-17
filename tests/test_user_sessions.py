@@ -252,7 +252,7 @@ def test_admin_sessions_view_hides_token_hash(app, user):
     login_client(client, user.id)
     record = UserSession.query.filter_by(user_id=user.id).one()
 
-    response = request(client, 'get', '/admin/admin_usersession/')
+    response = request(client, 'get', '/site-admin/console/admin_usersession/')
     assert response.status_code == 200
     assert b'pytest' in response.data
     assert record.token_hash.encode() not in response.data

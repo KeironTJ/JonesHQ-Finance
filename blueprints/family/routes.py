@@ -1,7 +1,7 @@
 """
 Family blueprint routes.
 
-Admin-only routes (require login + admin role):
+Household-owner routes (require login + owner role):
   GET  /family               – management page (members, active invites)
   POST /family/invite        – create a new invite link
   POST /family/invite/<id>/revoke  – revoke an unused invite
@@ -25,7 +25,7 @@ from extensions import db, limiter
 from models.family import Family, FamilyInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
-from utils.permissions import SECTION_GROUPS, SECTION_LABELS, ADMIN_ONLY_SECTIONS
+from utils.permissions import SECTION_GROUPS, SECTION_LABELS, OWNER_ONLY_SECTIONS
 from utils.db_helpers import family_query, get_family_id
 from services.household.family_service import FamilyService
 from services.household.household_deletion_service import HouseholdDeletionService
@@ -37,22 +37,22 @@ from utils.reauth import recent_auth_required
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _require_admin():
-    """Abort with 403 if the current user is not an admin."""
-    if not current_user.is_authenticated or not current_user.is_admin:
+def _require_household_owner():
+    """Abort with 403 unless the current user owns their household."""
+    if not current_user.is_authenticated or not current_user.is_household_owner:
         abort(403)
 
 
-# ── Admin routes ──────────────────────────────────────────────────────────────
+# ── Household-owner routes ──────────────────────────────────────────────────────────────
 
 @family_bp.route('/', methods=['GET'])
 @login_required
 def index():
-    _require_admin()
+    _require_household_owner()
 
     family = current_user.family
     if family is None:
-        # Bootstrap: create a default family for this admin
+        # Bootstrap: create a default family for this owner
         family = Family(name='My Family')
         db.session.add(family)
         db.session.flush()
@@ -102,7 +102,7 @@ def index():
 @login_required
 def create_assignment_label():
     """Create a custom family assignment label (e.g., child/non-login person)."""
-    _require_admin()
+    _require_household_owner()
 
     family = current_user.family
     if family is None:
@@ -127,7 +127,7 @@ def create_assignment_label():
 @login_required
 def delete_assignment_label(label_id):
     """Delete a custom family assignment label."""
-    _require_admin()
+    _require_household_owner()
 
     name = FamilyService.delete_assignment_label(label_id, current_user.family_id)
     flash(f'Removed assignment label: {name}', 'success')
@@ -138,7 +138,7 @@ def delete_assignment_label(label_id):
 @login_required
 @recent_auth_required
 def create_invite():
-    _require_admin()
+    _require_household_owner()
 
     family = current_user.family
     if family is None:
@@ -172,7 +172,7 @@ def create_invite():
 @login_required
 @recent_auth_required
 def revoke_invite(invite_id):
-    _require_admin()
+    _require_household_owner()
 
     FamilyService.revoke_invite(invite_id, current_user.family_id)
     flash('Invite revoked.', 'success')
@@ -183,7 +183,7 @@ def revoke_invite(invite_id):
 @login_required
 @recent_auth_required
 def update_member(member_id):
-    _require_admin()
+    _require_household_owner()
 
     member_name = request.form.get('member_name', '').strip()
     selected_sections = request.form.getlist('sections')
@@ -207,7 +207,7 @@ def update_member(member_id):
 @login_required
 @recent_auth_required
 def remove_member(member_id):
-    _require_admin()
+    _require_household_owner()
 
     name = FamilyService.remove_member(
         member_id,
@@ -227,7 +227,7 @@ def remove_member(member_id):
 @limiter.limit(
     "3 per 15 minutes", key_func=lambda: f"household-delete:{current_user.id}", methods=["POST"])
 def delete_household():
-    _require_admin()
+    _require_household_owner()
     if current_user.family_id is None:
         abort(403)
     form = DeleteHouseholdForm()

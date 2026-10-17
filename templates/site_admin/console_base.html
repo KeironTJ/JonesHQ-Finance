@@ -1,0 +1,34 @@
+{% extends 'admin/base.html' %}
+
+{% block head_tail %}
+{{ super() }}
+<style>
+    .site-admin-console-banner {
+        background: repeating-linear-gradient(135deg, #7f1d1d 0 18px, #991b1b 18px 36px);
+        color: #fff;
+        border-radius: 0.4rem;
+        padding: 0.7rem 1rem;
+        margin-bottom: 0.75rem;
+    }
+    .site-admin-console-banner a { color: #fff; text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block brand %}
+<a class="navbar-brand" href="{{ admin_view.admin.url }}">Site admin console</a>
+{% endblock %}
+
+{% block menu_links %}
+<ul class="nav navbar-nav navbar-right">
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('site_admin.index') }}">Site admin overview</a></li>
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('dashboard.index') }}">Back to my household</a></li>
+</ul>
+{% endblock %}
+
+{% block messages %}
+<div class="site-admin-console-banner" role="note">
+    <strong>SITE ADMIN</strong> &mdash; users, sessions and security events for every household. No household
+    financial data is shown here. <a href="{{ url_for('dashboard.index') }}">Back to my household</a>
+</div>
+{{ super() }}
+{% endblock %}

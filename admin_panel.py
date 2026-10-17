@@ -1,5 +1,5 @@
 """
-Flask-Admin operator console for Family HQ, at /admin.
+Flask-Admin operator console for Family HQ, at /site-admin/console (part of the site admin area).
 
 Operator-only: users, households, invites, sessions, security events and the
 global UK tax-year templates. Household financial data is deliberately not
@@ -28,7 +28,7 @@ def _deny_admin_access():
     if _is_two_factor_site_admin():
         from utils.reauth import reauthentication_redirect
         return reauthentication_redirect()
-    flash('Admin access required.', 'danger')
+    flash('Site admin access required.', 'danger')
     return redirect(url_for('auth.intro'))
 
 
@@ -219,10 +219,10 @@ def init_admin(app, db):
 
     admin = Admin(
         app,
-        name='FamilyHQ Admin',
-        theme=Bootstrap4Theme(),
-        index_view=SecureAdminIndexView(),
-        url='/admin',
+        name='Site admin console',
+        theme=Bootstrap4Theme(base_template='site_admin/console_base.html', fluid=True),
+        index_view=SecureAdminIndexView(template='site_admin/console_index.html', url='/site-admin/console'),
+        url='/site-admin/console',
     )
     admin.add_view(UserAdminView(User, db.session, name='Users', category='Operator'))
     admin.add_view(FamilyAdminView(Family, db.session, name='Households', category='Operator'))

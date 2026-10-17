@@ -228,22 +228,22 @@ def test_stale_site_admin_must_confirm_for_household_invites_and_admin(app, user
     client = app.test_client()
     login_client(client, user.id)
     assert request(client, 'get', '/site-admin/household-invites').status_code == 200
-    assert request(client, 'get', '/admin/').status_code == 200
+    assert request(client, 'get', '/site-admin/console/').status_code == 200
 
     make_stale(user)
-    for path in ('/site-admin/household-invites', '/admin/', '/admin/admin_user/'):
+    for path in ('/site-admin/household-invites', '/site-admin/console/', '/site-admin/console/admin_user/'):
         response = request(client, 'get', path)
         assert response.status_code == 302, path
         assert urlsplit(response.headers['Location']).path == '/account/confirm', path
 
     request(client, 'post', '/account/confirm', data={'password': 'TestPass1!'})
-    assert request(client, 'get', '/admin/admin_user/').status_code == 200
+    assert request(client, 'get', '/site-admin/console/admin_user/').status_code == 200
 
 
 def test_non_admin_is_not_sent_to_reauth_for_admin_panel(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    response = request(client, 'get', '/admin/')
+    response = request(client, 'get', '/site-admin/console/')
     assert response.status_code == 302
     assert urlsplit(response.headers['Location']).path != '/account/confirm'
 
@@ -361,10 +361,10 @@ def test_admin_security_events_view(app, user):
     enable_two_factor_admin(user)
     client = app.test_client()
     login_client(client, user.id)
-    response = request(client, 'get', '/admin/admin_securityevent/')
+    response = request(client, 'get', '/site-admin/console/admin_securityevent/')
     assert response.status_code == 200
     assert b'two_factor_enabled' in response.data
-    assert request(client, 'get', '/admin/admin_securityevent/new/').status_code in (302, 403, 404)
+    assert request(client, 'get', '/site-admin/console/admin_securityevent/new/').status_code in (302, 403, 404)
 
 
 def test_two_factor_events_are_logged(app, user):

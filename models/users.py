@@ -34,8 +34,8 @@ class User(UserMixin, db.Model):
     # Set when the user proves they own their email address (verification or reset link)
     email_verified_at = db.Column(db.DateTime, nullable=True)
 
-    # Site-level superuser flag - controls access to Flask-Admin (/admin)
-    # Completely separate from 'role' which is a family-level concept.
+    # Service operator ("site admin"): the /site-admin area. Granted only on the server
+    # (flask site-admin grant). Unrelated to 'role', which is a household-level concept.
     is_site_admin = db.Column(db.Boolean, default=False, server_default='0', nullable=False)
 
     # Two-factor login (TOTP). A secret without totp_enabled_at is a pending setup.
@@ -60,7 +60,8 @@ class User(UserMixin, db.Model):
         ),
         nullable=True,
     )
-    # 'admin' = full access within the family app; 'member' = restricted to allowed_sections
+    # Household role. 'admin' is shown as "Owner" (full access to their own household);
+    # 'member' is restricted to allowed_sections. The stored value stays 'admin'.
     role = db.Column(db.String(20), nullable=False, default='admin')
     # Display name that maps to 'assigned_to' values in transaction data
     member_name = db.Column(db.String(100), nullable=True)
@@ -114,8 +115,8 @@ class User(UserMixin, db.Model):
     # ------------------------------------------------------------------
 
     @property
-    def is_admin(self):
-        """True if the user has the 'admin' role."""
+    def is_household_owner(self):
+        """True for a household owner (stored role 'admin'). Not the same as is_site_admin."""
         return self.role == 'admin'
 
     @property
@@ -131,10 +132,10 @@ class User(UserMixin, db.Model):
     def get_allowed_sections(self):
         """Return the set of section keys this user may access.
 
-        Admin users always receive ``None`` (meaning: all sections allowed).
+        Household owners always receive ``None`` (meaning: all sections allowed).
         Members receive a set parsed from the ``allowed_sections`` JSON column.
         """
-        if self.is_admin:
+        if self.is_household_owner:
             return None  # no restriction
         if not self.allowed_sections:
             return set()
@@ -146,10 +147,10 @@ class User(UserMixin, db.Model):
     def can_access_section(self, section_key):
         """Return True if this user may access *section_key*.
 
-        Admins can always access every section.
+        Household owners can always access every section.
         Members need *section_key* listed in their ``allowed_sections``.
         """
-        if self.is_admin:
+        if self.is_household_owner:
             return True
         sections = self.get_allowed_sections()
         return section_key in sections

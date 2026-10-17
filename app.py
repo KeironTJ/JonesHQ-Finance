@@ -127,6 +127,7 @@ def create_app(config_name=None):
     from blueprints.family import family_bp
     from blueprints.plans import plans_bp
     from blueprints.onboarding import onboarding_bp
+    from blueprints.site_admin import site_admin_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -147,6 +148,7 @@ def create_app(config_name=None):
     app.register_blueprint(family_bp)
     app.register_blueprint(plans_bp)
     app.register_blueprint(onboarding_bp)
+    app.register_blueprint(site_admin_bp)
 
     # ── Section-level access enforcement ──────────────────────────────────
     @app.before_request
@@ -202,7 +204,15 @@ def create_app(config_name=None):
             today=lambda: date.today().strftime('%Y-%m-%d'),
             timedelta=timedelta,
             can_access_section=can_access_section,
+            site_settings_banner=_site_settings_banner,
         )
+
+    def _site_settings_banner():
+        from services.platform.site_settings_service import SiteSettingsService
+        settings = SiteSettingsService.get_safely()
+        if settings is None or not settings.announcement:
+            return None
+        return {'text': settings.announcement, 'level': settings.announcement_level}
     
     # ── Auto-set family_id on every new record ─────────────────────────────
     from sqlalchemy import event as _sa_event
@@ -232,6 +242,11 @@ def create_app(config_name=None):
     # Flask-Admin views use their own SecureForm CSRF tokens (admin_panel.OperatorView);
     # exempt its blueprint from Flask-WTF's global CSRF so the two don't conflict.
     csrf.exempt(app.blueprints['admin'])
+
+    @app.route('/admin', strict_slashes=False)
+    def legacy_admin_redirect():
+        from flask import redirect, url_for
+        return redirect(url_for('site_admin.index'))
 
     # Register error handlers
     register_error_handlers(app)
@@ -338,7 +353,7 @@ def register_commands(app):
 
     @app.cli.group()
     def site_admin():
-        """Manage site-level admin access to /admin panel."""
+        """Manage site admin (service operator) access to the /site-admin area."""
         pass
 
     @site_admin.command('grant')

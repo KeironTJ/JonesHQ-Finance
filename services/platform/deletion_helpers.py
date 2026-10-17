@@ -26,13 +26,13 @@ def deletion_references(plan, delete_order, allowed_family_detach=()):
                         if column.name == 'family_id' and table in allowed_family_detach:
                             continue
                         if 'family_id' in row and row['family_id'] != targets[row[column.name]]:
-                            raise ValueError('Linked household data is inconsistent. Contact the site administrator before deletion.')
+                            raise ValueError('Linked household data is inconsistent. Contact the service operator before deletion.')
                 if not column.nullable:
                     if surviving:
-                        raise ValueError('Linked records prevent safe account deletion. Contact the site administrator.')
+                        raise ValueError('Linked records prevent safe account deletion. Contact the service operator.')
                     continue
                 if surviving and column.name == 'owner_id' and target == User.__table__:
-                    raise ValueError('Private records require a reviewed deletion rule. Contact the site administrator.')
+                    raise ValueError('Private records require a reviewed deletion rule. Contact the service operator.')
                 if table in order and order[table] < order[target]:
                     # Subscriptions must retain their funding target until they are deleted.
                     condition &= table.c.id.not_in(deleting)

@@ -39,6 +39,7 @@ EVENT_LABELS = {
 	'account_deactivated': 'Account deactivated by the service operator',
 	'account_reactivated': 'Account reactivated by the service operator',
 	'account_unlocked': 'Sign-in lockout cleared by the service operator',
+	'site_settings_updated': 'Site settings changed by the service operator',
 }
 
 # Events that also send the user an email, with the alert subject.

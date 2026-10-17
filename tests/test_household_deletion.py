@@ -301,7 +301,7 @@ def test_membership_or_role_change_after_review_requires_a_new_review(app, user,
 
     monkeypatch.setattr(HouseholdDeletionService, 'preview', demote_after_preview)
     response = client.post('/family/delete', data=VALID_DATA)
-    assert b'Only an active administrator' in response.data
+    assert b'Only an active household owner' in response.data
     assert db.session.get(Family, family.id) is not None
 
 

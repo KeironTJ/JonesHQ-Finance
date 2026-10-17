@@ -26,7 +26,7 @@ def index():
     onboarding_incomplete = (
         current_user.onboarding_version < 1
         or (
-            current_user.is_admin
+            current_user.is_household_owner
             and current_user.family
             and current_user.family.onboarding_version < 1
         )

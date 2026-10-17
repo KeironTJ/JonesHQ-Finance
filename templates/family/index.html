@@ -38,15 +38,15 @@
                         </td>
                         <td class="text-muted small">{{ member.email }}</td>
                         <td>
-                            {% if member.is_admin %}
-                            <span class="badge bg-danger">Admin</span>
+                            {% if member.is_household_owner %}
+                            <span class="badge bg-danger">Owner</span>
                             {% else %}
                             <span class="badge bg-secondary">Member</span>
                             {% endif %}
                         </td>
                         <td>{{ member.member_name or '—' }}</td>
                         <td>
-                            {% if member.is_admin %}
+                            {% if member.is_household_owner %}
                             <span class="text-muted fst-italic">All sections</span>
                             {% else %}
                                 {% set sections = member.get_allowed_sections() %}
@@ -154,7 +154,7 @@
                             <td>{{ invite.member_name }}</td>
                             <td>
                                 {% if invite.role == 'admin' %}
-                                <span class="badge bg-danger">Admin</span>
+                                <span class="badge bg-danger">Owner</span>
                                 {% else %}
                                 <span class="badge bg-secondary">Member</span>
                                 {% endif %}
@@ -270,7 +270,7 @@
                             <label class="form-label fw-semibold">Role</label>
                             <select name="role" class="form-select" id="inviteRoleSelect">
                                 <option value="member" selected>Member (restricted)</option>
-                                <option value="admin">Admin (full access)</option>
+                                <option value="admin">Owner (full access)</option>
                             </select>
                         </div>
                     </div>
@@ -329,7 +329,7 @@
                             <label class="form-label fw-semibold">Role</label>
                             <select name="role" class="form-select" id="editMemberRole">
                                 <option value="member">Member (restricted)</option>
-                                <option value="admin">Admin (full access)</option>
+                                <option value="admin">Owner (full access)</option>
                             </select>
                         </div>
                     </div>
@@ -371,7 +371,7 @@
 
 {% block extra_js %}
 <script>
-// ── Invite modal: hide section checkboxes when role = admin
+// ── Invite modal: hide section checkboxes for owners (role value "admin")
 document.getElementById('inviteRoleSelect').addEventListener('change', function () {
     document.getElementById('sectionCheckboxes').style.display =
         this.value === 'admin' ? 'none' : '';

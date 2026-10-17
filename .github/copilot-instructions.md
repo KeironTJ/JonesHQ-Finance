@@ -19,6 +19,14 @@ DIRECTORY_STRUCTURE.md) and [services/README.md](../services/README.md) for the 
   Page-only CSS/JS stays inline in that page's `extra_css`/`extra_js` block; only promote it to
   a dedicated `static/` file once it's reused across pages or big enough to need its own file.
 
+## Household owner vs. site admin
+
+- `User.is_household_owner` (`role == 'admin'`) — manages one household. Never use it to gate
+  service-wide features.
+- `User.is_site_admin` — the service operator. Site-admin pages live only in the `site_admin`
+  blueprint (`/site-admin`, gated in its `before_request`) and the Flask-Admin console at
+  `/site-admin/console` (`admin_panel.py`). They must never expose household financial data.
+
 ## Multi-tenancy vs. privacy
 
 Two separate layers — see `utils/db_helpers.py`.

@@ -32,10 +32,10 @@ class HouseholdDeletionService:
     def _check_user(user):
         if (
             not user.is_authenticated or not user.is_active
-            or user.id != get_current_user_id() or not user.is_admin
+            or user.id != get_current_user_id() or not user.is_household_owner
             or user.family_id is None
         ):
-            raise ValueError('Only an active administrator can delete their own household.')
+            raise ValueError('Only an active household owner can delete their own household.')
 
     @staticmethod
     def _plan(user):
@@ -45,7 +45,7 @@ class HouseholdDeletionService:
         reviewed = set(tables) | {User.__table__, SecurityEvent.__table__}
         for table in db.metadata.tables.values():
             if 'family_id' in table.c and table not in reviewed:
-                raise ValueError('Household data requires a reviewed deletion rule. Contact the site administrator.')
+                raise ValueError('Household data requires a reviewed deletion rule. Contact the service operator.')
         # Exact household scope deliberately includes every member's private records.
         plan = {
             table: dict(db.session.execute(

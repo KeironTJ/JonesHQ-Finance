@@ -20,10 +20,10 @@ a *key* (short string) used as the canonical identifier across the codebase:
     vehicles           /vehicles, /vehicles/fuel, /vehicles/trips
     childcare          /childcare
     plans              /plans
-    settings           /settings            (admin-only by default)
-    family             /family              (admin-only by default)
+    settings           /settings            (household owners only)
+    family             /family              (household owners only)
 
-Admin users bypass all section checks.
+Household owners bypass all section checks.
 Members must have the section key listed in their ``allowed_sections`` column.
 """
 
@@ -54,8 +54,8 @@ SECTION_MAP = [
     ('/family',       'family'),
 ]
 
-# Section keys that only admins can ever access regardless of allowed_sections
-ADMIN_ONLY_SECTIONS = {'settings', 'family'}
+# Section keys that only household owners can access, regardless of allowed_sections
+OWNER_ONLY_SECTIONS = {'settings', 'family'}
 
 # Human-readable labels (used in invite-creation UI)
 SECTION_LABELS = {
@@ -96,7 +96,7 @@ def check_section_access():
     """Call from a ``before_request`` hook to enforce section-level restrictions.
 
     Does nothing for anonymous users (Flask-Login's own ``login_required``
-    handles those). Does nothing for admin users.
+    handles those). Does nothing for household owners.
     Raises 403 if a member tries to access a forbidden section.
     """
     user = current_user
@@ -117,15 +117,15 @@ def check_section_access():
         return  # Flask-Login login_required takes care of this
     if request.endpoint == 'family.join' and user.family_id is None:
         return  # Detached accounts can accept a new invite, not manage a household.
-    if user.is_admin:
-        return  # admins have unrestricted access
+    if user.is_household_owner:
+        return  # household owners have unrestricted access
 
     section = section_for_path(request.path)
     if section is None:
         return  # dashboard, static files, auth routes – always allowed
 
-    # Members cannot access admin-only sections regardless of their list
-    if section in ADMIN_ONLY_SECTIONS:
+    # Members cannot access owner-only sections regardless of their list
+    if section in OWNER_ONLY_SECTIONS:
         abort(403)
 
     if not user.can_access_section(section):

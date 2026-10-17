@@ -53,8 +53,8 @@ def _csrf_token(html):
 
 def _run_action(client, action, ids, token=None):
     if token is None:
-        token = _csrf_token(request(client, 'get', '/admin/admin_user/').data)
-    return request(client, 'post', '/admin/admin_user/action/', data={
+        token = _csrf_token(request(client, 'get', '/site-admin/console/admin_user/').data)
+    return request(client, 'post', '/site-admin/console/admin_user/action/', data={
         'action': action, 'rowid': [str(i) for i in ids], 'csrf_token': token,
     })
 
@@ -66,17 +66,17 @@ def test_household_financial_data_is_not_exposed(app, admin_client, other_user):
 
     for endpoint in ('admin_account', 'admin_transaction', 'admin_balance', 'admin_income',
                      'admin_pension', 'admin_settings', 'admin_taxsettings'):
-        assert request(admin_client, 'get', f'/admin/{endpoint}/').status_code == 404, endpoint
-    index = request(admin_client, 'get', '/admin/')
+        assert request(admin_client, 'get', f'/site-admin/console/{endpoint}/').status_code == 404, endpoint
+    index = request(admin_client, 'get', '/site-admin/console/')
     assert index.status_code == 200
     assert b'Transactions' not in index.data
     assert b'ZZSECRET' not in index.data
 
 
 def test_users_cannot_be_created_edited_or_deleted_directly(admin_client, other_user):
-    for path in ('/admin/admin_user/new/', f'/admin/admin_user/edit/?id={other_user.id}'):
+    for path in ('/site-admin/console/admin_user/new/', f'/site-admin/console/admin_user/edit/?id={other_user.id}'):
         assert request(admin_client, 'get', path).status_code in (302, 403, 404), path
-    request(admin_client, 'post', '/admin/admin_user/delete/', data={'id': str(other_user.id)})
+    request(admin_client, 'post', '/site-admin/console/admin_user/delete/', data={'id': str(other_user.id)})
     assert db.session.get(User, other_user.id) is not None
 
 
@@ -130,7 +130,7 @@ def test_family_invite_token_is_never_shown(admin_client, user):
     db.session.add(invite)
     db.session.commit()
 
-    for path in ('/admin/admin_familyinvite/', f'/admin/admin_familyinvite/details/?id={invite.id}'):
+    for path in ('/site-admin/console/admin_familyinvite/', f'/site-admin/console/admin_familyinvite/details/?id={invite.id}'):
         response = request(admin_client, 'get', path)
         assert response.status_code == 200, path
         assert invite.token.encode() not in response.data, path
@@ -142,13 +142,13 @@ def test_tax_templates_view_only_shows_and_creates_global_rows(admin_client, use
     db.session.add_all([household_row, template])
     db.session.commit()
 
-    listing = request(admin_client, 'get', '/admin/admin_taxtemplate/')
+    listing = request(admin_client, 'get', '/site-admin/console/admin_taxtemplate/')
     assert b'GL-2026' in listing.data and b'HH-2026' not in listing.data
-    edit_household = request(admin_client, 'get', f'/admin/admin_taxtemplate/edit/?id={household_row.id}')
+    edit_household = request(admin_client, 'get', f'/site-admin/console/admin_taxtemplate/edit/?id={household_row.id}')
     assert edit_household.status_code == 302
 
-    form_page = request(admin_client, 'get', '/admin/admin_taxtemplate/new/')
-    response = request(admin_client, 'post', '/admin/admin_taxtemplate/new/', data={
+    form_page = request(admin_client, 'get', '/site-admin/console/admin_taxtemplate/new/')
+    response = request(admin_client, 'post', '/site-admin/console/admin_taxtemplate/new/', data={
         'csrf_token': _csrf_token(form_page.data),
         'tax_year': '2027-2028', 'effective_from': '2027-04-06',
         'personal_allowance': '12570', 'basic_rate_limit': '50270', 'higher_rate_limit': '125140',

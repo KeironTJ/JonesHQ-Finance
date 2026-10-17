@@ -201,26 +201,31 @@
                            data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i>
                             <span class="ms-1">{{ current_user.name }}</span>
-                            {% if not current_user.is_admin %}
+                            {% if current_user.is_household_owner %}
+                            <span class="badge bg-secondary ms-1" style="font-size:0.65em;">Owner</span>
+                            {% else %}
                             <span class="badge bg-secondary ms-1" style="font-size:0.65em;">Member</span>
                             {% endif %}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            {% if current_user.is_admin %}
+                            {% if current_user.is_household_owner %}
+                            <li><h6 class="dropdown-header">Your household</h6></li>
                             <li><a class="dropdown-item" href="{{ url_for('family.index') }}">
-                                <i class="bi bi-people-fill"></i> Family
+                                <i class="bi bi-people-fill"></i> Family &amp; members
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
-                            {% if current_user.is_site_admin %}
-                            <li><a class="dropdown-item" href="{{ url_for('auth.household_invites') }}">
-                                <i class="bi bi-envelope-plus"></i> Household invites
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            {% endif %}
+                            <li><h6 class="dropdown-header">Your account</h6></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.account_security') }}">
                                 <i class="bi bi-shield-lock"></i> Account security
                             </a></li>
+                            {% if current_user.is_site_admin %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header" style="color:var(--clr-danger);">Site admin (all households)</h6></li>
+                            <li><a class="dropdown-item" href="{{ url_for('site_admin.index') }}">
+                                <i class="bi bi-shield-shaded"></i> Site admin area
+                            </a></li>
+                            {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="POST" action="{{ url_for('auth.logout') }}">
@@ -239,6 +244,12 @@
     </nav>
     <main>
         <div class="container-fluid px-3 px-lg-4">
+            {% set banner = site_settings_banner() %}
+            {% if banner %}
+            <div class="alert alert-{{ banner.level }} mt-3 mb-0" role="status">
+                <i class="bi bi-megaphone-fill me-1"></i> {{ banner.text }}
+            </div>
+            {% endif %}
             {% with messages = get_flashed_messages(with_categories=True) %}
                 {% if messages %}
                     <div class="flash-zone">

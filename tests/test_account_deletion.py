@@ -223,7 +223,7 @@ def test_last_admin_cannot_delete_until_another_active_admin_exists(app, user, f
                           family_id=family.id, password_hash=user.password_hash, role=role, is_active=active)
     db.session.commit()
     response = client.post('/account/security/delete', data=VALID_DATA)
-    assert b'Appoint another active household administrator' in response.data
+    assert b'Appoint another active household owner' in response.data
     assert row_exists(User, user.id)
 
 
@@ -363,7 +363,7 @@ def test_replacement_admin_deactivated_after_preview_blocks_deletion(app, deleti
 
     monkeypatch.setattr(AccountDeletionService, 'preview', deactivate_after_preview)
     response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
-    assert b'Appoint another active household administrator' in response.data
+    assert b'Appoint another active household owner' in response.data
     assert row_exists(User, user.id)
 
 

@@ -190,7 +190,7 @@ def test_site_admin_without_two_factor_is_forced_to_setup(app, user):
 	response = client.get('/dashboard/')
 	assert response.status_code == 302
 	assert response.headers['Location'].endswith('/account/security/two-factor/setup')
-	assert client.get('/admin/').status_code == 302
+	assert client.get('/site-admin/console/').status_code == 302
 	assert client.get('/account/security/two-factor/setup').status_code == 200
 
 
@@ -224,9 +224,9 @@ def test_admin_panel_never_shows_two_factor_secret(app, user):
 	assert is_logged_in(client)
 
 	for path in (
-		'/admin/admin_user/',
-		f'/admin/admin_user/details/?id={user.id}',
-		'/admin/admin_user/export/csv/',
+		'/site-admin/console/admin_user/',
+		f'/site-admin/console/admin_user/details/?id={user.id}',
+		'/site-admin/console/admin_user/export/csv/',
 	):
 		response = client.get(path)
 		assert response.status_code == 200, path
