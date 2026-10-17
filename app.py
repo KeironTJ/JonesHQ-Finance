@@ -46,14 +46,8 @@ def create_app(config_name=None):
     app.config.from_object(config[config_name])
     config[config_name].init_app(app)
 
-    if app.config['TRUSTED_PROXY_COUNT']:
-        from werkzeug.middleware.proxy_fix import ProxyFix
-        app.wsgi_app = ProxyFix(
-            app.wsgi_app,
-            x_for=app.config['TRUSTED_PROXY_COUNT'],
-            x_proto=app.config['TRUSTED_PROXY_COUNT'],
-            x_host=0,
-        )
+    from utils.proxy_guard import wrap_wsgi_app
+    wrap_wsgi_app(app)
 
     # Ensure Jinja template edits are picked up immediately in development.
     if app.debug or app.config.get('TESTING'):

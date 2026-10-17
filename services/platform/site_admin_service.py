@@ -55,6 +55,8 @@ class SiteAdminService:
             ('Security event retention', f"{config.get('SECURITY_EVENT_RETENTION_DAYS')} days"),
             ('Rate-limit storage', rate_limit_scheme),
             ('Trusted proxies', str(config.get('TRUSTED_PROXY_COUNT'))),
+            ('Direct connections', 'Proxy and local only' if (config.get('TRUSTED_PROXY_IPS') or '').strip()
+             else 'Accepted from any address'),
             ('Database engine', db.engine.dialect.name),
             ('Database migration', SiteAdminService._migration_revision()),
         ]

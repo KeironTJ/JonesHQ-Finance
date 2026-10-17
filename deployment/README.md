@@ -200,9 +200,8 @@ sudo -u joneshq bash -c "cd /home/joneshq/joneshq-finance && venv/bin/python dep
 If Redis fails to start in an unprivileged LXC with `226/NAMESPACE`, enable
 Proxmox → container → Options → Features → **Nesting**, then re-run the setup script.
 
-Also restrict port 8000 so only the Nginx Proxy Manager host can reach it (Proxmox
-firewall or `ufw allow from <NPM-IP> to any port 8000`); otherwise LAN devices could
-bypass HTTPS and spoof forwarded client IPs.
+Also restrict port 8000 so only the Nginx Proxy Manager container can reach it. See
+[Restricting direct access to port 8000](#restricting-direct-access-to-port-8000).
 
 After updating, check through the public URL: login works, the browser shows the
 session cookie as Secure/HttpOnly, and 11 rapid wrong-password attempts return
@@ -375,6 +374,56 @@ recent password confirmation. The old `/admin` address redirects there.
   household financial data and can't create, edit or delete users.
 
 See [AUTHENTICATION_SETUP.md](../docs/AUTHENTICATION_SETUP.md#site-admin-area-site-admin).
+
+## Restricting direct access to port 8000
+
+Nginx Proxy Manager (NPM) runs in a separate LXC and forwards to this container
+on port 8000, so Gunicorn must keep listening on the network (`0.0.0.0:8000`).
+Without restrictions, any device on the LAN can open `http://<finance-IP>:8000`
+directly, skipping HTTPS, and fake `X-Forwarded-For` to dodge login rate limits.
+Two layers close this:
+
+### 1. App: `TRUSTED_PROXY_IPS`
+
+The NPM container needs a fixed address (static IP or DHCP reservation). Find it
+in Proxmox → NPM container → **Network**. Then, as root in the finance LXC:
+
+```bash
+cd /home/joneshq/joneshq-finance
+grep -q '^TRUSTED_PROXY_IPS=' .env.production \
+  || echo 'TRUSTED_PROXY_IPS=<NPM-IP>' >> .env.production
+sudo -u joneshq venv/bin/python deployment/check_production_config.py
+systemctl restart joneshq-finance
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/healthz   # 200
+```
+
+Then check the public site still loads and you can sign in. From another LAN
+device, `curl -i http://<finance-IP>:8000/healthz` should return **403 Direct
+access is not allowed**.
+
+If the public site returns that 403 instead, the address is wrong: remove the
+`TRUSTED_PROXY_IPS` line and restart, then recheck the NPM IP. The site admin
+**Overview** shows "Direct connections: Proxy and local only" when it's active.
+
+### 2. Proxmox firewall on the finance container
+
+Guest firewalls only work when the datacenter firewall is enabled. **Enabling the
+datacenter firewall also filters the Proxmox host itself**, so do it in this order:
+
+1. Datacenter → Firewall → **Options**: set **Input Policy** to `ACCEPT` first
+   (keeps the host's web UI and SSH reachable), then set **Firewall** to `Yes`.
+2. Finance container → **Network** → `net0` → Edit: tick **Firewall**.
+3. Finance container → Firewall → **Add** two rules, in this order (top first):
+   - Direction `in`, Action `ACCEPT`, Protocol `tcp`, Dest. port `8000`,
+     Source `<NPM-IP>`, Enable ticked.
+   - Direction `in`, Action `DROP`, Protocol `tcp`, Dest. port `8000`,
+     Source empty, Enable ticked.
+4. Finance container → Firewall → **Options**: set **Firewall** to `Yes`. Leave
+   Input Policy `ACCEPT` so SSH and anything else you use keep working.
+
+Check again: the public site works; a LAN `curl` to port 8000 now times out
+instead of returning 403. Local checks inside the LXC (`127.0.0.1`) are
+unaffected. To undo, set the container's Firewall option back to `No`.
 
 ## Files
 

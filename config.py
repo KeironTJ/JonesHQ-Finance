@@ -14,6 +14,8 @@ class Config:
     def init_app(cls, app):
         if app.config['TRUSTED_PROXY_COUNT'] < 0:
             raise ValueError("TRUSTED_PROXY_COUNT must not be negative.")
+        from utils.proxy_guard import parse_proxy_networks
+        parse_proxy_networks(app.config.get('TRUSTED_PROXY_IPS'))
         if app.config['SESSION_IDLE_MINUTES'] < 1 or app.config['SESSION_ABSOLUTE_HOURS'] < 1:
             raise ValueError("SESSION_IDLE_MINUTES and SESSION_ABSOLUTE_HOURS must be at least 1.")
         if app.config['REAUTH_WINDOW_MINUTES'] < 1:
@@ -59,6 +61,8 @@ class Config:
     RATELIMIT_SWALLOW_ERRORS = False
     RATELIMIT_IN_MEMORY_FALLBACK_ENABLED = False
     TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', '0'))
+    # Comma-separated proxy IPs/CIDRs. When set, only these (and loopback) may connect.
+    TRUSTED_PROXY_IPS = os.environ.get('TRUSTED_PROXY_IPS', '')
     
     # Security Headers
     SECURITY_HEADERS = {
@@ -172,6 +176,7 @@ class TestingConfig(Config):
     WTF_CSRF_ENABLED = False
     RATELIMIT_STORAGE_URI = 'memory://'
     TRUSTED_PROXY_COUNT = 0
+    TRUSTED_PROXY_IPS = ''
     # Tests capture email in EmailService's outbox instead of sending it
     MAIL_SERVER = 'smtp.test.invalid'
     MAIL_USE_SSL = True

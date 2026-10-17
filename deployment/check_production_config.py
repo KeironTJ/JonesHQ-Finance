@@ -68,6 +68,11 @@ def main():
     print("OK: production configuration is valid and Redis is reachable.")
     print(f"    Rate-limit storage: {env['RATELIMIT_STORAGE_URI']}")
     print(f"    Trusted proxies:    {env.get('TRUSTED_PROXY_COUNT', '0')}")
+    if env.get('TRUSTED_PROXY_IPS', '').strip():
+        print(f"    Proxy addresses:    {env['TRUSTED_PROXY_IPS']} (other direct connections get 403)")
+    elif env.get('TRUSTED_PROXY_COUNT', '0') not in ('', '0'):
+        print("    WARNING: TRUSTED_PROXY_IPS is not set. Any host that can reach port 8000 can "
+              "bypass HTTPS and spoof its IP. Set it to the proxy's IP address.")
     if app.config.get('MAIL_SERVER'):
         print(f"    Email:              {app.config['MAIL_SERVER']}:{app.config['MAIL_PORT']} "
               f"from {app.config['MAIL_FROM']}")

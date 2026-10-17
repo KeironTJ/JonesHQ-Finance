@@ -26,6 +26,7 @@ Install `requirements.txt`, select `FLASK_ENV=production`, and configure:
 | `DATABASE_URL` or `SQLALCHEMY_DATABASE_URI` | Application database connection |
 | `RATELIMIT_STORAGE_URI` | Shared private Redis backend, using `redis://` or `rediss://` |
 | `TRUSTED_PROXY_COUNT` | `0` by default; `1` for the supplied single nginx proxy |
+| `TRUSTED_PROXY_IPS` | Recommended: the proxy's IP (comma-separated IPs/CIDRs). Only it and localhost may connect; others get 403 |
 
 For example, generate a secret locally:
 
@@ -42,7 +43,10 @@ these settings; `deployment/check_production_config.py` verifies them (and is ru
 automatically by `quick_update.sh` before restarting). See `deployment/README.md`.
 
 Only trust forwarded headers when the application server is reachable exclusively
-through the configured trusted proxies. Review the actual proxy chain before
+through the configured trusted proxies. Setting `TRUSTED_PROXY_IPS` enforces this in
+the app: forwarded headers are used only on connections from those addresses,
+loopback (local health checks) is served without trusting them, and every other
+direct connection gets 403. Review the actual proxy chain before
 changing the count; nginx plus another proxy is not the single-proxy example.
 See [Deployment setup](../deployment/README.md).
 
