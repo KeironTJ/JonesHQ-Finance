@@ -342,6 +342,21 @@ as a fallback. Removing rows from the live database does not erase retained back
 copies or operational log files, and does not immediately shrink PostgreSQL's
 on-disk size (autovacuum reclaims space for reuse).
 
+## Household isolation check
+
+Each household's data is separated by `family_id`. Writes that would link a
+record to another household's record are blocked by the app and logged as
+`TENANCY_REFERENCE_BLOCKED table=... column=...` in the application log. To scan
+existing data for cross-household links (read-only; exits 1 if any are found):
+
+```bash
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && set -a && . ./.env.production && venv/bin/flask maintenance check-tenancy'
+```
+
+Run it after each deployment and before onboarding new households. Any reported
+`table.column` count is pre-existing data that needs investigation; do not
+delete rows without a fresh dump.
+
 ## Files
 
 Current:
@@ -360,7 +375,7 @@ Historical / do not use on current production:
 - **POSTGRES_REHEARSAL.md**, **prepare_postgres_source.py**, **rehearse_postgres.py**,
   **rehearse_update_guard.py** - SQLite ? PostgreSQL migration tooling (completed October 2026)
 - **backup.sh** - Legacy SQLite backup (used by `quick_update.sh` only on SQLite installs); refuses to run on PostgreSQL
-- **deploy.sh** - Original fresh-install script; configures SQLite
+- **deploy.sh** - Original fresh-install script; configures SQLite. Refuses to run unless `ALLOW_LEGACY_SQLITE_DEPLOY=1`
 - **nginx.conf** - Only for a self-hosted Nginx; production uses Nginx Proxy Manager
 - **DEPLOYMENT_CHECKLIST.md**, **LXC_SIMPLE_DEPLOYMENT.md** - Original SQLite install guides
 

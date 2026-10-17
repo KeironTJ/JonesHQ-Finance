@@ -1,12 +1,22 @@
 #!/bin/bash
 #
-# FamilyHQ Finance - Automated Deployment Script
-# Run this on your Proxmox Ubuntu container
+# FamilyHQ Finance - LEGACY SQLite fresh-install script
 #
-# Usage: bash deployment/deploy.sh
+# OBSOLETE: this builds the original SQLite installation under /home/joneshq/app.
+# Production runs on PostgreSQL; running this would create a server with an empty
+# SQLite database and none of the existing data. It refuses to run unless
+# ALLOW_LEGACY_SQLITE_DEPLOY=1 is set deliberately (e.g. for a throwaway SQLite box).
+# To rebuild production, restore the latest Proxmox LXC backup. See deployment/README.md.
 #
 
 set -e  # Exit on any error
+
+if [ "${ALLOW_LEGACY_SQLITE_DEPLOY:-}" != "1" ]; then
+    echo "ERROR: deploy.sh is a legacy SQLite installer and does not reproduce production."
+    echo "Production uses PostgreSQL. To rebuild, restore the latest Proxmox LXC backup;"
+    echo "see 'Building a new server' in deployment/README.md. Nothing was changed."
+    exit 1
+fi
 
 echo "========================================="
 echo "  FamilyHQ Finance - Deployment Script"

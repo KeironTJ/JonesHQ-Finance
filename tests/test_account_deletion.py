@@ -269,8 +269,10 @@ def test_deletion_failure_rolls_back_everything(app, deletion_user, graph, monke
 def test_cross_household_corrupt_child_blocks_deletion(app, deletion_user, graph):
     user, _ = deletion_user
     own, _, _, foreign = graph
-    add(Balance, family_id=foreign['account'].family_id, account_id=own['account'].id,
-        balance=5, balance_date=TODAY)
+    # Simulate legacy corrupt data; the ORM write guard would reject this.
+    db.session.execute(Balance.__table__.insert().values(
+        family_id=foreign['account'].family_id, account_id=own['account'].id,
+        balance=5, balance_date=TODAY))
     db.session.commit()
     response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
     assert b'household data is inconsistent' in response.data

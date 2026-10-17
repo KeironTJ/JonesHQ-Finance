@@ -21,8 +21,9 @@ def main():
         print("=" * 60)
         print()
         
-        print("This will rebuild the entire monthly_account_balances cache")
-        print("from the earliest transaction to 12 months in the future.")
+        print("This rebuilds the monthly_account_balances cache for the signed-in")
+        print("household only. Without a signed-in user it does nothing; use the")
+        print("Net Worth page's 'Refresh cache' button in each household instead.")
         print()
         
         response = input("Continue? (y/n): ")

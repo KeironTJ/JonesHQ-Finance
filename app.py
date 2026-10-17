@@ -221,6 +221,9 @@ def create_app(config_name=None):
         except RuntimeError:
             pass  # outside request context (e.g. db.create_all() at startup)
 
+    # Registered after the auto-stamp so new records already have family_id.
+    from utils.tenancy_guard import register_cross_family_guard
+    register_cross_family_guard(db)
     # Register Flask-Admin (must come after db.init_app and all models are loaded)
     from admin_panel import init_admin
     init_admin(app, db)
@@ -264,6 +267,21 @@ def register_error_handlers(app):
         flash('CSRF token validation failed. Please try again.', 'danger')
         return render_template('errors/csrf.html', reason=error.description), 400
 
+    from utils.tenancy_guard import CrossFamilyReferenceError
+
+    @app.errorhandler(CrossFamilyReferenceError)
+    def handle_cross_family_reference(error):
+        # The guard aborted the flush; discard the partial unit of work and send the user back.
+        from urllib.parse import urlsplit
+        from flask import flash, redirect, request, url_for
+        db.session.rollback()
+        flash(str(error), 'danger')
+        target = url_for('dashboard.index')
+        referrer = urlsplit(request.referrer or '')
+        if referrer.netloc == request.host and referrer.path.startswith('/'):
+            target = referrer.path + (f'?{referrer.query}' if referrer.query else '')
+        return redirect(target)
+
 
 def register_commands(app):
     """Register Flask CLI commands."""
@@ -290,6 +308,20 @@ def register_commands(app):
         click.echo('Preview only; no records deleted.' if dry_run else 'Retention cleanup completed.')
         for name, count in counts.items():
             click.echo(f'{name}: {count}')
+
+    @maintenance_cli.command('check-tenancy')
+    def check_tenancy():
+        """Read-only: report records that reference another household's records."""
+        from utils.tenancy_guard import find_cross_family_references
+        violations = find_cross_family_references(db)
+        db.session.rollback()
+        if not violations:
+            click.echo('Household isolation check passed: no cross-household references.')
+            return
+        click.echo('Cross-household references found (table.column: rows):')
+        for name, count in sorted(violations.items()):
+            click.echo(f'{name}: {count}')
+        raise SystemExit(1)
 
     @app.cli.command('health')
     def health_check():

@@ -155,9 +155,18 @@ def test_cannot_link_another_familys_transaction(app, family, user):
     plan = Plan(family_id=family.id, title='Birthday')
     db.session.add_all([other_family, category, plan])
     db.session.flush()
+    other_category = Category(
+        family_id=other_family.id,
+        name='Other',
+        category_type='expense',
+        head_budget='Other',
+        sub_budget='Other',
+    )
+    db.session.add(other_category)
+    db.session.flush()
     transaction = Transaction(
         family_id=other_family.id,
-        category_id=category.id,
+        category_id=other_category.id,
         amount=Decimal('-25.00'),
         transaction_date=date.today(),
     )

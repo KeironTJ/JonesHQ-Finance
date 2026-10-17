@@ -239,8 +239,12 @@ def test_commit_failure_rolls_back_data_membership_sessions_and_audit(app, user,
 
 def test_foreign_child_link_blocks_deletion_without_mutating_foreign_records(app, user, graph):
     *_, own, private, shared, former, foreign = graph
-    foreign['transaction'].linked_transaction_id = own['transaction'].id
+    # Simulate legacy corrupt data; the ORM write guard would reject this.
+    db.session.execute(Transaction.__table__.update().where(
+        Transaction.__table__.c.id == foreign['transaction'].id
+    ).values(linked_transaction_id=own['transaction'].id))
     db.session.commit()
+    db.session.expire(foreign['transaction'])
     response = sign_in(app, user).post('/family/delete', data=VALID_DATA)
     assert b'household data is inconsistent' in response.data
     db.session.refresh(foreign['transaction'])

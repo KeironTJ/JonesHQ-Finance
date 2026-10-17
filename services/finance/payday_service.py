@@ -568,7 +568,7 @@ class PaydayService:
 
         # ── Single query: all transactions for this account up to end of last period ──
         all_txns = (
-            Transaction.query
+            family_query(Transaction)
             .filter(
                 Transaction.account_id == account_id,
                 Transaction.transaction_date <= last_period_end,

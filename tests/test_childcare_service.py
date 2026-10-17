@@ -66,11 +66,12 @@ def test_daily_activity_assigns_family_and_preserves_updates(activity_records, f
 
 def test_daily_activity_rejects_existing_cross_household_reference(activity_records, family):
     children, types = activity_records
-    activity = DailyChildcareActivity(
+    # Simulate legacy corrupt data; the ORM write guard would reject this.
+    activity_id = db.session.execute(DailyChildcareActivity.__table__.insert().values(
         family_id=family.id, date=date(2026, 1, 5),
-        child_id=children[2].id, activity_type_id=types[2].id, occurred=False)
-    db.session.add(activity)
+        child_id=children[2].id, activity_type_id=types[2].id, occurred=False)).inserted_primary_key[0]
     db.session.commit()
+    activity = db.session.get(DailyChildcareActivity, activity_id)
     with pytest.raises(ValueError, match='Invalid child or activity type'):
         ChildcareService.update_daily_activity(
             activity.date, activity.child_id, activity.activity_type_id, True)

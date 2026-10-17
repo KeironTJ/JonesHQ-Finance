@@ -34,6 +34,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
 import calendar
+from utils import db_helpers
 from utils.db_helpers import family_query, family_get, family_get_or_404
 
 
@@ -122,6 +123,7 @@ class MonthlyBalanceService:
             cache_entry.last_calculated = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             cache_entry = MonthlyAccountBalance(
+                family_id=db_helpers.get_family_id(),
                 account_id=account_id,
                 year_month=year_month,
                 actual_balance=actual,
@@ -208,13 +210,19 @@ class MonthlyBalanceService:
     @staticmethod
     def rebuild_all_cache(future_months=24):
         """
-        Rebuild entire cache from scratch (use for initial population or full refresh)
-        
+        Rebuild the current household's cache from scratch (initial population or full refresh).
+
+        Only cache rows for accounts visible to the current user are cleared and
+        rebuilt; other households (and other members' private accounts) are untouched.
+
         Args:
             future_months: How many months into the future to project (default 24, max 240 for retirement planning)
         """
-        # Clear existing cache
-        MonthlyAccountBalance.query.delete()
+        visible_account_ids = [row.id for row in family_query(Account).with_entities(Account.id).all()]
+        if visible_account_ids:
+            family_query(MonthlyAccountBalance).filter(
+                MonthlyAccountBalance.account_id.in_(visible_account_ids)
+            ).delete(synchronize_session=False)
         db.session.commit()
         
         # Find earliest transaction date across all accounts

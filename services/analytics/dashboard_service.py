@@ -20,6 +20,8 @@ class DashboardService:
     def get_dashboard_data(selected_account_id=None, selected_year=None):
         accounts = AccountService.get_active_accounts_with_balances()
         accounts_by_id = {account.id: account for account in accounts}
+        if selected_account_id not in accounts_by_id:
+            selected_account_id = None
         if not selected_account_id:
             user_id = db_helpers.get_current_user_id()
             user = db.session.get(User, user_id) if user_id else None

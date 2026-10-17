@@ -25,7 +25,15 @@ Two separate layers — see `utils/db_helpers.py`.
 
 - **`family_id`** — hard security boundary. Family A must never see Family B's data. All
   queries go through `family_query()` / `family_get()` / `family_get_or_404()`, never raw
-  `Model.query`.
+  `Model.query` (including bulk `.delete()`/`.update()` and any ID taken from the request).
+- **Write-time guard** — `utils/tenancy_guard.py` registers a `before_flush` listener that
+  raises `CrossFamilyReferenceError` (a `ValueError`) when a new or changed row's foreign key
+  points at another family's row. An app-wide error handler rolls back and flashes it. It is a
+  backstop: services should still look up submitted IDs with `family_get()` and give a
+  specific message. `flask maintenance check-tenancy` scans existing data read-only.
+  Tests that need cross-household corrupt data must create it with core
+  `Model.__table__.insert()/update()` statements, which bypass the guard.
+  `tests/test_household_isolation.py` sweeps every route as household A against B's IDs.
 - **`owner_id`** — optional soft privacy *within* a family. Nullable FK to `users.id`; `NULL`
   = shared with the family, set = visible only to that user. Implemented on Account, Income/
   RecurringIncome, Pension, Loan, CreditCard, Vehicle, Expense, Plan. Child records without
