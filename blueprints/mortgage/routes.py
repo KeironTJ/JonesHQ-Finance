@@ -158,7 +158,11 @@ def confirm_snapshot(snapshot_id):
 def create_property():
     """Create a new property"""
     if request.method == 'POST':
-        prop = MortgageService.create_property(request.form)
+        try:
+            prop = MortgageService.create_property(request.form)
+        except ValueError as error:
+            flash(str(error) or 'Unable to create property.', 'danger')
+            return render_template('mortgage/create_property.html')
         
         flash('Property created successfully!', 'success')
         return redirect(url_for('mortgage.property_detail', property_id=prop.id))

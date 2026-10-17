@@ -56,6 +56,9 @@ class CategoryService:
 
     @staticmethod
     def create_category(head_budget, sub_budget, category_type):
+        head_budget = (head_budget or '').strip()
+        if not head_budget or not (category_type or '').strip():
+            raise ValueError('Enter a head budget and choose a category type.')
         normalized_sub_budget = sub_budget or None
         name = head_budget + (f' - {normalized_sub_budget}' if normalized_sub_budget else '')
         category = Category(

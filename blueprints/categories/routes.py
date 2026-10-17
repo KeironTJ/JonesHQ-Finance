@@ -37,7 +37,11 @@ def add():
         if existing:
             flash(f'Category "{head_budget} - {sub_budget}" already exists!', 'warning')
         else:
-            category = CategoryService.create_category(head_budget, sub_budget, category_type)
+            try:
+                category = CategoryService.create_category(head_budget, sub_budget, category_type)
+            except ValueError as error:
+                flash(str(error) or 'Unable to add category.', 'danger')
+                return redirect(url_for('categories.add'))
             flash(f'Category "{category.name}" added successfully!', 'success')
             return redirect(url_for('categories.index'))
     

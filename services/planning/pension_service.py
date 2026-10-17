@@ -454,7 +454,23 @@ class PensionService:
                 )
             )
         
-    
+        query = query.order_by(PensionSnapshot.review_date, Pension.provider)
+        
+        results = query.all()
+        
+        # Group by date
+        grouped = {}
+        for snapshot, pension in results:
+            date_key = snapshot.review_date
+            if date_key not in grouped:
+                grouped[date_key] = {
+                    'review_date': date_key,
+                    'is_projection': snapshot.is_projection,
+                    'pensions': {},
+                    'total_value': Decimal('0'),
+                    'total_growth_percent': None
+                }
+            
             grouped[date_key]['pensions'][pension.provider] = {
                 'value': snapshot.value,
                 'growth_percent': snapshot.growth_percent,

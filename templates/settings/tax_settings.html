@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Tax &amp; NI Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-percent"></i> Tax &amp; National Insurance</h1>
+        <a href="{{ url_for('settings.index') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Settings
+        </a>
+    </div>
+
+    <p class="text-muted">
+        These UK income tax and employee National Insurance bands are used to estimate take-home pay
+        for your household's income. Each tax year can be adjusted independently.
+    </p>
+
+    {% if tax_years %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Tax year</th>
+                        <th>Period</th>
+                        <th class="text-end">Personal allowance</th>
+                        <th class="text-end">Basic / higher / additional</th>
+                        <th class="text-end">NI main / upper</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tax_year in tax_years %}
+                    <tr>
+                        <td><strong>{{ tax_year.tax_year }}</strong></td>
+                        <td>
+                            {{ tax_year.effective_from.strftime('%d %b %Y') }}
+                            &ndash;
+                            {{ tax_year.effective_to.strftime('%d %b %Y') if tax_year.effective_to else 'ongoing' }}
+                        </td>
+                        <td class="text-end">£{{ '{:,.0f}'.format(tax_year.personal_allowance) }}</td>
+                        <td class="text-end">
+                            {{ '{:g}'.format((tax_year.basic_rate * 100)|float) }}% /
+                            {{ '{:g}'.format((tax_year.higher_rate * 100)|float) }}% /
+                            {{ '{:g}'.format((tax_year.additional_rate * 100)|float) }}%
+                        </td>
+                        <td class="text-end">
+                            {{ '{:g}'.format((tax_year.ni_basic_rate * 100)|float) }}% /
+                            {{ '{:g}'.format((tax_year.ni_additional_rate * 100)|float) }}%
+                        </td>
+                        <td>
+                            {% if tax_year.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ url_for('settings.edit_tax_settings', id=tax_year.id) }}"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> Edit
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No tax years are set up for your household yet. Default UK rates are used where available.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

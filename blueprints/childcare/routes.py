@@ -10,6 +10,14 @@ from decimal import Decimal
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
 
 
+def _form_year_month():
+    year = int(request.form.get('year', ''))
+    month = int(request.form.get('month', ''))
+    if not 1 <= month <= 12 or not 1900 <= year <= 2200:
+        raise ValueError('Invalid month')
+    return year, month
+
+
 @childcare_bp.route('/childcare')
 def index():
     """Main childcare tracking page - calendar view"""
@@ -119,9 +127,12 @@ def update_activity():
 @childcare_bp.route('/childcare/create_transaction/<int:child_id>', methods=['POST'])
 def create_transaction(child_id):
     """Create a transaction for a child's monthly childcare costs"""
-    year = int(request.form.get('year'))
-    month = int(request.form.get('month'))
-    account_id = int(request.form.get('account_id'))
+    try:
+        year, month = _form_year_month()
+        account_id = int(request.form.get('account_id', ''))
+    except ValueError:
+        flash('Choose a valid month and account.', 'danger')
+        return redirect(url_for('childcare.index'))
     family_get_or_404(Account, account_id)
     
     transaction = ChildcareService.create_monthly_transaction(year, month, child_id, account_id)
@@ -331,8 +342,11 @@ def reports():
 @childcare_bp.route('/childcare/apply_templates', methods=['POST'])
 def apply_templates():
     """Apply weekly templates to fill entire month"""
-    year = int(request.form.get('year'))
-    month = int(request.form.get('month'))
+    try:
+        year, month = _form_year_month()
+    except ValueError:
+        flash('Choose a valid month.', 'danger')
+        return redirect(url_for('childcare.index'))
     
     count = ChildcareService.apply_templates_to_month(year, month)
     
@@ -343,8 +357,11 @@ def apply_templates():
 @childcare_bp.route('/childcare/copy_previous_month', methods=['POST'])
 def copy_previous_month():
     """Copy previous month's activities to current month"""
-    year = int(request.form.get('year'))
-    month = int(request.form.get('month'))
+    try:
+        year, month = _form_year_month()
+    except ValueError:
+        flash('Choose a valid month.', 'danger')
+        return redirect(url_for('childcare.index'))
     
     count = ChildcareService.copy_previous_month(year, month)
     
@@ -355,8 +372,11 @@ def copy_previous_month():
 @childcare_bp.route('/childcare/clear_month', methods=['POST'])
 def clear_month():
     """Clear all activities for a month"""
-    year = int(request.form.get('year'))
-    month = int(request.form.get('month'))
+    try:
+        year, month = _form_year_month()
+    except ValueError:
+        flash('Choose a valid month.', 'danger')
+        return redirect(url_for('childcare.index'))
     
     count = ChildcareService.clear_month(year, month)
     

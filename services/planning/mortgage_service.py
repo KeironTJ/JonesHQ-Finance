@@ -65,25 +65,28 @@ class MortgageService:
     
     @staticmethod
     def create_property(data):
-        purchase_date = (
-            date.fromisoformat(data['purchase_date'])
-            if data.get('purchase_date') else None
-        )
+        address = (data.get('address') or '').strip()
+        if not address:
+            raise ValueError('Enter the property address.')
+        try:
+            purchase_date = (
+                date.fromisoformat(data['purchase_date'])
+                if data.get('purchase_date') else None
+            )
+            purchase_price = Decimal(data['purchase_price']) if data.get('purchase_price') else None
+            current_valuation = (
+                Decimal(data['current_valuation']) if data.get('current_valuation') else None
+            )
+            appreciation_rate = Decimal(data.get('annual_appreciation_rate') or '3.0')
+        except (ValueError, ArithmeticError):
+            raise ValueError('Check the property dates and amounts.') from None
         property_obj = Property(
             family_id=db_helpers.get_family_id(),
-            address=data.get('address'),
+            address=address,
             purchase_date=purchase_date,
-            purchase_price=(
-                Decimal(data['purchase_price'])
-                if data.get('purchase_price') else None
-            ),
-            current_valuation=(
-                Decimal(data['current_valuation'])
-                if data.get('current_valuation') else None
-            ),
-            annual_appreciation_rate=Decimal(
-                data.get('annual_appreciation_rate', '3.0')
-            ),
+            purchase_price=purchase_price,
+            current_valuation=current_valuation,
+            annual_appreciation_rate=appreciation_rate,
             is_primary_residence=data.get('is_primary_residence') == 'on',
         )
         db.session.add(property_obj)

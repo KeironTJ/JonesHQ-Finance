@@ -142,9 +142,9 @@ def _request(client, method, path, user_id, query=None, form=None):
         if method == 'GET':
             return client.get(path, query_string=query)
         return client.post(path, data=form or {})
-    except Exception:  # noqa: BLE001 - a crash is not a leak; data checks below still apply
+    except Exception as error:  # noqa: BLE001 - reported separately from leaks
         db.session.rollback()
-        return None
+        return error
 
 
 def test_other_household_records_cannot_be_read_or_changed_through_any_route(app, two_households):
@@ -155,23 +155,31 @@ def test_other_household_records_cannot_be_read_or_changed_through_any_route(app
     injected_ids = {field: str(FOREIGN_ID) for field in ID_FIELDS}
     client = app.test_client()
 
-    leaks = []
-    for rule, path in list(_id_routes(app)) + list(_all_simple_routes(app)):
-        if 'GET' in rule.methods:
-            response = _request(client, 'GET', path, user_id, query=injected_ids)
-            if response is not None and response.status_code == 200 and MARKER.encode() in response.data:
-                leaks.append(f'GET {path}')
-    for rule, path in list(_id_routes(app)) + list(_all_simple_routes(app)):
-        if 'POST' in rule.methods:
-            response = _request(client, 'POST', path, user_id, form=injected_ids)
-            if response is not None and MARKER.encode() in response.data:
-                leaks.append(f'POST {path}')
+    leaks, errors = [], []
+    routes = list(_id_routes(app)) + list(_all_simple_routes(app))
+    for method in ('GET', 'POST'):
+        for rule, path in routes:
+            if method not in rule.methods:
+                continue
+            response = _request(
+                client, method, path, user_id,
+                query=injected_ids if method == 'GET' else None,
+                form=injected_ids if method == 'POST' else None,
+            )
+            if isinstance(response, Exception):
+                errors.append(f'{method} {path}: {type(response).__name__}: {response}'[:200])
+                continue
+            if response.status_code >= 500:
+                errors.append(f'{method} {path}: HTTP {response.status_code}')
+            if MARKER.encode() in response.data:
+                leaks.append(f'{method} {path}')
 
     db.session.rollback()
     db.session.expire_all()
     assert not leaks, f'Other household data appeared in responses: {leaks}'
     assert _snapshot(family_b_id, tables) == before, 'Other household data was changed'
     assert find_cross_family_references(db) == {}
+    assert not errors, 'Routes crashed on unexpected input:\n' + '\n'.join(errors)
 
 
 def _account(family_id, name):

@@ -706,8 +706,10 @@ def bulk_delete():
 @transactions_bp.route('/transactions/save-filter-preference', methods=['POST'])
 def save_filter_preference():
     """Save user preference for filter section expansion"""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('expanded', False), bool):
+        return jsonify({'success': False, 'error': 'Invalid preference.'}), 400
     try:
-        data = request.get_json()
         expanded = data.get('expanded', False)
         
         Settings.set_value(

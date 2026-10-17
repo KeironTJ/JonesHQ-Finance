@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Tax Year {{ tax_year.tax_year }}{% endblock %}
+
+{% macro money_field(name, label, value) %}
+<div class="col-md-4 mb-3">
+    <label for="{{ name }}" class="form-label">{{ label }}</label>
+    <div class="input-group">
+        <span class="input-group-text">£</span>
+        <input type="number" step="0.01" min="0" class="form-control" id="{{ name }}" name="{{ name }}"
+               value="{{ '%.2f'|format(value) }}" required>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro rate_field(name, label, value) %}
+<div class="col-md-4 mb-3">
+    <label for="{{ name }}" class="form-label">{{ label }}</label>
+    <div class="input-group">
+        <input type="number" step="0.01" min="0" max="100" class="form-control" id="{{ name }}" name="{{ name }}"
+               value="{{ '{:g}'.format((value * 100)|float) }}" required>
+        <span class="input-group-text">%</span>
+    </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-percent"></i> Tax year {{ tax_year.tax_year }}</h1>
+        <a href="{{ url_for('settings.tax_settings') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <form method="POST" action="{{ url_for('settings.edit_tax_settings', id=tax_year.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Income tax</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {{ money_field('personal_allowance', 'Personal allowance', tax_year.personal_allowance) }}
+                    {{ money_field('basic_rate_limit', 'Basic rate limit', tax_year.basic_rate_limit) }}
+                    {{ money_field('higher_rate_limit', 'Higher rate limit', tax_year.higher_rate_limit) }}
+                </div>
+                <div class="row">
+                    {{ rate_field('basic_rate', 'Basic rate', tax_year.basic_rate) }}
+                    {{ rate_field('higher_rate', 'Higher rate', tax_year.higher_rate) }}
+                    {{ rate_field('additional_rate', 'Additional rate', tax_year.additional_rate) }}
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-shield-check"></i> National Insurance (employee)</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {{ money_field('ni_threshold', 'Primary threshold', tax_year.ni_threshold) }}
+                    {{ money_field('ni_upper_earnings', 'Upper earnings limit', tax_year.ni_upper_earnings) }}
+                </div>
+                <div class="row">
+                    {{ rate_field('ni_basic_rate', 'Main rate', tax_year.ni_basic_rate) }}
+                    {{ rate_field('ni_additional_rate', 'Additional rate', tax_year.ni_additional_rate) }}
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="notes" class="form-label">Notes</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="2">{{ tax_year.notes or '' }}</textarea>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
+                           {% if tax_year.is_active %}checked{% endif %}>
+                    <label class="form-check-label" for="is_active">Active (used for take-home pay estimates)</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('settings.tax_settings') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Save</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

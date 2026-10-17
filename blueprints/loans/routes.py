@@ -289,6 +289,9 @@ def regenerate_schedule(id):
 @loans_bp.route('/<int:id>/payment/<int:payment_id>/toggle-paid', methods=['POST'])
 def toggle_payment_paid(id, payment_id):
     """Toggle payment paid status and sync with bank transaction"""
+    payment = family_get(LoanPayment, payment_id)
+    if payment is None or payment.loan_id != id:
+        return jsonify({'success': False, 'error': 'Payment not found.'}), 404
     try:
         payment, account_id = LoanService.toggle_payment_paid(payment_id)
         if account_id:
