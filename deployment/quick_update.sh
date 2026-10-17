@@ -39,7 +39,7 @@ update_exit() {
         echo "Previous commit: $PREV_COMMIT"
         echo "Recovery directory: $RECOVERY_DIR"
         echo "Recovery dump (usable only if backup success was reported): $BACKUP_FILE"
-        echo "Check service/timer are stopped; follow deployment/POSTGRES_REHEARSAL.md recovery steps."
+        echo "Check service/timer are stopped; follow 'Recovering from a failed update' in deployment/README.md."
         [ "$result" -ne 0 ] || result=1
     fi
     exit "$result"

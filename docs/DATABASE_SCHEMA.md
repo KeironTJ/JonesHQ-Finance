@@ -6,9 +6,9 @@ application. The model modules and Flask-Migrate revision history are
 authoritative; this guide is a domain-oriented reference rather than a
 complete generated table catalog.
 
-The application uses SQLite by default for development. Configure
-`DATABASE_URL` or `SQLALCHEMY_DATABASE_URI` for another database, especially
-in production. Most domain records support family ownership so authenticated
+The application uses SQLite by default for local development and tests.
+Production runs on PostgreSQL 17 (configured via `DATABASE_URL` or
+`SQLALCHEMY_DATABASE_URI`); migrations must work on both backends. Most domain records support family ownership so authenticated
 users can share a financial workspace while permissions remain enforced by the
 application.
 

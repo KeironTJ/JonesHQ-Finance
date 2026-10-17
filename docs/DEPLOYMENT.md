@@ -1,5 +1,12 @@
 # Deployment Guide - JonesHQ Finance
 
+> **?? HISTORICAL ? DO NOT FOLLOW FOR CURRENT PRODUCTION.** This guide describes the
+> original SQLite installation. Production has run on PostgreSQL since October 2026
+> under `/home/joneshq/joneshq-finance`. Its SQLite database settings, backup/restore
+> commands and `/home/joneshq/app` paths are obsolete; restoring a SQLite file would
+> discard every change since the cutover. Use the
+> [production runbook](../deployment/README.md) instead.
+
 ## 🚀 Quick Deployment Steps
 
 ### 1. Generate Secret Key
@@ -250,13 +257,9 @@ sudo systemctl restart joneshq-finance
 ```
 
 ### Database Backups
-```bash
-# Automated daily backup (crontab)
-0 2 * * * pg_dump joneshq_finance > /backups/joneshq_$(date +\%Y\%m\%d).sql
 
-# Or for SQLite
-0 2 * * * cp /path/to/instance/joneshq_finance.db /backups/joneshq_$(date +\%Y\%m\%d).db
-```
+Obsolete commands removed. See *Backups* in the
+[production runbook](../deployment/README.md).
 
 ---
 

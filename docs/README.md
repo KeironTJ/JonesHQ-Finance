@@ -16,7 +16,8 @@ Complete documentation for the FamilyHQ Finance personal finance management syst
 - **[Transaction Editing](TRANSACTION_EDITING.md)** - Transaction editing behavior
 - **[Integrated Transactions](INTEGRATED_TRANSACTIONS.md)** - Transaction and related-domain integration
 - **[Subscriptions](SUBSCRIPTIONS.md)** - Managed recurring bank and credit-card charges
-- **[Deployment](DEPLOYMENT.md)** - Deployment guidance
+- **[Production Runbook](../deployment/README.md)** - Current production setup, updates, backups, recovery and monitoring (authoritative)
+- **[Deployment](DEPLOYMENT.md)** - Historical SQLite-era deployment guidance (do not follow for production)
 - **[Directory Structure](DIRECTORY_STRUCTURE.md)** - Current repository layout
 
 ## 📂 Project Structure
@@ -99,10 +100,11 @@ Vendors normalize merchant names across transactions to prevent duplicates like 
 
 ## 🗂️ Database Overview
 
-The application uses SQLite by default in development. Production should use
-the database URL configured through `DATABASE_URL` or
-`SQLALCHEMY_DATABASE_URI`. The schema is defined by the SQLAlchemy models and
-managed through Flask-Migrate migrations.
+The application uses SQLite by default in local development and tests.
+Production runs on PostgreSQL 17, configured through `DATABASE_URL` or
+`SQLALCHEMY_DATABASE_URI`; see the
+[production runbook](../deployment/README.md). The schema is defined by the
+SQLAlchemy models and managed through Flask-Migrate migrations.
 
 **Core Financial:**
 - `accounts` - Bank accounts

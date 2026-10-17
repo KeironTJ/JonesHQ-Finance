@@ -1,4 +1,12 @@
 # Production Deployment Guide - Proxmox Server
+
+> **?? HISTORICAL ? DO NOT FOLLOW FOR CURRENT PRODUCTION.** This guide describes the
+> original SQLite installation. Production has run on PostgreSQL since October 2026
+> under `/home/joneshq/joneshq-finance`. Its SQLite database settings, backup/restore
+> commands and `/home/joneshq/app` paths are obsolete; restoring a SQLite file would
+> discard every change since the cutover. Use the
+> [production runbook](../deployment/README.md) instead.
+
 ## finance.joneshq.co.uk
 
 This guide will help you deploy JonesHQ Finance on your Proxmox home server with SSL/HTTPS support.
@@ -316,13 +324,9 @@ sudo systemctl restart joneshq-finance
 ```
 
 ### Backup Database
-```bash
-# SQLite
-cp /home/joneshq/app/instance/joneshq_finance.db ~/backups/joneshq_finance_$(date +%Y%m%d).db
 
-# PostgreSQL
-pg_dump joneshq_finance > ~/backups/joneshq_finance_$(date +%Y%m%d).sql
-```
+Obsolete commands removed (they targeted the SQLite file or the wrong database
+name). See *Backups* in the [production runbook](../deployment/README.md).
 
 ### View Logs
 ```bash

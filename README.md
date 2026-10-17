@@ -193,7 +193,8 @@ with app.app_context():
 - **SQLAlchemy**: ORM for database operations
 - **Flask-Migrate**: Database migrations
 - **Bootstrap 5**: Frontend CSS framework
-- **SQLite**: Development database (can use PostgreSQL/MySQL in production)
+- **SQLite**: Local development and test database
+- **PostgreSQL 17**: Production database (see [deployment/README.md](deployment/README.md))
 
 ## Security Notes
 

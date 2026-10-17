@@ -1,5 +1,12 @@
 # Quick Deployment Checklist - finance.joneshq.co.uk
 
+> **?? HISTORICAL ? DO NOT FOLLOW FOR CURRENT PRODUCTION.** This guide describes the
+> original SQLite installation. Production has run on PostgreSQL since October 2026
+> under `/home/joneshq/joneshq-finance`. Its SQLite database settings, backup/restore
+> commands and `/home/joneshq/app` paths are obsolete; restoring a SQLite file would
+> discard every change since the cutover. Use the
+> [production runbook](README.md) instead.
+
 Print this checklist and follow step-by-step:
 
 ## Pre-Deployment (Do This First)
@@ -141,19 +148,9 @@ sudo ufw status
 
 ## Emergency Recovery
 
-**Restore from backup:**
-```bash
-cd /home/joneshq/backups
-gunzip joneshq_finance_YYYYMMDD.db.gz
-cp joneshq_finance_YYYYMMDD.db /home/joneshq/app/instance/joneshq_finance.db
-sudo systemctl restart joneshq-finance
-```
-
-**Restart everything:**
-```bash
-sudo systemctl restart joneshq-finance
-sudo systemctl restart nginx
-```
+Removed: the SQLite restore commands that were here would silently discard all
+PostgreSQL-era data. See *Recovering from a failed update* and *Backups* in the
+[production runbook](README.md).
 
 ---
 

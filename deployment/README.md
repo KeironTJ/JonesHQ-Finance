@@ -1,15 +1,139 @@
-# Deployment Files
+# Production Operations Runbook
 
-This directory contains production deployment configurations for JonesHQ Finance.
+This is the **authoritative, current** guide for operating JonesHQ Finance in
+production. Where any other document disagrees with this one, this one wins.
+Older guides ([DEPLOYMENT_CHECKLIST](DEPLOYMENT_CHECKLIST.md),
+[LXC_SIMPLE_DEPLOYMENT](LXC_SIMPLE_DEPLOYMENT.md),
+[docs/PROXMOX_DEPLOYMENT](../docs/PROXMOX_DEPLOYMENT.md),
+[docs/DEPLOYMENT](../docs/DEPLOYMENT.md)) describe the original SQLite install and
+are kept for history only. [POSTGRES_REHEARSAL](POSTGRES_REHEARSAL.md) is the record
+of the completed migration; do not re-run it.
 
-## PostgreSQL preparation
+## Current production
 
-Production remains on SQLite until an explicit, verified cutover. See
-[PostgreSQL rehearsal](POSTGRES_REHEARSAL.md) for same-LXC setup, a read-only source
-check and copying a consistent snapshot into an empty disposable PostgreSQL database.
-Install `requirements-postgres.txt` only for that work. The existing quick updater
-refuses non-SQLite configurations because its database restore is SQLite-specific;
-PostgreSQL-aware backup/restore and final cutover remain prerequisites.
+| Item | Value |
+|---|---|
+| Host | Proxmox LXC behind Nginx Proxy Manager (TLS terminated at the proxy) |
+| App directory | `/home/joneshq/joneshq-finance` (Linux user `joneshq`) |
+| App service | `joneshq-finance` (Gunicorn on port 8000) |
+| Retention job | `joneshq-maintenance.timer` → `joneshq-maintenance.service` |
+| Rate-limit store | Redis on localhost (`redis-server`) |
+| Database | PostgreSQL 17, local peer authentication as `joneshq`, UTF8, `postgresql+psycopg` driver |
+| Database name | `joneshq_finance_cutover_rehearsal` |
+| Configuration | `/home/joneshq/joneshq-finance/.env.production` (private; never print or commit) |
+
+> **The database named `joneshq_finance_cutover_rehearsal` is PRODUCTION.**
+> The name is left over from the October 2026 SQLite → PostgreSQL cutover. Never
+> drop, clear, restore over or run tests against it.
+
+**SQLite is no longer used in production.** The file
+`instance/joneshq_finance.db` on the server is the obsolete pre-cutover copy and
+has not received writes since the cutover. Do not point the app back at it, back
+it up as if it were current, or "restore" it: that would silently discard every
+change made since the cutover. SQLite remains the default only for local
+development and tests.
+
+## Updating production
+
+As root inside the LXC:
+
+```bash
+bash /home/joneshq/joneshq-finance/deployment/quick_update.sh
+```
+
+On PostgreSQL the updater:
+
+1. Records the current commit and a private copy of `.env.production` in a new
+   `/home/joneshq/backups/postgres-update-*` recovery directory.
+2. Stops the retention timer/service and the app, then writes a custom-format
+   `database.dump` as the app user and verifies its archive listing. A failed
+   dump stops the update before any code is pulled.
+3. Pulls code, installs `requirements.txt` and `requirements-postgres.txt`,
+   checks production configuration and runs the test suite.
+4. Runs migrations against the database in `.env.production`, restarts the app
+   and checks `/healthz`.
+5. Restarts the retention timer only if it was active beforehand.
+
+Stop any other writers you have added before running it. Requirements: the
+`joneshq` user can reach PostgreSQL by peer authentication, and `pg_dump` /
+`pg_restore` matching the server version are installed. The helpers parse
+`.env.production` literally; do not `source` it in your own scripts.
+
+**If an update fails after maintenance begins, the app and retention jobs are
+left stopped. There is no automatic restore or code rollback.** A marker at
+`/home/joneshq/backups/postgres-update-incomplete` blocks further updater runs
+until you resolve it; follow [Recovering from a failed update](#recovering-from-a-failed-update).
+
+## Backups
+
+- **Primary:** Proxmox LXC backups (vzdump) of the whole container, including
+  the PostgreSQL data directory, stored on two separate SSDs. A full LXC restore
+  has been tested. Check the Proxmox backup job's task history periodically.
+- **Per update:** each `quick_update.sh` run leaves a point-in-time
+  `database.dump` in its recovery directory.
+- **Not a backup:** [backup.sh](backup.sh) is a legacy SQLite script. It now
+  refuses to run against a PostgreSQL configuration. Do not schedule it; remove
+  any old `joneshq-backup` cron entry.
+
+A PostgreSQL dump/restore rehearsal matched every row and sequence. To take an
+ad-hoc dump (for example before risky manual work), as root:
+
+```bash
+install -d -o joneshq -g joneshq -m 700 /home/joneshq/backups/manual-$(date +%Y%m%d-%H%M%S)
+sudo -u joneshq bash -c 'umask 077; PGCLIENTENCODING=UTF8 pg_dump --format=custom --file=/home/joneshq/backups/manual-YYYYMMDD-HHMMSS/database.dump joneshq_finance_cutover_rehearsal'
+sudo -u joneshq pg_restore --list /home/joneshq/backups/manual-YYYYMMDD-HHMMSS/database.dump > /dev/null && echo "archive readable"
+```
+
+Replace `manual-YYYYMMDD-HHMMSS` with the directory actually created. A
+readable archive listing is not a restore test.
+
+### Recovery artifacts
+
+Recovery directories (`/home/joneshq/backups/postgres-update-*`,
+`/home/joneshq/postgres-rehearsal/cutover-*`) contain credentials and personal
+data. They are never pruned automatically. Set a retention period, and delete
+only specific, reviewed directories once they are no longer needed.
+
+## Recovering from a failed update
+
+- Keep the app, retention jobs and any other writers stopped. Preserve logs and
+  the failed database for diagnosis; do not delete it or blindly reset code.
+- Decide whether a forward fix is safer. Dependency/test failures before
+  migration do not themselves require restoring the database.
+- If a restore is needed, create a **new**, explicitly named UTF8 database owned
+  by the app role, using `template0` and the original locale. Never restore over
+  the failed database as the first recovery step.
+- Restore the confirmed `database.dump` into that empty database as the app user
+  with `pg_restore --single-transaction --exit-on-error`. Treat a dump as
+  confirmed only if the updater reported backup success. Verify the migration
+  version, row counts, sequences and application behaviour before using it.
+- Restore the recorded compatible code/dependencies and privately review the
+  saved environment file. Deliberately point `.env.production` at the recovered
+  database; keep all other credentials/settings unchanged.
+- Run `deployment/check_production_config.py`, restart the app, verify
+  `/healthz` and sign-in, and only then re-enable the retention timer if it was
+  previously enabled (the recovery directory's `maintenance-timer-active` file
+  records `1` or `0`).
+- Once recovery is confirmed, remove only the reviewed
+  `/home/joneshq/backups/postgres-update-incomplete` marker.
+- Writes accepted after the dump (including during the post-restart health
+  check) are not in it. Reconcile them before a restore-based recovery.
+
+For whole-container failures, restore the latest good Proxmox LXC backup instead.
+
+## Monitoring
+
+Monitoring must run outside the application process. Point your monitor at:
+
+- `GET http://127.0.0.1:8000/healthz` (inside the LXC) or
+  `https://finance.joneshq.co.uk/healthz` (end-to-end): expect HTTP 200 and
+  `{"status":"ok"}` (database + Redis reachable).
+- `systemctl is-failed joneshq-maintenance.service`: non-zero exit means healthy;
+  `failed` means the last retention run errored.
+- `systemctl is-active joneshq-finance redis-server postgresql`.
+
+A monitor inside the LXC cannot report the LXC itself being down; check from
+another host too if you need that.
 
 ## Required authentication settings
 
@@ -200,7 +324,7 @@ a catch-up when the timer is activated after missing a run. The one-shot service
 does not run in a Gunicorn worker, loads `.env.production`, runs as `joneshq`, and
 forces production configuration. It requires a valid production configuration
 and access to the database; it does not send mail or need to probe Redis.
-Paths match the supplied SQLite LXC layout; adapt them if your installation differs.
+Paths match the production layout above.
 
 After later changes to the unit files, copy them again, run `daemon-reload` and
 restart the timer. To pause scheduled deletion:
@@ -215,78 +339,35 @@ marks errors. A successful one-shot service normally becomes inactive afterwards
 check the exit result/journal, not whether it remains running. There are no
 automatic failure notifications yet. Existing sign-in-triggered cleanup remains
 as a fallback. Removing rows from the live database does not erase retained backup
-copies or operational log files, and does not necessarily shrink the SQLite file.
+copies or operational log files, and does not immediately shrink PostgreSQL's
+on-disk size (autovacuum reclaims space for reuse).
 
 ## Files
 
-- **nginx.conf** - Nginx reverse proxy configuration
-- **joneshq-finance.service** - Systemd service file
-- **gunicorn_config.py** - Gunicorn WSGI server configuration
-- **deploy.sh** - Automated deployment script
-- **quick_update.sh** - Pull, verify, test, migrate and restart an existing install
-- **setup_redis.sh** - One-time Redis setup for login rate limiting
+Current:
+
+- **quick_update.sh** - Backs up (PostgreSQL dump), pulls, tests, migrates and restarts production
+- **postgres_update_backup.py** - PostgreSQL dump/verify helper used by `quick_update.sh`
 - **check_production_config.py** - Verifies `.env.production` and Redis before restarts
-- **backup.sh** - Database backup script
-- **joneshq-maintenance.service / .timer** - Optional daily security-log/session retention job
+- **joneshq-finance.service** - App systemd unit
+- **joneshq-maintenance.service / .timer** - Daily security-log/session retention job
+- **gunicorn_config.py** - Gunicorn WSGI server configuration
+- **setup_redis.sh** - One-time Redis setup for login rate limiting
+- **migrate_production.py** - Runs migrations using `.env.production` (called by `quick_update.sh`)
 
-## Quick Start
+Historical / do not use on current production:
 
-See [PROXMOX_DEPLOYMENT.md](../docs/PROXMOX_DEPLOYMENT.md) for complete deployment instructions.
+- **POSTGRES_REHEARSAL.md**, **prepare_postgres_source.py**, **rehearse_postgres.py**,
+  **rehearse_update_guard.py** - SQLite ? PostgreSQL migration tooling (completed October 2026)
+- **backup.sh** - Legacy SQLite backup (used by `quick_update.sh` only on SQLite installs); refuses to run on PostgreSQL
+- **deploy.sh** - Original fresh-install script; configures SQLite
+- **nginx.conf** - Only for a self-hosted Nginx; production uses Nginx Proxy Manager
+- **DEPLOYMENT_CHECKLIST.md**, **LXC_SIMPLE_DEPLOYMENT.md** - Original SQLite install guides
 
-## Manual Deployment
+## Building a new server
 
-### 1. Copy files to server
-
-```bash
-# On server
-sudo mkdir -p /home/joneshq/app/deployment
-```
-
-```powershell
-# From Windows
-scp deployment/* joneshq@<server-ip>:/home/joneshq/app/deployment/
-```
-
-### 2. Install service
-
-```bash
-sudo cp deployment/joneshq-finance.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable joneshq-finance
-```
-
-### 3. Configure nginx
-
-```bash
-sudo cp deployment/nginx.conf /etc/nginx/sites-available/finance.joneshq.co.uk
-sudo ln -s /etc/nginx/sites-available/finance.joneshq.co.uk /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
-### 4. Set up backups
-
-```bash
-sudo cp deployment/backup.sh /usr/local/bin/joneshq-backup
-sudo chmod +x /usr/local/bin/joneshq-backup
-
-# Add to crontab (daily at 2 AM)
-sudo crontab -e
-# Add line: 0 2 * * * /usr/local/bin/joneshq-backup
-```
-
-## Automated Deployment
-
-Run the automated deployment script:
-
-```bash
-sudo bash deployment/deploy.sh
-```
-
-This will:
-- Install all dependencies
-- Create user and directories
-- Set up Python environment
-- Configure nginx and SSL
-- Install and start services
-- Configure firewall
+There is no current fresh-install script for PostgreSQL. `deploy.sh` and the older
+guides create a SQLite installation. If you need to rebuild, restore the latest
+Proxmox LXC backup rather than installing from scratch. If a from-scratch install is
+ever required, install PostgreSQL and Redis as described in this runbook, restore a
+confirmed `database.dump` into a new database, and verify health before opening it.

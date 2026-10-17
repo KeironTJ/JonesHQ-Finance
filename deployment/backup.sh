@@ -1,15 +1,12 @@
 #!/bin/bash
 #
-# FamilyHQ Finance - Automated Backup Script
-# Run daily via cron
+# FamilyHQ Finance - LEGACY SQLite backup script
 #
-# Installation:
-#   sudo cp deployment/backup.sh /usr/local/bin/joneshq-backup
-#   sudo chmod +x /usr/local/bin/joneshq-backup
-#   
-# Add to crontab (run daily at 2 AM):
-#   sudo crontab -e
-#   0 2 * * * /usr/local/bin/joneshq-backup
+# OBSOLETE FOR CURRENT PRODUCTION: production runs on PostgreSQL. This script only
+# copies the old SQLite file, which no longer receives writes. quick_update.sh calls
+# it only for SQLite installs; it refuses to run when .env.production points at a
+# non-SQLite database. Do not schedule it.
+# See deployment/README.md (Backups) for the current backup arrangements.
 #
 
 set -e
@@ -20,6 +17,18 @@ BACKUP_DIR="/home/joneshq/backups"
 DB_PATH="$APP_DIR/instance/joneshq_finance.db"
 RETENTION_DAYS=30  # Keep backups for 30 days
 DATE=$(date +%Y%m%d_%H%M%S)
+
+ENV_FILE="$APP_DIR/.env.production"
+if [ -f "$ENV_FILE" ]; then
+    DB_URL_LINE=$(grep -E '^[[:space:]]*(export[[:space:]]+)?(DATABASE_URL|SQLALCHEMY_DATABASE_URI)=' "$ENV_FILE" | tail -n 1 || true)
+    DB_URL_VALUE=${DB_URL_LINE#*=}
+    DB_URL_VALUE=${DB_URL_VALUE#[\"\']}
+    if [ -n "$DB_URL_LINE" ] && [[ "$DB_URL_VALUE" != sqlite:* ]]; then
+        echo "ERROR: Production is not configured for SQLite; this legacy script would back up an obsolete file."
+        echo "See deployment/README.md (Backups). Nothing was backed up."
+        exit 1
+    fi
+fi
 
 # Create backup directory if it doesn't exist
 mkdir -p $BACKUP_DIR

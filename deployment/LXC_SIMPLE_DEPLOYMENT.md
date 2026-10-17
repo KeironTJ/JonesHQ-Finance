@@ -1,5 +1,12 @@
 # Simple LXC Deployment - Behind Existing Nginx Proxy
 
+> **?? HISTORICAL ? DO NOT FOLLOW FOR CURRENT PRODUCTION.** This guide describes the
+> original SQLite installation. Production has run on PostgreSQL since October 2026
+> under `/home/joneshq/joneshq-finance`. Its SQLite database settings, backup/restore
+> commands and `/home/joneshq/app` paths are obsolete; restoring a SQLite file would
+> discard every change since the cutover. Use the
+> [production runbook](README.md) instead.
+
 This guide is for deploying FamilyHQ Finance in a new LXC container when you **already have Nginx Proxy Manager** running.
 
 ---
@@ -323,14 +330,9 @@ sudo systemctl restart joneshq-finance
 ```
 
 ### Backup Database
-```bash
-# Create backup
-cp /home/joneshq/app/instance/joneshq_finance.db ~/joneshq_finance_backup_$(date +%Y%m%d).db
 
-# Restore backup
-cp ~/joneshq_finance_backup_YYYYMMDD.db /home/joneshq/app/instance/joneshq_finance.db
-sudo systemctl restart joneshq-finance
-```
+Obsolete SQLite commands removed. See *Backups* in the
+[production runbook](README.md).
 
 ---
 
