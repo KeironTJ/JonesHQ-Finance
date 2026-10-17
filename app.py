@@ -216,6 +216,8 @@ def create_app(config_name=None):
             if current_user and current_user.is_authenticated and current_user.family_id:
                 fid = current_user.family_id
                 for obj in session.new:
+                    if getattr(obj, '_global_record', False):
+                        continue
                     if hasattr(obj, 'family_id') and obj.family_id is None:
                         obj.family_id = fid
         except RuntimeError:
@@ -227,8 +229,8 @@ def create_app(config_name=None):
     # Register Flask-Admin (must come after db.init_app and all models are loaded)
     from admin_panel import init_admin
     init_admin(app, db)
-    # Flask-Admin generates its own form tokens; exempt its blueprint from
-    # Flask-WTF's global CSRF so the two don't conflict.
+    # Flask-Admin views use their own SecureForm CSRF tokens (admin_panel.OperatorView);
+    # exempt its blueprint from Flask-WTF's global CSRF so the two don't conflict.
     csrf.exempt(app.blueprints['admin'])
 
     # Register error handlers

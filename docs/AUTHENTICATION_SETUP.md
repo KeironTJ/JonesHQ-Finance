@@ -143,7 +143,7 @@ at any time.
 - Activity (`last_seen_at` and IP) is recorded at most once a minute.
 - **Account security → Signed-in devices** lists active sessions with browser,
   device, IP and last activity. Users can sign out one device or all other devices.
-- Site admins can view all sessions (without token hashes) under **Admin → Core → Sessions**.
+- Site admins can view all sessions (without token hashes) under **Admin → Operator → Sessions**.
 - Revoked and expired rows are deleted 30 days later, the next time that user signs in.
 
 Sign a user out everywhere from the server (e.g. a lost laptop):
@@ -174,7 +174,33 @@ once when it is deployed.
   server reset commands. Each row has the user, household, IP and browser.
   Failed sign-ins for unknown emails are not recorded.
 - **Account security → Recent security activity** shows a user their last 20 events.
-  Site admins can search all events under **Admin → Core → Security events**.
+  Site admins can search all events under **Admin → Operator → Security events**.
+
+## Operator console (`/admin`)
+
+`/admin` is limited to site admins who have two-factor login turned on and have
+confirmed their password recently. It is an operator console, not a data browser:
+
+- **No household financial data.** Accounts, transactions, budgets, income,
+  pensions, loans, settings and every other household table are not exposed. Use
+  the app itself (scoped to your own household) or the server for investigations.
+- **Users** is read-only, with secrets excluded (password hash, two-factor secret,
+  recovery codes). Bulk actions: **Deactivate** (blocks sign-in and signs out
+  every device; you can't deactivate yourself), **Reactivate**, **Unlock** (clears
+  failed-sign-in lockout) and **Sign out everywhere**. Each action is recorded as
+  a security event (`account_deactivated`, `account_reactivated`,
+  `account_unlocked`, `all_sessions_revoked`) with "by site admin <id>".
+- **Households, Member invites, Household invites, Sessions** and **Security
+  events** are read-only. Invite tokens and token hashes are never shown, so the
+  console can't be used to join a household.
+- **Reference → Tax year templates** edits only the global tax rows
+  (`family_id` empty) that new households copy and that act as the fallback.
+  Each household's own tax settings are edited by that household in Settings.
+- All console forms and bulk actions carry Flask-Admin CSRF tokens.
+
+Create, edit and delete aren't available for users in the console. Use
+**Account security**, family member management, household deletion or the `flask`
+server commands so validation and audit logging still apply.
 - Events older than `SECURITY_EVENT_RETENTION_DAYS` (365) are deleted when anyone signs in.
   Enable the optional daily systemd retention timer to clean up even without sign-ins
   (see [deployment setup](../deployment/README.md#daily-retention-cleanup)).

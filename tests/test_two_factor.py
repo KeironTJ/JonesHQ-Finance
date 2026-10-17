@@ -225,7 +225,7 @@ def test_admin_panel_never_shows_two_factor_secret(app, user):
 
 	for path in (
 		'/admin/admin_user/',
-		f'/admin/admin_user/edit/?id={user.id}',
+		f'/admin/admin_user/details/?id={user.id}',
 		'/admin/admin_user/export/csv/',
 	):
 		response = client.get(path)

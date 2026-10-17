@@ -36,6 +36,9 @@ EVENT_LABELS = {
 	'password_reset_link_created': 'Password reset link created by the server admin',
 	'email_verified': 'Email address verified',
 	'data_exported': 'Downloaded a data export',
+	'account_deactivated': 'Account deactivated by the service operator',
+	'account_reactivated': 'Account reactivated by the service operator',
+	'account_unlocked': 'Sign-in lockout cleared by the service operator',
 }
 
 # Events that also send the user an email, with the alert subject.

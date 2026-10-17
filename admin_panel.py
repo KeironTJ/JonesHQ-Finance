@@ -1,17 +1,19 @@
 """
-Flask-Admin panel for Family HQ
-Accessible at /admin - restricted to users with role='admin'
+Flask-Admin operator console for Family HQ, at /admin.
+
+Operator-only: users, households, invites, sessions, security events and the
+global UK tax-year templates. Household financial data is deliberately not
+exposed here; households manage their own data in the app. Access requires a
+site admin with two-factor login and a recent password confirmation.
 """
-from flask import redirect, url_for, flash
+from flask import flash, redirect, url_for
 from flask_admin import Admin, AdminIndexView, expose
+from flask_admin.actions import action
 from flask_admin.contrib.sqla import ModelView
+from flask_admin.form import SecureForm
 from flask_admin.theme import Bootstrap4Theme
 from flask_login import current_user
 
-
-# ---------------------------------------------------------------------------
-# Base secure views
-# ---------------------------------------------------------------------------
 
 def _is_two_factor_site_admin():
     return current_user.is_authenticated and current_user.is_site_admin and current_user.two_factor_enabled
@@ -31,8 +33,6 @@ def _deny_admin_access():
 
 
 class SecureAdminIndexView(AdminIndexView):
-    """Admin home page - checks for admin role before rendering."""
-
     @expose('/')
     def index(self):
         if not _is_verified_site_admin():
@@ -46,38 +46,22 @@ class SecureAdminIndexView(AdminIndexView):
         return _deny_admin_access()
 
 
-class SecureModelView(ModelView):
-    """Full CRUD model view - admin only."""
+class OperatorView(ModelView):
+    """Read-only by default; every form (incl. actions) carries a CSRF token."""
 
-    can_export = True
+    form_base_class = SecureForm
+    can_create = False
+    can_edit = False
+    can_delete = False
+    can_export = False
+    can_view_details = True
     page_size = 50
     column_display_pk = True
 
     def __init__(self, model, session, **kwargs):
-        # Auto-prefix all endpoints with 'admin_' to avoid conflicts with
-        # existing app blueprints that share the same model names.
-        if 'endpoint' not in kwargs:
-            kwargs['endpoint'] = f'admin_{model.__name__.lower()}'
-
-        # If the model has a family_id column, automatically inject it into
-        # column_filters as an instance attribute before super().__init__()
-        # so every table can be scoped by family without explicit per-view config.
-        if hasattr(model, 'family_id'):
-            # Gather any filters already declared on the subclass
-            existing = list(getattr(self.__class__, 'column_filters', None) or [])
-            if 'family_id' not in existing:
-                existing.insert(0, 'family_id')
-            # Set as instance attribute - Flask-Admin reads this in _refresh_cache()
-            self.column_filters = existing
-
+        # Prefix endpoints so they don't clash with app blueprints of the same name.
+        kwargs.setdefault('endpoint', f'admin_{model.__name__.lower()}')
         super().__init__(model, session, **kwargs)
-
-    def scaffold_list_columns(self):
-        """Ensure family_id always appears in the column list for models that have it."""
-        columns = super().scaffold_list_columns()
-        if hasattr(self.model, 'family_id') and 'family_id' not in columns:
-            columns.insert(1, 'family_id')  # after id
-        return columns
 
     def is_accessible(self):
         return _is_verified_site_admin()
@@ -86,25 +70,14 @@ class SecureModelView(ModelView):
         return _deny_admin_access()
 
 
-class ReadOnlyModelView(SecureModelView):
-    """Read-only model view for sensitive or computed tables."""
+class UserAdminView(OperatorView):
+    """Users. Changes go through actions so they are audited and revoke sessions."""
 
-    can_create = False
-    can_edit = False
-    can_delete = False
-
-
-# ---------------------------------------------------------------------------
-# Customised model views
-# ---------------------------------------------------------------------------
-
-class UserAdminView(SecureModelView):
-    """Users - hide password hash, show useful columns."""
-    _secret_columns = ['password_hash', 'totp_secret', 'totp_last_step', 'recovery_codes']
+    _secret_columns = ['password_hash', 'totp_secret', 'totp_last_step', 'recovery_codes', 'sessions']
     column_exclude_list = _secret_columns
     column_details_exclude_list = _secret_columns
     column_export_exclude_list = _secret_columns
-    form_excluded_columns = _secret_columns + ['totp_enabled_at']
+    can_export = True
     column_searchable_list = ['email', 'name', 'member_name']
     column_filters = ['role', 'is_active', 'is_site_admin', 'family_id']
     column_list = [
@@ -112,90 +85,137 @@ class UserAdminView(SecureModelView):
         'family_id', 'member_name', 'last_login', 'created_at',
         'failed_login_attempts', 'locked_until', 'totp_enabled_at',
     ]
+    column_export_list = column_list
+    column_details_list = column_list + ['email_verified_at', 'onboarding_version']
     column_labels = {'totp_enabled_at': '2FA enabled'}
 
+    def _apply(self, ids, change, event_type, message):
+        from extensions import db
+        from models.users import User
+        from services.platform.security_event_service import SecurityEventService
+        from services.platform.user_session_service import UserSessionService
 
-class UserSessionAdminView(ReadOnlyModelView):
-    """Signed-in sessions; the token hash is never shown."""
+        changed = 0
+        for user in User.query.filter(User.id.in_([int(i) for i in ids])).all():
+            if user.id == current_user.id and event_type == 'account_deactivated':
+                flash('You cannot deactivate your own account here.', 'warning')
+                continue
+            if not change(user):
+                continue
+            db.session.commit()
+            details = f'by site admin {current_user.id}'
+            SecurityEventService.record(event_type, user=user, details=details)
+            if event_type in ('account_deactivated', 'all_sessions_revoked'):
+                UserSessionService.revoke_all(user, reason=f'site admin {current_user.id}')
+            changed += 1
+        flash(f'{message}: {changed} user(s).', 'success')
+
+    @action('deactivate', 'Deactivate', 'Deactivate the selected users and sign them out everywhere?')
+    def action_deactivate(self, ids):
+        def change(user):
+            if not user.is_active:
+                return False
+            user.is_active = False
+            return True
+        self._apply(ids, change, 'account_deactivated', 'Deactivated')
+
+    @action('reactivate', 'Reactivate', 'Reactivate the selected users?')
+    def action_reactivate(self, ids):
+        def change(user):
+            if user.is_active:
+                return False
+            user.is_active = True
+            return True
+        self._apply(ids, change, 'account_reactivated', 'Reactivated')
+
+    @action('unlock', 'Unlock sign-in', 'Clear failed sign-in lockouts for the selected users?')
+    def action_unlock(self, ids):
+        def change(user):
+            if not user.failed_login_attempts and not user.locked_until:
+                return False
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            return True
+        self._apply(ids, change, 'account_unlocked', 'Unlocked')
+
+    @action('sign_out', 'Sign out everywhere', 'Sign the selected users out of every device?')
+    def action_sign_out(self, ids):
+        from extensions import db
+        from models.users import User
+        from services.platform.user_session_service import UserSessionService
+
+        users = User.query.filter(User.id.in_([int(i) for i in ids])).all()
+        for user in users:
+            UserSessionService.revoke_all(user, reason=f'site admin {current_user.id}')
+        db.session.commit()
+        flash(f'Signed out: {len(users)} user(s).', 'success')
+
+
+class FamilyAdminView(OperatorView):
+    column_searchable_list = ['name']
+    column_list = ['id', 'name', 'onboarding_version', 'created_at']
+
+
+class FamilyInviteAdminView(OperatorView):
+    # The raw token would let the operator join the household; never show it.
+    column_list = ['id', 'family_id', 'role', 'member_name', 'created_by_id', 'created_at',
+                   'expires_at', 'used_at', 'used_by_id']
+    column_details_list = column_list
+    column_filters = ['family_id']
+
+
+class HouseholdInviteAdminView(OperatorView):
+    column_list = ['id', 'email', 'note', 'created_by_id', 'created_at', 'expires_at',
+                   'used_at', 'used_by_id', 'revoked_at']
+    column_details_list = column_list
+
+
+class UserSessionAdminView(OperatorView):
     column_list = ['id', 'user', 'remember', 'created_at', 'last_seen_at', 'expires_at',
                    'revoked_at', 'ip_address', 'user_agent']
-    column_exclude_list = ['token_hash']
-    column_details_exclude_list = ['token_hash']
-    column_export_exclude_list = ['token_hash']
+    column_details_list = column_list
     column_default_sort = ('last_seen_at', True)
 
 
-class SecurityEventAdminView(ReadOnlyModelView):
-    """Security audit trail."""
+class SecurityEventAdminView(OperatorView):
+    can_export = True
     column_list = ['created_at', 'event_type', 'user', 'family_id', 'details', 'ip_address', 'user_agent']
+    column_export_list = column_list
     column_filters = ['event_type', 'user_id', 'family_id', 'created_at']
     column_searchable_list = ['event_type', 'details', 'ip_address']
     column_default_sort = ('created_at', True)
 
 
-class TransactionAdminView(SecureModelView):
-    column_searchable_list = ['description', 'item', 'assigned_to']
-    column_filters = ['transaction_date', 'payment_type', 'account_id', 'family_id']
-    column_default_sort = ('transaction_date', True)
+class TaxTemplateAdminView(OperatorView):
+    """Global UK tax-year defaults (family_id NULL) used by households without their own copy."""
 
+    can_create = True
+    can_edit = True
+    form_excluded_columns = ['family_id', 'created_at', 'updated_at']
+    column_exclude_list = ['family_id']
+    column_default_sort = ('effective_from', True)
 
-class AccountAdminView(SecureModelView):
-    column_searchable_list = ['name']
-    column_filters = ['account_type', 'is_active', 'family_id']
+    def get_query(self):
+        return super().get_query().filter(self.model.family_id.is_(None))
 
+    def get_count_query(self):
+        return super().get_count_query().filter(self.model.family_id.is_(None))
 
-class CategoryAdminView(SecureModelView):
-    column_searchable_list = ['name']
-    column_filters = ['category_type', 'family_id']
+    def get_one(self, id):
+        record = super().get_one(id)
+        return record if record is not None and record.family_id is None else None
 
+    def on_model_change(self, form, model, is_created):
+        model.family_id = None
+        # Stops the app's before_flush auto-stamp assigning the operator's household.
+        model._global_record = True
 
-class VendorAdminView(SecureModelView):
-    column_searchable_list = ['name']
-    column_filters = ['is_active', 'family_id']
-
-
-class ExpenseAdminView(SecureModelView):
-    column_searchable_list = ['description']
-    column_filters = ['date', 'expense_type', 'family_id']
-    column_default_sort = ('date', True)
-
-
-class IncomeAdminView(SecureModelView):
-    column_searchable_list = ['person', 'tax_year']
-    column_filters = ['pay_date', 'person', 'family_id']
-    column_default_sort = ('pay_date', True)
-
-
-class LoanAdminView(SecureModelView):
-    column_searchable_list = ['name']
-    column_filters = ['is_active', 'family_id']
-
-
-class CreditCardAdminView(SecureModelView):
-    column_searchable_list = ['card_name']
-    column_filters = ['is_active', 'family_id']
-
-
-class PensionAdminView(SecureModelView):
-    column_searchable_list = ['provider', 'person']
-    column_filters = ['person', 'is_active', 'family_id']
-
-
-class VehicleAdminView(SecureModelView):
-    column_searchable_list = ['make', 'model', 'registration']
-    column_filters = ['fuel_type', 'is_active', 'family_id']
-
-
-class FamilyAdminView(SecureModelView):
-    column_searchable_list = ['name']
-
-
-# ---------------------------------------------------------------------------
-# Admin factory
-# ---------------------------------------------------------------------------
 
 def init_admin(app, db):
-    """Create the Flask-Admin instance and register all model views."""
+    """Create the Flask-Admin instance and register the operator views."""
+    from models.family import Family, FamilyInvite, HouseholdInvite
+    from models.tax_settings import TaxSettings
+    from models.users import SecurityEvent, User, UserSession
 
     admin = Admin(
         app,
@@ -204,107 +224,12 @@ def init_admin(app, db):
         index_view=SecureAdminIndexView(),
         url='/admin',
     )
-
-    # ---- Import all models ------------------------------------------------
-    from models.users import SecurityEvent, User, UserSession
-    from models.family import Family, FamilyInvite, HouseholdInvite
-    from models.accounts import Account
-    from models.balances import Balance
-    from models.budgets import Budget
-    from models.transactions import Transaction
-    from models.planned import PlannedTransaction
-    from models.categories import Category
-    from models.vendors import Vendor, VendorType
-    from models.income import Income
-    from models.recurring_income import RecurringIncome
-    from models.expenses import Expense
-    from models.expense_calendar import ExpenseCalendarEntry
-    from models.loans import Loan
-    from models.loan_payments import LoanPayment
-    from models.credit_cards import CreditCard, CreditCardPromotion
-    from models.credit_card_transactions import CreditCardTransaction
-    from models.mortgage import Mortgage, MortgageProduct
-    from models.mortgage_payments import MortgagePayment, MortgageSnapshot
-    from models.pensions import Pension
-    from models.pension_snapshots import PensionSnapshot
-    from models.vehicles import Vehicle
-    from models.fuel import FuelRecord
-    from models.trips import Trip
-    from models.childcare import ChildcareRecord, Child, ChildActivityType, DailyChildcareActivity, MonthlyChildcareSummary
-    from models.networth import NetWorth
-    from models.monthly_account_balance import MonthlyAccountBalance
-    from models.settings import Settings
-    from models.tax_settings import TaxSettings
-    from models.property import Property
-
-    # ---- Register views ---------------------------------------------------
-
-    # Core / Auth
-    admin.add_view(UserAdminView(User, db.session, name='Users', category='Core'))
-    admin.add_view(FamilyAdminView(Family, db.session, name='Families', category='Core'))
-    admin.add_view(SecureModelView(FamilyInvite, db.session, name='Invites', category='Core'))
-    admin.add_view(ReadOnlyModelView(HouseholdInvite, db.session, name='Household Invites', category='Core'))
-    admin.add_view(UserSessionAdminView(UserSession, db.session, name='Sessions', category='Core'))
-    admin.add_view(SecurityEventAdminView(SecurityEvent, db.session, name='Security events', category='Core'))
-
-    # Accounts & Transactions
-    admin.add_view(AccountAdminView(Account, db.session, name='Accounts', category='Accounts'))
-    admin.add_view(ReadOnlyModelView(Balance, db.session, name='Balances', category='Accounts'))
-    admin.add_view(ReadOnlyModelView(MonthlyAccountBalance, db.session, name='Monthly Balances', category='Accounts'))
-    admin.add_view(TransactionAdminView(Transaction, db.session, name='Transactions', category='Accounts'))
-    admin.add_view(SecureModelView(PlannedTransaction, db.session, name='Planned', category='Accounts'))
-
-    # Income
-    admin.add_view(IncomeAdminView(Income, db.session, name='Income', category='Income'))
-    admin.add_view(SecureModelView(RecurringIncome, db.session, name='Recurring Income', category='Income'))
-
-    # Expenses
-    admin.add_view(ExpenseAdminView(Expense, db.session, name='Expenses', category='Expenses'))
-    admin.add_view(SecureModelView(ExpenseCalendarEntry, db.session, name='Calendar Entries', category='Expenses'))
-    admin.add_view(SecureModelView(Budget, db.session, name='Budgets', category='Expenses'))
-
-    # Credit Cards
-    admin.add_view(CreditCardAdminView(CreditCard, db.session, name='Credit Cards', category='Credit Cards'))
-    admin.add_view(SecureModelView(CreditCardPromotion, db.session, name='Promotions', category='Credit Cards'))
-    admin.add_view(SecureModelView(CreditCardTransaction, db.session, name='CC Transactions', category='Credit Cards'))
-
-    # Loans
-    admin.add_view(LoanAdminView(Loan, db.session, name='Loans', category='Loans'))
-    admin.add_view(SecureModelView(LoanPayment, db.session, name='Loan Payments', category='Loans'))
-
-    # Mortgage
-    admin.add_view(SecureModelView(Mortgage, db.session, name='Mortgage', category='Mortgage'))
-    admin.add_view(SecureModelView(MortgageProduct, db.session, name='Products', category='Mortgage'))
-    admin.add_view(SecureModelView(MortgagePayment, db.session, name='Payments', category='Mortgage'))
-    admin.add_view(ReadOnlyModelView(MortgageSnapshot, db.session, name='Snapshots', category='Mortgage'))
-
-    # Pensions
-    admin.add_view(PensionAdminView(Pension, db.session, name='Pensions', category='Pensions'))
-    admin.add_view(ReadOnlyModelView(PensionSnapshot, db.session, name='Snapshots', category='Pensions'))
-
-    # Vehicles
-    admin.add_view(VehicleAdminView(Vehicle, db.session, name='Vehicles', category='Vehicles'))
-    admin.add_view(SecureModelView(FuelRecord, db.session, name='Fuel Records', category='Vehicles'))
-    admin.add_view(SecureModelView(Trip, db.session, name='Trips', category='Vehicles'))
-
-    # Childcare
-    admin.add_view(SecureModelView(Child, db.session, name='Children', category='Childcare'))
-    admin.add_view(SecureModelView(ChildActivityType, db.session, name='Activity Types', category='Childcare'))
-    admin.add_view(SecureModelView(DailyChildcareActivity, db.session, name='Daily Activities', category='Childcare'))
-    admin.add_view(ReadOnlyModelView(MonthlyChildcareSummary, db.session, name='Monthly Summary', category='Childcare'))
-    admin.add_view(SecureModelView(ChildcareRecord, db.session, name='Records', category='Childcare'))
-
-    # Reference Data
-    admin.add_view(CategoryAdminView(Category, db.session, name='Categories', category='Reference'))
-    admin.add_view(VendorAdminView(Vendor, db.session, name='Vendors', category='Reference'))
-    admin.add_view(SecureModelView(VendorType, db.session, name='Vendor Types', category='Reference'))
-
-    # Net Worth & Analytics
-    admin.add_view(ReadOnlyModelView(NetWorth, db.session, name='Net Worth', category='Analytics'))
-    admin.add_view(SecureModelView(Property, db.session, name='Properties', category='Analytics'))
-
-    # Settings
-    admin.add_view(SecureModelView(Settings, db.session, name='Settings', category='Settings'))
-    admin.add_view(SecureModelView(TaxSettings, db.session, name='Tax Settings', category='Settings'))
-
+    admin.add_view(UserAdminView(User, db.session, name='Users', category='Operator'))
+    admin.add_view(FamilyAdminView(Family, db.session, name='Households', category='Operator'))
+    admin.add_view(FamilyInviteAdminView(FamilyInvite, db.session, name='Member invites', category='Operator'))
+    admin.add_view(HouseholdInviteAdminView(HouseholdInvite, db.session, name='Household invites', category='Operator'))
+    admin.add_view(UserSessionAdminView(UserSession, db.session, name='Sessions', category='Operator'))
+    admin.add_view(SecurityEventAdminView(SecurityEvent, db.session, name='Security events', category='Operator'))
+    admin.add_view(TaxTemplateAdminView(TaxSettings, db.session, name='Tax year templates',
+                                        category='Reference', endpoint='admin_taxtemplate'))
     return admin
