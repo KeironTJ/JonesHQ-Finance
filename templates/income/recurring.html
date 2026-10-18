@@ -7,7 +7,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <div>
             <h1 class="mb-0"><i class="bi bi-briefcase"></i> Income sources</h1>
-            <p class="text-muted mb-0">Each source forecasts its payslips for the next two years. Open one to add pay rises, bonuses or tax-code changes.</p>
+            <p class="text-muted mb-0">Each source forecasts its payslips {{ forecast_years }} year{{ 's' if forecast_years > 1 }} ahead (change this under Tools). Open one to add pay rises, bonuses or tax-code changes.</p>
         </div>
         <div class="d-flex gap-2">
             <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add source</a>
@@ -93,12 +93,18 @@
         <div class="card-header"><i class="bi bi-tools"></i> Tools</div>
         <div class="card-body row g-4">
             <div class="col-md-6">
-                <h6>Refresh forecasts</h6>
-                <p class="small text-muted">Re-price every unsettled future payslip with current settings and tax rates, and fill the next two years.</p>
-                <form method="post" action="{{ url_for('income.refresh_all') }}">
+                <h6>Forecasts</h6>
+                <p class="small text-muted">Payslips (and their bank forecast transactions) are saved this far ahead, re-priced with current settings and tax rates. The <a href="{{ url_for('income.plan') }}">plan</a> projects beyond it. Paid and actual payslips are never changed.</p>
+                <form method="post" action="{{ url_for('income.refresh_all') }}" class="d-flex gap-2 align-items-center">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="next" value="sources"/>
-                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Refresh all forecasts</button>
+                    <label class="small text-nowrap" for="forecastYears">Keep</label>
+                    <select class="form-select form-select-sm w-auto" id="forecastYears" name="forecast_years">
+                        {% for y in range(1, max_forecast_years + 1) %}
+                        <option value="{{ y }}" {% if y == forecast_years %}selected{% endif %}>{{ y }} year{{ 's' if y > 1 }} ahead</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-outline-primary btn-sm text-nowrap"><i class="bi bi-arrow-repeat"></i> Save &amp; refresh</button>
                 </form>
             </div>
             <div class="col-md-6">

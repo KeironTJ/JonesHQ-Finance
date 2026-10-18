@@ -63,7 +63,9 @@ from utils.db_helpers import family_get, family_get_or_404, family_query
 MAX_MONEY = Decimal('99999999.99')  # Numeric(10, 2) ceiling
 MAX_TEMPLATE_YEARS = 60             # Longest a single job template may run
 GENERATION_HORIZON_YEARS = 50       # Upper bound for trim / range validation
-FORECAST_HORIZON_MONTHS = 24        # Forecast rows are saved this far ahead; the plan projects beyond
+DEFAULT_FORECAST_YEARS = 5          # Forecast rows are saved this far ahead (household setting); the plan projects beyond
+MAX_FORECAST_YEARS = 10
+FORECAST_YEARS_SETTING = 'income.forecast_years'
 MAX_RANGE_YEARS = 50                # Longest delete/regenerate window
 ORPHAN_SERIES_MIN = 3               # Detached future rows in a run this long are leftover forecasts
 MAX_ANNUAL_RISE = Decimal('50')     # % — sanity cap for pay rises
@@ -989,9 +991,34 @@ class IncomeService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def forecast_years():
+        """Household setting: how many years ahead forecast payslips are saved."""
+        from models.settings import Settings
+        try:
+            years = int(Settings.get_value(FORECAST_YEARS_SETTING, DEFAULT_FORECAST_YEARS))
+        except (TypeError, ValueError):
+            return DEFAULT_FORECAST_YEARS
+        return min(max(years, 1), MAX_FORECAST_YEARS)
+
+    @staticmethod
+    def set_forecast_years(value):
+        """Save the forecast horizon; call refresh_all_forecasts() afterwards to apply it."""
+        from models.settings import Settings
+        try:
+            years = int(value)
+        except (TypeError, ValueError):
+            raise ValueError('Choose how many years of forecasts to keep.') from None
+        if not 1 <= years <= MAX_FORECAST_YEARS:
+            raise ValueError(f'Forecasts can be kept from 1 to {MAX_FORECAST_YEARS} years ahead.')
+        Settings.set_value(FORECAST_YEARS_SETTING, years,
+                           'Years ahead that income payslips are forecast', 'int')
+        db.session.commit()
+        return years
+
+    @staticmethod
     def forecast_horizon(today=None):
         """Forecast rows are saved up to this date; the plan projects beyond it."""
-        return (today or date.today()) + relativedelta(months=FORECAST_HORIZON_MONTHS)
+        return (today or date.today()) + relativedelta(years=IncomeService.forecast_years())
 
     @staticmethod
     def pay_date_for_month(recurring_income, target_date):
@@ -1154,7 +1181,7 @@ class IncomeService:
         """
         Fill in missing Income records for a source from where generation last
         stopped up to *end_date* (for monthly pay, the whole of that month),
-        never beyond FORECAST_HORIZON_MONTHS from today or the source's end
+        never beyond the household's forecast horizon or the source's end
         date. Idempotent.
 
         Returns the list of Income records (new or pre-existing) in the window.

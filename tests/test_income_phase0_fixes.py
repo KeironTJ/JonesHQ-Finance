@@ -13,7 +13,7 @@ from models.income import Income
 from models.recurring_income import RecurringIncome
 from models.transactions import Transaction
 from models.users import User
-from services.finance.income_service import IncomeService, FORECAST_HORIZON_MONTHS
+from services.finance.income_service import IncomeService, DEFAULT_FORECAST_YEARS
 
 
 @pytest.fixture
@@ -367,7 +367,8 @@ def test_household_owner_cannot_make_another_members_income_private(scoped, user
 def test_generation_never_exceeds_horizon(scoped):
     recurring = _template(start_date=date.today().replace(day=1).isoformat())
     generated = IncomeService.generate_missing_income(recurring.id, end_date=date(9999, 1, 1))
-    assert generated[-1].pay_date <= date.today() + relativedelta(months=FORECAST_HORIZON_MONTHS)
+    assert generated[-1].pay_date <= date.today() + relativedelta(years=DEFAULT_FORECAST_YEARS)
+    assert generated[-1].pay_date > date.today() + relativedelta(years=DEFAULT_FORECAST_YEARS, months=-1)
 
 
 @pytest.mark.parametrize('field,value', [

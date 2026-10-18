@@ -138,12 +138,40 @@ def _future(recurring):
                                Income.pay_date > date.today()).order_by(Income.pay_date).all()
 
 
-def test_new_source_forecasts_two_years(scoped):
+def test_new_source_forecasts_five_years_by_default(scoped):
     recurring = _source()
     future = _future(recurring)
     assert future
-    assert future[-1].pay_date <= date.today() + relativedelta(months=24) + timedelta(days=31)
-    assert future[-1].pay_date >= date.today() + relativedelta(months=23)
+    assert future[-1].pay_date <= date.today() + relativedelta(years=5)
+    assert future[-1].pay_date >= date.today() + relativedelta(years=5, months=-1)
+
+
+def test_forecast_years_setting_extends_and_shortens(scoped):
+    recurring = _source()
+    IncomeService.set_forecast_years(2)
+    IncomeService.refresh_all_forecasts()
+    assert _future(recurring)[-1].pay_date <= date.today() + relativedelta(years=2)
+
+    IncomeService.set_forecast_years(8)
+    IncomeService.refresh_all_forecasts()
+    assert _future(recurring)[-1].pay_date >= date.today() + relativedelta(years=8, months=-1)
+    assert IncomeService.forecast_years() == 8
+
+
+@pytest.mark.parametrize('value', ['0', '11', 'abc', None])
+def test_forecast_years_validation(scoped, value):
+    with pytest.raises(ValueError):
+        IncomeService.set_forecast_years(value)
+
+
+def test_forecast_years_is_per_household(scoped, monkeypatch):
+    from models.family import Family
+    IncomeService.set_forecast_years(3)
+    other = Family(name='Other')
+    db.session.add(other)
+    db.session.commit()
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: other.id)
+    assert IncomeService.forecast_years() == 5
 
 
 def test_pay_rise_reprices_unsettled_forecasts_only(scoped):
@@ -330,6 +358,79 @@ def test_plan_counts_paid_history_of_closed_sources_without_projecting(scoped):
     assert all(y['totals']['gross'] == 0 for y in plan['years'][1:])
 
 
+def _set_retirement(years_from_now, person='Household', age=67):
+    dob = date.today() + relativedelta(years=years_from_now - age)
+    return IncomeProjectionService.set_retirement(
+        person, {'date_of_birth': dob.isoformat(), 'retirement_age': str(age)})
+
+
+def test_plan_stops_work_income_at_retirement_and_warns(scoped):
+    _source()
+    _source(source='State', income_type='rental', set_aside_percent='20')
+    info = _set_retirement(8)
+    plan = IncomeProjectionService.build_plan()
+
+    retire_year = payroll_calculator.tax_year_start(info['date'])
+    assert plan['until_year'] == retire_year + 1
+    last = plan['years'][-1]
+    assert last['by_type'].get('employment') is None
+    assert last['by_type']['rental']['gross'] > 0
+    assert next(y for y in plan['years'] if y['start'] == retire_year)['retiring'] == ['Household']
+    assert any('no pension income source' in w for w in plan['warnings'])
+    # Forecast rows are only saved 5 years ahead, so the job's end date isn't the issue here.
+    assert any('stopped at' in w for w in plan['warnings'])
+
+
+def test_saved_forecasts_after_retirement_are_dropped_but_paid_rows_kept(scoped):
+    recurring = _source()
+    info = _set_retirement(2)
+    later = Income.query.filter(Income.recurring_income_id == recurring.id,
+                                Income.pay_date > info['date']).order_by(Income.pay_date).all()
+    assert later
+    later[0].is_paid = True
+    db.session.commit()
+    plan = IncomeProjectionService.build_plan(until_year=payroll_calculator.tax_year_start(date.today()) + 4)
+    employment = [y['by_type'].get('employment', {}).get('gross', 0) for y in plan['years']]
+    after = [y for y in plan['years'] if y['start'] > payroll_calculator.tax_year_start(later[0].pay_date)]
+    assert all('employment' not in y['by_type'] for y in after)
+    assert sum(employment) > 0
+
+
+@pytest.mark.parametrize('data, message', [
+    ({'date_of_birth': 'nope'}, 'valid date'),
+    ({'date_of_birth': '1900-01-01'}, '16 to 100'),
+    ({'date_of_birth': '1980-01-01', 'retirement_age': '40'}, 'between'),
+    ({'date_of_birth': '1980-01-01', 'retirement_age': 'x'}, 'whole-number'),
+])
+def test_retirement_validation(scoped, data, message):
+    _source()
+    with pytest.raises(ValueError, match=message):
+        IncomeProjectionService.set_retirement('Household', data)
+
+
+def test_retirement_only_for_people_with_income(scoped):
+    with pytest.raises(ValueError):
+        IncomeProjectionService.set_retirement('Nobody', {'date_of_birth': '1980-01-01'})
+
+
+def test_retirement_shared_with_pension_planner_and_clearable(scoped):
+    from services.planning.pension_service import PensionService
+    _source()
+    _set_retirement(10)
+    assert PensionService.get_person_age('Household') == 57
+    IncomeProjectionService.set_retirement('Household', {'date_of_birth': ''})
+    assert IncomeProjectionService.retirement_for('Household') is None
+
+
+def test_2026_tables_are_built_in(scoped):
+    estimate = payroll_calculator.calculate_payslip(
+        Decimal('40000'), 'S1257L', IncomeService.get_tax_settings_for_date(date(2026, 6, 1)),
+        date(2026, 6, 1), student_loan_plans=['plan_2'])
+    assert not any('assumed unchanged' in w or 'latest known' in w for w in estimate.warnings)
+    # Plan 2 2026-27 threshold £29,385: (40000 - 29385) / 12 * 9% ≈ £79.61
+    assert Decimal('79') <= estimate.student_loan <= Decimal('80')
+
+
 # --- Pages -----------------------------------------------------------------------
 
 def test_income_pages_render(client, scoped):
@@ -379,3 +480,21 @@ def test_refresh_all_route(client, scoped):
     _source()
     response = client.post('/income/refresh-forecasts', follow_redirects=True)
     assert 'Forecasts refreshed' in response.get_data(as_text=True)
+
+
+def test_refresh_route_saves_forecast_years(client, scoped):
+    _source()
+    client.post('/income/refresh-forecasts', data={'forecast_years': '7', 'next': 'sources'})
+    assert IncomeService.forecast_years() == 7
+    response = client.post('/income/refresh-forecasts', data={'forecast_years': '99'}, follow_redirects=True)
+    assert 'from 1 to 10 years' in response.get_data(as_text=True)
+    assert IncomeService.forecast_years() == 7
+
+
+def test_retirement_route(client, scoped):
+    _source()
+    response = client.post('/income/plan/retirement', data={
+        'person': 'Household', 'date_of_birth': '1980-05-01', 'retirement_age': '66'}, follow_redirects=True)
+    assert 'retires on 01 May 2046' in response.get_data(as_text=True)
+    page = client.get('/income/plan').get_data(as_text=True)
+    assert 'Household retires' in page and 'value="1980-05-01"' in page

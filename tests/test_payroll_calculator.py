@@ -80,7 +80,8 @@ def test_scottish_flat_codes_use_scottish_rates():
 
 def test_scottish_unknown_year_warns_and_uses_latest_bands():
     tax, warnings = pc.calculate_annual_income_tax(Decimal('30000'), 'S1257L', S, year_start=2030)
-    assert tax.quantize(Decimal('0.01')) == Decimal('3482.82')
+    # Latest built-in bands (2026-27): 3,967 @19% + 12,989 @20% + 474 @21%
+    assert tax.quantize(Decimal('0.01')) == Decimal('3451.07')
     assert warnings and 'Scottish' in warnings[0]
 
 

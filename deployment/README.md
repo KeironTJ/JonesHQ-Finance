@@ -364,11 +364,11 @@ sources are backfilled as employment, monthly, salary-sacrifice, so their
 figures don't change. Nothing is deleted.
 
 After the update, each household should open **Income → Sources → Tools →
-Refresh all forecasts** once (or simply open the Payslips page, which tops up to
-24 months). Forecasts are now only saved 24 months ahead; older data may still
-hold forecasts further out. They are harmless, but can be removed with
-**Payslips → Tools → Trim forecasts** (24 months). Paid and actual payslips are
-never touched by either action.
+Forecasts → Save & refresh** once (or simply open the Payslips page, which tops
+up to the horizon). Forecasts are saved a household-chosen number of years ahead
+(setting `income.forecast_years`, default 5, 1–10); the refresh also removes
+unsettled forecasts beyond it, so older data that ran further out is tidied up.
+Paid and actual payslips are never touched.
 
 Sources that used fixed monthly figures keep them; the source page offers
 "Switch to calculated" so pay rises and timeline changes take effect.

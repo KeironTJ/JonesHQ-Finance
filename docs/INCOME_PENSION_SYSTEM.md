@@ -9,7 +9,7 @@ Comprehensive system for tracking lifetime income, calculating tax/NI/pension co
 |---|---|---|
 | **Income source** | `recurring_income` | One job, pension, self-employment or rental income for one person: type, pay frequency, starting pay, tax code, pension, student loan, yearly rise, deposit account, category, visibility. |
 | **Timeline change** | `income_changes` | A dated event on a source: new salary, % pay rise, bonus / one-off, tax-code change, pension % change. Deleted with its source. |
-| **Payslip** | `income` | One pay date. Forecasts are saved up to **24 months** ahead (`FORECAST_HORIZON_MONTHS`); actuals are entered over them. |
+| **Payslip** | `income` | One pay date. Forecasts are saved a household-chosen number of years ahead (Sources → Tools; setting `income.forecast_years`, default **5**, max 10); actuals are entered over them. |
 | **Plan** | none (computed) | `/income/plan`: per-tax-year totals up to retirement, projected in memory from each source's timeline. Nothing is saved. |
 
 **Terms on a date** (`income_schedule.terms_for`): start from the source's own
@@ -33,17 +33,23 @@ set-aside %); `rental` (set-aside %).
 dates, and fills up to the horizon. Settled rows (paid, actual payslip entered, or
 paid transaction) are never changed. It runs automatically after saving a source,
 adding/removing a change, and when the Payslips page tops up the horizon.
-**Tools → Refresh all forecasts** (`refresh_all_forecasts`) re-runs it for every
-source you can see, e.g. after new tax rates are loaded.
+**Tools → Forecasts → Save & refresh** (`set_forecast_years` + `refresh_all_forecasts`)
+saves the horizon and re-runs it for every source you can see, e.g. after new tax
+rates are loaded.
 
 **Manual overrides:** edit a payslip (choose manual figures) or **Enter actual**;
 that row is then settled and kept. A source can also keep the legacy fixed
 monthly figures (`use_manual_deductions`); those sources ignore yearly rises and
 the timeline until switched to "calculated".
 
-**Retirement:** set an end date on the job (**End income** on the source page)
-and add a `pension` source starting the day after. The plan stops each source at
-its end date. Inactive or ended sources only contribute payslips actually saved.
+**Retirement:** on the Plan page set each person's date of birth and retirement
+age (household settings `<person>_date_of_birth` / `<person>_retirement_age`,
+shared with the pension planner). The plan then runs to the last retirement and
+stops `employment` / `self_employed` income at it (paid or actual payslips still
+count), warning if the job has no end date or the person has no pension source.
+Set the job's end date (**End income**) so saved forecasts stop too, and add a
+`private_pension` / `state_pension` source starting the day after. Inactive or
+ended sources only contribute payslips actually saved.
 
 **Expense integration:** a source can fold reimbursable expenses into its payday
 (`fold_expenses`), as before.
@@ -57,8 +63,9 @@ its end date. Inactive or ended sources only contribute payslips actually saved.
 | `GET/POST /income/recurring/add`, `/income/recurring/<id>/edit` | Source form with live preview (`static/js/income-source-form.js`) |
 | `GET /income/recurring/<id>` | Source page: current terms, timeline, upcoming/recent payslips, end income, rebuild range, delete |
 | `POST /income/recurring/<id>/changes`, `/income/changes/<id>/delete` | Add / remove a timeline change |
-| `POST /income/refresh-forecasts` | Refresh all forecasts |
+| `POST /income/refresh-forecasts` | Refresh all forecasts (optional `forecast_years` saves the horizon first) |
 | `GET /income/plan?until=&person=` | Plan to a tax year (max 50 years) |
+| `POST /income/plan/retirement` | Save / clear a person's date of birth and retirement age |
 
 ## Database Models
 
@@ -116,9 +123,10 @@ All deduction maths lives in one pure module, `services/finance/payroll_calculat
 (`calculate_payslip`, any frequency). Forecasts, record edits, the source preview and
 the plan all use it, so they can't disagree. Rates come from `TaxSettings` for the pay
 date's tax year (fallback: 2025-26 rUK rates); Scottish bands and student-loan
-thresholds come from `uk_tax_tables.py`. When a year is missing from those tables the
-latest known year is used and a warning is shown (2026-27 Scottish and student-loan
-figures still need adding). The plan assumes thresholds stay frozen.
+thresholds come from `uk_tax_tables.py` (built in to 2026-27; add each new year
+in April). When a year is missing from those tables the latest known year is used
+and a warning is shown for the current tax year. The plan assumes thresholds stay
+frozen in later years.
 
 - **Tax year** runs 6 April → 5 April (`tax_year_for()`).
 - **Tax codes:** `1257L` (and M/N/T suffixes), `0T`, `K475`, `BR`, `D0`, `D1`, `NT`,
@@ -186,10 +194,10 @@ summary = IncomeService.get_income_summary(person='Keiron', year=2024)
 - Generated records are matched to their template by `recurring_income_id` + pay date,
   so two jobs paid on the same day don't collide. Pay dates before the template's
   start date or after its end date are skipped.
-- Forecast rows are saved at most 24 months ahead (the plan projects further in
-  memory); a source and its timeline may span at most 60 years; delete/regenerate
-  ranges are capped at 50 years. Older data may still hold forecasts beyond 24
-  months: they stay until trimmed (Payslips → Tools → Trim forecasts).
+- Forecast rows are saved up to the household's forecast horizon (default 5
+  years; the plan projects further in memory); a source and its timeline may span
+  at most 60 years; delete/regenerate ranges are capped at 50 years. Saving a new
+  horizon refreshes every source, which also removes unsettled forecasts beyond it.
 - A record is **settled** if it is paid, has an actual payslip entered, or its
   transaction is paid. Deleting or regenerating a range removes unsettled forecasts
   *and their forecast transactions*; settled records (including future months you

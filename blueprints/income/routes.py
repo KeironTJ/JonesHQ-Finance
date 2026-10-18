@@ -6,7 +6,7 @@ from models.recurring_income import RecurringIncome
 from models.accounts import Account
 from models.categories import Category
 from models.users import User
-from services.finance.income_service import IncomeService
+from services.finance.income_service import IncomeService, MAX_FORECAST_YEARS
 from extensions import db
 from datetime import datetime, date
 from decimal import Decimal
@@ -126,6 +126,7 @@ def index():
                            current_person=person,
                            current_year=year,
                            today=date.today(),
+                           forecast_years=IncomeService.forecast_years(),
                            today_year=datetime.now().year,
                            linked_expenses_by_income=linked_expenses_by_income,
                            folded_recurring_income_ids=folded_recurring_income_ids)
@@ -285,7 +286,9 @@ def recurring():
 
     people = [p[0] for p in family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()]
     return render_template('income/recurring.html', by_person=by_person, people=people,
-                           current_person=person, today=date.today(), **_labels())
+                           current_person=person, today=date.today(),
+                           forecast_years=IncomeService.forecast_years(),
+                           max_forecast_years=MAX_FORECAST_YEARS, **_labels())
 
 
 def _labels():
@@ -387,8 +390,11 @@ def delete_recurring(id):
 
 @income_bp.route('/income/refresh-forecasts', methods=['POST'])
 def refresh_all():
-    """Re-price every source's unsettled forecasts and fill the forecast horizon."""
+    """Re-price every source's unsettled forecasts and fill the forecast horizon,
+    optionally changing how many years ahead are kept first."""
     try:
+        if request.form.get('forecast_years'):
+            IncomeService.set_forecast_years(request.form['forecast_years'])
         result = IncomeService.refresh_all_forecasts()
         message = (f"Forecasts refreshed: {result['updated']} updated, {result['added']} added, "
                    f"{result['removed']} removed.")
@@ -413,7 +419,25 @@ def plan():
         result = IncomeProjectionService.build_plan()
     people = [p[0] for p in family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()]
     return render_template('income/plan.html', plan=result, people=people,
+                           retirement_people=[(p, IncomeProjectionService.retirement_for(p)) for p in people],
                            current_person=request.args.get('person') or None, **_labels())
+
+
+@income_bp.route('/income/plan/retirement', methods=['POST'])
+def save_retirement():
+    """Set a person's date of birth and retirement age (shared with the pension planner)."""
+    from services.finance.income_projection_service import IncomeProjectionService
+
+    person = request.form.get('person', '')
+    try:
+        info = IncomeProjectionService.set_retirement(person, request.form)
+        if info:
+            flash(f"{person} retires on {info['date'].strftime('%d %b %Y')} (age {info['age']}).", 'success')
+        else:
+            flash(f'Retirement details cleared for {person}.', 'info')
+    except Exception as e:
+        _fail(e, 'Error saving retirement details.')
+    return redirect(url_for('income.plan'))
 
 
 @income_bp.route('/income/generate-missing', methods=['POST'])

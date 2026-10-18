@@ -9,7 +9,7 @@
     <div class="row mb-3 align-items-center">
         <div class="col">
             <h1 class="mb-0"><i class="bi bi-cash-coin me-2"></i>Income</h1>
-            <div class="text-muted small">Every payslip — paid, actual and forecast. Forecasts run two years ahead; the <a href="{{ url_for('income.plan') }}">plan</a> goes further.</div>
+            <div class="text-muted small">Every payslip — paid, actual and forecast. Forecasts run {{ forecast_years }} year{{ 's' if forecast_years > 1 }} ahead; the <a href="{{ url_for('income.plan') }}">plan</a> goes further.</div>
         </div>
         <div class="col-auto d-flex gap-2 flex-wrap">
             <button id="deleteSelectedBtn" class="btn btn-danger" style="display:none">
@@ -374,9 +374,9 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p>This removes <strong>unpaid, unedited</strong> forecast records more than 24 months ahead. Older versions created forecasts much further out; the plan now projects those years instead.</p>
+                    <p>This removes <strong>unpaid, unedited</strong> forecast records more than {{ forecast_years }} year{{ 's' if forecast_years > 1 }} ahead (your forecast setting under Sources → Tools). Older versions created forecasts much further out; the plan now projects those years instead.</p>
                     <p class="text-muted small mb-3">Paid records and any records where you've entered actual payslip values are never touched.</p>
-                    <input type="hidden" name="months_ahead" value="24">
+                    <input type="hidden" name="months_ahead" value="{{ forecast_years * 12 }}">
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
