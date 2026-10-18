@@ -73,7 +73,8 @@ ended sources only contribute payslips actually saved.
 Tracks each pay period with full breakdown of deductions and contributions.
 
 **Key Fields:**
-- `person`: 'Keiron' or 'Emma' (supports multiple people)
+- `person`: display name of who the income belongs to (a member's name, or a label such as 'Household')
+- `member_id`: the household member (`users.id`) it is linked to, or NULL for labels / unmatched names
 - `pay_date`: Date of payment
 - `tax_year`: '2023-2024' format
 - `gross_annual_income`: Current annual salary
@@ -212,8 +213,17 @@ summary = IncomeService.get_income_summary(person='Keiron', year=2024)
   previews leftover detached forecasts (flagged, or a run of 3+ for the same
   person/source); re-run with `--apply` to delete them. See `deployment/README.md`.
 - Only the person an income belongs to can make it private (or the household owner,
-  for income not tied to a member's name). Template visibility cascades to its
+  for income not tied to a member). Template visibility cascades to its
   generated records.
+- **Household member link:** sources and payslips store `member_id` (FK to
+  `users`, `ON DELETE SET NULL`) alongside the `person` display name. It is set
+  when the chosen person matches exactly one member's member name or account name
+  (case-insensitive); forecasts inherit it from their source. Renaming a member
+  renames their linked income, and also links unlinked rows recorded under their
+  old or new name. Someone joining via invite is linked to income recorded under
+  their invited name. Removing a member unlinks their income but keeps the name.
+  Privacy checks use the link when present. Retirement settings and pension pots
+  are still keyed by name.
 
 ## Integration Points
 

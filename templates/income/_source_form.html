@@ -34,7 +34,7 @@
                             <option value="{{ p }}" {% if p == cur_person or (not cur_person and loop.first) %}selected{% endif %}>{{ p }}</option>
                             {% endfor %}
                             {% if cur_person and cur_person not in people %}
-                            <option value="{{ cur_person }}" selected>{{ cur_person }}</option>
+                            <option value="{{ cur_person }}" selected>{{ cur_person }} (not linked to a member)</option>
                             {% endif %}
                         </select>
                     </div>

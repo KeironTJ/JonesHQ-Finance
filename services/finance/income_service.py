@@ -197,11 +197,58 @@ class IncomeService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _may_make_private(person):
+    def _member_id_for(person):
+        """User id of the household member whose name is *person* (member name or
+        account name, case-insensitive), or None if it isn't exactly one member."""
+        from models.users import User
+
+        key = (person or '').strip().lower()
+        if not key:
+            return None
+        matches = {
+            member.id for member in family_query(User).all()
+            if key in {(member.member_name or '').strip().lower(), (member.name or '').strip().lower()}
+        }
+        return matches.pop() if len(matches) == 1 else None
+
+    @staticmethod
+    def sync_member_link(member, family_id, previous_names=()):
+        """Link *member* to income recorded under their name(s) and keep `person`
+        on their linked income in step with their current display name.
+
+        Called when someone joins the household or a member is renamed. Names
+        shared with another member are never auto-linked."""
+        from models.users import User
+
+        display = (member.member_name or member.name or '').strip()[:50]
+        if not family_id or not display:
+            return
+        keys = {(name or '').strip().lower() for name in (member.member_name, member.name, *previous_names)} - {''}
+        for other in User.query.filter(User.family_id == family_id, User.id != member.id).all():
+            keys -= {(other.member_name or '').strip().lower(), (other.name or '').strip().lower()}
+        for model in (RecurringIncome, Income):
+            if keys:
+                model.query.filter(
+                    model.family_id == family_id,
+                    model.member_id.is_(None),
+                    func.lower(func.trim(model.person)).in_(keys),
+                ).update({'member_id': member.id}, synchronize_session=False)
+            model.query.filter(model.family_id == family_id, model.member_id == member.id).update(
+                {'person': display}, synchronize_session=False)
+
+    @staticmethod
+    def unlink_member(member_id, family_id):
+        """Detach a departing member from the household's income; names are kept."""
+        for model in (RecurringIncome, Income):
+            model.query.filter(model.family_id == family_id, model.member_id == member_id).update(
+                {'member_id': None}, synchronize_session=False)
+
+    @staticmethod
+    def _may_make_private(person, member_id=None):
         """
         Making income private hides it from the rest of the household, so only the
         person it belongs to may do that. For income not tied to a household
-        member's name (e.g. 'Household'), the household owner may.
+        member (e.g. 'Household'), the household owner may.
         """
         from models.users import User
 
@@ -209,6 +256,8 @@ class IncomeService:
         user = db.session.get(User, uid) if uid else None
         if user is None:
             return False
+        if member_id is not None:
+            return member_id == user.id
         person_key = (person or '').strip().lower()
         own_names = {(user.member_name or '').strip().lower(), (user.name or '').strip().lower()} - {''}
         if person_key in own_names:
@@ -219,7 +268,7 @@ class IncomeService:
         return person_key not in member_names and user.is_household_owner
 
     @staticmethod
-    def _resolve_owner_id(data, person, record=None):
+    def _resolve_owner_id(data, person, record=None, member_id=None):
         """Work out owner_id for a create/update request without allowing a member
         to take over somebody else's shared income."""
         wants_private = data.get('visibility') == 'private'
@@ -230,8 +279,11 @@ class IncomeService:
             return None
         # On edits, authorise against the record's existing person so a member
         # can't relabel someone else's shared income as theirs and hide it.
-        check_person = record.person if record is not None else person
-        if not IncomeService._may_make_private(check_person):
+        if record is not None:
+            check_person, check_member = record.person, record.member_id
+        else:
+            check_person, check_member = person, member_id
+        if not IncomeService._may_make_private(check_person, check_member):
             raise ValueError(f"Only {check_person} can make this income private.")
         return db_helpers.get_current_user_id()
 
@@ -250,10 +302,12 @@ class IncomeService:
         IncomeService._validate_template_dates(start_date, end_date)
 
         person = IncomeService._text(data, 'person', 50, default=recurring.person or 'Household') or 'Household'
+        member_id = IncomeService._member_id_for(person)
         recurring.owner_id = IncomeService._resolve_owner_id(
-            data, person, record=recurring if recurring.id else None
+            data, person, record=recurring if recurring.id else None, member_id=member_id,
         )
         recurring.person = person
+        recurring.member_id = member_id
         recurring.start_date = start_date
         recurring.end_date = end_date
         recurring.income_type = IncomeService._choice(
@@ -732,6 +786,8 @@ class IncomeService:
 
     @staticmethod
     def _save_new_income(income, create_transaction, recalculate_balance, commit):
+        if income.member_id is None:
+            income.member_id = IncomeService._member_id_for(income.person)
         db.session.add(income)
         db.session.flush()
         if create_transaction and income.deposit_account_id:
@@ -750,6 +806,7 @@ class IncomeService:
     def create_one_off_income(data):
         """Create a single (non-recurring) income record from form data."""
         person = IncomeService._text(data, 'person', 50, default='Household') or 'Household'
+        member_id = IncomeService._member_id_for(person)
         deposit_account_id = IncomeService._int_id(data, 'deposit_account_id', 'deposit account')
         return IncomeService.create_income_record(
             person=person,
@@ -763,7 +820,7 @@ class IncomeService:
             deposit_account_id=deposit_account_id,
             source=IncomeService._text(data, 'source', 100),
             create_transaction=data.get('create_transaction') == 'on',
-            owner_id=IncomeService._resolve_owner_id(data, person),
+            owner_id=IncomeService._resolve_owner_id(data, person, member_id=member_id),
         )
 
     @staticmethod
@@ -776,6 +833,8 @@ class IncomeService:
 
         person = IncomeService._text(data, 'person', 50, default=income.person) or income.person
         income.owner_id = IncomeService._resolve_owner_id(data, person, record=income)
+        if person != income.person or income.member_id is None:
+            income.member_id = IncomeService._member_id_for(person)
         income.person = person
         income.pay_date = IncomeService._date(data, 'pay_date', 'Pay date')
         income.source = IncomeService._text(data, 'source', 100)
@@ -1107,6 +1166,7 @@ class IncomeService:
         income = Income(
             family_id=recurring.family_id or db_helpers.get_family_id(),
             person=recurring.person,
+            member_id=recurring.member_id,
             pay_date=pay_date,
             deposit_account_id=recurring.deposit_account_id,
             source=recurring.source,
@@ -1260,6 +1320,7 @@ class IncomeService:
                 continue
             covered.add(income.pay_date)
             income.person = recurring.person
+            income.member_id = recurring.member_id
             income.source = recurring.source
             income.owner_id = recurring.owner_id
             income.deposit_account_id = recurring.deposit_account_id

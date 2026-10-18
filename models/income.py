@@ -8,6 +8,7 @@ class Income(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     person = db.Column(db.String(50), nullable=False, default='Household')
+    member_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
     pay_date = db.Column(db.Date, nullable=False)
     tax_year = db.Column(db.String(9))  # 2022-2023
     
@@ -74,6 +75,7 @@ class Income(db.Model):
     transaction = db.relationship('Transaction', foreign_keys=[transaction_id], uselist=False)
     recurring_income = db.relationship('RecurringIncome', foreign_keys=[recurring_income_id], backref='generated_income')
     owner = db.relationship('User', foreign_keys=[owner_id])
+    member = db.relationship('User', foreign_keys=[member_id])
 
     @property
     def is_private(self):

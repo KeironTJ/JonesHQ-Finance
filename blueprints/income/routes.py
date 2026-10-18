@@ -64,7 +64,9 @@ def _get_income_people():
             if row[0] and row[0] not in seen:
                 seen.add(row[0])
                 people.append(row[0])
-    return people or ['Household']
+    if 'Household' not in seen:
+        people.append('Household')
+    return people
 
 
 @income_bp.route('/income')

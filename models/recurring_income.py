@@ -9,6 +9,9 @@ class RecurringIncome(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     person = db.Column(db.String(50), nullable=False, default='Household')
+    # Household member this income belongs to (NULL = household / non-member label).
+    # `person` stays as the display name and follows the member's name on rename.
+    member_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
     
     # Schedule
     start_date = db.Column(db.Date, nullable=False)
@@ -69,6 +72,7 @@ class RecurringIncome(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     owner = db.relationship('User', foreign_keys=[owner_id])
+    member = db.relationship('User', foreign_keys=[member_id])
     pension = db.relationship('Pension', foreign_keys=[pension_id])
 
     @property

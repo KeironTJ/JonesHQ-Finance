@@ -498,3 +498,106 @@ def test_retirement_route(client, scoped):
     assert 'retires on 01 May 2046' in response.get_data(as_text=True)
     page = client.get('/income/plan').get_data(as_text=True)
     assert 'Household retires' in page and 'value="1980-05-01"' in page
+
+
+# --- Household member link ---------------------------------------------------
+
+def _member(family, name, member_name=None, email=None):
+    member = User(email=email or f'{name.lower().replace(" ", ".")}@example.com', name=name,
+                  member_name=member_name, family_id=family.id, role='member')
+    member.set_password('TestPass1!')
+    db.session.add(member)
+    db.session.commit()
+    return member
+
+
+def test_source_and_its_payslips_link_to_the_member(scoped, family, user):
+    partner = _member(family, 'Partner Account', member_name='Sam')
+    recurring = _source(person='sam')
+    assert recurring.member_id == partner.id
+    payslips = Income.query.filter_by(recurring_income_id=recurring.id).all()
+    assert payslips and {p.member_id for p in payslips} == {partner.id}
+
+    household = _source(person='Household')
+    assert household.member_id is None
+
+
+def test_ambiguous_names_are_not_linked(scoped, family, user):
+    _member(family, 'Alex One', member_name='Alex')
+    _member(family, 'Alex Two', member_name='Alex')
+    assert _source(person='Alex').member_id is None
+
+
+def test_one_off_and_edited_payslips_follow_the_person(scoped, family, user):
+    partner = _member(family, 'Sam')
+    one_off = IncomeService.create_one_off_income({
+        'person': 'Sam', 'pay_date': date.today().isoformat(), 'gross_annual': '12000', 'tax_code': '1257L',
+    })
+    assert one_off.member_id == partner.id
+    IncomeService.update_income_record(one_off.id, {
+        'person': 'Admin User', 'pay_date': date.today().isoformat(), 'gross_annual': '12000', 'tax_code': '1257L',
+    })
+    assert db.session.get(Income, one_off.id).member_id == user.id
+
+
+def test_renaming_a_member_renames_their_income(scoped, family, user):
+    from services.household.family_service import FamilyService
+
+    partner = _member(family, 'Sam Smith', member_name='Sam')
+    recurring = _source(person='Sam')
+    legacy = IncomeService.create_one_off_income({
+        'person': 'Household', 'pay_date': date.today().isoformat(), 'gross_annual': '1000', 'tax_code': '1257L',
+    })
+    db.session.execute(Income.__table__.update().where(Income.id == legacy.id)
+                       .values(person='Sam', member_id=None))
+    db.session.commit()
+
+    FamilyService.update_member(partner.id, family.id, user.id, 'member', 'Samantha', [])
+
+    db.session.expire_all()
+    assert db.session.get(RecurringIncome, recurring.id).person == 'Samantha'
+    assert {p.person for p in Income.query.filter_by(member_id=partner.id).all()} == {'Samantha'}
+    # Unlinked rows recorded under the old name are picked up too.
+    assert db.session.get(Income, legacy.id).member_id == partner.id
+
+
+def test_joining_household_links_income_recorded_under_invited_name(scoped, family, user, monkeypatch):
+    from datetime import datetime
+    from models.family import FamilyInvite
+    from services.household.family_service import FamilyService
+
+    recurring = _source(person='Jo')
+    assert recurring.member_id is None
+    joiner = User(email='jo@example.com', name='Joanne')
+    joiner.set_password('TestPass1!')
+    db.session.add(joiner)
+    invite = FamilyInvite(family_id=family.id, member_name='Jo', role='member', token='tok-jo',
+                          created_by_id=user.id, expires_at=datetime.now() + timedelta(days=2))
+    db.session.add(invite)
+    db.session.commit()
+
+    monkeypatch.setattr('services.household.family_service.get_current_user_id', lambda: joiner.id)
+    FamilyService.join_existing(joiner, {'token': 'tok-jo'})
+    db.session.expire_all()
+
+    assert db.session.get(RecurringIncome, recurring.id).member_id == joiner.id
+
+
+def test_removing_a_member_unlinks_but_keeps_their_income(scoped, family, user):
+    from services.household.family_service import FamilyService
+
+    partner = _member(family, 'Sam')
+    recurring = _source(person='Sam')
+    FamilyService.remove_member(partner.id, family.id, user.id)
+    db.session.expire_all()
+    kept = db.session.get(RecurringIncome, recurring.id)
+    assert kept.person == 'Sam' and kept.member_id is None
+    assert Income.query.filter_by(member_id=partner.id).count() == 0
+
+
+def test_only_the_linked_member_can_make_their_income_private(scoped, family, user):
+    partner = _member(family, 'Partner Account', member_name='Sam')
+    with pytest.raises(ValueError, match='Only Sam'):
+        _source(person='Sam', visibility='private')
+    assert _source(person='Admin User', visibility='private').owner_id == user.id
+    assert partner.id != user.id

@@ -8,6 +8,7 @@ from extensions import db
 from models.family import Family, FamilyInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User, UserSession
+from services.finance.income_service import IncomeService
 from services.platform.security_event_service import SecurityEventService
 from services.platform.user_session_service import UserSessionService
 from utils.db_helpers import get_current_user_id
@@ -40,6 +41,7 @@ class FamilyService:
             user.allowed_sections = invite.allowed_sections
             user.default_account_id = None
             user.onboarding_version = 0
+            IncomeService.sync_member_link(user, invite.family_id)
             db.session.execute(update(UserSession).where(
                 UserSession.user_id == user.id, UserSession.revoked_at.is_(None),
             ).values(revoked_at=now))
@@ -114,10 +116,12 @@ class FamilyService:
             return None
 
         member.role = role if role in ('admin', 'member') else 'member'
+        previous_names = (member.member_name, member.name)
         member.member_name = member_name or member.name
         member.allowed_sections = None if member.role == 'admin' else None
         if member.role != 'admin':
             member.set_allowed_sections(sections)
+        IncomeService.sync_member_link(member, family_id, previous_names)
         db.session.commit()
         SecurityEventService.record('family_member_updated', details=f'{member.name} ({member.role})')
         return member
@@ -129,6 +133,7 @@ class FamilyService:
             return None
 
         name = member.name
+        IncomeService.unlink_member(member.id, family_id)
         member.family_id = None
         member.role = 'member'
         member.allowed_sections = None

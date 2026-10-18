@@ -373,6 +373,12 @@ Paid and actual payslips are never touched.
 Sources that used fixed monthly figures keep them; the source page offers
 "Switch to calculated" so pay rises and timeline changes take effect.
 
+Migration `e6b1d4f8a2c3` adds `member_id` to `recurring_income` / `income` and
+links existing rows whose `person` matches exactly one current member's member
+name or account name in the same household (case-insensitive). Other rows (e.g.
+a first name only, or 'Household') stay unlinked; their edit form shows
+"(not linked to a member)" and re-selecting the member links them.
+
 ## Leftover income forecasts (one-off, after the income fixes)
 
 Older versions left a deleted income template's future forecasts (and their

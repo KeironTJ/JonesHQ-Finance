@@ -68,6 +68,9 @@
                                     {% for p in people %}
                                     <option value="{{ p }}" {% if income.person == p %}selected{% endif %}>{{ p }}</option>
                                     {% endfor %}
+                                    {% if income.person not in people %}
+                                    <option value="{{ income.person }}" selected>{{ income.person }} (not linked to a member)</option>
+                                    {% endif %}
                                 </select>
                             </div>
                             <div class="col-6">
