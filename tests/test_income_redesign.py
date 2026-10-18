@@ -1,0 +1,381 @@
+"""Income redesign: schedules, timeline terms, forecast refresh, plan and pages."""
+import time
+from datetime import date, timedelta
+from decimal import Decimal
+from types import SimpleNamespace
+
+import pytest
+from dateutil.relativedelta import relativedelta
+from werkzeug.exceptions import NotFound
+
+from extensions import db
+from models.income import Income
+from models.income_change import IncomeChange
+from models.recurring_income import RecurringIncome
+from models.users import User
+from services.finance import income_schedule, payroll_calculator
+from services.finance.income_projection_service import IncomeProjectionService
+from services.finance.income_service import IncomeService
+
+
+@pytest.fixture
+def scoped(app, family, user, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+    return family
+
+
+@pytest.fixture
+def client(app, user, scoped):
+    from tests.auth_helpers import login_client
+    c = app.test_client()
+    login_client(c, user.id)
+    return c
+
+
+def _source(**overrides):
+    data = {
+        'person': 'Household',
+        'source': 'Acme',
+        'start_date': (date.today().replace(day=1) - relativedelta(months=3)).isoformat(),
+        'end_date': '',
+        'pay_day': '15',
+        'gross_annual': '36000',
+        'employer_pension_pct': '3',
+        'employee_pension_pct': '5',
+        'tax_code': '1257L',
+        'deposit_account_id': '',
+        'category_id': '',
+    }
+    data.update(overrides)
+    return IncomeService.save_income_source(data)
+
+
+def _ns(**kw):
+    base = dict(pay_frequency='monthly', pay_day=15, first_pay_date=None, start_date=date(2026, 1, 1),
+                end_date=None, gross_annual_income=Decimal('30000'), tax_code='1257L',
+                employee_pension_percent=0, employer_pension_percent=0,
+                annual_increase_percent=None, annual_increase_start=None)
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def _change(change_type, when, id=1, **kw):
+    return SimpleNamespace(change_type=change_type, effective_date=when, id=id, amount=kw.get('amount'),
+                           percent=kw.get('percent'), tax_code=kw.get('tax_code'),
+                           employee_pension_percent=kw.get('employee'), employer_pension_percent=kw.get('employer'),
+                           bonus_pensionable=kw.get('pensionable', False))
+
+
+# --- Schedules ---------------------------------------------------------------
+
+@pytest.mark.parametrize('frequency, expected', [
+    ('weekly', [2, 9, 16, 23, 30]),
+    ('fortnightly', [2, 16, 30]),
+    ('four_weekly', [2, 30]),
+])
+def test_repeating_schedules_step_from_first_pay_date(frequency, expected):
+    src = _ns(pay_frequency=frequency, first_pay_date=date(2026, 1, 2), start_date=date(2026, 1, 1))
+    dates = income_schedule.pay_dates(src, date(2026, 1, 1), date(2026, 1, 31))
+    assert [d.day for d in dates] == expected
+
+
+def test_annual_schedule_uses_anniversary():
+    src = _ns(pay_frequency='annual', first_pay_date=date(2026, 3, 10), start_date=date(2026, 3, 10))
+    assert income_schedule.pay_dates(src, date(2026, 1, 1), date(2028, 12, 31)) == [
+        date(2026, 3, 10), date(2027, 3, 10), date(2028, 3, 10)]
+
+
+def test_monthly_pay_day_on_weekend_moves_earlier():
+    src = _ns(pay_day=25)
+    # 25 Oct 2026 is a Sunday.
+    assert income_schedule.pay_dates(src, date(2026, 10, 1), date(2026, 10, 31)) == [date(2026, 10, 23)]
+
+
+def test_schedule_respects_end_date():
+    src = _ns(pay_frequency='weekly', first_pay_date=date(2026, 1, 2), end_date=date(2026, 1, 20))
+    assert income_schedule.pay_dates(src, date(2026, 1, 1), date(2026, 2, 28))[-1] == date(2026, 1, 16)
+
+
+# --- Terms from the timeline ---------------------------------------------------
+
+def test_auto_rise_applies_before_same_day_explicit_change_then_salary_reset():
+    src = _ns(annual_increase_percent=Decimal('3'), annual_increase_start=date(2027, 4, 1))
+    changes = [
+        _change('percent_rise', date(2027, 4, 1), id=1, percent=Decimal('10')),
+        _change('salary', date(2028, 1, 1), id=2, amount=Decimal('40000')),
+    ]
+    assert income_schedule.terms_for(src, changes, date(2027, 3, 15)).gross_annual == Decimal('30000')
+    assert income_schedule.terms_for(src, changes, date(2027, 4, 15)).gross_annual == Decimal('33990.00')
+    assert income_schedule.terms_for(src, changes, date(2028, 1, 15)).gross_annual == Decimal('40000')
+    assert income_schedule.terms_for(src, changes, date(2028, 4, 15)).gross_annual == Decimal('41200.00')
+
+
+def test_bonus_paid_once_on_next_pay_date():
+    src = _ns()
+    changes = [_change('bonus', date(2027, 6, 10), amount=Decimal('1000'), pensionable=True)]
+    june = income_schedule.terms_for(src, changes, date(2027, 6, 15), previous=date(2027, 5, 14))
+    july = income_schedule.terms_for(src, changes, date(2027, 7, 15), previous=date(2027, 6, 15))
+    assert june.bonus == Decimal('1000.00') and june.bonus_pensionable
+    assert july.bonus == 0
+
+
+def test_tax_code_and_pension_changes():
+    src = _ns(employee_pension_percent=5, employer_pension_percent=3)
+    changes = [
+        _change('tax_code', date(2027, 4, 6), id=1, tax_code='S1257L'),
+        _change('pension', date(2027, 5, 1), id=2, employee=Decimal('8')),
+    ]
+    terms = income_schedule.terms_for(src, changes, date(2027, 5, 15))
+    assert terms.tax_code == 'S1257L'
+    assert terms.employee_pension_pct == Decimal('8') and terms.employer_pension_pct == Decimal('3')
+
+
+# --- Forecast refresh ------------------------------------------------------------
+
+def _future(recurring):
+    return Income.query.filter(Income.recurring_income_id == recurring.id,
+                               Income.pay_date > date.today()).order_by(Income.pay_date).all()
+
+
+def test_new_source_forecasts_two_years(scoped):
+    recurring = _source()
+    future = _future(recurring)
+    assert future
+    assert future[-1].pay_date <= date.today() + relativedelta(months=24) + timedelta(days=31)
+    assert future[-1].pay_date >= date.today() + relativedelta(months=23)
+
+
+def test_pay_rise_reprices_unsettled_forecasts_only(scoped):
+    recurring = _source()
+    future = _future(recurring)
+    paid, actual = future[2], future[3]
+    paid.is_paid = True
+    actual.is_manual_override = True
+    actual.take_home = Decimal('1.23')
+    db.session.commit()
+    before = {i.id: Decimal(str(i.gross_monthly_income)) for i in future}
+    count = len(future)
+
+    IncomeService.add_income_change(recurring.id, {
+        'change_type': 'percent_rise', 'effective_date': date.today().isoformat(), 'percent': '10'})
+
+    after = _future(recurring)
+    assert len(after) == count
+    by_id = {i.id: i for i in after}
+    assert Decimal(str(by_id[paid.id].gross_monthly_income)) == before[paid.id]
+    assert Decimal(str(by_id[actual.id].take_home)) == Decimal('1.23')
+    other = after[0] if after[0].id not in (paid.id, actual.id) else after[-1]
+    assert Decimal(str(other.gross_monthly_income)) == (before[other.id] * Decimal('1.1')).quantize(Decimal('0.01'))
+
+
+def test_bonus_change_adds_to_one_payslip_and_removal_reverts(scoped):
+    recurring = _source()
+    target = _future(recurring)[1]
+    change = IncomeService.add_income_change(recurring.id, {
+        'change_type': 'bonus', 'effective_date': (target.pay_date - timedelta(days=1)).isoformat(), 'amount': '2000'})
+    bonused = [i for i in _future(recurring) if i.bonus]
+    assert [i.pay_date for i in bonused] == [target.pay_date]
+    assert Decimal(str(bonused[0].bonus)) == Decimal('2000')
+
+    IncomeService.delete_income_change(change.id)
+    assert not [i for i in _future(recurring) if i.bonus]
+
+
+def test_earlier_end_date_removes_later_forecasts_but_keeps_settled(scoped):
+    recurring = _source()
+    future = _future(recurring)
+    keeper = future[10]
+    keeper.is_paid = True
+    db.session.commit()
+    end = date.today() + relativedelta(months=6)
+    IncomeService.save_income_source({
+        'person': 'Household', 'source': 'Acme', 'start_date': recurring.start_date.isoformat(),
+        'end_date': end.isoformat(), 'pay_day': '15', 'gross_annual': '36000', 'tax_code': '1257L',
+        'is_active': 'on', 'auto_create_transaction': 'on',
+    }, recurring_id=recurring.id)
+    remaining = _future(recurring)
+    assert all(i.pay_date <= end or i.id == keeper.id for i in remaining)
+    assert keeper.id in {i.id for i in remaining}
+
+
+def test_switching_to_weekly_redates_forecasts(scoped):
+    recurring = _source()
+    first = date.today() + timedelta(days=(4 - date.today().weekday()) % 7 or 7)
+    IncomeService.save_income_source({
+        'person': 'Household', 'source': 'Acme', 'start_date': recurring.start_date.isoformat(),
+        'pay_frequency': 'weekly', 'first_pay_date': first.isoformat(), 'gross_annual': '36000',
+        'tax_code': '1257L', 'is_active': 'on',
+    }, recurring_id=recurring.id)
+    future = _future(recurring)
+    assert len(future) > 90
+    assert all(i.pay_frequency == 'weekly' for i in future)
+    gaps = {(b.pay_date - a.pay_date).days for a, b in zip(future, future[1:])}
+    assert gaps <= {7, 6, 8, 5, 9}
+
+
+def test_pausing_source_removes_unsettled_forecasts(scoped):
+    recurring = _source()
+    IncomeService.save_income_source({
+        'person': 'Household', 'source': 'Acme', 'start_date': recurring.start_date.isoformat(),
+        'pay_day': '15', 'gross_annual': '36000', 'tax_code': '1257L',
+    }, recurring_id=recurring.id)
+    assert _future(recurring) == []
+
+
+# --- Timeline validation & privacy --------------------------------------------------
+
+@pytest.mark.parametrize('data, message', [
+    ({'change_type': 'percent_rise', 'percent': '0'}, 'cannot be zero'),
+    ({'change_type': 'salary', 'amount': '-5'}, None),
+    ({'change_type': 'bonus'}, None),
+    ({'change_type': 'pension'}, 'pension %'),
+    ({'change_type': 'nonsense'}, None),
+])
+def test_invalid_changes_rejected(scoped, data, message):
+    recurring = _source()
+    data = {'effective_date': date.today().isoformat(), **data}
+    with pytest.raises(ValueError, match=message):
+        IncomeService.add_income_change(recurring.id, data)
+    db.session.rollback()
+    assert IncomeChange.query.count() == 0
+
+
+def test_change_before_start_rejected(scoped):
+    recurring = _source()
+    with pytest.raises(ValueError, match='before the income starts'):
+        IncomeService.add_income_change(recurring.id, {
+            'change_type': 'tax_code', 'tax_code': 'BR',
+            'effective_date': (recurring.start_date - timedelta(days=1)).isoformat()})
+
+
+def test_other_members_private_timeline_is_hidden(scoped, family, user, monkeypatch):
+    other = User(email='other@example.com', name='Other', family_id=family.id, role='member')
+    other.set_password('TestPass1!')
+    db.session.add(other)
+    db.session.commit()
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: other.id)
+    recurring = _source(person='Other', visibility='private')
+    change = IncomeService.add_income_change(recurring.id, {
+        'change_type': 'tax_code', 'tax_code': 'BR', 'effective_date': date.today().isoformat()})
+    assert recurring.owner_id == other.id
+
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+    with pytest.raises(NotFound):
+        IncomeService.delete_income_change(change.id)
+    with pytest.raises(NotFound):
+        IncomeService.add_income_change(recurring.id, {
+            'change_type': 'tax_code', 'tax_code': 'BR', 'effective_date': date.today().isoformat()})
+
+
+def test_deleting_source_deletes_its_timeline(scoped):
+    recurring = _source()
+    IncomeService.add_income_change(recurring.id, {
+        'change_type': 'tax_code', 'tax_code': 'BR', 'effective_date': date.today().isoformat()})
+    IncomeService.delete_recurring_income(recurring.id)
+    assert IncomeChange.query.count() == 0
+
+
+# --- Plan ------------------------------------------------------------------------
+
+def test_plan_uses_saved_rows_then_projects_until_end_date(scoped):
+    end = date.today() + relativedelta(years=4)
+    recurring = _source(end_date=end.isoformat(), annual_increase_percent='3',
+                        annual_increase_start=(date.today() + relativedelta(months=1)).isoformat())
+    plan = IncomeProjectionService.build_plan(until_year=payroll_calculator.tax_year_start(date.today()) + 6)
+
+    first = plan['years'][0]
+    year_start = date(first['start'], 4, 6)
+    saved = Income.query.filter(Income.recurring_income_id == recurring.id,
+                                Income.pay_date >= year_start,
+                                Income.pay_date < year_start + relativedelta(years=1)).all()
+    assert first['totals']['take_home'] == sum(Decimal(str(i.take_home)) for i in saved)
+
+    by_year = {y['start']: y['totals']['gross'] for y in plan['years']}
+    end_year = payroll_calculator.tax_year_start(end)
+    assert by_year[end_year + 1] == 0
+    full_years = [y for y in sorted(by_year) if first['start'] < y < end_year]
+    assert all(by_year[b] > by_year[a] for a, b in zip(full_years, full_years[1:]))
+
+
+def test_plan_handles_fifty_years_of_weekly_pay_quickly(scoped):
+    _source(pay_frequency='weekly', first_pay_date=date.today().isoformat(),
+            start_date=date.today().isoformat(), annual_increase_percent='2',
+            annual_increase_start=(date.today() + relativedelta(years=1)).isoformat())
+    started = time.perf_counter()
+    plan = IncomeProjectionService.build_plan(until_year=10_000)
+    assert time.perf_counter() - started < 20
+    assert len(plan['years']) == 51
+    assert plan['years'][-1]['totals']['gross'] > plan['years'][1]['totals']['gross']
+
+
+def test_plan_rejects_garbage_year(scoped):
+    with pytest.raises(ValueError):
+        IncomeProjectionService.build_plan(until_year='abc')
+
+
+def test_plan_counts_paid_history_of_closed_sources_without_projecting(scoped):
+    year_start = date(payroll_calculator.tax_year_start(date.today()), 4, 6)
+    old = _source(source='Old job', start_date=year_start.isoformat())
+    past = Income.query.filter(Income.recurring_income_id == old.id, Income.pay_date <= date.today()).all()
+    for income in past:
+        income.is_paid = True
+    old.is_active = False
+    db.session.commit()
+    IncomeService.refresh_forecasts(old.id)
+
+    plan = IncomeProjectionService.build_plan()
+    expected = sum(Decimal(str(i.take_home)) for i in past)
+    assert plan['years'][0]['totals']['take_home'] == expected
+    assert all(y['totals']['gross'] == 0 for y in plan['years'][1:])
+
+
+# --- Pages -----------------------------------------------------------------------
+
+def test_income_pages_render(client, scoped):
+    recurring = _source()
+    IncomeService.add_income_change(recurring.id, {
+        'change_type': 'bonus', 'amount': '500', 'effective_date': date.today().isoformat()})
+    for url in ('/income', '/income/recurring', f'/income/recurring/{recurring.id}',
+                f'/income/recurring/{recurring.id}/edit', '/income/recurring/add',
+                '/income/plan', '/income/plan?person=Household&until=2040'):
+        response = client.get(url)
+        assert response.status_code == 200, url
+
+
+def test_add_weekly_source_via_form_then_timeline_routes(client, scoped):
+    response = client.post('/income/recurring/add', data={
+        'person': 'Household', 'source': 'Shop', 'income_type': 'employment', 'pay_frequency': 'weekly',
+        'start_date': date.today().isoformat(), 'first_pay_date': date.today().isoformat(),
+        'gross_annual': '26000', 'tax_code': '1257L', 'student_loan_plans': ['plan_2'],
+        'pension_scheme': 'net_pay', 'auto_create_transaction': 'on',
+    })
+    recurring = RecurringIncome.query.filter_by(source='Shop').one()
+    assert response.status_code == 302 and response.location.endswith(f'/income/recurring/{recurring.id}')
+    assert recurring.pay_frequency == 'weekly' and recurring.student_loan_plans == 'plan_2'
+    assert Income.query.filter_by(recurring_income_id=recurring.id).count() > 90
+
+    client.post(f'/income/recurring/{recurring.id}/changes', data={
+        'change_type': 'salary', 'amount': '30000', 'effective_date': date.today().isoformat()})
+    change = IncomeChange.query.one()
+    page = client.get(f'/income/recurring/{recurring.id}').get_data(as_text=True)
+    assert 'New salary' in page and '£30,000.00 a year' in page
+
+    client.post(f'/income/changes/{change.id}/delete')
+    assert IncomeChange.query.count() == 0
+
+
+def test_preview_supports_frequency_and_student_loan(client):
+    response = client.post('/income/calculate-preview', json={
+        'gross_annual': '52000', 'tax_code': '1257L', 'pay_frequency': 'weekly',
+        'student_loan_plans': ['plan_2'], 'employee_pension_pct': '5',
+    })
+    body = response.get_json()
+    assert body['success'] and body['frequency'] == 'weekly' and body['student_loan'] > 0
+    assert 900 < body['gross_period'] < 1100
+
+
+def test_refresh_all_route(client, scoped):
+    _source()
+    response = client.post('/income/refresh-forecasts', follow_redirects=True)
+    assert 'Forecasts refreshed' in response.get_data(as_text=True)

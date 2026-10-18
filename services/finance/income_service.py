@@ -39,7 +39,7 @@ Primary entry points
   regenerate_income_range()     — delete then recreate records in a date window
 """
 import calendar
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from dateutil.relativedelta import relativedelta
@@ -49,10 +49,12 @@ from extensions import db
 from models.accounts import Account
 from models.categories import Category
 from models.income import Income
+from models.income_change import IncomeChange
+from models.pensions import Pension
 from models.recurring_income import RecurringIncome
 from models.tax_settings import TaxSettings
 from models.transactions import Transaction
-from services.finance import payroll_calculator
+from services.finance import income_schedule, payroll_calculator
 from services.finance.payday_service import PaydayService
 from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
@@ -60,10 +62,11 @@ from utils.db_helpers import family_get, family_get_or_404, family_query
 
 MAX_MONEY = Decimal('99999999.99')  # Numeric(10, 2) ceiling
 MAX_TEMPLATE_YEARS = 60             # Longest a single job template may run
-GENERATION_HORIZON_YEARS = 50       # Never generate forecasts beyond today + this
-DEFAULT_OPEN_ENDED_YEARS = 20       # Horizon for templates with no end date
+GENERATION_HORIZON_YEARS = 50       # Upper bound for trim / range validation
+FORECAST_HORIZON_MONTHS = 24        # Forecast rows are saved this far ahead; the plan projects beyond
 MAX_RANGE_YEARS = 50                # Longest delete/regenerate window
 ORPHAN_SERIES_MIN = 3               # Detached future rows in a run this long are leftover forecasts
+MAX_ANNUAL_RISE = Decimal('50')     # % — sanity cap for pay rises
 
 
 class IncomeService:
@@ -147,6 +150,22 @@ class IncomeService:
     def _text(data, key, max_len, default=''):
         value = (data.get(key) or default or '').strip()
         return value[:max_len]
+
+    @staticmethod
+    def _choice(data, key, options, label, default):
+        value = (data.get(key) or default or '').strip()
+        if value not in options:
+            raise ValueError(f'Unknown {label} selected.')
+        return value
+
+    @staticmethod
+    def _student_loan_plans(data):
+        """Form checkboxes (getlist) or a CSV string -> validated CSV, or None."""
+        raw = data.getlist('student_loan_plans') if hasattr(data, 'getlist') else data.get('student_loan_plans')
+        if isinstance(raw, list) and len(raw) == 1:
+            raw = raw[0]
+        plans = payroll_calculator.normalise_student_loan_plans(raw or ())
+        return ','.join(plans) or None
 
     @staticmethod
     def _validate_family_references(deposit_account_id=None, category_id=None):
@@ -235,7 +254,38 @@ class IncomeService:
         recurring.person = person
         recurring.start_date = start_date
         recurring.end_date = end_date
-        recurring.pay_day = IncomeService._pay_day(data)
+        recurring.income_type = IncomeService._choice(
+            data, 'income_type', payroll_calculator.INCOME_TYPES, 'income type', recurring.income_type or 'employment')
+        recurring.pay_frequency = IncomeService._choice(
+            data, 'pay_frequency', payroll_calculator.PAY_FREQUENCIES, 'pay frequency', recurring.pay_frequency or 'monthly')
+        recurring.pension_scheme = IncomeService._choice(
+            data, 'pension_scheme', payroll_calculator.PENSION_SCHEME_LABELS, 'pension scheme',
+            recurring.pension_scheme or payroll_calculator.DEFAULT_PENSION_SCHEME)
+        first_pay_date = IncomeService._date(data, 'first_pay_date', 'First pay date', required=False)
+        if recurring.pay_frequency == 'monthly':
+            recurring.pay_day = IncomeService._pay_day(data)
+            recurring.first_pay_date = None
+        else:
+            first_pay_date = first_pay_date or start_date
+            if first_pay_date < start_date:
+                raise ValueError('First pay date cannot be before the start date.')
+            recurring.first_pay_date = first_pay_date
+            recurring.pay_day = first_pay_date.day
+        recurring.student_loan_plans = IncomeService._student_loan_plans(data)
+        recurring.set_aside_percent = IncomeService._decimal(
+            data, 'set_aside_percent', 'Tax set-aside %', default=None, maximum=Decimal('100'))
+        recurring.annual_increase_percent = IncomeService._decimal(
+            data, 'annual_increase_percent', 'Yearly pay rise %', default=None, maximum=MAX_ANNUAL_RISE) or None
+        recurring.annual_increase_start = IncomeService._date(
+            data, 'annual_increase_start', 'First yearly rise date', required=False)
+        if recurring.annual_increase_percent and not recurring.annual_increase_start:
+            raise ValueError('Choose the date of the next yearly pay rise.')
+        if not recurring.annual_increase_percent:
+            recurring.annual_increase_start = None
+        pension_id = IncomeService._int_id(data, 'pension_id', 'pension')
+        if pension_id is not None and not family_get(Pension, pension_id):
+            raise ValueError('Invalid pension selected')
+        recurring.pension_id = pension_id
         recurring.gross_annual_income = IncomeService._decimal(
             data, 'gross_annual', 'Gross annual income', required=True
         )
@@ -270,6 +320,7 @@ class IncomeService:
 
     @staticmethod
     def update_recurring_income(recurring_id, data):
+        """Save the source's settings, then re-price its unsettled future forecasts."""
         recurring = family_get_or_404(RecurringIncome, recurring_id)
         IncomeService._apply_recurring_fields(recurring, data)
         recurring.is_active = data.get('is_active') == 'on'
@@ -277,7 +328,71 @@ class IncomeService:
         for income in family_query(Income).filter(Income.recurring_income_id == recurring.id).all():
             income.owner_id = recurring.owner_id
         db.session.commit()
+        IncomeService.refresh_forecasts(recurring.id)
         return recurring
+
+    @staticmethod
+    def save_income_source(data, recurring_id=None):
+        """Create or update a source and bring its saved forecasts up to date."""
+        if recurring_id is None:
+            recurring = IncomeService.create_recurring_income(data)
+            IncomeService.generate_missing_income(recurring.id)
+            return recurring
+        return IncomeService.update_recurring_income(recurring_id, data)
+
+    # ------------------------------------------------------------------
+    # Timeline (pay rises, bonuses, tax code / pension changes)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def add_income_change(recurring_id, data):
+        recurring = family_get_or_404(RecurringIncome, recurring_id)
+        change_type = IncomeService._choice(data, 'change_type', IncomeChange.CHANGE_TYPES, 'change type', '')
+        effective = IncomeService._date(data, 'effective_date', 'Effective date')
+        if effective < recurring.start_date:
+            raise ValueError('A change cannot be dated before the income starts.')
+        if effective > recurring.start_date + relativedelta(years=MAX_TEMPLATE_YEARS):
+            raise ValueError(f'A change cannot be more than {MAX_TEMPLATE_YEARS} years after the start date.')
+        change = IncomeChange(
+            family_id=recurring.family_id or db_helpers.get_family_id(),
+            recurring_income_id=recurring.id,
+            effective_date=effective,
+            change_type=change_type,
+            description=IncomeService._text(data, 'description', 255) or None,
+        )
+        if change_type in ('salary', 'bonus'):
+            change.amount = IncomeService._decimal(
+                data, 'amount', 'New salary' if change_type == 'salary' else 'Bonus amount', required=True)
+            if change.amount <= 0:
+                raise ValueError('Amount must be more than zero.')
+            change.bonus_pensionable = change_type == 'bonus' and data.get('bonus_pensionable') == 'on'
+        elif change_type == 'percent_rise':
+            change.percent = IncomeService._decimal(
+                data, 'percent', 'Pay rise %', required=True, minimum=-MAX_ANNUAL_RISE, maximum=MAX_ANNUAL_RISE)
+            if change.percent == 0:
+                raise ValueError('Pay rise % cannot be zero.')
+        elif change_type == 'tax_code':
+            change.tax_code = IncomeService._tax_code(data.get('tax_code'))
+        elif change_type == 'pension':
+            change.employee_pension_percent = IncomeService._decimal(
+                data, 'employee_pension_pct', 'Employee pension %', default=None, maximum=Decimal('100'))
+            change.employer_pension_percent = IncomeService._decimal(
+                data, 'employer_pension_pct', 'Employer pension %', default=None, maximum=Decimal('100'))
+            if change.employee_pension_percent is None and change.employer_pension_percent is None:
+                raise ValueError('Enter the new employee and/or employer pension %.')
+        db.session.add(change)
+        db.session.commit()
+        IncomeService.refresh_forecasts(recurring.id)
+        return change
+
+    @staticmethod
+    def delete_income_change(change_id):
+        change = family_get_or_404(IncomeChange, change_id)
+        recurring_id = change.recurring_income_id
+        db.session.delete(change)
+        db.session.commit()
+        IncomeService.refresh_forecasts(recurring_id)
+        return recurring_id
 
     @staticmethod
     def _is_settled(income, transaction=None):
@@ -332,6 +447,8 @@ class IncomeService:
             if group.mode == 'folded':
                 group.mode = 'separate'
 
+        for change in family_query(IncomeChange).filter(IncomeChange.recurring_income_id == recurring.id).all():
+            db.session.delete(change)
         db.session.flush()
         db.session.delete(recurring)
         db.session.flush()
@@ -345,13 +462,17 @@ class IncomeService:
         raises — a sync failure here shouldn't block saving the income record."""
         if not income.recurring_income_id:
             return
+        IncomeService._sync_folded_for(income.recurring_income_id)
+
+    @staticmethod
+    def _sync_folded_for(recurring_income_id):
         try:
             from services.finance.expense_sync_service import ExpenseSyncService
-            ExpenseSyncService.sync_folded_expenses_for_recurring_income(income.recurring_income_id)
+            ExpenseSyncService.sync_folded_expenses_for_recurring_income(recurring_income_id)
         except Exception:
             from flask import current_app
             current_app.logger.exception(
-                f'Failed to sync folded expenses for recurring_income_id={income.recurring_income_id}'
+                f'Failed to sync folded expenses for recurring_income_id={recurring_income_id}'
             )
 
     @staticmethod
@@ -477,35 +598,50 @@ class IncomeService:
 
     @staticmethod
     def preview_payslip(data):
-        """Parse a preview request and return the estimate as a JSON-safe dict."""
+        """Parse a preview request and return the estimate as a JSON-safe dict.
+        Accepts the source-form fields, so the live preview matches forecasts."""
         data = data or {}
-        estimate = IncomeService.estimate_payslip(
-            gross_annual=IncomeService._decimal(data, 'gross_annual', 'Gross annual income', required=True),
-            tax_code=IncomeService._tax_code(data.get('tax_code')),
-            pay_date=IncomeService._date(data, 'pay_date', 'Pay date', required=False),
+        pay_date = IncomeService._date(data, 'pay_date', 'Pay date', required=False) or date.today()
+        estimate = payroll_calculator.calculate_payslip(
+            IncomeService._decimal(data, 'gross_annual', 'Gross annual income', required=True),
+            IncomeService._tax_code(data.get('tax_code')),
+            IncomeService.get_tax_settings_for_date(pay_date),
+            pay_date,
+            frequency=IncomeService._choice(data, 'pay_frequency', payroll_calculator.PAY_FREQUENCIES, 'pay frequency', 'monthly'),
+            income_type=IncomeService._choice(data, 'income_type', payroll_calculator.INCOME_TYPES, 'income type', 'employment'),
             employee_pension_pct=IncomeService._percent(data, 'employee_pension_pct', 'Employee pension %'),
             employer_pension_pct=IncomeService._percent(data, 'employer_pension_pct', 'Employer pension %'),
+            pension_scheme=IncomeService._choice(
+                data, 'pension_scheme', payroll_calculator.PENSION_SCHEME_LABELS, 'pension scheme',
+                payroll_calculator.DEFAULT_PENSION_SCHEME),
             avc=IncomeService._decimal(data, 'avc', 'AVC'),
             other=IncomeService._decimal(data, 'other', 'Other deductions'),
+            student_loan_plans=IncomeService._student_loan_plans(data) or (),
+            bonus=IncomeService._decimal(data, 'bonus', 'Bonus'),
+            bonus_pensionable=data.get('bonus_pensionable') in ('on', 'true', '1', True),
+            set_aside_pct=IncomeService._decimal(data, 'set_aside_percent', 'Tax set-aside %', maximum=Decimal('100')),
         )
         return estimate.as_dict()
 
     @staticmethod
     def _apply_estimate(income, estimate):
         income.tax_year = estimate.tax_year
+        income.pay_frequency = estimate.frequency
         income.gross_annual_income = estimate.gross_annual
-        income.gross_monthly_income = estimate.gross_monthly
+        income.gross_monthly_income = estimate.gross_period
+        income.bonus = estimate.bonus or None
         income.employer_pension_amount = estimate.employer_pension
         income.employee_pension_amount = estimate.employee_pension
         income.total_pension = estimate.total_pension
-        income.adjusted_monthly_income = estimate.adjusted_monthly
+        income.adjusted_monthly_income = estimate.adjusted_period
         income.adjusted_annual_income = estimate.adjusted_annual
         income.income_tax = estimate.income_tax
         income.national_insurance = estimate.national_insurance
+        income.student_loan = estimate.student_loan or None
         income.avc = estimate.avc
         income.other_deductions = estimate.other_deductions
         income.take_home = estimate.take_home
-        income.estimated_annual_take_home = (estimate.take_home * 12).quantize(Decimal('0.01'))
+        income.estimated_annual_take_home = (estimate.take_home * estimate.periods_per_year).quantize(Decimal('0.01'))
 
     # ------------------------------------------------------------------
     # Income record creation / editing
@@ -646,34 +782,50 @@ class IncomeService:
         gross_annual = IncomeService._decimal(data, 'gross_annual', 'Gross annual income', required=True)
         avc = IncomeService._decimal(data, 'avc', 'AVC')
         other = IncomeService._decimal(data, 'other', 'Other deductions')
+        bonus = IncomeService._decimal(data, 'bonus', 'Bonus', default=Decimal(str(income.bonus or 0)))
+        frequency = income.pay_frequency or 'monthly'
+        periods = payroll_calculator.PAY_FREQUENCIES.get(frequency, 12)
 
         if mode == 'manual':
             employer_pension = IncomeService._decimal(data, 'employer_pension_amount', 'Employer pension')
             employee_pension = IncomeService._decimal(data, 'employee_pension_amount', 'Employee pension')
             income.gross_annual_income = gross_annual
-            income.gross_monthly_income = (gross_annual / 12).quantize(Decimal('0.01'))
+            income.bonus = bonus or None
+            income.gross_monthly_income = (gross_annual / periods + bonus).quantize(Decimal('0.01'))
             income.employer_pension_amount = employer_pension
             income.employee_pension_amount = employee_pension
             income.total_pension = employer_pension + employee_pension
             income.income_tax = IncomeService._decimal(data, 'income_tax', 'Income tax', minimum=-MAX_MONEY)
             income.national_insurance = IncomeService._decimal(data, 'national_insurance', 'National Insurance')
+            income.student_loan = IncomeService._decimal(data, 'student_loan', 'Student loan') or None
             income.take_home = IncomeService._decimal(data, 'take_home', 'Take home', required=True, minimum=-MAX_MONEY)
             income.avc = avc
             income.other_deductions = other
             income.employer_pension_percent = Decimal('0')
             income.employee_pension_percent = Decimal('0')
             income.adjusted_monthly_income = (income.gross_monthly_income - employee_pension).quantize(Decimal('0.01'))
-            income.adjusted_annual_income = (gross_annual - employee_pension * 12).quantize(Decimal('0.01'))
-            income.estimated_annual_take_home = (income.take_home * 12).quantize(Decimal('0.01'))
+            income.adjusted_annual_income = (gross_annual - employee_pension * periods).quantize(Decimal('0.01'))
+            income.estimated_annual_take_home = (income.take_home * periods).quantize(Decimal('0.01'))
             income.tax_year = payroll_calculator.tax_year_for(income.pay_date)
             income.is_manual_override = True
             income.is_paid = income.pay_date <= date.today()
         else:
             income.employer_pension_percent = IncomeService._percent(data, 'employer_pension_pct', 'Employer pension %')
             income.employee_pension_percent = IncomeService._percent(data, 'employee_pension_pct', 'Employee pension %')
-            estimate = IncomeService.estimate_payslip(
-                gross_annual, income.tax_code, income.pay_date,
-                income.employee_pension_percent, income.employer_pension_percent, avc, other,
+            source = income.recurring_income
+            estimate = payroll_calculator.calculate_payslip(
+                gross_annual, income.tax_code, IncomeService.get_tax_settings_for_date(income.pay_date),
+                income.pay_date,
+                frequency=frequency,
+                income_type=getattr(source, 'income_type', None) or 'employment',
+                employee_pension_pct=income.employee_pension_percent,
+                employer_pension_pct=income.employer_pension_percent,
+                pension_scheme=getattr(source, 'pension_scheme', None) or payroll_calculator.DEFAULT_PENSION_SCHEME,
+                avc=avc,
+                other=other,
+                student_loan_plans=getattr(source, 'student_loan_plans', None) or (),
+                bonus=bonus,
+                set_aside_pct=getattr(source, 'set_aside_percent', None) or 0,
             )
             IncomeService._apply_estimate(income, estimate)
             income.is_manual_override = False
@@ -693,8 +845,11 @@ class IncomeService:
         income.total_pension = income.employer_pension_amount + income.employee_pension_amount
         income.avc = IncomeService._decimal(data, 'avc', 'AVC')
         income.other_deductions = IncomeService._decimal(data, 'other', 'Other deductions')
+        income.student_loan = IncomeService._decimal(
+            data, 'student_loan', 'Student loan', default=Decimal(str(income.student_loan or 0))) or None
         income.take_home = IncomeService._decimal(data, 'take_home', 'Take home', required=True, minimum=-MAX_MONEY)
-        income.estimated_annual_take_home = (income.take_home * 12).quantize(Decimal('0.01'))
+        periods = payroll_calculator.PAY_FREQUENCIES.get(income.pay_frequency or 'monthly', 12)
+        income.estimated_annual_take_home = (income.take_home * periods).quantize(Decimal('0.01'))
         income.is_manual_override = True
         # Only mark as paid once the pay date has actually passed
         income.is_paid = income.pay_date <= date.today()
@@ -784,15 +939,7 @@ class IncomeService:
             return None
         IncomeService._validate_family_references(deposit_account_id=income.deposit_account_id)
         old_account_id = transaction.account_id
-
-        transaction.amount = income.take_home + (income.expense_reimbursement_total or Decimal('0'))
-        transaction.description = f"{income.person} Salary"
-        transaction.item = f"Take home: £{income.take_home:,.2f}"
-        transaction.account_id = income.deposit_account_id
-        transaction.category_id = IncomeService._income_category_id(income)
-        IncomeService._stamp_transaction_dates(transaction, income.pay_date)
-        transaction.is_paid = income.is_paid
-        transaction.is_forecasted = not income.is_paid and income.pay_date > date.today()
+        IncomeService._fill_transaction(transaction, income)
 
         db.session.flush()
         IncomeService._sync_folded_expenses(income)
@@ -842,13 +989,15 @@ class IncomeService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def forecast_horizon(today=None):
+        """Forecast rows are saved up to this date; the plan projects beyond it."""
+        return (today or date.today()) + relativedelta(months=FORECAST_HORIZON_MONTHS)
+
+    @staticmethod
     def pay_date_for_month(recurring_income, target_date):
-        """Pay date for the template in *target_date*'s month, moved back to the
-        previous working day if it falls on a weekend."""
-        year, month = target_date.year, target_date.month
-        last_day = calendar.monthrange(year, month)[1]
-        pay_day = last_day if recurring_income.pay_day == 0 else min(recurring_income.pay_day, last_day)
-        return PaydayService.get_previous_working_day(date(year, month, pay_day))
+        """Monthly pay date for the template in *target_date*'s month, moved back
+        to the previous working day if it falls on a weekend or bank holiday."""
+        return income_schedule.monthly_pay_date(recurring_income.pay_day, target_date.year, target_date.month)
 
     @staticmethod
     def _existing_income_for(recurring_income, pay_date):
@@ -868,104 +1017,266 @@ class IncomeService:
         ).first()
 
     @staticmethod
-    def generate_income_for_month(recurring_income, target_date, recalculate_balance=True, commit=True):
-        """
-        Generate one Income record from a RecurringIncome template for the given month.
+    def _changes_for(recurring):
+        return family_query(IncomeChange).filter(
+            IncomeChange.recurring_income_id == recurring.id
+        ).order_by(IncomeChange.effective_date, IncomeChange.id).all()
 
-        Returns the existing record if one already exists, or None if the pay date
-        falls outside the template's start/end dates.
-        """
-        pay_date = IncomeService.pay_date_for_month(recurring_income, target_date)
-        if pay_date < recurring_income.start_date:
-            return None
-        if recurring_income.end_date and pay_date > recurring_income.end_date:
-            return None
+    @staticmethod
+    def uses_fixed_figures(recurring):
+        """Legacy templates with typed-in monthly deductions keep those figures
+        for every forecast; pay rises, bonuses and the timeline don't apply."""
+        return bool(recurring.use_manual_deductions and recurring.manual_take_home)
 
-        existing = IncomeService._existing_income_for(recurring_income, pay_date)
-        if existing:
-            return existing
+    @staticmethod
+    def _apply_fixed_figures(income, recurring):
+        def d(value):
+            return Decimal(str(value or 0))
 
-        common = dict(
-            person=recurring_income.person,
-            pay_date=pay_date,
-            gross_annual=recurring_income.gross_annual_income,
-            tax_code=recurring_income.tax_code,
-            avc=recurring_income.avc or 0,
-            other=recurring_income.other_deductions or 0,
-            deposit_account_id=recurring_income.deposit_account_id,
-            source=recurring_income.source,
-            create_transaction=recurring_income.auto_create_transaction,
-            recurring_income_id=recurring_income.id,
-            owner_id=recurring_income.owner_id,
-            recalculate_balance=recalculate_balance,
-            commit=commit,
-        )
-        if recurring_income.use_manual_deductions and recurring_income.manual_take_home:
-            income = IncomeService.create_income_record_manual(
-                employer_pension=recurring_income.manual_employer_pension or Decimal('0'),
-                employee_pension=recurring_income.manual_employee_pension or Decimal('0'),
-                tax=recurring_income.manual_tax_monthly or Decimal('0'),
-                ni=recurring_income.manual_ni_monthly or Decimal('0'),
-                take_home=recurring_income.manual_take_home,
-                **common,
-            )
-            # Template-generated records are forecasts, not actual payslips; the
-            # flag is set again when the user enters their real payslip.
-            income.is_manual_override = False
-            db.session.flush()
+        gross_annual = d(recurring.gross_annual_income)
+        gross = (gross_annual / 12).quantize(Decimal('0.01'))
+        employer, employee = d(recurring.manual_employer_pension), d(recurring.manual_employee_pension)
+        income.tax_year = payroll_calculator.tax_year_for(income.pay_date)
+        income.tax_code = recurring.tax_code
+        income.pay_frequency = 'monthly'
+        income.gross_annual_income = gross_annual
+        income.gross_monthly_income = gross
+        income.bonus = None
+        income.student_loan = None
+        income.employer_pension_percent = Decimal('0')
+        income.employee_pension_percent = Decimal('0')
+        income.employer_pension_amount = employer
+        income.employee_pension_amount = employee
+        income.total_pension = employer + employee
+        income.adjusted_monthly_income = gross - employee
+        income.adjusted_annual_income = gross_annual - employee * 12
+        income.income_tax = d(recurring.manual_tax_monthly)
+        income.national_insurance = d(recurring.manual_ni_monthly)
+        income.avc = d(recurring.avc)
+        income.other_deductions = d(recurring.other_deductions)
+        income.take_home = d(recurring.manual_take_home)
+        income.estimated_annual_take_home = (income.take_home * 12).quantize(Decimal('0.01'))
+
+    @staticmethod
+    def _price_forecast(income, recurring, changes, previous, settings_cache):
+        """(Re)calculate a forecast row from the source's terms on its pay date."""
+        if IncomeService.uses_fixed_figures(recurring):
+            IncomeService._apply_fixed_figures(income, recurring)
         else:
-            income = IncomeService.create_income_record(
-                employer_pension_pct=recurring_income.employer_pension_percent or 0,
-                employee_pension_pct=recurring_income.employee_pension_percent or 0,
-                **common,
-            )
+            terms = income_schedule.terms_for(recurring, changes, income.pay_date, previous)
+            year = payroll_calculator.tax_year_start(income.pay_date)
+            if year not in settings_cache:
+                settings_cache[year] = IncomeService.get_tax_settings_for_date(income.pay_date)
+            estimate = income_schedule.estimate(recurring, terms, income.pay_date, settings_cache[year])
+            IncomeService._apply_estimate(income, estimate)
+            income.tax_code = terms.tax_code
+            income.employee_pension_percent = terms.employee_pension_pct
+            income.employer_pension_percent = terms.employer_pension_pct
+        # A forecast, not an actual payslip; set when the real payslip is entered.
+        income.is_manual_override = False
+
+    @staticmethod
+    def _create_forecast(recurring, changes, pay_date, previous, settings_cache):
+        income = Income(
+            family_id=recurring.family_id or db_helpers.get_family_id(),
+            person=recurring.person,
+            pay_date=pay_date,
+            deposit_account_id=recurring.deposit_account_id,
+            source=recurring.source,
+            recurring_income_id=recurring.id,
+            owner_id=recurring.owner_id,
+        )
+        IncomeService._price_forecast(income, recurring, changes, previous, settings_cache)
+        db.session.add(income)
+        db.session.flush()
+        if recurring.auto_create_transaction and income.deposit_account_id:
+            income.transaction_id = IncomeService.create_income_transaction(income, recalculate_balance=False).id
         return income
+
+    @staticmethod
+    def _generation_start(recurring):
+        last = recurring.last_generated_date
+        if last is None:
+            return recurring.start_date
+        if income_schedule.frequency_of(recurring) == 'monthly':
+            # Monthly templates record the last month processed (1st of month).
+            return last.replace(day=1) + relativedelta(months=1)
+        return last + timedelta(days=1)
+
+    @staticmethod
+    def _generation_limit(recurring, end_date=None):
+        limit = IncomeService.forecast_horizon()
+        if end_date is not None:
+            limit = min(limit, end_date)
+        if income_schedule.frequency_of(recurring) == 'monthly':
+            limit = limit.replace(day=calendar.monthrange(limit.year, limit.month)[1])
+        return limit
+
+    @staticmethod
+    def _generated_marker(recurring, limit):
+        if income_schedule.frequency_of(recurring) == 'monthly':
+            return limit.replace(day=1)
+        return limit
+
+    @staticmethod
+    def _generate_dates(recurring, dates):
+        """Create forecasts for *dates* that have no row yet.
+        Returns (rows for every date, number created)."""
+        if not dates:
+            return [], 0
+        changes = IncomeService._changes_for(recurring)
+        settings_cache = {}
+        previous = income_schedule.previous_pay_date(recurring, dates[0])
+        rows, created = [], 0
+        for pay_date in dates:
+            existing = IncomeService._existing_income_for(recurring, pay_date)
+            if existing:
+                rows.append(existing)
+            else:
+                rows.append(IncomeService._create_forecast(recurring, changes, pay_date, previous, settings_cache))
+                created += 1
+            previous = pay_date
+        return rows, created
+
+    @staticmethod
+    def _finish_generation(recurring, created, extra_accounts=(), sync=True):
+        db.session.flush()
+        accounts = set(extra_accounts)
+        if created and recurring.auto_create_transaction:
+            accounts.add(recurring.deposit_account_id)
+        IncomeService._recalculate_balances(accounts)
+        db.session.commit()
+        if sync:
+            IncomeService._sync_folded_for(recurring.id)
 
     @staticmethod
     def generate_missing_income(recurring_income_id, end_date=None):
         """
-        Fill in missing Income records for a RecurringIncome template from its last
-        generated month up to *end_date* (default: template end_date, or
-        DEFAULT_OPEN_ENDED_YEARS ahead). Never generates beyond
-        GENERATION_HORIZON_YEARS from today. Idempotent.
+        Fill in missing Income records for a source from where generation last
+        stopped up to *end_date* (for monthly pay, the whole of that month),
+        never beyond FORECAST_HORIZON_MONTHS from today or the source's end
+        date. Idempotent.
 
         Returns the list of Income records (new or pre-existing) in the window.
         """
         recurring = family_get(RecurringIncome, recurring_income_id)
         if not recurring or not recurring.is_active:
             return []
+        start = IncomeService._generation_start(recurring)
+        limit = IncomeService._generation_limit(recurring, end_date)
+        if limit < start:
+            return []
+        rows, created = IncomeService._generate_dates(recurring, income_schedule.pay_dates(recurring, start, limit))
+        recurring.last_generated_date = IncomeService._generated_marker(recurring, limit)
+        IncomeService._finish_generation(recurring, created, sync=bool(rows))
+        return rows
 
-        if recurring.last_generated_date:
-            start = recurring.last_generated_date.replace(day=1) + relativedelta(months=1)
-        else:
-            start = recurring.start_date.replace(day=1)
+    @staticmethod
+    def _fill_transaction(transaction, income):
+        transaction.amount = income.take_home + (income.expense_reimbursement_total or Decimal('0'))
+        transaction.description = f"{income.person} Salary"
+        transaction.item = f"Take home: £{income.take_home:,.2f}"
+        transaction.account_id = income.deposit_account_id
+        transaction.category_id = IncomeService._income_category_id(income)
+        IncomeService._stamp_transaction_dates(transaction, income.pay_date)
+        transaction.is_paid = income.is_paid
+        transaction.is_forecasted = not income.is_paid and income.pay_date > date.today()
 
-        if end_date is None:
-            end_date = recurring.end_date or (date.today() + relativedelta(years=DEFAULT_OPEN_ENDED_YEARS))
-        horizon = date.today() + relativedelta(years=GENERATION_HORIZON_YEARS)
-        end_date = min(end_date, horizon).replace(day=1)
+    @staticmethod
+    def _remove_forecast(income, txn, affected_accounts):
+        from services.finance.expense_sync_service import ExpenseSyncService
 
-        generated = []
-        created_any = False
-        current = start
-        while current <= end_date:
-            income = IncomeService.generate_income_for_month(
-                recurring, current, recalculate_balance=False, commit=False
-            )
-            if income:
-                generated.append(income)
-                created_any = True
-            recurring.last_generated_date = current
-            current += relativedelta(months=1)
-
-        if created_any or current != start:
+        ExpenseSyncService.unlink_expenses_from_income(income.id)
+        if txn:
+            income.transaction_id = None
             db.session.flush()
-            if recurring.auto_create_transaction:
-                IncomeService._recalculate_balances([recurring.deposit_account_id])
-            db.session.commit()
-            if created_any:
-                IncomeService._sync_folded_expenses(generated[-1])
-        return generated
+            affected_accounts.add(txn.account_id)
+            db.session.delete(txn)
+        db.session.delete(income)
+
+    @staticmethod
+    def refresh_forecasts(recurring_income_id):
+        """
+        Bring a source's saved future forecasts in line with its current terms
+        and timeline. Unsettled forecasts dated after today are re-priced in
+        place (keeping their transactions and expense links), removed when no
+        longer on the schedule, and missing pay dates up to the horizon are
+        added. Settled rows (paid / actual payslip entered) are never touched.
+        """
+        recurring = family_get(RecurringIncome, recurring_income_id)
+        if not recurring:
+            raise ValueError('Income source not found.')
+        today = date.today()
+        limit = IncomeService._generation_limit(recurring)
+        wanted = income_schedule.pay_dates(recurring, today + timedelta(days=1), limit) if recurring.is_active else []
+        previous_of, previous = {}, (income_schedule.previous_pay_date(recurring, wanted[0]) if wanted else None)
+        for pay_date in wanted:
+            previous_of[pay_date] = previous
+            previous = pay_date
+
+        changes = IncomeService._changes_for(recurring)
+        settings_cache = {}
+        affected_accounts = set()
+        covered = set()
+        updated = removed = 0
+        rows = family_query(Income).filter(
+            Income.recurring_income_id == recurring.id, Income.pay_date > today,
+        ).order_by(Income.pay_date, Income.id).all()
+        for income in rows:
+            txn = family_get(Transaction, income.transaction_id) if income.transaction_id else None
+            if IncomeService._is_settled(income, txn):
+                covered.add(income.pay_date)
+                continue
+            if income.pay_date not in previous_of or income.pay_date in covered:
+                IncomeService._remove_forecast(income, txn, affected_accounts)
+                removed += 1
+                continue
+            covered.add(income.pay_date)
+            income.person = recurring.person
+            income.source = recurring.source
+            income.owner_id = recurring.owner_id
+            income.deposit_account_id = recurring.deposit_account_id
+            IncomeService._price_forecast(income, recurring, changes, previous_of[income.pay_date], settings_cache)
+            if recurring.auto_create_transaction and income.deposit_account_id:
+                if txn:
+                    affected_accounts.add(txn.account_id)
+                    IncomeService._fill_transaction(txn, income)
+                else:
+                    income.transaction_id = IncomeService.create_income_transaction(
+                        income, recalculate_balance=False).id
+                affected_accounts.add(income.deposit_account_id)
+            elif txn:
+                income.transaction_id = None
+                db.session.flush()
+                affected_accounts.add(txn.account_id)
+                db.session.delete(txn)
+            updated += 1
+
+        db.session.flush()
+        _, created = IncomeService._generate_dates(recurring, [d for d in wanted if d not in covered])
+        marker = IncomeService._generated_marker(recurring, limit)
+        if recurring.last_generated_date and recurring.last_generated_date > marker:
+            recurring.last_generated_date = marker
+        IncomeService._finish_generation(recurring, created, affected_accounts)
+        return {'updated': updated, 'removed': removed, 'added': created}
+
+    @staticmethod
+    def refresh_all_forecasts():
+        """refresh_forecasts() for every visible source; one bad source doesn't block the rest."""
+        from flask import current_app
+
+        totals = {'updated': 0, 'removed': 0, 'added': 0, 'failed': 0}
+        for recurring_id, in family_query(RecurringIncome).with_entities(RecurringIncome.id).all():
+            try:
+                result = IncomeService.refresh_forecasts(recurring_id)
+            except ValueError:
+                db.session.rollback()
+                totals['failed'] += 1
+                current_app.logger.warning('Forecast refresh failed for recurring_income_id=%s', recurring_id, exc_info=True)
+                continue
+            for key in ('updated', 'removed', 'added'):
+                totals[key] += result[key]
+        return totals
 
     @staticmethod
     def generate_all_missing_income(end_date=None):
@@ -1037,7 +1348,9 @@ class IncomeService:
                 family_query(Income).filter_by(recurring_income_id=tpl_id)
                 .order_by(Income.pay_date.desc()).first()
             )
-            tpl.last_generated_date = latest_kept.pay_date.replace(day=1) if latest_kept else None
+            tpl.last_generated_date = (
+                IncomeService._generated_marker(tpl, latest_kept.pay_date) if latest_kept else None
+            )
 
         IncomeService._recalculate_balances(affected_accounts)
         db.session.commit()
@@ -1091,9 +1404,12 @@ class IncomeService:
             deleted += 1
 
         if deleted:
-            range_start_month = start_date.replace(day=1)
-            if recurring.last_generated_date is None or recurring.last_generated_date >= range_start_month:
-                recurring.last_generated_date = range_start_month - relativedelta(months=1)
+            if income_schedule.frequency_of(recurring) == 'monthly':
+                resume_marker = start_date.replace(day=1) - relativedelta(months=1)
+            else:
+                resume_marker = start_date - timedelta(days=1)
+            if recurring.last_generated_date is None or recurring.last_generated_date > resume_marker:
+                recurring.last_generated_date = resume_marker
 
         db.session.flush()
         IncomeService._recalculate_balances(affected_accounts)

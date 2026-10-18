@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Income Plan - Family HQ{% endblock %}
+
+{% macro gbp(value) %}£{{ '{:,.0f}'.format(value or 0) }}{% endmacro %}
+
+{% block content %}
+{% set years = plan.years %}
+<div class="container-fluid px-lg-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-graph-up"></i> Income plan</h1>
+            <p class="text-muted mb-0">Income per tax year, up to retirement. Saved payslips (including actuals) are used where they exist; later years are projected from each source's timeline and yearly rise.</p>
+        </div>
+        <form method="get" class="d-flex gap-2 align-items-end">
+            <div>
+                <label for="person" class="form-label small mb-0">Person</label>
+                <select class="form-select form-select-sm" id="person" name="person">
+                    <option value="">Everyone</option>
+                    {% for p in people %}<option value="{{ p }}" {% if p == current_person %}selected{% endif %}>{{ p }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="until" class="form-label small mb-0">Until tax year</label>
+                <select class="form-select form-select-sm" id="until" name="until">
+                    {% for y in range(plan.first_year, plan.max_year + 1) %}
+                    <option value="{{ y }}" {% if y == plan.until_year %}selected{% endif %}>{{ y }}-{{ '%02d' % ((y + 1) % 100) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-sm btn-primary">Show</button>
+        </form>
+    </div>
+
+    {% if not plan.sources and not years|selectattr('totals.gross')|list %}
+    <div class="card"><div class="card-body text-center py-5">
+        <p class="mb-3">No income to plan yet.</p>
+        <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add an income source</a>
+    </div></div>
+    {% else %}
+
+    {% for w in plan.warnings %}
+    <div class="alert alert-warning py-2 small mb-2"><i class="bi bi-exclamation-triangle"></i> {{ w }}</div>
+    {% endfor %}
+
+    <div class="card mb-4">
+        <div class="card-header"><i class="bi bi-table"></i> Household totals per tax year</div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 small align-middle text-end">
+                <thead class="table-light"><tr>
+                    <th class="text-start">Tax year</th><th>Gross</th><th>Income tax</th><th>NI</th><th>Student loan</th>
+                    <th>Your pension</th><th>Employer pension</th><th>Take home</th><th>Per month</th>
+                </tr></thead>
+                <tbody>
+                {% for y in years %}
+                {% set tt = y.totals %}
+                <tr>
+                    <td class="text-start text-nowrap">{{ y.label }} {% if y.projected %}<span class="badge text-bg-light border" title="Includes projected payments">projected</span>{% endif %}</td>
+                    <td>{{ gbp(tt.gross) }}</td>
+                    <td>{{ gbp(tt.income_tax) }}</td>
+                    <td>{{ gbp(tt.national_insurance) }}</td>
+                    <td>{{ gbp(tt.student_loan) if tt.student_loan else '—' }}</td>
+                    <td>{{ gbp(tt.employee_pension + tt.avc) }}</td>
+                    <td>{{ gbp(tt.employer_pension) }}</td>
+                    <td class="fw-semibold text-success">{{ gbp(tt.take_home) }}</td>
+                    <td>{{ gbp(tt.take_home / 12) }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        {% if plan.sources %}
+        <div class="col-xl-7">
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-briefcase"></i> Take home by source</div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 small text-end align-middle">
+                        <thead class="table-light"><tr>
+                            <th class="text-start">Tax year</th>
+                            {% for row in plan.sources %}
+                            <th><a href="{{ url_for('income.source', id=row.source.id) }}" class="text-decoration-none">{{ row.source.source or income_types.get(row.source.income_type) }}</a>
+                                <div class="fw-normal text-muted">{{ row.source.person }}{% if row.fixed %} · fixed{% endif %}</div></th>
+                            {% endfor %}
+                        </tr></thead>
+                        <tbody>
+                        {% for y in years %}
+                        <tr>
+                            <td class="text-start">{{ y.label }}</td>
+                            {% for row in plan.sources %}
+                            {% set v = row.years.get(y.start) %}
+                            <td>{{ gbp(v.take_home) if v else '—' }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-xl-5">
+            {% if plan.people|length > 1 %}
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-people"></i> Take home by person</div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 small text-end">
+                        <thead class="table-light"><tr>
+                            <th class="text-start">Tax year</th>
+                            {% for p in plan.people %}<th>{{ p }}</th>{% endfor %}
+                        </tr></thead>
+                        <tbody>
+                        {% for y in years %}
+                        <tr>
+                            <td class="text-start">{{ y.label }}</td>
+                            {% for p in plan.people %}
+                            {% set v = y.by_person.get(p) %}
+                            <td>{{ gbp(v.take_home) if v else '—' }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if plan.pensions %}
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-piggy-bank"></i> Pension contributions per pot</div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 small text-end">
+                        <thead class="table-light"><tr>
+                            <th class="text-start">Tax year</th>
+                            {% for pot in plan.pensions %}<th>{{ pot.pension.provider }}<div class="fw-normal text-muted">{{ pot.pension.person }}</div></th>{% endfor %}
+                        </tr></thead>
+                        <tbody>
+                        {% for y in years %}
+                        <tr>
+                            <td class="text-start">{{ y.label }}</td>
+                            {% for pot in plan.pensions %}<td>{{ gbp(pot.years.get(y.start)) }}</td>{% endfor %}
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer small text-muted">You + employer + AVC. Link a source to a pot on its edit page.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <p class="small text-muted">
+        <i class="bi bi-info-circle"></i> Projections assume today's tax bands, NI and student-loan thresholds stay as they are,
+        and stop at each source's end date. Set an end date on a job to model retirement, and add a pension income source starting then.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}{{ src.source or src.person }} - Income - Family HQ{% endblock %}
+
+{% macro gbp(value) %}£{{ '{:,.2f}'.format(value or 0) }}{% endmacro %}
+
+{% macro payslip_rows(rows) %}
+{% for p in rows %}
+<tr>
+    <td class="text-nowrap">{{ p.pay_date.strftime('%d %b %Y') }}</td>
+    <td class="text-end">{{ gbp(p.gross_monthly_income) }}{% if p.bonus %} <span class="badge text-bg-warning" title="Includes bonus {{ gbp(p.bonus) }}">bonus</span>{% endif %}</td>
+    <td class="text-end">{{ gbp(p.income_tax) }}</td>
+    <td class="text-end">{{ gbp(p.national_insurance) }}</td>
+    <td class="text-end d-none d-md-table-cell">{{ gbp(p.student_loan) if p.student_loan else '—' }}</td>
+    <td class="text-end d-none d-md-table-cell">{{ gbp(p.employee_pension_amount) }}</td>
+    <td class="text-end fw-semibold">{{ gbp(p.take_home) }}</td>
+    <td>
+        {% if p.is_paid %}<span class="badge text-bg-success">Paid</span>
+        {% elif p.is_manual_override %}<span class="badge text-bg-primary">Actual</span>
+        {% else %}<span class="badge text-bg-light border">Forecast</span>{% endif %}
+    </td>
+    <td class="text-end"><a href="{{ url_for('income.edit', id=p.id) }}" class="btn btn-sm btn-link p-0" title="Edit payslip"><i class="bi bi-pencil"></i></a></td>
+</tr>
+{% else %}
+<tr><td colspan="9" class="text-center text-muted small py-3">None</td></tr>
+{% endfor %}
+{% endmacro %}
+
+{% block content %}
+{% set t = snap.terms %}
+<div class="container">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+        <div>
+            <a href="{{ url_for('income.recurring') }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Income sources</a>
+            <h1 class="mb-0">{{ src.source or income_types.get(src.income_type, 'Income') }}</h1>
+            <div class="text-muted">
+                {{ src.person }} · {{ income_types.get(src.income_type, src.income_type) }} · {{ frequencies.get(src.pay_frequency or 'monthly') }}
+                {% if src.is_private %}· <i class="bi bi-lock"></i> Private{% endif %}
+                {% if snap.ended %}· <span class="badge text-bg-secondary">Ended</span>{% elif not src.is_active %}· <span class="badge text-bg-secondary">Paused</span>{% endif %}
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('income.edit_recurring', id=src.id) }}" class="btn btn-primary"><i class="bi bi-pencil"></i> Edit</a>
+            <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#changeModal"><i class="bi bi-calendar-plus"></i> Add change</button>
+        </div>
+    </div>
+
+    {% if fixed_figures %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> This source uses fixed payslip figures, so yearly rises and timeline changes don't affect its forecasts.
+        <a href="{{ url_for('income.edit_recurring', id=src.id) }}" class="alert-link">Switch to calculated</a>.
+    </div>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="card h-100"><div class="card-body">
+            <div class="text-muted small">Gross now</div>
+            <div class="fs-4 fw-semibold">£{{ '{:,.0f}'.format(t.gross_annual) }}<span class="fs-6 text-muted"> / yr</span></div>
+            {% if src.annual_increase_percent %}<div class="small text-muted">+{{ '%g' % src.annual_increase_percent }}% every {{ src.annual_increase_start.strftime('%d %b') }}</div>{% endif %}
+        </div></div></div>
+        <div class="col-md-3"><div class="card h-100"><div class="card-body">
+            <div class="text-muted small">Next payment</div>
+            {% if snap.next_payslip %}
+            <div class="fs-4 fw-semibold text-success">{{ gbp(snap.next_payslip.take_home) }}</div>
+            <div class="small text-muted">{{ snap.next_payslip.pay_date.strftime('%a %d %b %Y') }}</div>
+            {% else %}<div class="fs-4 text-muted">—</div>{% endif %}
+        </div></div></div>
+        <div class="col-md-3"><div class="card h-100"><div class="card-body">
+            <div class="text-muted small">Monthly take home</div>
+            <div class="fs-4 fw-semibold">{{ gbp(snap.monthly_take_home) if snap.monthly_take_home is not none else '—' }}</div>
+            <div class="small text-muted">Average, excluding bonuses</div>
+        </div></div></div>
+        <div class="col-md-3"><div class="card h-100"><div class="card-body small">
+            <div><span class="text-muted">Tax code</span> <span class="fw-semibold">{{ t.tax_code }}</span></div>
+            {% if src.income_type == 'employment' %}
+            <div><span class="text-muted">Pension</span> {{ '%g' % t.employee_pension_pct }}% + employer {{ '%g' % t.employer_pension_pct }}%</div>
+            <div class="text-muted">{{ pension_schemes.get(src.pension_scheme or 'salary_sacrifice') }}{% if src.pension %} → {{ src.pension.provider }}{% endif %}</div>
+            {% endif %}
+            <div><span class="text-muted">Into</span> {{ src.deposit_account.name if src.deposit_account else '—' }}</div>
+            <div><span class="text-muted">From</span> {{ src.start_date.strftime('%d %b %Y') }}{% if src.end_date %} to {{ src.end_date.strftime('%d %b %Y') }}{% endif %}</div>
+            {% if fold_group %}<div class="text-muted"><i class="bi bi-arrow-left-right"></i> Expense claims paid with this</div>{% endif %}
+        </div></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-clock-history"></i> Timeline</span>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#changeModal"><i class="bi bi-plus"></i></button>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item small">
+                        <div class="fw-semibold">{{ src.start_date.strftime('%d %b %Y') }} · Starts</div>
+                        <div class="text-muted">£{{ '{:,.2f}'.format(src.gross_annual_income or 0) }} a year, tax code {{ src.tax_code }}</div>
+                    </li>
+                    {% for c in snap.changes %}
+                    <li class="list-group-item small d-flex justify-content-between align-items-start {{ 'text-muted' if c.effective_date <= today }}">
+                        <div>
+                            <div class="fw-semibold">{{ c.effective_date.strftime('%d %b %Y') }} · {{ c.label }}</div>
+                            <div>{{ c.summary }}</div>
+                            {% if c.description %}<div class="text-muted">{{ c.description }}</div>{% endif %}
+                        </div>
+                        <form method="post" action="{{ url_for('income.delete_change', change_id=c.id) }}"
+                              onsubmit="return confirm('Remove this change and re-price future forecasts?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button class="btn btn-sm btn-link text-danger p-0" title="Remove"><i class="bi bi-x-lg"></i></button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                    {% if src.annual_increase_percent %}
+                    <li class="list-group-item small text-muted"><i class="bi bi-arrow-repeat"></i> +{{ '%g' % src.annual_increase_percent }}% every year from {{ src.annual_increase_start.strftime('%d %b %Y') }}</li>
+                    {% endif %}
+                    {% if src.end_date %}
+                    <li class="list-group-item small"><div class="fw-semibold">{{ src.end_date.strftime('%d %b %Y') }} · Ends</div></li>
+                    {% endif %}
+                </ul>
+                {% if not snap.changes %}
+                <div class="card-body small text-muted pt-0">Add pay rises, bonuses, tax-code or pension changes here. Forecasts after each date update automatically.</div>
+                {% endif %}
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-door-closed"></i> Leaving or retiring?</div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('income.end_job', id=src.id) }}"
+                          onsubmit="return confirm('End this income and delete unpaid payslips after the last pay date?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <label for="last_pay_date" class="form-label small">Last pay date</label>
+                        <div class="input-group input-group-sm">
+                            <input type="date" class="form-control" id="last_pay_date" name="last_pay_date" required>
+                            <button class="btn btn-outline-warning">End income</button>
+                        </div>
+                        <div class="form-text">Removes later forecasts. Paid history is kept. Add the new job as a new source.</div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-arrow-clockwise"></i> Rebuild a date range</div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('income.regenerate_range', id=src.id) }}"
+                          onsubmit="return confirm('Delete and recreate payslips in this range?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="row g-2">
+                            <div class="col"><input type="date" class="form-control form-control-sm" name="start_date" required aria-label="From"></div>
+                            <div class="col"><input type="date" class="form-control form-control-sm" name="end_date" required aria-label="To"></div>
+                        </div>
+                        <div class="form-check mt-2 small">
+                            <input class="form-check-input" type="checkbox" id="force" name="force">
+                            <label class="form-check-label" for="force">Also replace paid / actual payslips</label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary mt-2">Rebuild</button>
+                    </form>
+                </div>
+            </div>
+
+            <form method="post" action="{{ url_for('income.delete_recurring', id=src.id) }}"
+                  onsubmit="return confirm('Delete this income source? Paid history is kept; forecasts are removed.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-trash"></i> Delete income source</button>
+            </form>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-calendar-week"></i> Upcoming payslips <span class="text-muted small">({{ upcoming|length }})</span></div>
+                <div class="table-responsive" style="max-height: 32rem;">
+                    <table class="table table-sm table-hover mb-0 small align-middle">
+                        <thead class="table-light sticky-top"><tr>
+                            <th>Date</th><th class="text-end">Gross</th><th class="text-end">Tax</th><th class="text-end">NI</th>
+                            <th class="text-end d-none d-md-table-cell">Student loan</th><th class="text-end d-none d-md-table-cell">Pension</th>
+                            <th class="text-end">Take home</th><th></th><th></th>
+                        </tr></thead>
+                        <tbody>{{ payslip_rows(upcoming) }}</tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><i class="bi bi-journal-check"></i> Recent payslips</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 small align-middle">
+                        <thead class="table-light"><tr>
+                            <th>Date</th><th class="text-end">Gross</th><th class="text-end">Tax</th><th class="text-end">NI</th>
+                            <th class="text-end d-none d-md-table-cell">Student loan</th><th class="text-end d-none d-md-table-cell">Pension</th>
+                            <th class="text-end">Take home</th><th></th><th></th>
+                        </tr></thead>
+                        <tbody>{{ payslip_rows(history) }}</tbody>
+                    </table>
+                </div>
+                <div class="card-footer small text-muted">Record the real figures from a payslip with <i class="bi bi-pencil"></i>, or on the <a href="{{ url_for('income.index') }}">Payslips</a> page.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="changeModal" tabindex="-1" aria-labelledby="changeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="{{ url_for('income.add_change', id=src.id) }}" class="modal-content" id="change-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="modal-header">
+                <h5 class="modal-title" id="changeModalLabel">Add a change</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body row g-3">
+                <div class="col-7">
+                    <label for="change_type" class="form-label">What changes</label>
+                    <select class="form-select" id="change_type" name="change_type">
+                        {% for key, label in change_types.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-5">
+                    <label for="effective_date" class="form-label">From</label>
+                    <input type="date" class="form-control" id="effective_date" name="effective_date" required
+                           min="{{ src.start_date.isoformat() }}" value="{{ today.isoformat() if today >= src.start_date else src.start_date.isoformat() }}">
+                </div>
+                <div class="col-12" data-change="salary bonus">
+                    <label for="amount" class="form-label" data-amount-label>Amount</label>
+                    <div class="input-group">
+                        <span class="input-group-text">£</span>
+                        <input type="number" step="0.01" min="0.01" class="form-control" id="amount" name="amount">
+                    </div>
+                </div>
+                <div class="col-12" data-change="bonus">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="bonus_pensionable" name="bonus_pensionable">
+                        <label class="form-check-label" for="bonus_pensionable">Pension is taken from the bonus</label>
+                    </div>
+                    <div class="form-text">Paid with the first payment on or after this date, taxed at your marginal rate.</div>
+                </div>
+                <div class="col-12" data-change="percent_rise">
+                    <label for="percent" class="form-label">Rise</label>
+                    <div class="input-group">
+                        <input type="number" step="0.001" min="-50" max="50" class="form-control" id="percent" name="percent">
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <div class="form-text">Applied to the salary in force on that date. Use a negative number for a cut.</div>
+                </div>
+                <div class="col-12" data-change="tax_code">
+                    <label for="change_tax_code" class="form-label">New tax code</label>
+                    <input type="text" class="form-control text-uppercase" id="change_tax_code" name="tax_code" maxlength="10" value="{{ t.tax_code }}">
+                </div>
+                <div class="col-6" data-change="pension">
+                    <label for="change_employee_pct" class="form-label">You pay</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" min="0" max="100" class="form-control" id="change_employee_pct" name="employee_pension_pct" value="{{ '%g' % t.employee_pension_pct }}">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-6" data-change="pension">
+                    <label for="change_employer_pct" class="form-label">Employer pays</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" min="0" max="100" class="form-control" id="change_employer_pct" name="employer_pension_pct" value="{{ '%g' % t.employer_pension_pct }}">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label for="change_description" class="form-label">Note <span class="text-muted small">(optional)</span></label>
+                    <input type="text" class="form-control" id="change_description" name="description" maxlength="255" placeholder="e.g. Promotion, annual review">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add change</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const select = document.getElementById('change_type');
+    const amountLabel = document.querySelector('[data-amount-label]');
+    function update() {
+        const type = select.value;
+        document.querySelectorAll('#change-form [data-change]').forEach(el => {
+            el.classList.toggle('d-none', !el.dataset.change.split(' ').includes(type));
+        });
+        amountLabel.textContent = type === 'salary' ? 'New annual salary' : 'Bonus amount (gross)';
+    }
+    select.addEventListener('change', update);
+    update();
+})();
+</script>
+{% endblock %}

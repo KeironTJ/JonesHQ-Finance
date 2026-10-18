@@ -3,6 +3,63 @@
 ## Overview
 Comprehensive system for tracking lifetime income, calculating tax/NI/pension contributions, and monitoring pension growth. Integrates seamlessly with the existing transaction and Net Worth systems.
 
+## How income works (sources → timeline → payslips → plan)
+
+| Concept | Table | What it is |
+|---|---|---|
+| **Income source** | `recurring_income` | One job, pension, self-employment or rental income for one person: type, pay frequency, starting pay, tax code, pension, student loan, yearly rise, deposit account, category, visibility. |
+| **Timeline change** | `income_changes` | A dated event on a source: new salary, % pay rise, bonus / one-off, tax-code change, pension % change. Deleted with its source. |
+| **Payslip** | `income` | One pay date. Forecasts are saved up to **24 months** ahead (`FORECAST_HORIZON_MONTHS`); actuals are entered over them. |
+| **Plan** | none (computed) | `/income/plan`: per-tax-year totals up to retirement, projected in memory from each source's timeline. Nothing is saved. |
+
+**Terms on a date** (`income_schedule.terms_for`): start from the source's own
+figures, apply the yearly rise (`annual_increase_percent` each year from
+`annual_increase_start`), then apply every timeline change dated on or before the
+pay date. A `salary` change resets the base that later yearly rises compound on.
+A bonus is paid with the first payment on or after its date.
+
+**Pay dates** (`income_schedule.pay_dates`): `weekly`, `fortnightly`, `four_weekly`
+(anchored on `first_pay_date`, moved back to the previous working day), `monthly`
+(`pay_day`, `0` = last day) and `annual`.
+
+**Income types** decide the maths: `employment` (PAYE tax, Class 1 NI, workplace
+pension, student loan); `private_pension` (PAYE tax only); `state_pension`,
+`benefit`, `other_untaxed` (untaxed — state pension tax is collected via your
+other tax codes); `self_employed` (tax + Class 4 NI + student loan on profit, or a
+set-aside %); `rental` (set-aside %).
+
+**Refresh** (`IncomeService.refresh_forecasts(source_id)`): re-prices every
+*unsettled* forecast of the source from its terms, removes forecasts outside its
+dates, and fills up to the horizon. Settled rows (paid, actual payslip entered, or
+paid transaction) are never changed. It runs automatically after saving a source,
+adding/removing a change, and when the Payslips page tops up the horizon.
+**Tools → Refresh all forecasts** (`refresh_all_forecasts`) re-runs it for every
+source you can see, e.g. after new tax rates are loaded.
+
+**Manual overrides:** edit a payslip (choose manual figures) or **Enter actual**;
+that row is then settled and kept. A source can also keep the legacy fixed
+monthly figures (`use_manual_deductions`); those sources ignore yearly rises and
+the timeline until switched to "calculated".
+
+**Retirement:** set an end date on the job (**End income** on the source page)
+and add a `pension` source starting the day after. The plan stops each source at
+its end date. Inactive or ended sources only contribute payslips actually saved.
+
+**Expense integration:** a source can fold reimbursable expenses into its payday
+(`fold_expenses`), as before.
+
+### Routes (`blueprints/income/routes.py`)
+
+| Route | Purpose |
+|---|---|
+| `GET /income` | Payslips list (tops forecasts up to the horizon) |
+| `GET /income/recurring` | Sources, grouped by person |
+| `GET/POST /income/recurring/add`, `/income/recurring/<id>/edit` | Source form with live preview (`static/js/income-source-form.js`) |
+| `GET /income/recurring/<id>` | Source page: current terms, timeline, upcoming/recent payslips, end income, rebuild range, delete |
+| `POST /income/recurring/<id>/changes`, `/income/changes/<id>/delete` | Add / remove a timeline change |
+| `POST /income/refresh-forecasts` | Refresh all forecasts |
+| `GET /income/plan?until=&person=` | Plan to a tax year (max 50 years) |
+
 ## Database Models
 
 ### Income Model (`models/income.py`)
@@ -56,14 +113,19 @@ Monthly snapshots of pension values for tracking growth.
 
 ### Tax & NI Calculations
 All deduction maths lives in one pure module, `services/finance/payroll_calculator.py`
-(`calculate_monthly_payslip`). Template generation, record edits and the add-form
-preview all use it, so they can't disagree. Rates come from `TaxSettings` for the pay
-date's tax year (fallback: 2025-26 rUK rates).
+(`calculate_payslip`, any frequency). Forecasts, record edits, the source preview and
+the plan all use it, so they can't disagree. Rates come from `TaxSettings` for the pay
+date's tax year (fallback: 2025-26 rUK rates); Scottish bands and student-loan
+thresholds come from `uk_tax_tables.py`. When a year is missing from those tables the
+latest known year is used and a warning is shown (2026-27 Scottish and student-loan
+figures still need adding). The plan assumes thresholds stay frozen.
 
 - **Tax year** runs 6 April → 5 April (`tax_year_for()`).
 - **Tax codes:** `1257L` (and M/N/T suffixes), `0T`, `K475`, `BR`, `D0`, `D1`, `NT`,
-  `C` (Welsh) prefix and `W1/M1/X` emergency suffixes. `S` (Scottish) codes are accepted
-  but taxed with rUK bands and return a warning. Anything else is rejected.
+  `C` (Welsh) prefix, `S` (Scottish, taxed with Scottish bands) and `W1/M1/X`
+  emergency suffixes. Anything else is rejected.
+- **Student loan:** plans 1, 2, 4, 5 and postgraduate, per pay period.
+- **Bonus:** taxed at the marginal rate; pension taken from it only if pensionable.
 - **Bands** apply to taxable income after the allowance (basic band is a fixed
   £37,700 width; additional rate above £125,140). The personal allowance tapers by
   £1 per £2 over £100k, but only for codes carrying the full standard allowance.
@@ -71,8 +133,9 @@ date's tax year (fallback: 2025-26 rUK rates).
 - **Pension:** employee pension is deducted once. Default scheme is salary sacrifice
   (reduces taxable and NI-able pay); the calculator also supports `net_pay` and
   `relief_at_source`.
-- **Simplifications:** annualised (annual ÷ 12, no cumulative PAYE); AVCs and
-  "other" are post-tax deductions.
+- **Simplifications:** tax is annualised (annual ÷ periods, no cumulative PAYE);
+  NI and student loan use per-period thresholds; 53-week years are not modelled;
+  AVCs and "other" are post-tax deductions.
 
 ### Key Methods
 
@@ -123,8 +186,10 @@ summary = IncomeService.get_income_summary(person='Keiron', year=2024)
 - Generated records are matched to their template by `recurring_income_id` + pay date,
   so two jobs paid on the same day don't collide. Pay dates before the template's
   start date or after its end date are skipped.
-- Generation never goes beyond 50 years from today; a template may span at most 60
-  years; delete/regenerate ranges are capped at 50 years.
+- Forecast rows are saved at most 24 months ahead (the plan projects further in
+  memory); a source and its timeline may span at most 60 years; delete/regenerate
+  ranges are capped at 50 years. Older data may still hold forecasts beyond 24
+  months: they stay until trimmed (Payslips → Tools → Trim forecasts).
 - A record is **settled** if it is paid, has an actual payslip entered, or its
   transaction is paid. Deleting or regenerating a range removes unsettled forecasts
   *and their forecast transactions*; settled records (including future months you

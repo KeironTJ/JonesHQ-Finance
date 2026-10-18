@@ -1,206 +1,121 @@
 {% extends "base.html" %}
 
-{% block title %}Recurring Income - Family HQ{% endblock %}
+{% block title %}Income Sources - Family HQ{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <h1><i class="bi bi-arrow-repeat"></i> Recurring Income Templates</h1>
-            <p class="text-muted">Set up automatic monthly income generation</p>
+<div class="container">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-briefcase"></i> Income sources</h1>
+            <p class="text-muted mb-0">Each source forecasts its payslips for the next two years. Open one to add pay rises, bonuses or tax-code changes.</p>
         </div>
-        <div class="col-auto">
-            <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Add Recurring Income
-            </a>
-            <a href="{{ url_for('income.index') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-list-ul"></i> View Income Records
-            </a>
-        </div>
-    </div>
-    
-    <!-- Filter -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Person</label>
-                    <select name="person" class="form-select">
-                        <option value="">All People</option>
-                        {% for p in people %}
-                        <option value="{{ p }}" {% if current_person == p %}selected{% endif %}>{{ p }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4 d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary me-2">
-                        <i class="bi bi-filter"></i> Filter
-                    </button>
-                    <a href="{{ url_for('income.recurring') }}" class="btn btn-secondary">
-                        <i class="bi bi-x-circle"></i> Clear
-                    </a>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <!-- Recurring Income Table -->
-    <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">Active Recurring Income</h5>
-        </div>
-        <div class="card-body">
-            {% if recurring_incomes %}
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Person</th>
-                            <th>Source</th>
-                            <th>Annual Salary</th>
-                            <th>Pay Day</th>
-                            <th>Period</th>
-                            <th>Account</th>
-                            <th>Last Generated</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for recurring in recurring_incomes %}
-                        <tr class="{% if not recurring.is_active %}table-secondary{% endif %}">
-                            <td><span class="badge bg-secondary">{{ recurring.person }}</span></td>
-                            <td>
-                                <strong>{{ recurring.source or 'Income' }}</strong>
-                                {% if recurring.description %}
-                                <br><small class="text-muted">{{ recurring.description }}</small>
-                                {% endif %}
-                            </td>
-                            <td class="fw-bold">£{{ "{:,.2f}".format(recurring.gross_annual_income) }}</td>
-                            <td>
-                                {% if recurring.pay_day == 0 %}
-                                Last day of month
-                                {% else %}
-                                {{ recurring.pay_day }}{{ 'st' if recurring.pay_day in [1, 21, 31] else ('nd' if recurring.pay_day in [2, 22] else ('rd' if recurring.pay_day in [3, 23] else 'th')) }}
-                                {% endif %}
-                            </td>
-                            <td>
-                                <small>
-                                    From: {{ recurring.start_date.strftime('%d/%m/%Y') }}<br>
-                                    {% if recurring.end_date %}
-                                    To: {{ recurring.end_date.strftime('%d/%m/%Y') }}
-                                    {% else %}
-                                    <span class="text-success">Ongoing</span>
-                                    {% endif %}
-                                </small>
-                            </td>
-                            <td>
-                                {% if recurring.deposit_account %}
-                                <span class="badge bg-primary">{{ recurring.deposit_account.name }}</span>
-                                {% if recurring.auto_create_transaction %}
-                                <br><small class="text-success"><i class="bi bi-check-circle"></i> Auto-create txn</small>
-                                {% endif %}
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if recurring.last_generated_date %}
-                                {{ recurring.last_generated_date.strftime('%b %Y') }}
-                                {% else %}
-                                <span class="text-muted">Not yet</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if recurring.is_active %}
-                                <span class="badge bg-success">Active</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Inactive</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="{{ url_for('income.edit_recurring', id=recurring.id) }}" 
-                                   class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                {% if recurring.is_active %}
-                                <a href="{{ url_for('income.edit_recurring', id=recurring.id) }}#end-job"
-                                   class="btn btn-sm btn-outline-warning" title="Change / End this job">
-                                    <i class="bi bi-door-closed"></i>
-                                </a>
-                                {% endif %}
-                                <form method="post" action="{{ url_for('income.delete_recurring', id=recurring.id) }}" 
-                                      class="d-inline" 
-                                      onsubmit="return confirm('Are you sure? This will not delete existing income records.');">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5">
-                <i class="bi bi-inbox empty-state-icon"></i>
-                <p class="text-muted mt-3">No recurring income templates found. Click "Add Recurring Income" to get started.</p>
-            </div>
-            {% endif %}
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add source</a>
+            <a href="{{ url_for('income.plan') }}" class="btn btn-outline-primary"><i class="bi bi-graph-up"></i> Plan</a>
+            <a href="{{ url_for('income.index') }}" class="btn btn-outline-secondary"><i class="bi bi-receipt"></i> Payslips</a>
         </div>
     </div>
 
-    <!-- Reperiod Transactions Tool -->
-    <div class="card mt-4 border-info">
-        <div class="card-header bg-info text-white">
-            <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Update Pay Period Buckets (Reperiod)</h5>
-        </div>
-        <div class="card-body">
-            <p class="text-muted">
-                If you have changed jobs and your new pay day is different, use this tool to
-                re-bucket <strong>all</strong> your existing bank and credit card transactions
-                into the correct pay periods.
-            </p>
-            <p class="text-muted">
-                Optionally enter your new pay day below first — this updates the global setting and then
-                re-calculates every transaction's <code>payday_period</code> based on the new day.
-                Leave blank to re-calculate using the current payday setting without changing it.
-            </p>
+    {% if people|length > 1 %}
+    <div class="mb-3">
+        <a href="{{ url_for('income.recurring') }}" class="btn btn-sm {{ 'btn-dark' if not current_person else 'btn-outline-dark' }}">Everyone</a>
+        {% for p in people %}
+        <a href="{{ url_for('income.recurring', person=p) }}" class="btn btn-sm {{ 'btn-dark' if current_person == p else 'btn-outline-dark' }}">{{ p }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
 
-            <form method="post" action="{{ url_for('income.reperiod_transactions') }}"
-                  onsubmit="return confirm('This will update the payday_period field on ALL transactions. Continue?');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <div class="row align-items-end g-3">
-                    <div class="col-md-4">
-                        <label for="new_payday_day" class="form-label fw-bold">New Pay Day of Month <span class="text-muted">(optional)</span></label>
-                        <select class="form-select" id="new_payday_day" name="new_payday_day">
-                            <option value="">— Keep current setting —</option>
-                            <option value="0">Last day of month</option>
-                            {% for day in range(1, 32) %}
-                            <option value="{{ day }}">{{ day }}{{ 'st' if day in [1, 21, 31] else ('nd' if day in [2, 22] else ('rd' if day in [3, 23] else 'th')) }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">
-                            This updates the global payday day setting for the whole app.
+    {% if not by_person %}
+    <div class="card"><div class="card-body text-center py-5">
+        <i class="bi bi-briefcase display-6 text-muted"></i>
+        <p class="mt-3 mb-3">No income sources yet.</p>
+        <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add your first income source</a>
+    </div></div>
+    {% endif %}
+
+    {% for person, group in by_person.items() %}
+    <div class="d-flex justify-content-between align-items-baseline mt-4 mb-2">
+        <h4 class="mb-0"><i class="bi bi-person-circle"></i> {{ person }}</h4>
+        <div class="text-muted small">
+            {% if group.gross %}
+            £{{ '{:,.0f}'.format(group.gross) }} a year gross · ≈ £{{ '{:,.2f}'.format(group.monthly) }} a month take home
+            {% else %}No current income{% endif %}
+        </div>
+    </div>
+    <div class="row g-3">
+        {% for snap in group.snapshots %}
+        {% set s = snap.source %}
+        {% set inactive = not s.is_active or snap.ended %}
+        <div class="col-md-6 col-xl-4">
+            <div class="card h-100 {{ 'opacity-75' if inactive }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h5 class="card-title mb-1">
+                                <a href="{{ url_for('income.source', id=s.id) }}" class="stretched-link text-decoration-none">{{ s.source or income_types.get(s.income_type, 'Income') }}</a>
+                            </h5>
+                            <div class="small text-muted">{{ income_types.get(s.income_type, s.income_type) }} · {{ frequencies.get(s.pay_frequency or 'monthly') }}</div>
+                        </div>
+                        <div class="text-end">
+                            {% if snap.ended %}<span class="badge text-bg-secondary">Ended</span>
+                            {% elif not s.is_active %}<span class="badge text-bg-secondary">Paused</span>
+                            {% elif s.start_date > today %}<span class="badge text-bg-info">Starts {{ s.start_date.strftime('%b %Y') }}</span>
+                            {% else %}<span class="badge text-bg-success">Active</span>{% endif %}
+                            {% if s.is_private %}<span class="badge text-bg-light border" title="Only visible to you"><i class="bi bi-lock"></i></span>{% endif %}
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <button type="submit" class="btn btn-info text-white w-100">
-                            <i class="bi bi-arrow-repeat"></i> Re-bucket All Transactions
-                        </button>
+                    <div class="row mt-3 small">
+                        <div class="col-6">
+                            <div class="text-muted">Gross now</div>
+                            <div class="fw-semibold">£{{ '{:,.0f}'.format(snap.terms.gross_annual) }} / yr</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted">Next payment</div>
+                            {% if snap.next_payslip %}
+                            <div class="fw-semibold text-success">£{{ '{:,.2f}'.format(snap.next_payslip.take_home or 0) }}</div>
+                            <div class="text-muted">{{ snap.next_payslip.pay_date.strftime('%d %b %Y') }}</div>
+                            {% else %}<div class="text-muted">—</div>{% endif %}
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2">
+                        {% if s.end_date %}<i class="bi bi-flag"></i> {{ 'Ended' if snap.ended else 'Ends' }} {{ s.end_date.strftime('%d %b %Y') }}{% endif %}
+                        {% if s.annual_increase_percent %}<span class="ms-2"><i class="bi bi-graph-up-arrow"></i> +{{ '%g' % s.annual_increase_percent }}% yearly</span>{% endif %}
+                        {% if snap.upcoming_changes %}<span class="ms-2"><i class="bi bi-calendar-event"></i> {{ snap.upcoming_changes|length }} upcoming change{{ 's' if snap.upcoming_changes|length != 1 }}</span>{% endif %}
                     </div>
                 </div>
-            </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
 
-            <div class="alert alert-warning mt-3 mb-0">
-                <i class="bi bi-exclamation-triangle"></i>
-                <strong>Note:</strong> This only updates the pay-period label used for budgeting/reporting.
-                It does <em>not</em> change transaction dates, amounts, or any other data.
+    <div class="card mt-5">
+        <div class="card-header"><i class="bi bi-tools"></i> Tools</div>
+        <div class="card-body row g-4">
+            <div class="col-md-6">
+                <h6>Refresh forecasts</h6>
+                <p class="small text-muted">Re-price every unsettled future payslip with current settings and tax rates, and fill the next two years.</p>
+                <form method="post" action="{{ url_for('income.refresh_all') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="next" value="sources"/>
+                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Refresh all forecasts</button>
+                </form>
+            </div>
+            <div class="col-md-6">
+                <h6>Pay period buckets</h6>
+                <p class="small text-muted">Re-assign every transaction to its payday period, optionally changing the household payday first.</p>
+                <form method="post" action="{{ url_for('income.reperiod_transactions') }}" class="d-flex gap-2"
+                      onsubmit="return confirm('Re-assign the pay period for every transaction?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <select class="form-select form-select-sm w-auto" name="new_payday_day" aria-label="Payday">
+                        <option value="">Keep current payday</option>
+                        {% for d in range(1, 32) %}<option value="{{ d }}">Payday: {{ d }}</option>{% endfor %}
+                        <option value="0">Payday: last day</option>
+                    </select>
+                    <button class="btn btn-outline-secondary btn-sm">Update</button>
+                </form>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
-

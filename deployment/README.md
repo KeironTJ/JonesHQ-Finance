@@ -356,6 +356,23 @@ Run it after each deployment and before onboarding new households. Any reported
 `table.column` count is pre-existing data that needs investigation; do not
 delete rows without a fresh dump.
 
+## Income redesign (one-off, after deploying it)
+
+Migration `d5a9c3e7f1b2` runs automatically during the update. It adds the
+`income_changes` table and new columns to `recurring_income` / `income`; existing
+sources are backfilled as employment, monthly, salary-sacrifice, so their
+figures don't change. Nothing is deleted.
+
+After the update, each household should open **Income → Sources → Tools →
+Refresh all forecasts** once (or simply open the Payslips page, which tops up to
+24 months). Forecasts are now only saved 24 months ahead; older data may still
+hold forecasts further out. They are harmless, but can be removed with
+**Payslips → Tools → Trim forecasts** (24 months). Paid and actual payslips are
+never touched by either action.
+
+Sources that used fixed monthly figures keep them; the source page offers
+"Switch to calculated" so pay rises and timeline changes take effect.
+
 ## Leftover income forecasts (one-off, after the income fixes)
 
 Older versions left a deleted income template's future forecasts (and their

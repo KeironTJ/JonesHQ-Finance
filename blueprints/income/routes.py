@@ -9,7 +9,7 @@ from models.users import User
 from services.finance.income_service import IncomeService
 from extensions import db
 from datetime import datetime, date
-from dateutil.relativedelta import relativedelta
+from decimal import Decimal
 from utils.db_helpers import family_query, family_get_or_404
 
 
@@ -70,10 +70,9 @@ def _get_income_people():
 @income_bp.route('/income')
 def index():
     """List all income records — auto-generates missing records on load."""
-    # Silently auto-generate up to 13 months ahead
+    # Silently fill forecasts up to the forecast horizon
     try:
-        end = (date.today().replace(day=1) + relativedelta(months=13))
-        IncomeService.generate_all_missing_income(end_date=end)
+        IncomeService.generate_all_missing_income()
     except Exception:
         db.session.rollback()
         current_app.logger.exception('Automatic income generation failed')
@@ -138,7 +137,7 @@ def add():
     if request.method == 'POST':
         try:
             income = IncomeService.create_one_off_income(request.form)
-            flash(f'Income record added successfully! Take home: ?{income.take_home:,.2f}', 'success')
+            flash(f'Income record added — take home £{income.take_home:,.2f}.', 'success')
             return redirect(url_for('income.index'))
         except Exception as e:
             _fail(e, 'Error adding income.')
@@ -150,13 +149,13 @@ def add():
 
 @income_bp.route('/income/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
-    """Edit an income record ? supports both calculated and manual-override modes."""
+    """Edit an income record — supports both calculated and manual-override modes."""
     income = family_get_or_404(Income, id)
 
     if request.method == 'POST':
         try:
             income = IncomeService.update_income_record(id, request.form)
-            flash(f'Income record updated ? take home: ?{income.take_home:,.2f}', 'success')
+            flash(f'Income record updated — take home £{income.take_home:,.2f}.', 'success')
             return redirect(url_for('income.index'))
         except Exception as e:
             _fail(e, 'Error updating income.')
@@ -212,7 +211,7 @@ def enter_actual(id):
     family_get_or_404(Income, id)
     try:
         income = IncomeService.record_actual_payslip(id, request.form)
-        flash(f'Actual payslip for {income.pay_date.strftime("%B %Y")} recorded ? transaction updated.', 'success')
+        flash(f'Actual payslip for {income.pay_date.strftime("%B %Y")} recorded — transaction updated.', 'success')
     except Exception as e:
         _fail(e, 'Error recording payslip.')
     return redirect(url_for('income.index'))
@@ -231,117 +230,203 @@ def calculate_preview():
         return jsonify({'success': False, 'error': 'Unable to calculate the income preview.'}), 400
 
 
-# ============= RECURRING INCOME ROUTES =============
+# ============= INCOME SOURCES =============
+
+def _source_form_context(source=None):
+    from models.pensions import Pension
+    from services.finance import payroll_calculator as pc
+    from services.finance import uk_tax_tables
+
+    return dict(
+        src=source,
+        accounts=family_query(Account).filter_by(is_active=True).order_by(Account.name).all(),
+        categories=_income_categories(),
+        people=_get_income_people(),
+        pensions=family_query(Pension).filter_by(is_active=True).order_by(Pension.person, Pension.provider).all(),
+        income_types=pc.INCOME_TYPE_LABELS,
+        frequencies=pc.PAY_FREQUENCY_LABELS,
+        pension_schemes=pc.PENSION_SCHEME_LABELS,
+        student_loan_labels=uk_tax_tables.STUDENT_LOAN_LABELS,
+        type_rules={
+            'paye': sorted(pc.PAYE_TYPES | {'self_employed'}),
+            'workplace_pension': sorted(pc.WORKPLACE_PENSION_TYPES),
+            'student_loan': sorted(pc.PAYROLL_STUDENT_LOAN_TYPES | {'self_employed'}),
+            'set_aside': sorted(pc.SET_ASIDE_TYPES | {'self_employed'}),
+        },
+    )
+
+
+def _save_folding(recurring_id):
+    from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
+    ExpenseReimbursementGroupService.set_folding_for_recurring_income(
+        recurring_id, request.form.get('fold_expenses') == 'on'
+    )
+
 
 @income_bp.route('/income/recurring')
 def recurring():
-    """List all recurring income templates"""
-    person = request.args.get('person', None)
-    
+    """Income sources, grouped by person."""
+    from services.finance.income_projection_service import IncomeProjectionService
+
+    person = request.args.get('person') or None
     query = family_query(RecurringIncome)
     if person:
         query = query.filter_by(person=person)
-    
-    recurring_incomes = query.order_by(RecurringIncome.person, RecurringIncome.source).all()
-    
-    # Get unique people for filter
-    people = family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()
-    people = [p[0] for p in people] if people else _get_income_people()
-    
-    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    
-    return render_template('income/recurring.html',
-                         recurring_incomes=recurring_incomes,
-                         people=people,
-                         accounts=accounts,
-                         current_person=person)
+    sources = query.order_by(RecurringIncome.is_active.desc(), RecurringIncome.person, RecurringIncome.source).all()
+    snapshots = [IncomeProjectionService.source_snapshot(s) for s in sources]
+
+    by_person = {}
+    for snap in snapshots:
+        group = by_person.setdefault(snap['source'].person, {'snapshots': [], 'gross': Decimal('0'), 'monthly': Decimal('0')})
+        group['snapshots'].append(snap)
+        if snap['source'].is_active and not snap['ended']:
+            group['gross'] += snap['terms'].gross_annual
+            group['monthly'] += snap['monthly_take_home'] or Decimal('0')
+
+    people = [p[0] for p in family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()]
+    return render_template('income/recurring.html', by_person=by_person, people=people,
+                           current_person=person, today=date.today(), **_labels())
+
+
+def _labels():
+    from services.finance import payroll_calculator as pc
+    return dict(income_types=pc.INCOME_TYPE_LABELS, frequencies=pc.PAY_FREQUENCY_LABELS,
+                pension_schemes=pc.PENSION_SCHEME_LABELS)
 
 
 @income_bp.route('/income/recurring/add', methods=['GET', 'POST'])
 def add_recurring():
-    """Add a new recurring income template"""
+    """Add an income source; forecasts are generated straight away."""
     if request.method == 'POST':
         try:
-            recurring = IncomeService.create_recurring_income(request.form)
-            
-            # Generate missing income records
-            generated = IncomeService.generate_missing_income(recurring.id)
-            
-            flash(f'Recurring income added successfully! Generated {len(generated)} income record(s).', 'success')
-            return redirect(url_for('income.recurring'))
-            
+            recurring = IncomeService.save_income_source(request.form)
+            _save_folding(recurring.id)
+            flash('Income source added and forecasts generated.', 'success')
+            return redirect(url_for('income.source', id=recurring.id))
         except Exception as e:
-            _fail(e, 'Error adding recurring income.')
-    
-    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    categories = _income_categories()
-    return render_template('income/add_recurring.html', accounts=accounts, categories=categories, people=_get_income_people())
+            _fail(e, 'Error adding income source.')
+    return render_template('income/add_recurring.html', form=request.form, **_source_form_context())
+
+
+@income_bp.route('/income/recurring/<int:id>')
+def source(id):
+    """One income source: current terms, timeline, payslips."""
+    from models.income_change import IncomeChange
+    from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
+    from services.finance.income_projection_service import IncomeProjectionService
+
+    recurring = family_get_or_404(RecurringIncome, id)
+    snapshot = IncomeProjectionService.source_snapshot(recurring)
+    payslips = family_query(Income).filter(Income.recurring_income_id == recurring.id).order_by(Income.pay_date).all()
+    today = date.today()
+    return render_template(
+        'income/source.html', src=recurring, snap=snapshot,
+        history=[p for p in payslips if p.pay_date <= today][-12:][::-1],
+        upcoming=[p for p in payslips if p.pay_date > today],
+        change_types=IncomeChange.CHANGE_TYPE_LABELS,
+        fixed_figures=IncomeService.uses_fixed_figures(recurring),
+        fold_group=ExpenseReimbursementGroupService.get_folded_group_for_recurring_income(recurring.id),
+        today=today, **_labels(),
+    )
 
 
 @income_bp.route('/income/recurring/<int:id>/edit', methods=['GET', 'POST'])
 def edit_recurring(id):
-    """Edit a recurring income template"""
+    """Edit an income source; unsettled future forecasts are re-priced."""
+    from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
+
     recurring = family_get_or_404(RecurringIncome, id)
-    
     if request.method == 'POST':
         try:
-            recurring = IncomeService.update_recurring_income(id, request.form)
-            from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
-            ExpenseReimbursementGroupService.set_folding_for_recurring_income(
-                recurring.id, request.form.get('fold_expenses') == 'on'
-            )
-            flash('Recurring income updated successfully!', 'success')
-            return redirect(url_for('income.recurring'))
-            
+            IncomeService.save_income_source(request.form, recurring_id=id)
+            _save_folding(id)
+            flash('Income source saved — future forecasts updated.', 'success')
+            return redirect(url_for('income.source', id=id))
         except Exception as e:
-            _fail(e, 'Error updating recurring income.')
+            _fail(e, 'Error saving income source.')
             recurring = family_get_or_404(RecurringIncome, id)
-    
-    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    categories = _income_categories()
-    from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
     fold_group = ExpenseReimbursementGroupService.get_folded_group_for_recurring_income(recurring.id)
-    return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories, people=_get_income_people(), fold_group=fold_group)
+    return render_template('income/edit_recurring.html', fold_group=fold_group,
+                           form=request.form if request.method == 'POST' else None,
+                           **_source_form_context(recurring))
+
+
+@income_bp.route('/income/recurring/<int:id>/changes', methods=['POST'])
+def add_change(id):
+    """Add a pay rise / bonus / tax code / pension change to the timeline."""
+    family_get_or_404(RecurringIncome, id)
+    try:
+        change = IncomeService.add_income_change(id, request.form)
+        flash(f'{change.label} from {change.effective_date.strftime("%d %b %Y")} added — forecasts updated.', 'success')
+    except Exception as e:
+        _fail(e, 'Error adding change.')
+    return redirect(url_for('income.source', id=id))
+
+
+@income_bp.route('/income/changes/<int:change_id>/delete', methods=['POST'])
+def delete_change(change_id):
+    try:
+        recurring_id = IncomeService.delete_income_change(change_id)
+        flash('Change removed — forecasts updated.', 'success')
+        return redirect(url_for('income.source', id=recurring_id))
+    except Exception as e:
+        _fail(e, 'Error removing change.')
+    return redirect(url_for('income.recurring'))
 
 
 @income_bp.route('/income/recurring/<int:id>/delete', methods=['POST'])
 def delete_recurring(id):
-    """Delete a recurring income template"""
+    """Delete an income source; history is kept, forecasts removed."""
     try:
         IncomeService.delete_recurring_income(id)
-        flash('Recurring income deleted successfully!', 'success')
+        flash('Income source deleted. Paid history was kept; forecasts were removed.', 'success')
     except Exception as e:
-        _fail(e, 'Error deleting recurring income.')
-    
+        _fail(e, 'Error deleting income source.')
     return redirect(url_for('income.recurring'))
+
+
+@income_bp.route('/income/refresh-forecasts', methods=['POST'])
+def refresh_all():
+    """Re-price every source's unsettled forecasts and fill the forecast horizon."""
+    try:
+        result = IncomeService.refresh_all_forecasts()
+        message = (f"Forecasts refreshed: {result['updated']} updated, {result['added']} added, "
+                   f"{result['removed']} removed.")
+        if result['failed']:
+            message += f" {result['failed']} source(s) could not be refreshed — open them to check their settings."
+        flash(message, 'warning' if result['failed'] else 'success')
+    except Exception as e:
+        _fail(e, 'Error refreshing forecasts.')
+    return redirect(request.form.get('next') == 'sources' and url_for('income.recurring') or url_for('income.index'))
+
+
+@income_bp.route('/income/plan')
+def plan():
+    """Long-range income plan per tax year, up to retirement."""
+    from services.finance.income_projection_service import IncomeProjectionService
+
+    try:
+        result = IncomeProjectionService.build_plan(
+            until_year=request.args.get('until') or None, person=request.args.get('person') or None)
+    except ValueError as e:
+        flash(str(e), 'danger')
+        result = IncomeProjectionService.build_plan()
+    people = [p[0] for p in family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()]
+    return render_template('income/plan.html', plan=result, people=people,
+                           current_person=request.args.get('person') or None, **_labels())
 
 
 @income_bp.route('/income/generate-missing', methods=['POST'])
 def generate_missing():
-    """Generate all missing income records from recurring templates (13-month window)."""
+    """Generate any missing forecast records up to the forecast horizon."""
     try:
-        end = date.today().replace(day=1) + relativedelta(months=13)
-        generated = IncomeService.generate_all_missing_income(end_date=end)
+        generated = IncomeService.generate_all_missing_income()
         if generated:
-            flash(f'Generated {len(generated)} income record(s).', 'success')
+            flash(f'Checked {len(generated)} income record(s) up to the forecast horizon.', 'success')
         else:
             flash('All income records are up to date.', 'info')
     except Exception as e:
         _fail(e, 'Error generating income.')
-    return redirect(url_for('income.index'))
-
-
-@income_bp.route('/income/generate-full-range', methods=['POST'])
-def generate_full_range():
-    """Generate the complete retirement-horizon range for all active templates (no end_date cap)."""
-    try:
-        generated = IncomeService.generate_all_missing_income()  # uses template end_date or 20-year default
-        if generated:
-            flash(f'Full range generated: {len(generated)} income record(s) added.', 'success')
-        else:
-            flash('All income records are already up to date across the full range.', 'info')
-    except Exception as e:
-        _fail(e, 'Error generating full range.')
     return redirect(url_for('income.index'))
 
 
@@ -350,15 +435,14 @@ def trim_forecasts():
     """Delete surplus far-future forecast records and reset last_generated_date."""
     try:
         try:
-            months = int(request.form.get('months_ahead', 13))
+            months = int(request.form.get('months_ahead', 24))
         except (TypeError, ValueError):
             raise ValueError('Months ahead must be a whole number.')
         result = IncomeService.trim_future_forecasts(months_ahead=months)
         if result['deleted']:
             flash(
                 f"Trimmed {result['deleted']} future forecast record(s) "
-                f"(+{result['transactions']} transaction(s)) beyond {months} months. "
-                f"Templates reset — auto-generate will fill forward from the next page load.",
+                f"(+{result['transactions']} transaction(s)) beyond {months} months.",
                 'success'
             )
         else:
@@ -373,59 +457,44 @@ def trim_forecasts():
 def regenerate_range(id):
     """Regenerate income records for a date range"""
     recurring = family_get_or_404(RecurringIncome, id)
-    
     try:
         start_date = _parse_form_date('start_date', 'Start date')
         end_date = _parse_form_date('end_date', 'End date')
-        force = request.form.get('force') == 'on'
-        
         result = IncomeService.regenerate_income_range(
-            recurring.id,
-            start_date,
-            end_date,
-            force=force
+            recurring.id, start_date, end_date, force=request.form.get('force') == 'on',
         )
-        
-        # Build result message
         messages = []
         if result['deleted'] > 0:
-            messages.append(f"Deleted {result['deleted']} record(s)")
+            messages.append(f"deleted {result['deleted']} record(s)")
         if result['regenerated'] > 0:
             messages.append(f"regenerated {result['regenerated']} record(s)")
         if result['skipped'] > 0:
-            messages.append(f"skipped {result['skipped']} record(s) with transactions")
-        
+            messages.append(f"skipped {result['skipped']} paid / actual record(s)")
         if messages:
-            flash(f"Successfully {', '.join(messages)}!", 'success')
+            flash(f"Done: {', '.join(messages)}.", 'success')
         else:
             flash('No records were affected.', 'info')
-            
     except Exception as e:
         _fail(e, 'Error regenerating income.')
-    
-    return redirect(url_for('income.edit_recurring', id=id))
+    return redirect(url_for('income.source', id=id))
 
 
 @income_bp.route('/income/recurring/<int:id>/end-job', methods=['POST'])
 def end_job(id):
-    """End a recurring income job: close the template and delete future unpaid records."""
+    """Leave a job / retire: close the source and delete future unpaid records."""
     recurring = family_get_or_404(RecurringIncome, id)
-
     try:
         last_pay_date = _parse_form_date('last_pay_date', 'Last pay date')
         result = IncomeService.end_job(recurring.id, last_pay_date)
-
-        msg = f"Job ended on {last_pay_date.strftime('%d/%m/%Y')}. "
+        msg = f"Income ended on {last_pay_date.strftime('%d/%m/%Y')}. "
         if result['deleted']:
-            msg += f"Deleted {result['deleted']} future unpaid income record(s) and their transactions. "
+            msg += f"Removed {result['deleted']} future forecast(s) and their transactions. "
         if result['kept_paid']:
-            msg += f"{result['kept_paid']} already-paid record(s) were kept."
+            msg += f"{result['kept_paid']} paid record(s) were kept."
         flash(msg.strip(), 'success')
-
     except Exception as e:
-        _fail(e, 'Error ending job.')
-
-    return redirect(url_for('income.recurring'))
+        _fail(e, 'Error ending income.')
+    return redirect(url_for('income.source', id=id))
 
 
 @income_bp.route('/income/reperiod-transactions', methods=['POST'])

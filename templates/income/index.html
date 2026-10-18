@@ -9,70 +9,59 @@
     <div class="row mb-3 align-items-center">
         <div class="col">
             <h1 class="mb-0"><i class="bi bi-cash-coin me-2"></i>Income</h1>
-        </div>
-        <div class="col-auto">
-            <button type="button"
-                    class="btn btn-link p-0 text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="focus"
-                    data-bs-placement="bottom"
-                    data-bs-html="true"
-                    data-bs-title="<i class='bi bi-info-circle'></i> Income &amp; Expenses"
-                    data-bs-content="Turn on <strong>'Add work expense reimbursements to this payslip'</strong> when editing a recurring income (<i class='bi bi-gear'></i> Manage Templates) to fold a job's expenses into its take-home pay. Click the '+ £X expenses' badge below any payslip to see exactly which expenses were folded in."
-                    title="How income &amp; expenses link up">
-                <i class="bi bi-info-circle fs-5"></i>
-            </button>
+            <div class="text-muted small">Every payslip — paid, actual and forecast. Forecasts run two years ahead; the <a href="{{ url_for('income.plan') }}">plan</a> goes further.</div>
         </div>
         <div class="col-auto d-flex gap-2 flex-wrap">
             <button id="deleteSelectedBtn" class="btn btn-danger" style="display:none">
                 <i class="bi bi-trash"></i> Delete Selected
             </button>
-            <form method="post" action="{{ url_for('income.generate_full_range') }}" class="d-inline">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <button type="submit" class="btn btn-outline-success"
-                        title="Generate all records to retirement horizon (20 years / template end date)">
-                    <i class="bi bi-calendar-range"></i> Generate Full Range
-                </button>
-            </form>
-            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#trimForecastsModal"
-                    title="Remove far-future forecast records to keep the page clean">
-                <i class="bi bi-scissors"></i> Trim Forecasts
-            </button>
-            <a href="{{ url_for('income.recurring') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-gear"></i> Manage Templates
+            <a href="{{ url_for('income.recurring') }}" class="btn btn-outline-primary">
+                <i class="bi bi-briefcase"></i> Sources
             </a>
-            <a href="{{ url_for('income.add') }}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Add One-Off Income
+            <a href="{{ url_for('income.plan') }}" class="btn btn-outline-primary">
+                <i class="bi bi-graph-up"></i> Plan
+            </a>
+            <a href="{{ url_for('income.add') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-plus-circle"></i> One-off
+            </a>
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-tools"></i> Tools
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <form method="post" action="{{ url_for('income.refresh_all') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="dropdown-item" title="Re-price unsettled future payslips with current settings and tax rates">
+                                <i class="bi bi-arrow-repeat"></i> Refresh forecasts
+                            </button>
+                        </form>
+                    </li>
+                    <li>
+                        <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#trimForecastsModal">
+                            <i class="bi bi-scissors"></i> Trim far-future forecasts
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Add source
             </a>
         </div>
     </div>
 
-    {# ─── Active Templates Banner ──────────────────────────────────────────── #}
+    {# ─── Active Sources ───────────────────────────────────────────────────── #}
     {% if recurring_templates %}
-    <div class="card mb-3 border-0 bg-light">
-        <div class="card-body py-2">
-            <div class="d-flex flex-wrap gap-3 align-items-center">
-                <span class="text-muted small fw-semibold">
-                    <i class="bi bi-arrow-repeat me-1"></i>ACTIVE TEMPLATES
-                </span>
-                {% for tpl in recurring_templates %}
-                <div class="d-flex align-items-center gap-2 bg-white rounded px-3 py-1 shadow-sm border">
-                    <span class="badge bg-secondary">{{ tpl.person }}</span>
-                    <span class="fw-semibold">{{ tpl.source or 'Income' }}</span>
-                    <span class="text-muted small">£{{ "{:,.0f}".format(tpl.gross_annual_income) }}/yr</span>
-                    <span class="text-muted small">&middot;
-                        {% if tpl.pay_day == 0 %}last day{% else %}{{ tpl.pay_day }}{{ 'st' if tpl.pay_day in [1,21,31] else ('nd' if tpl.pay_day in [2,22] else ('rd' if tpl.pay_day in [3,23] else 'th')) }}{% endif %}
-                    </span>
-                    {% if tpl.use_manual_deductions %}
-                    <span class="badge bg-warning text-dark small">Manual</span>
-                    {% endif %}
-                    <a href="{{ url_for('income.edit_recurring', id=tpl.id) }}" class="text-muted small">
-                        <i class="bi bi-pencil"></i>
-                    </a>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        {% for tpl in recurring_templates %}
+        <a href="{{ url_for('income.source', id=tpl.id) }}" class="d-flex align-items-center gap-2 bg-body-tertiary rounded px-3 py-1 border text-decoration-none text-body small">
+            <span class="badge bg-secondary">{{ tpl.person }}</span>
+            <span class="fw-semibold">{{ tpl.source or 'Income' }}</span>
+            <span class="text-muted">£{{ "{:,.0f}".format(tpl.gross_annual_income or 0) }}/yr</span>
+            {% if tpl.use_manual_deductions %}<span class="badge bg-warning text-dark">Fixed</span>{% endif %}
+            {% if tpl.id in folded_recurring_income_ids %}<i class="bi bi-arrow-left-right text-muted" title="Expense claims are paid with this income"></i>{% endif %}
+        </a>
+        {% endfor %}
     </div>
     {% endif %}
 
@@ -304,6 +293,7 @@
                                                 data-ee-pension="{{ income.employee_pension_amount or 0 }}"
                                                 data-avc="{{ income.avc or 0 }}"
                                                 data-other="{{ income.other_deductions or 0 }}"
+                                                data-student-loan="{{ income.student_loan or 0 }}"
                                                 data-take-home="{{ income.take_home }}"
                                                 data-url="{{ url_for('income.enter_actual', id=income.id) }}">
                                             <i class="bi bi-pencil-square"></i>
@@ -363,9 +353,9 @@
             <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
             <p class="text-muted">No income records yet.
                 {% if recurring_templates %}
-                    Income will be generated automatically from your active templates.
+                    Payslips will be forecast automatically from your income sources.
                 {% else %}
-                    <a href="{{ url_for('income.add_recurring') }}">Add a recurring template</a> to get started.
+                    <a href="{{ url_for('income.add_recurring') }}">Add an income source</a> to get started.
                 {% endif %}
             </p>
         </div>
@@ -384,17 +374,9 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p>This removes <strong>unpaid, unedited</strong> forecast records beyond a chosen horizon and resets each template so the auto-generator fills forward from there.</p>
+                    <p>This removes <strong>unpaid, unedited</strong> forecast records more than 24 months ahead. Older versions created forecasts much further out; the plan now projects those years instead.</p>
                     <p class="text-muted small mb-3">Paid records and any records where you've entered actual payslip values are never touched.</p>
-                    <label class="form-label">Keep forecasts up to <strong>how many months</strong> ahead?</label>
-                    <select name="months_ahead" class="form-select">
-                        <option value="3">3 months</option>
-                        <option value="4">4 months</option>
-                        <option value="6">6 months</option>
-                        <option value="12">12 months</option>
-                        <option value="13" selected>13 months (recommended)</option>
-                        <option value="24">24 months</option>
-                    </select>
+                    <input type="hidden" name="months_ahead" value="24">
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -463,6 +445,13 @@
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text">£</span>
                                 <input type="number" name="other" id="actual_other" class="form-control" step="0.01" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Student Loan</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">£</span>
+                                <input type="number" name="student_loan" id="actual_student_loan" class="form-control" step="0.01" min="0" value="0">
                             </div>
                         </div>
                         <div class="col-12">
@@ -563,6 +552,7 @@ document.querySelectorAll('.enter-actual-btn').forEach(btn => {
         document.getElementById('actual_emp_pension').value = parseFloat(d.empPension).toFixed(2);
         document.getElementById('actual_avc').value         = parseFloat(d.avc).toFixed(2);
         document.getElementById('actual_other').value       = parseFloat(d.other).toFixed(2);
+        document.getElementById('actual_student_loan').value = parseFloat(d.studentLoan || 0).toFixed(2);
         document.getElementById('actual_take_home').value   = parseFloat(d.takeHome).toFixed(2);
         enterActualForm.action = d.url;
         enterActualModal.show();

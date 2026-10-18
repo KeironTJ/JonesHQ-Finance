@@ -13,6 +13,7 @@ from models.family import Family, FamilyInvite, HouseholdInvite
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.fuel import FuelRecord
 from models.income import Income
+from models.income_change import IncomeChange
 from models.recurring_income import RecurringIncome
 from models.loans import Loan
 from models.loan_payments import LoanPayment
@@ -53,6 +54,7 @@ __all__ = [
     'FamilyInvite',
     'FuelRecord',
     'Income',
+    'IncomeChange',
     'RecurringIncome',
     'Loan',
     'LoanPayment',

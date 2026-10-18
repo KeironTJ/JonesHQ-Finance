@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from models import (
     Account, Balance, CreditCard, CreditCardPromotion, CreditCardTransaction,
-    Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, Loan,
+    Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, IncomeChange, Loan,
     LoanPayment, LoanTermChange, MonthlyAccountBalance, Pension, PensionSnapshot,
     Plan, PlanItem, RecurringIncome, Subscription, Transaction, Trip, User,
     UserRecoveryCode, UserSession, Vehicle,
@@ -28,6 +28,7 @@ DOMAIN_CHILDREN = (
     (Subscription, CreditCard, 'credit_card_id'),
     (LoanPayment, Loan, 'loan_id'),
     (LoanTermChange, Loan, 'loan_id'),
+    (IncomeChange, RecurringIncome, 'recurring_income_id'),
     (PensionSnapshot, Pension, 'pension_id'),
     (PlanItem, Plan, 'plan_id'),
     (FuelRecord, Vehicle, 'vehicle_id'),
@@ -36,7 +37,7 @@ DOMAIN_CHILDREN = (
 )
 DELETE_ORDER = (
     ExpenseCalendarEntry, PlanItem, Trip, FuelRecord, LoanTermChange, LoanPayment,
-    PensionSnapshot, CreditCardPromotion, Expense, Income, CreditCardTransaction, Balance,
+    PensionSnapshot, CreditCardPromotion, Expense, Income, IncomeChange, CreditCardTransaction, Balance,
     MonthlyAccountBalance, Transaction, Subscription,
     RecurringIncome, Plan, Vehicle, Pension, Loan, CreditCard, Account,
     FamilyInvite, UserSession, UserRecoveryCode, User,

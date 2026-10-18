@@ -11,9 +11,13 @@ class Income(db.Model):
     pay_date = db.Column(db.Date, nullable=False)
     tax_year = db.Column(db.String(9))  # 2022-2023
     
-    # Income details
+    # Income details. gross_monthly_income holds the gross for *this pay date*
+    # (base pay for the period plus any bonus) whatever the pay frequency.
     gross_annual_income = db.Column(db.Numeric(10, 2), nullable=False)
     gross_monthly_income = db.Column(db.Numeric(10, 2), nullable=False)
+    pay_frequency = db.Column(db.String(20), nullable=True)  # NULL = monthly (legacy rows)
+    bonus = db.Column(db.Numeric(10, 2), nullable=True)
+    student_loan = db.Column(db.Numeric(10, 2), nullable=True)
     
     # Pension contributions
     employer_pension_percent = db.Column(db.Numeric(5, 2))

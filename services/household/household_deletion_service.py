@@ -14,7 +14,7 @@ from utils.db_helpers import get_current_user_id
 HOUSEHOLD_TABLES = (
     'expense_calendar_entries', 'plan_items', 'trips', 'fuel_records',
     'loan_term_changes', 'loan_payments', 'pension_snapshots',
-    'credit_card_promotions', 'expenses', 'income', 'credit_card_transactions',
+    'credit_card_promotions', 'expenses', 'income', 'income_changes', 'credit_card_transactions',
     'balances', 'monthly_account_balances', 'daily_childcare_activities',
     'monthly_childcare_summaries', 'child_activity_types', 'children',
     'mortgage_snapshots', 'mortgage_products', 'mortgage_payments',

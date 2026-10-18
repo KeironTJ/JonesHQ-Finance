@@ -10,7 +10,7 @@ from sqlalchemy.exc import OperationalError
 from extensions import db, limiter
 from models import (
     Account, Balance, Category, CreditCard, CreditCardPromotion, CreditCardTransaction,
-    Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, Loan,
+    Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, IncomeChange, Loan,
     LoanPayment, LoanTermChange, MonthlyAccountBalance, Pension, PensionSnapshot,
     Plan, PlanItem, RecurringIncome, SecurityEvent, Subscription, Transaction, Trip,
     User, UserRecoveryCode, UserSession, Vehicle,
@@ -85,6 +85,8 @@ def make_domains(owner, family_id, prefix):
         (LoanPayment, dict(loan_id=loan.id, date=TODAY, period=1, opening_balance=100,
                           payment_amount=10, amount_paid_off=10, closing_balance=90)),
         (LoanTermChange, dict(loan_id=loan.id, effective_date=TODAY)),
+        (IncomeChange, dict(recurring_income_id=recurring.id, effective_date=TODAY,
+                            change_type='percent_rise', percent=3)),
         (PensionSnapshot, dict(pension_id=pension.id, review_date=TODAY, value=100)),
         (Trip, dict(vehicle_id=vehicle.id, date=TODAY, total_miles=10, fuel_log_entry_id=fuel.id)),
         (PlanItem, dict(plan_id=plan.id, title=prefix, transaction_id=transaction.id)),

@@ -49,10 +49,31 @@ class RecurringIncome(db.Model):
     source = db.Column(db.String(100))  # Employer name
     description = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, default=True)
+
+    # Income source settings (see services/finance/payroll_calculator.py for options)
+    income_type = db.Column(db.String(30), nullable=False, default='employment', server_default='employment')
+    pay_frequency = db.Column(db.String(20), nullable=False, default='monthly', server_default='monthly')
+    # Anchor for weekly / fortnightly / four-weekly / annual schedules (monthly uses pay_day).
+    first_pay_date = db.Column(db.Date, nullable=True)
+    pension_scheme = db.Column(db.String(20), nullable=False, default='salary_sacrifice', server_default='salary_sacrifice')
+    student_loan_plans = db.Column(db.String(60), nullable=True)  # CSV of plan keys
+    set_aside_percent = db.Column(db.Numeric(5, 2), nullable=True)  # rental / self-employed
+    # Automatic yearly rise: annual_increase_percent applied every year from
+    # annual_increase_start (inclusive) on the same day and month.
+    annual_increase_percent = db.Column(db.Numeric(6, 3), nullable=True)
+    annual_increase_start = db.Column(db.Date, nullable=True)
+    # Pension pot that receives this job's contributions (retirement planning).
+    pension_id = db.Column(db.Integer, db.ForeignKey('pensions.id', ondelete='SET NULL'), nullable=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     owner = db.relationship('User', foreign_keys=[owner_id])
+    pension = db.relationship('Pension', foreign_keys=[pension_id])
+
+    @property
+    def student_loan_plan_list(self):
+        return [p for p in (self.student_loan_plans or '').split(',') if p]
 
     @property
     def is_private(self):

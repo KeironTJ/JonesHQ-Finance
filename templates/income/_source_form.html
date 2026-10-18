@@ -1,0 +1,325 @@
+{# Shared add/edit income source form. Context: src (or None), form (posted values or None),
+   accounts, categories, people, pensions, income_types, frequencies, pension_schemes,
+   student_loan_labels, type_rules, fold_group (edit only). #}
+{% set posted = form if form else {} %}
+{% macro val(name, current) -%}
+{%- if form and name in form -%}{{ form.get(name) }}{%- elif current is not none -%}{{ current }}{%- endif -%}
+{%- endmacro %}
+{% macro dval(name, current) -%}
+{%- if form and name in form -%}{{ form.get(name) }}{%- elif current -%}{{ current.isoformat() }}{%- endif -%}
+{%- endmacro %}
+{% macro checked(name, current) -%}
+{%- if form -%}{% if form.get(name) == 'on' %}checked{% endif %}{%- elif current %}checked{%- endif -%}
+{%- endmacro %}
+{% set cur_type = posted.get('income_type') or (src.income_type if src else 'employment') %}
+{% set cur_freq = posted.get('pay_frequency') or (src.pay_frequency if src else 'monthly') %}
+{% set cur_plans = posted.getlist('student_loan_plans') if posted and posted.getlist is defined else (src.student_loan_plan_list if src else []) %}
+
+<form method="post" id="source-form" novalidate
+      data-preview-url="{{ url_for('income.calculate_preview') }}"
+      data-type-rules='{{ type_rules | tojson }}'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <div class="row g-4">
+        <div class="col-lg-8">
+
+            {# --- Who & what --- #}
+            <div class="card mb-3">
+                <div class="card-header fw-semibold"><i class="bi bi-person"></i> Who &amp; what</div>
+                <div class="card-body row g-3">
+                    <div class="col-md-4">
+                        <label for="person" class="form-label">Person</label>
+                        {% set cur_person = posted.get('person') or (src.person if src else '') %}
+                        <select class="form-select" id="person" name="person" required>
+                            {% for p in people %}
+                            <option value="{{ p }}" {% if p == cur_person or (not cur_person and loop.first) %}selected{% endif %}>{{ p }}</option>
+                            {% endfor %}
+                            {% if cur_person and cur_person not in people %}
+                            <option value="{{ cur_person }}" selected>{{ cur_person }}</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="source" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="source" name="source" maxlength="100"
+                               placeholder="e.g. Acme Ltd salary" value="{{ val('source', src.source if src else none) }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="income_type" class="form-label">Income type</label>
+                        <select class="form-select" id="income_type" name="income_type">
+                            {% for key, label in income_types.items() %}
+                            <option value="{{ key }}" {% if key == cur_type %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="category_id" class="form-label">Category</label>
+                        {% set cur_cat = (posted.get('category_id') or (src.category_id if src else '')) | string %}
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">— none —</option>
+                            {% for c in categories %}
+                            <option value="{{ c.id }}" {% if c.id|string == cur_cat %}selected{% endif %}>{{ c.head_budget }}{% if c.sub_budget %} › {{ c.sub_budget }}{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="deposit_account_id" class="form-label">Paid into</label>
+                        {% set cur_acc = (posted.get('deposit_account_id') or (src.deposit_account_id if src else '')) | string %}
+                        <select class="form-select" id="deposit_account_id" name="deposit_account_id">
+                            <option value="">— no account —</option>
+                            {% for a in accounts %}
+                            <option value="{{ a.id }}" {% if a.id|string == cur_acc %}selected{% endif %}>{{ a.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="visibility" class="form-label">Visibility</label>
+                        {% set cur_vis = posted.get('visibility') or ('private' if src and src.is_private else 'shared') %}
+                        <select class="form-select" id="visibility" name="visibility">
+                            <option value="shared" {% if cur_vis == 'shared' %}selected{% endif %}>Shared with family</option>
+                            <option value="private" {% if cur_vis == 'private' %}selected{% endif %}>Private (only me)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {# --- When --- #}
+            <div class="card mb-3">
+                <div class="card-header fw-semibold"><i class="bi bi-calendar3"></i> When it's paid</div>
+                <div class="card-body row g-3">
+                    <div class="col-md-4">
+                        <label for="pay_frequency" class="form-label">Paid</label>
+                        <select class="form-select" id="pay_frequency" name="pay_frequency">
+                            {% for key, label in frequencies.items() %}
+                            <option value="{{ key }}" {% if key == cur_freq %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4" data-show-freq="monthly">
+                        <label for="pay_day" class="form-label">Pay day</label>
+                        {% set cur_day = (posted.get('pay_day') or (src.pay_day if src else 25)) | string %}
+                        <select class="form-select" id="pay_day" name="pay_day">
+                            {% for d in range(1, 32) %}
+                            <option value="{{ d }}" {% if d|string == cur_day %}selected{% endif %}>{{ d }}</option>
+                            {% endfor %}
+                            <option value="0" {% if cur_day == '0' %}selected{% endif %}>Last day of the month</option>
+                        </select>
+                        <div class="form-text">Moved earlier when it falls on a weekend or bank holiday.</div>
+                    </div>
+                    <div class="col-md-4" data-show-freq="weekly fortnightly four_weekly annual">
+                        <label for="first_pay_date" class="form-label">First pay date</label>
+                        <input type="date" class="form-control" id="first_pay_date" name="first_pay_date"
+                               value="{{ dval('first_pay_date', src.first_pay_date if src else none) }}">
+                        <div class="form-text">Later dates repeat from here. Defaults to the start date.</div>
+                    </div>
+                    <div class="col-md-4"></div>
+                    <div class="col-md-4">
+                        <label for="start_date" class="form-label">Starts</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" required
+                               value="{{ dval('start_date', src.start_date if src else none) }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="end_date" class="form-label">Ends <span class="text-muted small">(optional)</span></label>
+                        <input type="date" class="form-control" id="end_date" name="end_date"
+                               value="{{ dval('end_date', src.end_date if src else none) }}">
+                        <div class="form-text">Leaving date or retirement. Blank = ongoing.</div>
+                    </div>
+                </div>
+            </div>
+
+            {# --- Pay --- #}
+            <div class="card mb-3">
+                <div class="card-header fw-semibold"><i class="bi bi-cash-coin"></i> Pay &amp; deductions</div>
+                <div class="card-body row g-3">
+                    <div class="col-md-4">
+                        <label for="gross_annual" class="form-label" id="gross_label">Annual gross</label>
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" step="0.01" min="0" class="form-control" id="gross_annual" name="gross_annual" required
+                                   value="{{ val('gross_annual', src.gross_annual_income if src else none) }}">
+                        </div>
+                        {% if src and src.changes %}<div class="form-text">Starting figure — later changes are on the timeline.</div>{% endif %}
+                    </div>
+                    <div class="col-md-4" data-show-rule="paye">
+                        <label for="tax_code" class="form-label">Tax code</label>
+                        <input type="text" class="form-control text-uppercase" id="tax_code" name="tax_code" maxlength="10"
+                               value="{{ val('tax_code', src.tax_code if src else '1257L') }}">
+                        <div class="form-text">Prefix S for Scottish rates, C for Welsh.</div>
+                    </div>
+                    <div class="col-md-4" data-show-rule="set_aside">
+                        <label for="set_aside_percent" class="form-label">Put aside for tax</label>
+                        <div class="input-group">
+                            <input type="number" step="0.01" min="0" max="100" class="form-control" id="set_aside_percent" name="set_aside_percent"
+                                   value="{{ val('set_aside_percent', src.set_aside_percent if src else none) }}">
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <div class="form-text">Flat % shown as tax. Self-employed: leave blank to estimate tax and Class 4 NI.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="other" class="form-label">Other deductions</label>
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" step="0.01" min="0" class="form-control" id="other" name="other"
+                                   value="{{ val('other', src.other_deductions if src else none) }}">
+                        </div>
+                        <div class="form-text">Per payment (e.g. union, cycle scheme).</div>
+                    </div>
+
+                    <div class="col-12" data-show-rule="student_loan">
+                        <label class="form-label d-block">Student loan</label>
+                        {% for key, label in student_loan_labels.items() %}
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="student_loan_plans" value="{{ key }}" id="sl_{{ key }}"
+                                   {% if key in cur_plans %}checked{% endif %}>
+                            <label class="form-check-label" for="sl_{{ key }}">{{ label }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            {# --- Pension --- #}
+            <div class="card mb-3" data-show-rule="workplace_pension">
+                <div class="card-header fw-semibold"><i class="bi bi-piggy-bank"></i> Workplace pension</div>
+                <div class="card-body row g-3">
+                    <div class="col-md-4">
+                        <label for="pension_scheme" class="form-label">Scheme</label>
+                        {% set cur_scheme = posted.get('pension_scheme') or (src.pension_scheme if src else 'salary_sacrifice') %}
+                        <select class="form-select" id="pension_scheme" name="pension_scheme">
+                            {% for key, label in pension_schemes.items() %}
+                            <option value="{{ key }}" {% if key == cur_scheme %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="employee_pension_pct" class="form-label">You pay</label>
+                        <div class="input-group">
+                            <input type="number" step="0.01" min="0" max="100" class="form-control" id="employee_pension_pct" name="employee_pension_pct"
+                                   value="{{ val('employee_pension_pct', src.employee_pension_percent if src else none) }}">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="employer_pension_pct" class="form-label">Employer pays</label>
+                        <div class="input-group">
+                            <input type="number" step="0.01" min="0" max="100" class="form-control" id="employer_pension_pct" name="employer_pension_pct"
+                                   value="{{ val('employer_pension_pct', src.employer_pension_percent if src else none) }}">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="avc" class="form-label">Extra (AVC)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" step="0.01" min="0" class="form-control" id="avc" name="avc"
+                                   value="{{ val('avc', src.avc if src else none) }}">
+                        </div>
+                        <div class="form-text">Per payment, from net pay.</div>
+                    </div>
+                    <div class="col-md-8">
+                        <label for="pension_id" class="form-label">Contributions go to</label>
+                        {% set cur_pension = (posted.get('pension_id') or (src.pension_id if src else '')) | string %}
+                        <select class="form-select" id="pension_id" name="pension_id">
+                            <option value="">— not linked —</option>
+                            {% for p in pensions %}
+                            <option value="{{ p.id }}" {% if p.id|string == cur_pension %}selected{% endif %}>{{ p.person }} — {{ p.provider }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Used by the plan to show yearly contributions per pot.</div>
+                    </div>
+                </div>
+            </div>
+
+            {# --- Growth --- #}
+            <div class="card mb-3">
+                <div class="card-header fw-semibold"><i class="bi bi-graph-up-arrow"></i> Yearly pay rise <span class="text-muted small fw-normal">(optional)</span></div>
+                <div class="card-body row g-3">
+                    <div class="col-md-4">
+                        <label for="annual_increase_percent" class="form-label">Rise each year</label>
+                        <div class="input-group">
+                            <input type="number" step="0.01" min="0" max="50" class="form-control" id="annual_increase_percent" name="annual_increase_percent"
+                                   value="{{ val('annual_increase_percent', src.annual_increase_percent if src else none) }}">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="annual_increase_start" class="form-label">Next rise on</label>
+                        <input type="date" class="form-control" id="annual_increase_start" name="annual_increase_start"
+                               value="{{ dval('annual_increase_start', src.annual_increase_start if src else none) }}">
+                    </div>
+                    <div class="col-md-4 small text-muted align-self-center">
+                        Repeats every year on this date. Add one-off rises, bonuses or tax-code changes on the source's timeline.
+                    </div>
+                </div>
+            </div>
+
+            {% if src and src.use_manual_deductions %}
+            <div class="card mb-3 border-warning">
+                <div class="card-header fw-semibold text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> Fixed monthly figures (legacy)</div>
+                <div class="card-body row g-3">
+                    <div class="col-12 small">
+                        This source uses fixed payslip figures, so pay rises and timeline changes are ignored.
+                        Untick to let the calculator work them out.
+                    </div>
+                    <div class="col-12 form-check ms-2">
+                        <input class="form-check-input" type="checkbox" id="use_manual_deductions" name="use_manual_deductions" {{ checked('use_manual_deductions', src.use_manual_deductions) }}>
+                        <label class="form-check-label" for="use_manual_deductions">Use fixed figures</label>
+                    </div>
+                    {% for field, label, current in [
+                        ('manual_tax_monthly', 'Tax', src.manual_tax_monthly),
+                        ('manual_ni_monthly', 'NI', src.manual_ni_monthly),
+                        ('manual_employee_pension', 'Your pension', src.manual_employee_pension),
+                        ('manual_employer_pension', 'Employer pension', src.manual_employer_pension),
+                        ('manual_take_home', 'Take home', src.manual_take_home)] %}
+                    <div class="col-md">
+                        <label for="{{ field }}" class="form-label small">{{ label }}</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="{{ field }}" name="{{ field }}" value="{{ val(field, current) }}">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# --- Options --- #}
+            <div class="card mb-3">
+                <div class="card-header fw-semibold"><i class="bi bi-gear"></i> Options</div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="auto_create_transaction" name="auto_create_transaction"
+                               {% if posted %}{{ checked('auto_create_transaction', false) }}{% elif not src or src.auto_create_transaction %}checked{% endif %}>
+                        <label class="form-check-label" for="auto_create_transaction">Add each payment to the account as a transaction</label>
+                    </div>
+                    {% if src %}
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" {{ checked('is_active', src.is_active) }}>
+                        <label class="form-check-label" for="is_active">Active — untick to pause and remove its future forecasts</label>
+                    </div>
+                    {% endif %}
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="fold_expenses" name="fold_expenses"
+                               {% if posted %}{{ checked('fold_expenses', false) }}{% elif fold_group %}checked{% endif %}>
+                        <label class="form-check-label" for="fold_expenses">Expense claims are paid with this income</label>
+                        <div class="form-text">Reimbursed expenses from the <a href="{{ url_for('expenses.index') }}">Expenses</a> page are added to the payslip's deposit.</div>
+                    </div>
+                    <label for="description" class="form-label mt-2">Notes</label>
+                    <textarea class="form-control" id="description" name="description" rows="2" maxlength="255">{{ val('description', src.description if src else none) }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        {# --- Live preview --- #}
+        <div class="col-lg-4">
+            <div class="card sticky-top" style="top: 1rem;">
+                <div class="card-header fw-semibold"><i class="bi bi-receipt"></i> Estimated payslip</div>
+                <div class="card-body" id="preview">
+                    <p class="text-muted small mb-0">Enter the gross amount to see an estimate.</p>
+                </div>
+                <div class="card-footer small text-muted">Uses this tax year's rates. Forecasts use the rates for each pay date.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-2">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> {{ 'Save changes' if src else 'Add income source' }}</button>
+        <a href="{{ url_for('income.source', id=src.id) if src else url_for('income.recurring') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+</form>

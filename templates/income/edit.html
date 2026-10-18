@@ -89,11 +89,21 @@
                                     <span class="input-group-text">£</span>
                                     <input type="number" step="0.01" class="form-control" name="gross_annual"
                                            id="gross_annual" value="{{ income.gross_annual_income }}" required>
-                                    <span class="input-group-text text-muted small" id="gross_monthly_display">
-                                        £{{ "{:,.2f}".format(income.gross_monthly_income) }}/mo
+                                    <span class="input-group-text text-muted small" id="gross_monthly_display"
+                                          data-periods="{{ {'weekly': 52, 'fortnightly': 26, 'four_weekly': 13, 'annual': 1}.get(income.pay_frequency, 12) }}">
+                                        £{{ "{:,.2f}".format(income.gross_monthly_income) }} this payment
                                     </span>
                                 </div>
                             </div>
+                            <div class="col-6">
+                                <label class="form-label">Bonus this payment</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" step="0.01" min="0" class="form-control" name="bonus" id="bonus"
+                                           value="{{ income.bonus or '' }}">
+                                </div>
+                            </div>
+                            <div class="col-6"></div>
                             <div class="col-6">
                                 <label class="form-label">Tax Code</label>
                                 <input type="text" class="form-control" name="tax_code"
@@ -219,6 +229,14 @@
                                            value="{{ income.employer_pension_amount or 0 }}">
                                 </div>
                             </div>
+                            <div class="col-6">
+                                <label class="form-label">Student Loan</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">£</span>
+                                    <input type="number" step="0.01" min="0" class="form-control" name="student_loan"
+                                           value="{{ income.student_loan or 0 }}">
+                                </div>
+                            </div>
                             <div class="col-12">
                                 <label class="form-label fw-bold">Actual Take Home <span class="text-danger">*</span></label>
                                 <div class="input-group">
@@ -298,11 +316,15 @@ function setMode(mode) {
     }
 }
 
-// Update the monthly gross display as the user types
-document.getElementById('gross_annual').addEventListener('input', function () {
-    const monthly = parseFloat(this.value || 0) / 12;
-    document.getElementById('gross_monthly_display').textContent =
-        '\u00a3' + monthly.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '/mo';
-});
+// Update the per-payment gross display as the user types
+function updateGrossDisplay() {
+    const display = document.getElementById('gross_monthly_display');
+    const periods = parseInt(display.dataset.periods || '12', 10);
+    const amount = parseFloat(document.getElementById('gross_annual').value || 0) / periods
+        + parseFloat(document.getElementById('bonus').value || 0);
+    display.textContent = '\u00a3' + amount.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' this payment';
+}
+document.getElementById('gross_annual').addEventListener('input', updateGrossDisplay);
+document.getElementById('bonus').addEventListener('input', updateGrossDisplay);
 </script>
 {% endblock %}

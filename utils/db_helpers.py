@@ -74,7 +74,10 @@ def _inherited_visibility_models():
         from models.vehicles import Vehicle
         from models.balances import Balance
         from models.plans import Plan, PlanItem
+        from models.income_change import IncomeChange
+        from models.recurring_income import RecurringIncome
         _INHERITED_VISIBILITY_MODELS = {
+            IncomeChange: ('recurring_income_id', RecurringIncome),
             Transaction: ('account_id', Account),
             PensionSnapshot: ('pension_id', Pension),
             LoanPayment: ('loan_id', Loan),
