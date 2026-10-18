@@ -52,38 +52,35 @@ Monthly snapshots of pension values for tracking growth.
 - `value`: Pension value at this date
 - `growth_percent`: % growth since previous snapshot
 
-## Income Service (`services/income_service.py`)
+## Income Service (`services/finance/income_service.py`)
 
 ### Tax & NI Calculations
-Automatically calculates based on UK tax rules:
+All deduction maths lives in one pure module, `services/finance/payroll_calculator.py`
+(`calculate_monthly_payslip`). Template generation, record edits and the add-form
+preview all use it, so they can't disagree. Rates come from `TaxSettings` for the pay
+date's tax year (fallback: 2025-26 rUK rates).
 
-**Tax Rates (2023-2024):**
-- Personal Allowance: £12,570 (tax-free)
-- Basic Rate (20%): £12,571 - £50,270
-- Higher Rate (40%): £50,271 - £125,140
-- Additional Rate (45%): Over £125,140
-
-**National Insurance (Class 1 Employee):**
-- Threshold: £12,570
-- Basic Rate (12%): £12,571 - £50,270
-- Additional Rate (2%): Over £50,270
+- **Tax year** runs 6 April → 5 April (`tax_year_for()`).
+- **Tax codes:** `1257L` (and M/N/T suffixes), `0T`, `K475`, `BR`, `D0`, `D1`, `NT`,
+  `C` (Welsh) prefix and `W1/M1/X` emergency suffixes. `S` (Scottish) codes are accepted
+  but taxed with rUK bands and return a warning. Anything else is rejected.
+- **Bands** apply to taxable income after the allowance (basic band is a fixed
+  £37,700 width; additional rate above £125,140). The personal allowance tapers by
+  £1 per £2 over £100k, but only for codes carrying the full standard allowance.
+  K-code tax is capped at 50% of pay.
+- **Pension:** employee pension is deducted once. Default scheme is salary sacrifice
+  (reduces taxable and NI-able pay); the calculator also supports `net_pay` and
+  `relief_at_source`.
+- **Simplifications:** annualised (annual ÷ 12, no cumulative PAYE); AVCs and
+  "other" are post-tax deductions.
 
 ### Key Methods
 
+#### `estimate_payslip(gross_annual, tax_code, pay_date, ...)`
+Returns a `PayslipEstimate` (monthly gross, pension, tax, NI, take home, warnings).
+
 #### `calculate_tax_and_ni(gross_annual, tax_code, pension_amount)`
-Calculates tax and NI for given salary.
-
-**Example:**
-```python
-from services.finance.income_service import IncomeService
-
-result = IncomeService.calculate_tax_and_ni(
-    gross_annual=53000,
-    tax_code='1070L',
-    pension_amount=3300  # Annual pension contribution
-)
-# Returns: {'tax': 7815.00, 'ni': 4100.00, 'total_deductions': 15215.00, 'net_annual': 37785.00}
-```
+Back-compat annual helper; `pension_amount` is treated as salary-sacrifice.
 
 #### `create_income_record(...)`
 Creates income record with auto-calculated tax/NI and optional transaction.
@@ -120,6 +117,30 @@ Get aggregate statistics for income.
 summary = IncomeService.get_income_summary(person='Keiron', year=2024)
 # Returns totals, averages, list of all income records
 ```
+
+## Generation & Deletion Rules
+
+- Generated records are matched to their template by `recurring_income_id` + pay date,
+  so two jobs paid on the same day don't collide. Pay dates before the template's
+  start date or after its end date are skipped.
+- Generation never goes beyond 50 years from today; a template may span at most 60
+  years; delete/regenerate ranges are capped at 50 years.
+- A record is **settled** if it is paid, has an actual payslip entered, or its
+  transaction is paid. Deleting or regenerating a range removes unsettled forecasts
+  *and their forecast transactions*; settled records (including future months you
+  have overridden) are kept.
+- **Ending a job or deleting a template** is stricter: only money actually received
+  is kept (paid, paid transaction, or an actual payslip dated today or earlier).
+  Every future forecast goes. Kept history is detached from a deleted template, and
+  folded expense groups revert to "separate".
+- Older versions flagged template-generated forecasts as actuals and left a deleted
+  template's forecasts behind. Migration `c4f8a2d6e0b1` clears the wrong flag on
+  linked future forecasts. `flask maintenance purge-orphan-income-forecasts`
+  previews leftover detached forecasts (flagged, or a run of 3+ for the same
+  person/source); re-run with `--apply` to delete them. See `deployment/README.md`.
+- Only the person an income belongs to can make it private (or the household owner,
+  for income not tied to a member's name). Template visibility cascades to its
+  generated records.
 
 ## Integration Points
 

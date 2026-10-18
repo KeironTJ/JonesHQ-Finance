@@ -204,6 +204,7 @@
             employer_pension_pct: document.getElementById('employer_pension_pct').value || 0,
             employee_pension_pct: document.getElementById('employee_pension_pct').value || 0,
             tax_code: document.getElementById('tax_code').value,
+            pay_date: document.getElementById('pay_date') ? document.getElementById('pay_date').value : '',
             avc: document.getElementById('avc').value || 0,
             other: document.getElementById('other').value || 0
         };
@@ -274,6 +275,12 @@
                     </small>
                 `;
                 document.getElementById('previewContent').innerHTML = html;
+                (data.warnings || []).forEach(function (message) {
+                    const warning = document.createElement('div');
+                    warning.className = 'alert alert-warning py-1 px-2 mt-2 mb-0 small';
+                    warning.textContent = message;
+                    document.getElementById('previewContent').appendChild(warning);
+                });
             } else {
                 alert('Error: ' + data.error);
             }

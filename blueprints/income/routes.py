@@ -1,4 +1,5 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify
+from flask import current_app, render_template, request, redirect, url_for, flash, jsonify
+from sqlalchemy import func
 from . import income_bp
 from models.income import Income
 from models.recurring_income import RecurringIncome
@@ -9,8 +10,38 @@ from services.finance.income_service import IncomeService
 from extensions import db
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
-from decimal import Decimal
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id, get_current_user_id
+from utils.db_helpers import family_query, family_get_or_404
+
+
+GENERIC_ERROR = 'Something went wrong — please try again.'
+
+
+def _fail(error, fallback):
+    """Roll back and flash a user-facing message. Only ValueErrors (raised by the
+    service with a user-facing message) are shown verbatim; anything else is
+    logged and replaced with a generic message so internals aren't exposed."""
+    db.session.rollback()
+    if isinstance(error, ValueError):
+        flash(str(error) or fallback, 'danger')
+    else:
+        current_app.logger.exception(fallback)
+        flash(f'{fallback} {GENERIC_ERROR}', 'danger')
+
+
+def _income_categories():
+    return (
+        family_query(Category)
+        .filter(func.lower(Category.category_type) == 'income')
+        .order_by(Category.head_budget, Category.sub_budget)
+        .all()
+    )
+
+
+def _parse_form_date(field, label):
+    try:
+        return datetime.strptime(request.form[field], '%Y-%m-%d').date()
+    except (KeyError, ValueError):
+        raise ValueError(f'{label} must be a valid date (YYYY-MM-DD).')
 
 
 def _get_income_people():
@@ -44,7 +75,8 @@ def index():
         end = (date.today().replace(day=1) + relativedelta(months=13))
         IncomeService.generate_all_missing_income(end_date=end)
     except Exception:
-        pass
+        db.session.rollback()
+        current_app.logger.exception('Automatic income generation failed')
 
     # Get filter parameters
     person = request.args.get('person', None)
@@ -64,7 +96,7 @@ def index():
 
     # Get unique people and years for filters
     people = family_query(Income).with_entities(Income.person).distinct().order_by(Income.person).all()
-    people = [p[0] for p in people] if people else ['Keiron']
+    people = [p[0] for p in people] if people else _get_income_people()
 
     years = family_query(Income).with_entities(db.func.substr(Income.tax_year, 1, 4).label('year')).distinct().all()
     years = sorted([y[0] for y in years], reverse=True) if years else []
@@ -102,142 +134,33 @@ def index():
 
 @income_bp.route('/income/add', methods=['GET', 'POST'])
 def add():
-    """Add a new income record"""
+    """Add a new one-off income record"""
     if request.method == 'POST':
         try:
-            # Parse form data
-            person = request.form.get('person', 'Keiron')
-            pay_date = datetime.strptime(request.form['pay_date'], '%Y-%m-%d').date()
-            gross_annual = Decimal(request.form['gross_annual'])
-            employer_pension_pct = Decimal(request.form.get('employer_pension_pct', 0))
-            employee_pension_pct = Decimal(request.form.get('employee_pension_pct', 0))
-            tax_code = request.form['tax_code']
-            avc = Decimal(request.form.get('avc', 0))
-            other = Decimal(request.form.get('other', 0))
-            deposit_account_id = request.form.get('deposit_account_id')
-            source = request.form.get('source', '')
-            create_transaction = request.form.get('create_transaction') == 'on'
-            is_private = request.form.get('visibility') == 'private'
-            
-            # Convert empty account_id to None
-            if deposit_account_id:
-                deposit_account_id = int(deposit_account_id)
-                family_get_or_404(Account, deposit_account_id)
-            else:
-                deposit_account_id = None
-            
-            # Create income record
-            income = IncomeService.create_income_record(
-                person=person,
-                pay_date=pay_date,
-                gross_annual=gross_annual,
-                employer_pension_pct=employer_pension_pct,
-                employee_pension_pct=employee_pension_pct,
-                tax_code=tax_code,
-                avc=avc,
-                other=other,
-                deposit_account_id=deposit_account_id,
-                source=source,
-                create_transaction=create_transaction,
-                owner_id=get_current_user_id() if is_private else None
-            )
-            
-            flash(f'Income record added successfully! Take home: £{income.take_home:,.2f}', 'success')
+            income = IncomeService.create_one_off_income(request.form)
+            flash(f'Income record added successfully! Take home: ?{income.take_home:,.2f}', 'success')
             return redirect(url_for('income.index'))
-            
         except Exception as e:
-            flash(f'Error adding income: {str(e)}', 'danger')
+            _fail(e, 'Error adding income.')
             return redirect(url_for('income.add'))
-    
-    # GET request - show form
+
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     return render_template('income/add.html', accounts=accounts, people=_get_income_people())
 
 
 @income_bp.route('/income/<int:id>/edit', methods=['GET', 'POST'])
 def edit(id):
-    """Edit an income record — supports both calculated and manual-override modes."""
+    """Edit an income record ? supports both calculated and manual-override modes."""
     income = family_get_or_404(Income, id)
 
     if request.method == 'POST':
         try:
-            mode = request.form.get('edit_mode', 'calculated')
-
-            income.person     = request.form.get('person', income.person)
-            income.pay_date   = datetime.strptime(request.form['pay_date'], '%Y-%m-%d').date()
-            income.source     = request.form.get('source', '')
-            income.tax_code   = request.form.get('tax_code', income.tax_code)
-            income.avc        = Decimal(request.form.get('avc', 0) or 0)
-            income.other_deductions = Decimal(request.form.get('other', 0) or 0)
-            income.owner_id   = get_current_user_id() if request.form.get('visibility') == 'private' else None
-
-            deposit_account_id = request.form.get('deposit_account_id')
-            if deposit_account_id:
-                deposit_account_id = int(deposit_account_id)
-                family_get_or_404(Account, deposit_account_id)
-            income.deposit_account_id = deposit_account_id or None
-
-            income.gross_annual_income  = Decimal(request.form['gross_annual'])
-            income.gross_monthly_income = (income.gross_annual_income / 12).quantize(Decimal('0.01'))
-
-            if mode == 'manual':
-                # User is entering actual payslip figures directly
-                income.employer_pension_amount = Decimal(request.form.get('employer_pension_amount', 0) or 0)
-                income.employee_pension_amount = Decimal(request.form.get('employee_pension_amount', 0) or 0)
-                income.total_pension           = income.employer_pension_amount + income.employee_pension_amount
-                income.income_tax              = Decimal(request.form.get('income_tax', 0) or 0)
-                income.national_insurance      = Decimal(request.form.get('national_insurance', 0) or 0)
-                income.take_home               = Decimal(request.form['take_home'])
-                # Clear % fields — not meaningful for manual records
-                income.employer_pension_percent = Decimal('0')
-                income.employee_pension_percent = Decimal('0')
-                income.adjusted_monthly_income  = (income.gross_monthly_income - income.employee_pension_amount).quantize(Decimal('0.01'))
-                income.adjusted_annual_income   = (income.gross_annual_income  - income.employee_pension_amount * 12).quantize(Decimal('0.01'))
-                income.is_manual_override       = True
-                income.is_paid                  = True
-            else:
-                # Calculated mode — recalculate from percentages using correct pay_date
-                income.employer_pension_percent = Decimal(request.form.get('employer_pension_pct', 0) or 0)
-                income.employee_pension_percent = Decimal(request.form.get('employee_pension_pct', 0) or 0)
-                income.employer_pension_amount  = (income.gross_monthly_income * income.employer_pension_percent / 100).quantize(Decimal('0.01'))
-                income.employee_pension_amount  = (income.gross_monthly_income * income.employee_pension_percent / 100).quantize(Decimal('0.01'))
-                income.total_pension            = income.employer_pension_amount + income.employee_pension_amount
-                income.adjusted_monthly_income  = (income.gross_monthly_income - income.employee_pension_amount).quantize(Decimal('0.01'))
-                income.adjusted_annual_income   = (income.gross_annual_income  - income.employee_pension_amount * 12).quantize(Decimal('0.01'))
-
-                calcs = IncomeService.calculate_tax_and_ni(
-                    gross_annual=income.adjusted_annual_income,
-                    tax_code=income.tax_code,
-                    pension_amount=income.employee_pension_amount * 12,
-                    pay_date=income.pay_date,
-                )
-                income.income_tax         = (calcs['tax'] / 12).quantize(Decimal('0.01'))
-                income.national_insurance = (calcs['ni']  / 12).quantize(Decimal('0.01'))
-                income.take_home          = (
-                    income.gross_monthly_income
-                    - income.employee_pension_amount
-                    - income.income_tax
-                    - income.national_insurance
-                    - income.avc
-                    - income.other_deductions
-                ).quantize(Decimal('0.01'))
-                income.is_manual_override = False
-
-            income.estimated_annual_take_home = (income.take_home * 12).quantize(Decimal('0.01'))
-
-            # Re-stamp tax year in case pay_date changed
-            y = income.pay_date.year
-            income.tax_year = f"{y}-{y+1}" if income.pay_date.month >= 4 else f"{y-1}-{y}"
-
-            IncomeService.sync_income_to_transaction(income)
-            db.session.commit()
-
-            flash(f'Income record updated — take home: £{income.take_home:,.2f}', 'success')
+            income = IncomeService.update_income_record(id, request.form)
+            flash(f'Income record updated ? take home: ?{income.take_home:,.2f}', 'success')
             return redirect(url_for('income.index'))
-
         except Exception as e:
-            db.session.rollback()
-            flash(f'Error updating income: {str(e)}', 'danger')
+            _fail(e, 'Error updating income.')
+            income = family_get_or_404(Income, id)
 
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     return render_template('income/edit.html', income=income, accounts=accounts, people=_get_income_people())
@@ -247,14 +170,11 @@ def edit(id):
 def delete(id):
     """Delete an income record"""
     keep_transaction = request.form.get('keep_transaction') == '1'
-
     try:
         IncomeService.delete_income_record(id, keep_transaction=keep_transaction)
         flash('Income record deleted successfully!', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error deleting income: {str(e)}', 'danger')
-
+        _fail(e, 'Error deleting income.')
     return redirect(url_for('income.index'))
 
 
@@ -262,77 +182,39 @@ def delete(id):
 def delete_multiple():
     """Delete multiple income records"""
     income_ids = request.form.getlist('income_ids')
-    
     if not income_ids:
         flash('No income records selected.', 'warning')
         return redirect(url_for('income.index'))
-    
     try:
         deleted_count = IncomeService.delete_income_records(income_ids)
         flash(f'Successfully deleted {deleted_count} income record(s) and their linked transactions.', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error deleting income records: {str(e)}', 'danger')
-    
+        _fail(e, 'Error deleting income records.')
     return redirect(url_for('income.index'))
 
 
 @income_bp.route('/income/toggle/<int:id>/paid', methods=['POST'])
 def toggle_paid(id):
     """Toggle the is_paid flag for an income record"""
-    income = family_get_or_404(Income, id)
-    
+    family_get_or_404(Income, id)
     try:
-        # Toggle the paid status
-        income.is_paid = not income.is_paid
-        
-        # Sync with linked transaction if it exists
-        if income.transaction_id:
-            from models.transactions import Transaction
-            transaction = family_get(Transaction, income.transaction_id)
-            if transaction:
-                transaction.is_paid = income.is_paid
-        
-        db.session.commit()
-        # Folded expenses are only "reimbursed" once the payslip is actually paid
-        IncomeService._sync_folded_expenses(income)
-        
-        return jsonify({
-            'id': income.id,
-            'field': 'paid',
-            'value': income.is_paid
-        })
-    except Exception as e:
+        income = IncomeService.toggle_income_paid(id)
+        return jsonify({'id': income.id, 'field': 'paid', 'value': income.is_paid})
+    except Exception:
         db.session.rollback()
+        current_app.logger.exception('Failed to toggle income paid status')
         return jsonify({'error': 'Unable to record the payslip.'}), 500
 
 
 @income_bp.route('/income/<int:id>/enter-actual', methods=['POST'])
 def enter_actual(id):
     """Quick-entry of actual payslip figures for a generated income record."""
-    income = family_get_or_404(Income, id)
-
+    family_get_or_404(Income, id)
     try:
-        income.income_tax = Decimal(request.form['tax'])
-        income.national_insurance = Decimal(request.form['ni'])
-        income.employer_pension_amount = Decimal(request.form.get('employer_pension', 0) or 0)
-        income.employee_pension_amount = Decimal(request.form.get('employee_pension', 0) or 0)
-        income.total_pension = income.employer_pension_amount + income.employee_pension_amount
-        income.avc = Decimal(request.form.get('avc', 0) or 0)
-        income.other_deductions = Decimal(request.form.get('other', 0) or 0)
-        income.take_home = Decimal(request.form['take_home'])
-        income.is_manual_override = True
-        # Only mark as paid once the pay date has actually passed
-        income.is_paid = income.pay_date <= date.today()
-
-        IncomeService.sync_income_to_transaction(income)
-        db.session.commit()
-
-        flash(f'Actual payslip for {income.pay_date.strftime("%B %Y")} recorded — transaction updated.', 'success')
+        income = IncomeService.record_actual_payslip(id, request.form)
+        flash(f'Actual payslip for {income.pay_date.strftime("%B %Y")} recorded ? transaction updated.', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error recording payslip: {str(e)}', 'danger')
-
+        _fail(e, 'Error recording payslip.')
     return redirect(url_for('income.index'))
 
 
@@ -340,47 +222,12 @@ def enter_actual(id):
 def calculate_preview():
     """AJAX endpoint to preview tax/NI calculations"""
     try:
-        data = request.get_json()
-        gross_annual = Decimal(data['gross_annual'])
-        employer_pension_pct = Decimal(data.get('employer_pension_pct', 0))
-        employee_pension_pct = Decimal(data.get('employee_pension_pct', 0))
-        tax_code = data['tax_code']
-        avc = Decimal(data.get('avc', 0))
-        other = Decimal(data.get('other', 0))
-        
-        # Calculate pension amount
-        pension_amount = (employer_pension_pct + employee_pension_pct) * gross_annual / 100
-        
-        # Calculate tax and NI
-        result = IncomeService.calculate_tax_and_ni(
-            gross_annual=gross_annual,
-            tax_code=tax_code,
-            pension_amount=pension_amount
-        )
-        
-        # Calculate monthly breakdown
-        gross_monthly = gross_annual / 12
-        employer_pension = gross_monthly * employer_pension_pct / 100
-        employee_pension = gross_monthly * employee_pension_pct / 100
-        total_pension = employer_pension + employee_pension
-        monthly_tax = result['tax'] / 12
-        monthly_ni = result['ni'] / 12
-        take_home = gross_monthly - monthly_tax - monthly_ni - employee_pension - avc - other
-        
-        return jsonify({
-            'success': True,
-            'gross_monthly': float(gross_monthly),
-            'employer_pension': float(employer_pension),
-            'employee_pension': float(employee_pension),
-            'total_pension': float(total_pension),
-            'income_tax': float(monthly_tax),
-            'national_insurance': float(monthly_ni),
-            'take_home': float(take_home),
-            'annual_tax': float(result['tax']),
-            'annual_ni': float(result['ni'])
-        })
-        
-    except Exception as e:
+        result = IncomeService.preview_payslip(request.get_json(silent=True))
+        return jsonify({'success': True, **result})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception:
+        current_app.logger.exception('Income preview failed')
         return jsonify({'success': False, 'error': 'Unable to calculate the income preview.'}), 400
 
 
@@ -399,7 +246,7 @@ def recurring():
     
     # Get unique people for filter
     people = family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()
-    people = [p[0] for p in people] if people else ['Keiron']
+    people = [p[0] for p in people] if people else _get_income_people()
     
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
     
@@ -424,11 +271,10 @@ def add_recurring():
             return redirect(url_for('income.recurring'))
             
         except Exception as e:
-            db.session.rollback()
-            flash(f'Error adding recurring income: {str(e)}', 'danger')
+            _fail(e, 'Error adding recurring income.')
     
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    categories = family_query(Category).filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
+    categories = _income_categories()
     return render_template('income/add_recurring.html', accounts=accounts, categories=categories, people=_get_income_people())
 
 
@@ -448,11 +294,11 @@ def edit_recurring(id):
             return redirect(url_for('income.recurring'))
             
         except Exception as e:
-            db.session.rollback()
-            flash(f'Error updating recurring income: {str(e)}', 'danger')
+            _fail(e, 'Error updating recurring income.')
+            recurring = family_get_or_404(RecurringIncome, id)
     
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    categories = family_query(Category).filter_by(category_type='income').order_by(Category.head_budget, Category.sub_budget).all()
+    categories = _income_categories()
     from services.finance.expense_reimbursement_group_service import ExpenseReimbursementGroupService
     fold_group = ExpenseReimbursementGroupService.get_folded_group_for_recurring_income(recurring.id)
     return render_template('income/edit_recurring.html', recurring=recurring, accounts=accounts, categories=categories, people=_get_income_people(), fold_group=fold_group)
@@ -465,8 +311,7 @@ def delete_recurring(id):
         IncomeService.delete_recurring_income(id)
         flash('Recurring income deleted successfully!', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error deleting recurring income: {str(e)}', 'danger')
+        _fail(e, 'Error deleting recurring income.')
     
     return redirect(url_for('income.recurring'))
 
@@ -482,7 +327,7 @@ def generate_missing():
         else:
             flash('All income records are up to date.', 'info')
     except Exception as e:
-        flash(f'Error generating income: {str(e)}', 'danger')
+        _fail(e, 'Error generating income.')
     return redirect(url_for('income.index'))
 
 
@@ -496,7 +341,7 @@ def generate_full_range():
         else:
             flash('All income records are already up to date across the full range.', 'info')
     except Exception as e:
-        flash(f'Error generating full range: {str(e)}', 'danger')
+        _fail(e, 'Error generating full range.')
     return redirect(url_for('income.index'))
 
 
@@ -504,7 +349,10 @@ def generate_full_range():
 def trim_forecasts():
     """Delete surplus far-future forecast records and reset last_generated_date."""
     try:
-        months = int(request.form.get('months_ahead', 13))
+        try:
+            months = int(request.form.get('months_ahead', 13))
+        except (TypeError, ValueError):
+            raise ValueError('Months ahead must be a whole number.')
         result = IncomeService.trim_future_forecasts(months_ahead=months)
         if result['deleted']:
             flash(
@@ -516,8 +364,7 @@ def trim_forecasts():
         else:
             flash('No surplus forecast records found beyond that horizon.', 'info')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error trimming forecasts: {str(e)}', 'danger')
+        _fail(e, 'Error trimming forecasts.')
 
     return redirect(url_for('income.index'))
 
@@ -528,8 +375,8 @@ def regenerate_range(id):
     recurring = family_get_or_404(RecurringIncome, id)
     
     try:
-        start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
-        end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d').date()
+        start_date = _parse_form_date('start_date', 'Start date')
+        end_date = _parse_form_date('end_date', 'End date')
         force = request.form.get('force') == 'on'
         
         result = IncomeService.regenerate_income_range(
@@ -554,8 +401,7 @@ def regenerate_range(id):
             flash('No records were affected.', 'info')
             
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error regenerating income: {str(e)}', 'danger')
+        _fail(e, 'Error regenerating income.')
     
     return redirect(url_for('income.edit_recurring', id=id))
 
@@ -566,7 +412,7 @@ def end_job(id):
     recurring = family_get_or_404(RecurringIncome, id)
 
     try:
-        last_pay_date = datetime.strptime(request.form['last_pay_date'], '%Y-%m-%d').date()
+        last_pay_date = _parse_form_date('last_pay_date', 'Last pay date')
         result = IncomeService.end_job(recurring.id, last_pay_date)
 
         msg = f"Job ended on {last_pay_date.strftime('%d/%m/%Y')}. "
@@ -577,8 +423,7 @@ def end_job(id):
         flash(msg.strip(), 'success')
 
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error ending job: {str(e)}', 'danger')
+        _fail(e, 'Error ending job.')
 
     return redirect(url_for('income.recurring'))
 
@@ -606,8 +451,7 @@ def reperiod_transactions():
         )
 
     except Exception as e:
-        db.session.rollback()
-        flash(f'Error updating payday periods: {str(e)}', 'danger')
+        _fail(e, 'Error updating payday periods.')
 
     return redirect(url_for('income.recurring'))
 

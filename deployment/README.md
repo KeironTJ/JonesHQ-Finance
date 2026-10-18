@@ -356,6 +356,27 @@ Run it after each deployment and before onboarding new households. Any reported
 `table.column` count is pre-existing data that needs investigation; do not
 delete rows without a fresh dump.
 
+## Leftover income forecasts (one-off, after the income fixes)
+
+Older versions left a deleted income template's future forecasts (and their
+unpaid bank forecast transactions) in place. Migration `c4f8a2d6e0b1` runs
+automatically during the update and only clears a wrong "Actual" flag; it deletes
+nothing. To remove the leftovers, preview first (read-only):
+
+```bash
+sudo -u joneshq bash -c 'cd /home/joneshq/joneshq-finance && set -a && . ./.env.production && venv/bin/flask maintenance purge-orphan-income-forecasts'
+```
+
+Each line is one household/person/source run of future, unpaid rows no longer
+linked to a template. Paid rows, rows with a paid transaction and a lone future
+one-off income are never selected. If every line is expected, re-run with
+`--apply` (optionally `--family ID` to do one household at a time). The update's
+`database.dump` is your restore point; take an ad-hoc dump first if the update was
+not run recently.
+
+The command does not look for bank transactions that have no income record at
+all (for example imported "Salary" forecasts); review those in the account view.
+
 ## Site admin area
 
 `/site-admin` is the operator area, separate from your own household's pages.

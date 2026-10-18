@@ -334,6 +334,22 @@ def register_commands(app):
             click.echo(f'{name}: {count}')
         raise SystemExit(1)
 
+    @maintenance_cli.command('purge-orphan-income-forecasts')
+    @click.option('--apply', is_flag=True, help='Delete the records (default is a preview).')
+    @click.option('--family', 'family_id', type=int, help='Limit to one household id.')
+    def purge_orphan_income_forecasts(apply, family_id):
+        """Remove future income forecasts left behind by deleted templates."""
+        from services.finance.income_service import IncomeService
+        groups = IncomeService.purge_orphaned_forecasts(dry_run=not apply, family_id=family_id)
+        if not groups:
+            click.echo('No orphaned income forecasts found.')
+            return
+        for g in groups:
+            click.echo(f"family {g['family_id']}: {g['person']} / {g['source'] or '-'}: "
+                       f"{g['count']} records {g['first']} -> {g['last']} "
+                       f"({g['with_transactions']} with forecast transactions)")
+        click.echo('Deleted.' if apply else 'Preview only; re-run with --apply to delete.')
+
     @app.cli.command('health')
     def health_check():
         """Check database and rate-limit storage without exposing settings."""
