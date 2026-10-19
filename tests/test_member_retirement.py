@@ -7,6 +7,8 @@ import pytest
 from sqlalchemy import create_engine, text
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from extensions import db
 from models.family import Family
@@ -231,6 +233,35 @@ def test_member_forms_and_retirement_routes(scoped, user, app):
         response = client.get(url)
         assert response.status_code == 200
         assert '69' in response.text
+
+
+def test_personal_preferences_do_not_change_shared_retirement_profile(scoped, user, app):
+    from tests.auth_helpers import login_client
+    person = member(scoped)
+    source(person.id)
+    RetirementService.save('Sam', {
+        'date_of_birth': '1980-01-01', 'retirement_age': '68',
+    }, person.id)
+    client = app.test_client()
+    login_client(client, user.id)
+    response = client.post('/preferences/save', json={
+        'key': 'dashboard.networth_expanded', 'value': True,
+    })
+    assert response.status_code == 200
+    assert user.preferences['dashboard.networth_expanded'] is True
+    assert not person.preferences
+    assert RetirementService.profile('Sam', person.id)['age'] == 68
+    assert client.get('/settings').status_code == 200
+    assert client.get('/income/plan').status_code == 200
+
+
+def test_preferences_and_retirement_migrations_have_one_head():
+    config = Config()
+    config.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'migrations'))
+    script = ScriptDirectory.from_config(config)
+    assert script.get_heads() == ['a8d3f6b0c4e5']
+    revisions = {revision.revision for revision in script.walk_revisions()}
+    assert {'f2a4c6e8b0d1', 'f7c2e5a9b3d4'} <= revisions
 
 
 def test_migration_backfills_unique_names_and_preserves_conflicts():

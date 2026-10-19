@@ -392,6 +392,11 @@ when no shared target exists; original per-pot ages remain stored, but do not
 override a shared profile. Downgrade removes only the pension member column;
 member-keyed settings and original legacy settings remain available.
 
+Merge revision `a8d3f6b0c4e5` joins the member-retirement and personal-preferences
+migration branches into one deployment head. It changes no data itself; upgrading
+from either branch applies the other branch's migration without losing existing
+personal preferences or household retirement settings.
+
 ## Leftover income forecasts (one-off, after the income fixes)
 
 Older versions left a deleted income template's future forecasts (and their
