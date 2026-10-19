@@ -13,6 +13,7 @@ werkzeug==3.1.9
 email-validator==2.1.0
 pyotp==2.10.0
 qrcode==8.2
+webauthn==2.7.0
 
 # Production server (install manually: pip install gunicorn)
 # gunicorn==21.2.0

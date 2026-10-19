@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Confirm your password - Family HQ{% endblock %}
+{% block title %}Confirm your identity - Family HQ{% endblock %}
 
 {% block content %}
 <div class="jhq-hero jhq-auth-hero">
@@ -10,8 +10,8 @@
                 <div class="brand-icon mb-2">
                     <i class="bi bi-shield-check"></i>
                 </div>
-                <h2>Confirm your password</h2>
-                <p>You're about to do something sensitive. Enter your password to continue.</p>
+                <h2>Confirm your identity</h2>
+                <p>You're about to do something sensitive. Use your password or a registered passkey to continue.</p>
             </div>
             <div class="auth-card-body">
                 <form method="POST" action="{{ url_for('auth.reauthenticate', next=request.args.get('next')) }}">
@@ -30,6 +30,12 @@
                     </div>
                     {{ form.submit(class="btn btn-primary w-100") }}
                 </form>
+                {% if passkeys_configured and current_user.passkeys.count() %}
+                <button type="button" class="btn btn-outline-primary w-100 mt-3" data-passkey-action="reauth"
+                        data-options-url="{{ url_for('auth.passkey_reauth_options', next=request.args.get('next')) }}"
+                        data-verify-url="{{ url_for('auth.passkey_reauth_verify') }}">Confirm with a passkey</button>
+                <div class="alert alert-danger mt-2 mb-0 d-none" data-passkey-error role="alert"></div>
+                {% endif %}
                 <hr class="my-3">
                 <p class="text-center mb-0" style="font-size:0.85rem;">
                     <a href="{{ url_for('dashboard.index') }}" class="text-decoration-none">
@@ -40,4 +46,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if passkeys_configured %}
+<script src="{{ url_for('static', filename='js/passkeys.js') }}" defer></script>
+{% endif %}
 {% endblock %}

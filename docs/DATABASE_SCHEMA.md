@@ -30,6 +30,19 @@ application.
   screens. New users receive application display defaults. Downgrading removes
   personal display choices and restores the original household defaults.
 
+## Passkey Authentication
+
+- `user_passkeys`: account-owned WebAuthn credentials (unique credential ID,
+  public key, signature counter, display name, created/last-used timestamps).
+  Credentials follow the user across household changes; they are not family data.
+- `passkey_challenges`: hashed browser flow token, challenge bytes, purpose,
+  optional bound user, five-minute expiry and login/registration context.
+  Consumed once in the database; expired rows are removed when starting flows.
+- `user_sessions.authentication_method`: persisted sign-in/confirmation method,
+  used to distinguish a verified passkey session from password-only fallback.
+- Migration `b9e4a7c1d6f2` adds these tables and column without changing financial
+  records. User-account deletion explicitly removes credentials and challenges.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)

@@ -16,6 +16,57 @@
         {% endif %}
 
         <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Passkeys</h2>
+                <p class="text-muted">
+                    Sign in with your fingerprint, face, device PIN or security key, without
+                    entering a password or authenticator code. Keep password + authenticator
+                    as a fallback and add a second passkey in case you lose a device.
+                </p>
+                {% if current_user.is_site_admin and not current_user.two_factor_enabled and not passkeys %}
+                <p class="text-warning">Site admins must set up a passkey or authenticator two-factor login.</p>
+                {% endif %}
+                {% if current_user.is_site_admin and passkeys and not current_user.two_factor_enabled %}
+                <p class="text-muted">Confirm with an existing passkey before changing your security methods. If all passkeys are lost, contact the site operator for recovery.</p>
+                {% endif %}
+                {% for key in passkeys %}
+                <div class="d-flex justify-content-between align-items-center gap-2 border-bottom py-2">
+                    <div>
+                        <strong>{{ key.name }}</strong>
+                        <div class="small text-muted">
+                            Added {{ key.created_at.strftime('%d %b %Y') }}
+                            {% if key.last_used_at %}&middot; Last used {{ key.last_used_at.strftime('%d %b %Y') }}{% endif %}
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ url_for('auth.passkey_remove', key_id=key.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Remove {{ key.name }}">Remove</button>
+                    </form>
+                </div>
+                {% else %}
+                <p>No passkeys registered yet.</p>
+                {% endfor %}
+                {% if passkeys_configured %}
+                <div class="mt-3">
+                    <label for="passkey-name" class="form-label">Passkey name</label>
+                    <input id="passkey-name" class="form-control mb-2" maxlength="100" placeholder="e.g. My phone" autocomplete="off">
+                    <button type="button" class="btn btn-primary" data-passkey-action="register"
+                            data-options-url="{{ url_for('auth.passkey_register_options') }}"
+                            data-verify-url="{{ url_for('auth.passkey_register_verify') }}">Add a passkey</button>
+                    {% if passkeys %}
+                    <button type="button" class="btn btn-outline-primary" data-passkey-action="reauth"
+                            data-options-url="{{ url_for('auth.passkey_reauth_options') }}"
+                            data-verify-url="{{ url_for('auth.passkey_reauth_verify') }}">Confirm identity with a passkey</button>
+                    {% endif %}
+                    <div class="alert alert-danger mt-2 mb-0 d-none" data-passkey-error role="alert"></div>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Passkeys are not configured. The site operator must set PASSKEY_ORIGIN to the site's HTTPS address.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mb-4">
             <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
                     <h2 class="h5 mb-1">Email address</h2>
@@ -112,9 +163,9 @@
             <div class="card-body">
                 <h2 class="h5">Turn off two-factor login</h2>
                 {% if two_factor_required %}
-                    <p class="text-muted mb-0">Site admins must keep two-factor login turned on.</p>
+                    <p class="text-muted mb-0">Site admins must keep an authenticator or at least one passkey.</p>
                 {% else %}
-                    <p class="text-muted">Your account will be protected by your password only.</p>
+                    <p class="text-muted">Password sign-in will no longer ask for a code. Registered passkeys will still work.</p>
                     <form method="POST" action="{{ url_for('auth.two_factor_disable') }}" class="row g-2 align-items-end">
                         {{ password_form.hidden_tag() }}
                         <div class="col-sm-5">
@@ -240,7 +291,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-outline-primary">Download JSON export</button>
                 </form>
-                <div class="form-text">Requires a recent password confirmation.
+                <div class="form-text">Requires recent password or passkey confirmation.
                     Limited to two downloads per hour.</div>
             </div>
         </div>
@@ -257,4 +308,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if passkeys_configured %}
+<script src="{{ url_for('static', filename='js/passkeys.js') }}" defer></script>
+{% endif %}
 {% endblock %}

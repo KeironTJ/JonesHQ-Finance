@@ -52,7 +52,7 @@ class UserSessionService:
 		return timedelta(minutes=current_app.config['SESSION_IDLE_MINUTES'])
 
 	@staticmethod
-	def create(user, remember=False, ip_address=None, user_agent=None):
+	def create(user, remember=False, ip_address=None, user_agent=None, method='password'):
 		"""Create a session record. Returns (record, token); only the hash is stored."""
 		now = _now()
 		token = secrets.token_urlsafe(32)
@@ -66,6 +66,7 @@ class UserSessionService:
 			ip_address=(ip_address or '')[:64] or None,
 			user_agent=(user_agent or '')[:255] or None,
 			reauthenticated_at=now,
+			authentication_method=method,
 		)
 		db.session.add(record)
 		UserSessionService.prune(user=user, now=now)
@@ -89,6 +90,7 @@ class UserSessionService:
 			user, remember=remember,
 			ip_address=request.remote_addr,
 			user_agent=request.user_agent.string,
+			method=method,
 		)
 		UserSessionService._attach(user, record, token)
 		login_user(user, remember=bool(remember))
@@ -102,6 +104,33 @@ class UserSessionService:
 		user._session_id = record.id
 		user._session_last_seen = record.last_seen_at
 		user._session_reauth_at = record.reauthenticated_at
+		user._session_authentication_method = record.authentication_method
+
+	@staticmethod
+	def has_strong_authentication(user):
+		return user.two_factor_enabled or (
+			getattr(user, '_session_authentication_method', None) == 'passkey'
+			and user.passkeys.count() > 0
+		)
+
+	@staticmethod
+	def require_existing_admin_factor(user):
+		if user.is_site_admin and user.passkeys.count() and not UserSessionService.has_strong_authentication(user):
+			raise ValueError('Use a registered passkey to confirm your site-admin identity first.')
+
+	@staticmethod
+	def mark_passkey_authenticated(user):
+		session_id = getattr(user, '_session_id', None)
+		updated = UserSession.query.filter_by(id=session_id, user_id=user.id, revoked_at=None).update(
+			{UserSession.authentication_method: 'passkey', UserSession.reauthenticated_at: _now()},
+			synchronize_session='fetch',
+		)
+		if updated != 1:
+			db.session.rollback()
+			raise ValueError('Your session has ended. Please sign in again.')
+		db.session.commit()
+		user._session_authentication_method = 'passkey'
+		user._session_reauth_at = _now()
 
 	@staticmethod
 	def is_live(record, now=None):
@@ -218,7 +247,7 @@ class UserSessionService:
 
 	@staticmethod
 	def is_recently_authenticated(user):
-		"""True if the password was entered in this session within REAUTH_WINDOW_MINUTES."""
+		"""True if password/passkey verification occurred within REAUTH_WINDOW_MINUTES."""
 		reauth_at = getattr(user, '_session_reauth_at', None)
 		if reauth_at is None:
 			return False

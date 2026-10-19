@@ -35,7 +35,7 @@ class SiteAdminService:
             'active_household_invites': sum(
                 1 for invite in HouseholdInviteService.list_invites() if invite.status == 'active'),
             'failed_sign_ins_24h': SecurityEvent.query.filter(
-                SecurityEvent.event_type.in_(('login_failed', 'two_factor_failed', 'account_locked')),
+                SecurityEvent.event_type.in_(('login_failed', 'two_factor_failed', 'passkey_failed', 'account_locked')),
                 SecurityEvent.created_at > now - timedelta(hours=24)).count(),
         }
 

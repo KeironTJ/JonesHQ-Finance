@@ -20,6 +20,12 @@ Import from the domain package, for example:
 from services.finance.transaction_service import TransactionService
 ```
 
+`platform/passkey_service.py` owns WebAuthn enrollment, one-time challenges,
+passwordless sign-in, recent identity confirmation, removal and server recovery.
+It uses `UserSessionService` for revocation and passkey-authenticated sessions;
+see [authentication setup](../docs/AUTHENTICATION_SETUP.md#passkeys-passwordless-sign-in)
+for trusted-origin configuration and deployment.
+
 ## Settings ownership
 
 `/settings` is an owner-only hub, not a combined save form. Household/payday,

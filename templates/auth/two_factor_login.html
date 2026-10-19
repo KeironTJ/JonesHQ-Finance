@@ -30,6 +30,13 @@
                     </div>
                     {{ form.submit(class="btn btn-primary w-100") }}
                 </form>
+                {% if passkeys_available %}
+                <button type="button" class="btn btn-outline-primary w-100 mt-3" data-passkey-action="login"
+                        data-remember="{{ 'true' if pending.remember else 'false' }}"
+                        data-options-url="{{ url_for('auth.passkey_login_options', next=pending.next) }}"
+                        data-verify-url="{{ url_for('auth.passkey_login_verify') }}">Use a passkey instead</button>
+                <div class="alert alert-danger mt-2 mb-0 d-none" data-passkey-error role="alert"></div>
+                {% endif %}
                 <hr class="my-3">
                 <p class="text-center mb-0" style="font-size:0.85rem;">
                     <a href="{{ url_for('auth.login') }}" class="text-decoration-none">
@@ -40,4 +47,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if passkeys_available %}
+<script src="{{ url_for('static', filename='js/passkeys.js') }}" defer></script>
+{% endif %}
 {% endblock %}

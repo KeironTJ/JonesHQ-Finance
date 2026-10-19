@@ -156,27 +156,32 @@ def create_app(config_name=None):
         from utils.permissions import check_section_access
         check_section_access()
 
-    # Site admins must have two-factor login before using the app
+    # Site admins need TOTP enrollment or a verified passkey session.
     _two_factor_exempt_endpoints = {
         'auth.storage_notice', 'auth.privacy_notice',
         'static', 'auth.logout', 'auth.account_security', 'auth.two_factor_setup',
         'auth.revoke_session', 'auth.revoke_other_sessions', 'auth.reauthenticate',
         'auth.verify_email', 'auth.resend_verification', 'auth.reset_password', 'auth.reset_password_token',
+        'auth.passkey_register_options', 'auth.passkey_register_verify', 'auth.passkey_remove',
+        'auth.passkey_reauth_options', 'auth.passkey_reauth_verify',
     }
 
     @app.before_request
     def require_site_admin_two_factor():
         from flask import redirect, request, url_for
         from flask_login import current_user
+        from services.platform.user_session_service import UserSessionService
         if request.endpoint == 'auth.health':
             return
         if (
             current_user.is_authenticated
             and current_user.is_site_admin
-            and not current_user.two_factor_enabled
+            and not UserSessionService.has_strong_authentication(current_user)
             and request.endpoint not in _two_factor_exempt_endpoints
         ):
-            return redirect(url_for('auth.two_factor_setup'))
+            return redirect(url_for(
+                'auth.reauthenticate' if current_user.passkeys.count() else 'auth.two_factor_setup',
+            ))
 
     # ── Jinja2 custom filter ────────────────────────────────────────────
     import json as _json
@@ -482,6 +487,24 @@ def register_commands(app):
         UserSessionService.revoke_all(user, reason='two-factor reset')
         note = ' They are a site admin, so they will be asked to set it up again at next login.' if user.is_site_admin else ''
         click.echo(f'Two-factor login reset and all sessions signed out for {user.email}.{note}')
+
+    @app.cli.group('passkeys')
+    def passkeys_cli():
+        """Manage passkeys."""
+        pass
+
+    @passkeys_cli.command('reset')
+    @click.argument('email')
+    def reset_passkeys(email):
+        """Remove lost passkeys and revoke every session after verifying the user's identity offline."""
+        from models.users import User
+        from services.platform.passkey_service import PasskeyService
+        user = User.query.filter_by(email=email.strip().lower()).first()
+        if not user:
+            click.echo(f'ERROR: No user found with email {email}', err=True)
+            raise SystemExit(1)
+        PasskeyService.reset(user)
+        click.echo(f'Passkeys reset and all sessions signed out for {user.email}. Authenticator settings are unchanged.')
 
     @app.cli.group('sessions')
     def sessions_cli():

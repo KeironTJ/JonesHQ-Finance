@@ -53,6 +53,16 @@
                     {{ form.submit(class="btn btn-primary w-100") }}
                 </form>
 
+                {% if passkeys_configured %}
+                <button type="button" class="btn btn-outline-primary w-100 mt-3"
+                        data-passkey-action="login"
+                        data-options-url="{{ url_for('auth.passkey_login_options', next=request.args.get('next')) }}"
+                        data-verify-url="{{ url_for('auth.passkey_login_verify') }}">
+                    <i class="bi bi-key me-1"></i> Sign in with a passkey
+                </button>
+                <div class="alert alert-danger mt-2 mb-0 d-none" data-passkey-error role="alert"></div>
+                {% endif %}
+
                 <hr class="my-3">
 
                 <p class="text-center mb-1" style="font-size:0.8rem;color:var(--text-muted);">
@@ -80,4 +90,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if passkeys_configured %}
+<script src="{{ url_for('static', filename='js/passkeys.js') }}" defer></script>
+{% endif %}
 {% endblock %}

@@ -1,4 +1,4 @@
-"""Require a recent password confirmation before sensitive actions."""
+"""Require recent password/passkey confirmation before sensitive actions."""
 from functools import wraps
 from urllib.parse import urlsplit
 
@@ -19,12 +19,12 @@ def _return_path():
 
 
 def reauthentication_redirect():
-    flash('Please confirm your password to continue.', 'info')
+    flash('Please confirm your identity to continue.', 'info')
     return redirect(url_for('auth.reauthenticate', next=_return_path()))
 
 
 def recent_auth_required(view):
-    """Use after @login_required. Asks for the password if it wasn't entered recently."""
+    """Use after @login_required. Ask for identity confirmation if it is no longer recent."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         if current_user.is_authenticated and not UserSessionService.is_recently_authenticated(current_user):

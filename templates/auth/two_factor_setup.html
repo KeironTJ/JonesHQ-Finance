@@ -16,7 +16,8 @@
         {% if required %}
         <div class="alert alert-warning">
             <i class="bi bi-exclamation-triangle me-1"></i>
-            Site admins must use two-factor login. Finish setup to continue.
+            Site admins must use an authenticator or a passkey. Finish setup or
+            <a href="{{ url_for('auth.account_security') }}">add a passkey from Account security</a>.
         </div>
         {% endif %}
 

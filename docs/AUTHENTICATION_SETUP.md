@@ -102,12 +102,78 @@ Never store financial records or authentication secrets in them. Login itself is
 controlled by a server-side session record (see **Signed-in sessions**), so a
 stolen cookie stops working once that session is revoked or expires.
 
+## Passkeys (passwordless sign-in)
+
+Passkeys use WebAuthn with required device/user verification (face, fingerprint,
+device PIN or a verification-capable security key). A verified passkey replaces
+both the password and authenticator-code steps for that sign-in. Password + TOTP
+and existing recovery codes remain available as a fallback; adding a passkey
+does not turn TOTP off.
+
+Deployment:
+
+1. Install the updated `requirements.txt` (`webauthn==2.7.0`).
+2. Back up the database and run `flask db upgrade` (revision `b9e4a7c1d6f2`).
+   Existing sessions are preserved; their authentication method defaults to
+   `password`.
+3. Set `PASSKEY_ORIGIN=https://finance.yourdomain.co.uk` to the exact public origin
+   without a path. It defaults to `APP_BASE_URL` when omitted.
+   `PASSKEY_RP_ID` defaults to that origin's hostname (no scheme or port).
+   Trust settings are never inferred from the request Host header.
+4. Restart the application. Open **Account security → Passkeys**, give the key a
+   name, and select **Add a passkey**. Add a second device/key for recovery.
+5. Use **Sign in with a passkey** on the sign-in page. Email and password fields
+   are not needed; **Remember Me** still controls the seven-day session.
+
+Passkeys are disabled if neither origin setting is configured. Production
+requires HTTPS and a stable domain; changing the RP ID invalidates existing
+passkeys for the new site. Local development can use
+`PASSKEY_ORIGIN=http://localhost:5000` (or `http://127.0.0.1:5000`, used consistently).
+Unsupported browsers show an explicit message and keep password sign-in available.
+
+- Up to 20 named passkeys per user; registration requires a discoverable
+  credential and user verification. No attestation or biometric data is retained.
+- Only credential IDs, public keys, counters, names and timestamps are stored
+  in `user_passkeys`. Private keys stay in the authenticator/password manager.
+- Five-minute challenges are browser-, purpose- and account-bound, stored in
+  `passkey_challenges` and atomically consumed once. Restoring an old signed cookie
+  cannot replay a consumed challenge. Expired challenges are pruned on new requests.
+- Every response verifies the challenge, RP ID, trusted origin and user
+  verification. Sign-in verifies the signature and signature counter (including
+  zero-counter support for synced passkeys). Inactive/locked accounts and removed
+  credentials cannot sign in.
+- All passkey POSTs require CSRF protection and are rate-limited. Registration
+  and removal require recent authentication. Changes sign out other sessions
+  and produce security events and configured email alerts.
+- **Confirm with a passkey** can refresh the recent-authentication window without
+  entering a password. Actions which explicitly require the current password
+  (such as changing it or deleting the account) still require it.
+- Site admins can use a verified passkey session instead of TOTP enrollment.
+  A password-only session with existing passkeys and no TOTP cannot access admin
+  pages, replace/remove passkeys, or enroll TOTP without confirming an existing
+  passkey first. They cannot remove their last passkey unless TOTP is enabled.
+- Losing a passkey does not invalidate its private key. Remove it from **Account
+  security**; remove it from your password manager/device separately if desired.
+
+If all passkeys are lost, use password + authenticator/recovery code if enabled.
+For a passkey-only site admin, the server operator must verify identity offline,
+then run:
+
+```bash
+flask passkeys reset user@example.com
+```
+
+This removes all passkeys and pending challenges, revokes every session, records
+an audit event and sends a configured security alert. It does not reset TOTP.
+A site admin without TOTP can then sign in with their password and enroll a new
+passkey from Account security or set up TOTP.
+
 ## Two-factor login
 
 Any user can turn on authenticator-app (TOTP) two-factor login from
-**Account security** in the user menu. It is **required for site admins**: a
-site admin without it is redirected to setup on every page, and the site admin
-area (`/site-admin`) refuses access until it is on.
+**Account security** in the user menu. Site admins must have either TOTP enabled
+or a passkey-verified session. A site admin without either is redirected to setup
+(or passkey confirmation if they already have passkeys).
 
 - Setup shows a QR code and a manual setup key. The first valid 6-digit code
   turns it on and shows 10 single-use recovery codes once.
@@ -118,7 +184,7 @@ area (`/site-admin`) refuses access until it is on.
   Each code can only be used once, which protects against replay.
 - Recovery codes are stored as SHA-256 hashes. Regenerating them needs the
   password, and turning 2FA off needs the password and a code. Site admins
-  can't turn it off.
+  can only turn it off if they have at least one registered passkey.
 - The TOTP secret is stored unencrypted in the `users` table, so protect the
   database and backups. It is hidden from the admin panel lists, forms and exports.
 
@@ -163,10 +229,10 @@ once when it is deployed.
 
 - **Account security → Change password** needs the current password and a new one
   that meets the password policy. It signs out every other device.
-- Sensitive actions ask for the password again if it wasn't entered in the last
+- Sensitive actions ask for password or passkey confirmation if neither was used in the last
   `REAUTH_WINDOW_MINUTES` (default 15) in this session: turning on two-factor
   login, household invites, service settings, family invites, editing or removing family members,
-  and the site admin area. The time is counted from the last password entry and
+  and the site admin area. The time is counted from the last password/passkey verification and
   doesn't slide with activity. "Remember me" sessions keep their original sign-in
   time, so they are asked once that is older than the window. Form posts can't be replayed, so the user goes
   back to the page they came from and submits again. Password confirmation is
@@ -194,7 +260,7 @@ There are two unrelated kinds of "admin". Neither grants the other's powers.
 | Who | Whoever registers a household, plus anyone they make an owner | You, the operator. Granted only on the server: `flask site-admin grant EMAIL` |
 | Scope | Their own household only (`family_id`) | The service as a whole, never household finances |
 | Where | **Family & members**, Settings, household deletion | **Site admin area** (`/site-admin`) |
-| Requirements | None beyond sign-in | Two-factor login and a recent password confirmation |
+| Requirements | None beyond sign-in | TOTP enrollment or a passkey-verified session, plus recent authentication |
 
 The operator normally also owns their own household and uses the app like any
 other customer. The user menu separates **Your household**, **Your account** and
@@ -203,8 +269,8 @@ banner with **Back to my household**.
 
 ## Site admin area (`/site-admin`)
 
-Only site admins with two-factor login turned on and a recent password
-confirmation can open it. Nothing here shows household financial data.
+Only site admins with TOTP enabled or a passkey-verified session, and recent
+password/passkey authentication, can open it. Nothing here shows household financial data.
 
 - **Overview** (`/site-admin/`): counts (households, active/deactivated/locked
   users, sessions, open household invites, failed sign-ins in 24 hours) and the
@@ -267,7 +333,7 @@ valid when loading the environment file in Bash.
   link received by email also confirms the address.
 - Security alert emails are sent for: sign-in from a browser not seen before
   (not the first sign-in), password changed or reset, two-factor login turned
-  on, off or reset, and new recovery codes.
+  on, off or reset, new recovery codes, and passkeys added, removed or reset.
 - Email is sent in a background thread so pages don't wait on SMTP; failures are
   logged. Check delivery with `flask email test you@example.com`.
 - Without email, or for someone who can't reach their inbox, the server admin can
@@ -441,11 +507,13 @@ does not update a running server. Never expose the development debugger in
 production. This targeted upgrade is not a complete dependency security audit.
 
 ```powershell
-venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_user_sessions.py tests\test_account_security.py tests\test_account_email.py
+venv\Scripts\python.exe -m pytest -q tests\test_auth_security.py tests\test_auth_service.py tests\test_user.py tests\test_onboarding.py tests\test_household_invites.py tests\test_two_factor.py tests\test_passkeys.py tests\test_user_sessions.py tests\test_account_security.py tests\test_account_email.py
 ```
 
 Tests cover rejected and successful logins, lockout expiry, safe redirects,
 IP/account throttling, invitation policy, two-factor setup/login/recovery/replay,
+real signed passkey registration/authentication, trusted origin/RP/device verification,
+challenge and counter replay, account-bound confirmation, site-admin factor enforcement,
 session revocation and idle/absolute expiry, change password, password confirmation
 for sensitive actions, security events, password reset by email and admin link,
 email confirmation, security alert emails,
@@ -459,7 +527,6 @@ correct proxy configuration.
 ## Remaining work before wider public registration
 
 - Choose managed identity, self-hosted identity, or continued local authentication.
-- Add passkeys as an alternative to authenticator-app codes.
 - Review household isolation, exports, administrative access, and member removal.
 - The public `/cookies` notice describes application cookies, local-storage
   preferences and account email delivery. Main-app Bootstrap, icons and Chart.js

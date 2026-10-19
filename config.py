@@ -97,6 +97,9 @@ class Config:
     # Two-factor login
     TWO_FACTOR_ISSUER = 'Family HQ'
     TWO_FACTOR_PENDING_SECONDS = 300
+    # Explicit trusted origin; never infer passkey trust from the request Host header.
+    PASSKEY_ORIGIN = os.environ.get('PASSKEY_ORIGIN', os.environ.get('APP_BASE_URL', '')).strip().rstrip('/')
+    PASSKEY_RP_ID = os.environ.get('PASSKEY_RP_ID', '').strip()
 
     # Outgoing email (e.g. Resend SMTP). Email features are off until MAIL_SERVER is set.
     MAIL_SERVER = os.environ.get('MAIL_SERVER', '').strip()

@@ -13,6 +13,7 @@ from flask import current_app
 from extensions import db
 from models.users import User, UserRecoveryCode
 from services.platform.security_event_service import SecurityEventService
+from services.platform.user_session_service import UserSessionService
 
 
 RECOVERY_CODE_COUNT = 10
@@ -37,11 +38,12 @@ class TwoFactorService:
 
 	@staticmethod
 	def is_required(user):
-		return bool(user.is_site_admin)
+		return bool(user.is_site_admin and not user.passkeys.count())
 
 	@staticmethod
 	def begin_setup(user):
 		"""Create a pending secret if none exists. Returns the secret."""
+		UserSessionService.require_existing_admin_factor(user)
 		if user.two_factor_enabled:
 			raise ValueError('Two-factor login is already turned on.')
 		if not user.totp_secret:
@@ -118,6 +120,7 @@ class TwoFactorService:
 	@staticmethod
 	def confirm_setup(user, data):
 		"""Turn on two-factor login after the first valid code. Returns new recovery codes."""
+		UserSessionService.require_existing_admin_factor(user)
 		if user.two_factor_enabled:
 			raise ValueError('Two-factor login is already turned on.')
 		if not user.totp_secret:
@@ -172,6 +175,11 @@ class TwoFactorService:
 			raise ValueError('Site admins must keep two-factor login turned on.')
 		TwoFactorService._check_password(user, data.get('password'))
 		TwoFactorService.verify_login(user, data)
+		User.query.filter_by(id=user.id).update({User.id: User.id}, synchronize_session=False)
+		db.session.refresh(user)
+		if TwoFactorService.is_required(user):
+			db.session.rollback()
+			raise ValueError('Site admins must keep an authenticator or at least one passkey.')
 		TwoFactorService.reset(user)
 		SecurityEventService.record('two_factor_disabled', user=user)
 

@@ -13,6 +13,7 @@ from models import (
     UserRecoveryCode, UserSession, Vehicle,
 )
 from models.expense_calendar import ExpenseCalendarEntry
+from models.passkeys import PasskeyChallenge, UserPasskey
 from models.settings import Settings
 from services.platform.deletion_helpers import deletion_references
 from utils.db_helpers import get_current_user_id
@@ -41,7 +42,7 @@ DELETE_ORDER = (
     PensionSnapshot, CreditCardPromotion, Expense, Income, IncomeChange, CreditCardTransaction, Balance,
     MonthlyAccountBalance, Transaction, Subscription,
     RecurringIncome, Plan, Vehicle, Pension, Loan, CreditCard, Account,
-    FamilyInvite, UserSession, UserRecoveryCode, User,
+    FamilyInvite, UserSession, UserRecoveryCode, PasskeyChallenge, UserPasskey, User,
 )
 
 
@@ -83,6 +84,7 @@ class AccountDeletionService:
                 plan.setdefault(child.__table__, {})[row_id] = family_id
         for model, foreign_key in (
             (FamilyInvite, 'created_by_id'), (UserSession, 'user_id'), (UserRecoveryCode, 'user_id'),
+            (PasskeyChallenge, 'user_id'), (UserPasskey, 'user_id'),
         ):
             rows = db.session.execute(select(model.id).where(getattr(model, foreign_key) == user.id))
             plan[model.__table__] = {row_id: None for row_id in rows.scalars()}

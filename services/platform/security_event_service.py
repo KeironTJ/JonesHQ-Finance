@@ -9,6 +9,11 @@ from models.users import SecurityEvent
 
 
 EVENT_LABELS = {
+	'passkey_added': 'Passkey added',
+	'passkey_removed': 'Passkey removed',
+	'passkey_failed': 'Failed passkey verification',
+	'passkey_reauthenticated': 'Confirmed identity with a passkey',
+	'passkeys_reset': 'Passkeys reset by the server admin',
 	'login_success': 'Signed in',
 	'login_failed': 'Failed sign-in attempt',
 	'account_locked': 'Account temporarily locked',
@@ -44,6 +49,9 @@ EVENT_LABELS = {
 
 # Events that also send the user an email, with the alert subject.
 ALERT_SUBJECTS = {
+	'passkey_added': 'A passkey was added to your Family HQ account',
+	'passkey_removed': 'A passkey was removed from your Family HQ account',
+	'passkeys_reset': 'Passkeys were reset for your Family HQ account',
 	'login_success': 'New sign-in to your Family HQ account',
 	'password_changed': 'Your Family HQ password was changed',
 	'password_reset': 'Your Family HQ password was reset',

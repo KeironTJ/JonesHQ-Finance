@@ -421,8 +421,11 @@ all (for example imported "Salary" forecasts); review those in the account view.
 ## Site admin area
 
 `/site-admin` is the operator area, separate from your own household's pages.
-It needs `is_site_admin` (`flask site-admin grant EMAIL`), two-factor login and a
-recent password confirmation. The old `/admin` address redirects there.
+It needs `is_site_admin` (`flask site-admin grant EMAIL`), TOTP enrollment or a
+verified passkey session, and recent password/passkey confirmation. See
+[passkey deployment](../docs/AUTHENTICATION_SETUP.md#passkeys-passwordless-sign-in)
+for the migration, HTTPS origin configuration and recovery command.
+The old `/admin` address redirects there.
 
 - **Overview**: service counts and the effective, non-secret configuration,
   including database engine and migration revision.

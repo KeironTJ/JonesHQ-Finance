@@ -4,7 +4,7 @@ Flask-Admin operator console for Family HQ, at /site-admin/console (part of the 
 Operator-only: users, households, invites, sessions, security events and the
 global UK tax-year templates. Household financial data is deliberately not
 exposed here; households manage their own data in the app. Access requires a
-site admin with two-factor login and a recent password confirmation.
+site admin with TOTP or a verified passkey session and recent authentication.
 """
 from flask import flash, redirect, url_for
 from flask_admin import Admin, AdminIndexView, expose
@@ -16,7 +16,11 @@ from flask_login import current_user
 
 
 def _is_two_factor_site_admin():
-    return current_user.is_authenticated and current_user.is_site_admin and current_user.two_factor_enabled
+    from services.platform.user_session_service import UserSessionService
+    return (
+        current_user.is_authenticated and current_user.is_site_admin
+        and UserSessionService.has_strong_authentication(current_user)
+    )
 
 
 def _is_verified_site_admin():
@@ -73,7 +77,10 @@ class OperatorView(ModelView):
 class UserAdminView(OperatorView):
     """Users. Changes go through actions so they are audited and revoke sessions."""
 
-    _secret_columns = ['password_hash', 'totp_secret', 'totp_last_step', 'recovery_codes', 'sessions']
+    _secret_columns = [
+        'password_hash', 'totp_secret', 'totp_last_step', 'recovery_codes', 'sessions',
+        'passkeys', 'passkey_challenges',
+    ]
     column_exclude_list = _secret_columns
     column_details_exclude_list = _secret_columns
     column_export_exclude_list = _secret_columns

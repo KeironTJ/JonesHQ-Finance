@@ -67,6 +67,7 @@ class AuthService:
 	@staticmethod
 	def reauthenticate(user, data):
 		"""Confirm the signed-in user's password so sensitive actions are allowed for a while."""
+		UserSessionService.require_existing_admin_factor(user)
 		password = data.get('password') or ''
 		if not password or not user.check_password(password):
 			SecurityEventService.record('password_confirm_failed', user=user)

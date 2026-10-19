@@ -47,6 +47,10 @@ class User(UserMixin, db.Model):
                                      lazy='dynamic', cascade='all, delete-orphan')
     sessions = db.relationship('UserSession', back_populates='user',
                                lazy='dynamic', cascade='all, delete-orphan')
+    passkeys = db.relationship('UserPasskey', back_populates='user',
+                               lazy='dynamic', cascade='all, delete-orphan')
+    passkey_challenges = db.relationship('PasskeyChallenge', back_populates='user',
+                                        lazy='dynamic', cascade='all, delete-orphan')
 
     # Family / multi-user fields
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
@@ -178,8 +182,9 @@ class UserSession(db.Model):
     revoked_at = db.Column(db.DateTime, nullable=True)
     ip_address = db.Column(db.String(64), nullable=True)
     user_agent = db.Column(db.String(255), nullable=True)
-    # Last time the password was entered in this session; sensitive actions need it to be recent
+    # Last password/passkey verification; sensitive actions need it to be recent
     reauthenticated_at = db.Column(db.DateTime, nullable=True)
+    authentication_method = db.Column(db.String(20), nullable=False, default='password', server_default='password')
 
     user = db.relationship('User', back_populates='sessions')
 

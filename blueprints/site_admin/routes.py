@@ -2,8 +2,8 @@
 Site admin (service operator) routes, under /site-admin.
 
 Separate from household management: nothing here shows household financial
-records. Every route requires a site admin with two-factor login (enforced
-app-wide) and a recent password confirmation.
+records. Every route requires a site admin with TOTP or a verified passkey session
+(enforced app-wide) and recent password/passkey authentication.
 """
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user

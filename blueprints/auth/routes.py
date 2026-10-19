@@ -23,6 +23,7 @@ from services.platform.email_service import EmailService
 from services.platform.email_verification_service import EmailVerificationService
 from services.platform.household_invite_service import HouseholdInviteService
 from services.platform.password_reset_service import PasswordResetService
+from services.platform.passkey_service import PasskeyService
 from services.platform.security_event_service import SecurityEventService
 from services.platform.site_settings_service import SiteSettingsService
 from services.platform.two_factor_service import TwoFactorService
@@ -104,7 +105,47 @@ def login():
             flash(f'Welcome back, {user.name}!', 'success')
             return redirect(_safe_next_page(default_endpoint))
     
-    return render_template('auth/login.html', form=form)
+    return render_template('auth/login.html', form=form, passkeys_configured=PasskeyService.is_configured())
+
+
+def _passkey_data():
+    if request.content_length is not None and request.content_length > 65536:
+        raise ValueError('The passkey response is too large.')
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ValueError('Send a valid passkey response.')
+    return data
+
+
+@auth_bp.route('/login/passkey/options', methods=['POST'])
+@limiter.limit("10 per minute", methods=["POST"])
+def passkey_login_options():
+    if current_user.is_authenticated:
+        return jsonify(error='You are already signed in.'), 400
+    try:
+        data = _passkey_data()
+        data['next'] = _safe_next_page()
+        return jsonify(PasskeyService.begin_authentication(data))
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+
+
+@auth_bp.route('/login/passkey/verify', methods=['POST'])
+@limiter.limit("10 per minute", methods=["POST"])
+def passkey_login_verify():
+    if current_user.is_authenticated:
+        return jsonify(error='You are already signed in.'), 400
+    try:
+        user, context = PasskeyService.finish_authentication(_passkey_data())
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+    session.pop('2fa_pending', None)
+    UserSessionService.start(user, remember=context.get('remember', False), method='passkey')
+    flash(f'Welcome back, {user.name}!', 'success')
+    target = context.get('next')
+    if user.family_id is None and target == url_for('dashboard.index'):
+        target = url_for('auth.account_security')
+    return jsonify(redirect=target or url_for('auth.account_security'))
 
 
 def _pending_two_factor():
@@ -160,7 +201,10 @@ def two_factor_login():
                 flash(f'You used a recovery code. {remaining} remaining - generate new ones from Account security if you are running low.', 'warning')
             return redirect(pending.get('next') or url_for('dashboard.index'))
 
-    return render_template('auth/two_factor_login.html', form=form)
+    return render_template(
+        'auth/two_factor_login.html', form=form, pending=pending,
+        passkeys_available=PasskeyService.is_configured() and user.passkeys.count() > 0,
+    )
 
 
 @auth_bp.route('/account/security')
@@ -175,6 +219,8 @@ def account_security():
         change_password_form=ChangePasswordForm(formdata=None),
         events=SecurityEventService.recent_for_user(current_user),
         email_enabled=EmailService.is_configured(),
+        passkeys=current_user.passkeys.order_by('created_at').all(),
+        passkeys_configured=PasskeyService.is_configured(),
     )
 
 
@@ -182,6 +228,67 @@ def _current_user_key():
     if current_user.is_authenticated:
         return f"user:{current_user.get_id().split(':', 1)[0]}"
     return f"ip:{get_remote_address()}"
+
+
+@auth_bp.route('/account/security/passkeys/options', methods=['POST'])
+@login_required
+@recent_auth_required
+@limiter.limit("10 per minute", key_func=_current_user_key, methods=["POST"])
+def passkey_register_options():
+    try:
+        return jsonify(PasskeyService.begin_registration(current_user, _passkey_data()))
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+
+
+@auth_bp.route('/account/security/passkeys/verify', methods=['POST'])
+@login_required
+@recent_auth_required
+@limiter.limit("10 per minute", key_func=_current_user_key, methods=["POST"])
+def passkey_register_verify():
+    try:
+        PasskeyService.finish_registration(current_user, _passkey_data())
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+    flash('Passkey added. Other devices have been signed out.', 'success')
+    return jsonify(redirect=url_for('auth.account_security'))
+
+
+@auth_bp.route('/account/security/passkeys/<int:key_id>/remove', methods=['POST'])
+@login_required
+@recent_auth_required
+@limiter.limit("10 per minute", key_func=_current_user_key, methods=["POST"])
+def passkey_remove(key_id):
+    try:
+        PasskeyService.remove(current_user, key_id)
+    except ValueError as error:
+        flash(str(error), 'danger')
+    else:
+        flash('Passkey removed. Other devices have been signed out.', 'success')
+    return redirect(url_for('auth.account_security'))
+
+
+@auth_bp.route('/account/confirm/passkey/options', methods=['POST'])
+@login_required
+@limiter.limit("5 per 15 minutes", key_func=_current_user_key, methods=["POST"])
+def passkey_reauth_options():
+    try:
+        data = _passkey_data()
+        data['next'] = _safe_next_page('auth.account_security')
+        return jsonify(PasskeyService.begin_authentication(data, current_user))
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+
+
+@auth_bp.route('/account/confirm/passkey/verify', methods=['POST'])
+@login_required
+@limiter.limit("5 per 15 minutes", key_func=_current_user_key, methods=["POST"])
+def passkey_reauth_verify():
+    try:
+        _, context = PasskeyService.finish_authentication(_passkey_data(), current_user)
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+    return jsonify(redirect=context.get('next') or url_for('auth.account_security'))
 
 
 @auth_bp.route('/account/security/delete', methods=['GET', 'POST'])
@@ -258,7 +365,7 @@ def reauthenticate():
             flash(str(error) or 'Your password was not correct.', 'danger')
         else:
             return redirect(_safe_next_page())
-    return render_template('auth/reauthenticate.html', form=form)
+    return render_template('auth/reauthenticate.html', form=form, passkeys_configured=PasskeyService.is_configured())
 
 
 @auth_bp.route('/account/security/password', methods=['POST'])
@@ -320,7 +427,11 @@ def two_factor_setup():
     if current_user.two_factor_enabled:
         return redirect(url_for('auth.account_security'))
 
-    TwoFactorService.begin_setup(current_user)
+    try:
+        TwoFactorService.begin_setup(current_user)
+    except ValueError as error:
+        flash(str(error), 'danger')
+        return redirect(url_for('auth.account_security'))
     form = TwoFactorCodeForm()
     if form.validate_on_submit():
         try:
