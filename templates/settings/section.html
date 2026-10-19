@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ section_title }} settings{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h1>{{ section_title }} settings</h1>
+        <a class="btn btn-outline-secondary" href="{{ url_for('settings.index') }}"><i class="bi bi-arrow-left"></i> All settings</a>
+    </div>
+    <p class="text-muted">Applies to this household. Only household owners can change these settings.</p>
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('settings.module_settings', section=section) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% block settings_fields %}{% endblock %}
+                <button class="btn btn-primary mt-3" type="submit">Save {{ section_title|lower }} settings</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

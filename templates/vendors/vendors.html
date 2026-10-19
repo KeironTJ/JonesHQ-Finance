@@ -275,6 +275,8 @@
     </div>
 </div>
 
+{% endblock %}
+{% block extra_js %}
 <script>
 // Calculate and display stats
 document.addEventListener('DOMContentLoaded', function() {
@@ -284,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
         : { 'Content-Type': 'application/json' };
     const collapseAllToggle = document.getElementById('collapseAllDefault');
     const collapseAllDefault = collapseAllToggle?.checked ?? false;
-    const storageKey = 'vendors.openSections';
+    const storageKey = 'vendors.openSections.{{ current_user.id }}';
 
     if (!collapseAllDefault) {
         const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
@@ -318,12 +320,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (collapseAllToggle) {
         collapseAllToggle.addEventListener('change', () => {
-            const value = collapseAllToggle.checked;
-            fetch('{{ url_for("settings.save_preference") }}', {
-                method: 'POST',
-                headers: jsonHeaders,
-                body: JSON.stringify({ key: 'vendors.collapse_all_default', value })
-            });
+            savePersonalPreference(collapseAllToggle, '{{ url_for("preferences.save_preference") }}',
+                'vendors.collapse_all_default', jsonHeaders);
         });
     }
     const activeCount = document.querySelectorAll('[data-status="active"]').length;

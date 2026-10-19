@@ -117,6 +117,7 @@ def create_app(config_name=None):
     from blueprints.mortgage import mortgage_bp
     from blueprints.networth import networth_bp
     from blueprints.settings import settings_bp
+    from blueprints.preferences import preferences_bp
     from blueprints.expenses import expenses_bp
     from blueprints.family import family_bp
     from blueprints.plans import plans_bp
@@ -138,6 +139,7 @@ def create_app(config_name=None):
     app.register_blueprint(mortgage_bp)
     app.register_blueprint(networth_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(preferences_bp)
     app.register_blueprint(expenses_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(plans_bp)

@@ -1,426 +1,51 @@
 {% extends "base.html" %}
-
 {% block title %}Settings{% endblock %}
-
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-gear"></i> Application Settings</h1>
+    <h1 class="mb-2"><i class="bi bi-gear"></i> Settings</h1>
+    <p class="text-muted mb-4">Choose an area to manage. Each page saves independently.</p>
+    <h2 class="h4">Your preferences</h2>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h3 class="h5">Personal preferences</h3>
+            <p>Appearance, dashboard layout, category and vendor display, and your default account. Applies only to you; theme is saved in this browser.</p>
+            <a class="btn btn-outline-primary" href="{{ url_for('preferences.index') }}">Manage personal preferences</a>
+        </div>
     </div>
-
-    <div class="row">
-        <div class="col-md-8">
-            <form method="POST" action="{{ url_for('settings.update') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                
-                <!-- Credit Card Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="bi bi-credit-card"></i> Credit Card Settings</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="default_generation_years" class="form-label">Default Generation Period (Years)</label>
-                            <input type="number" 
-                                   class="form-control" 
-                                   id="default_generation_years" 
-                                   name="default_generation_years" 
-                                   value="{{ default_generation_years }}"
-                                   min="1"
-                                   max="50"
-                                   required>
-                            <small class="text-muted">
-                                When generating future credit card transactions, this sets the default time period. 
-                                Applies to both individual card generation and "Generate All" operations.
-                            </small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Payday Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Payday Tracking</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="default_account_id" class="form-label">Default Account</label>
-                            <select class="form-select" id="default_account_id" name="default_account_id">
-                                {% for account in accounts %}
-                                <option value="{{ account.id }}" {% if account.id == default_account_id %}selected{% endif %}>
-                                    {{ account.name }} ({{ account.account_type }})
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <small class="text-muted">Used for payday tracking when no account is selected on the dashboard.</small>
-                        </div>
-                        <div class="mb-3">
-                            <label for="payday_day" class="form-label">Payday (Day of Month)</label>
-                            <input type="number" 
-                                   class="form-control" 
-                                   id="payday_day" 
-                                   name="payday_day" 
-                                   value="{{ payday_day }}"
-                                   min="1"
-                                   max="31"
-                                   required>
-                            <small class="text-muted">
-                                Set the day of the month when you get paid (e.g., 15 for the 15th). 
-                                If payday falls on a weekend, the system will automatically use the previous working day.
-                                This is used to track monthly budgets from payday to payday.
-                            </small>
-                        </div>
-                        <div class="alert alert-info mb-0">
-                            <i class="bi bi-info-circle"></i> <strong>Payday Periods:</strong> 
-                            Your budget periods run from payday to payday. For example, if your payday is the 15th, 
-                            January's period runs from January 15th to February 14th.
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Expense Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-warning text-dark">
-                        <h5 class="mb-0"><i class="bi bi-receipt"></i> Work Expense Settings</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="expense_reimburse_account" class="form-label">Reimbursement Account</label>
-                            <select class="form-select" id="expense_reimburse_account" name="expense_reimburse_account">
-                                <option value="">-- Select Account --</option>
-                                {% for account in accounts %}
-                                <option value="{{ account.id }}" {% if account.id == expense_reimburse_account %}selected{% endif %}>
-                                    {{ account.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <small class="text-muted">
-                                This is the account where monthly expense reimbursements will be deposited.
-                            </small>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="expense_payment_account" class="form-label">Default Payment Account</label>
-                            <select class="form-select" id="expense_payment_account" name="expense_payment_account">
-                                <option value="">-- Select Account --</option>
-                                {% for account in accounts %}
-                                <option value="{{ account.id }}" {% if account.id == expense_payment_account %}selected{% endif %}>
-                                    {{ account.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <small class="text-muted">
-                                Default account for bank-paid expenses (can be overridden per expense).
-                            </small>
-                        </div>
-                        
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="expense_auto_sync" name="expense_auto_sync" value="1" {% if expense_auto_sync %}checked{% endif %}>
-                            <label class="form-check-label" for="expense_auto_sync">
-                                Auto-sync expense transactions
-                            </label>
-                            <small class="form-text text-muted d-block">
-                                Automatically create bank/credit card transactions when expenses are added or updated.
-                            </small>
-                        </div>
-
-                        <div class="row g-3 mt-1">
-                            <div class="col-md-6">
-                                <label for="expense_reimburse_category" class="form-label">Reimbursement Category</label>
-                                <select class="form-select" id="expense_reimburse_category" name="expense_reimburse_category">
-                                    <option value="">-- Select Category --</option>
-                                    {% for cat in categories %}
-                                    <option value="{{ cat.id }}" {% if cat.id == expense_reimburse_category_id %}selected{% endif %}>
-                                        {{ cat.head_budget }}{% if cat.sub_budget %} › {{ cat.sub_budget }}{% endif %}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <small class="text-muted">Used on reimbursement bank transactions.</small>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="expense_reimburse_vendor" class="form-label">Reimbursement Vendor</label>
-                                <select class="form-select" id="expense_reimburse_vendor" name="expense_reimburse_vendor">
-                                    <option value="">-- Select Vendor --</option>
-                                    {% for v in vendors %}
-                                    <option value="{{ v.id }}" {% if v.id == expense_reimburse_vendor_id %}selected{% endif %}>
-                                        {{ v.name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <small class="text-muted">Used on reimbursement bank transactions (e.g. your employer).</small>
-                            </div>
-                        </div>
-
-                        <div class="mb-3 mt-3">
-                            <label class="form-label fw-semibold">Expense Accumulation Period</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="expense_period_mode" id="period_mode_calendar" value="calendar_month"
-                                    {% if expense_period_mode == 'calendar_month' %}checked{% endif %}>
-                                <label class="form-check-label" for="period_mode_calendar">
-                                    <strong>Calendar Month</strong>
-                                </label>
-                                <small class="form-text text-muted d-block ms-4">
-                                    Expenses are grouped by the calendar month they occur in (e.g. Jan 1–31).
-                                    Reimbursement is created on the last working day of that calendar month.
-                                </small>
-                            </div>
-                            <div class="form-check mt-2">
-                                <input class="form-check-input" type="radio" name="expense_period_mode" id="period_mode_payday" value="payday_period"
-                                    {% if expense_period_mode == 'payday_period' %}checked{% endif %}>
-                                <label class="form-check-label" for="period_mode_payday">
-                                    <strong>Payday Period</strong>
-                                </label>
-                                <small class="form-text text-muted d-block ms-4">
-                                    Expenses are grouped by your payday period (e.g. Jan 15–Feb 14 when payday is the 15th).
-                                    Reimbursement is created on the last working day of that payday period.<br>
-                                    <em>Note: individual linked bank/credit card transactions always use their transaction date's payday period regardless of this setting.</em>
-                                </small>
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mt-1" id="cutoff_day_section">
-                            <div class="col-md-4">
-                                <label for="expense_cutoff_day" class="form-label fw-semibold">Monthly Cutoff Day</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="expense_cutoff_day"
-                                           name="expense_cutoff_day" min="0" max="28"
-                                           value="{{ expense_cutoff_day }}">
-                                    <span class="input-group-text">of month</span>
-                                </div>
-                                <small class="text-muted d-block mt-1">
-                                    <strong>0</strong> = last day of month (default).<br>
-                                    <strong>1–28</strong>: expenses on or after this day belong to <em>next</em> month's claim period.<br>
-                                    <em>Only applies in Calendar Month mode.</em>
-                                </small>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="expense_reimburse_day" class="form-label fw-semibold">Reimbursement Day</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="expense_reimburse_day"
-                                           name="expense_reimburse_day" min="0" max="28"
-                                           value="{{ expense_reimburse_day }}">
-                                    <span class="input-group-text">of month</span>
-                                </div>
-                                <small class="text-muted d-block mt-1">
-                                    <strong>0</strong> = auto (uses cutoff day or last working day of period).<br>
-                                    <strong>1–28</strong>: fixed reimbursement date, adjusted to the previous working day if it falls on a weekend.<br>
-                                    <em>Example: cutoff 15, reimburse 25 → May expenses cut off 15 May, reimbursed 23 May (Fri if 25 is a Sun).</em>
-                                </small>
-                            </div>
-                        </div>
-                        
-                        <div class="alert alert-info mt-3 mb-0">
-                            <i class="bi bi-info-circle"></i> <strong>Expense Workflow:</strong>
-                            Payment → Period Reimbursement (last working day of period) → CC Payment (1 working day after reimbursement).
-                            Individual bank/credit card transactions always carry the <em>payday period</em> of their transaction date.
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Dashboard Preferences -->
-                <div class="card mb-4">
-                    <div class="card-header bg-dark text-white">
-                        <h5 class="mb-0"><i class="bi bi-speedometer2"></i> Dashboard Preferences</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="dashboard_networth_expanded" name="dashboard_networth_expanded" value="1" {% if networth_expanded %}checked{% endif %}>
-                            <label class="form-check-label" for="dashboard_networth_expanded">
-                                Net Worth Summary expanded by default
-                            </label>
-                        </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="dashboard_account_selection_expanded" name="dashboard_account_selection_expanded" value="1" {% if account_selection_expanded %}checked{% endif %}>
-                            <label class="form-check-label" for="dashboard_account_selection_expanded">
-                                Account Selection expanded by default
-                            </label>
-                        </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="dashboard_payday_expanded" name="dashboard_payday_expanded" value="1" {% if payday_expanded %}checked{% endif %}>
-                            <label class="form-check-label" for="dashboard_payday_expanded">
-                                Payday Period Tracking expanded by default
-                            </label>
-                        </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="dashboard_summaries_expanded" name="dashboard_summaries_expanded" value="1" {% if summaries_expanded %}checked{% endif %}>
-                            <label class="form-check-label" for="dashboard_summaries_expanded">
-                                Financial Summaries expanded by default
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="dashboard_quick_nav_expanded" name="dashboard_quick_nav_expanded" value="1" {% if quick_nav_expanded %}checked{% endif %}>
-                            <label class="form-check-label" for="dashboard_quick_nav_expanded">
-                                Quick Navigation expanded by default
-                            </label>
-                        </div>
-                        <small class="text-muted d-block mt-2">
-                            These defaults are used when the dashboard loads.
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Vendor Types -->
-                <div class="card mb-4">
-                    <div class="card-header bg-secondary text-white">
-                        <h5 class="mb-0"><i class="bi bi-shop"></i> Vendor Types</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="mb-3">
-                            Vendor types are managed in a dedicated list so you can add, edit, and order them.
-                        </p>
-                        <a href="{{ url_for('vendors.types_index') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-tags"></i> Manage Vendor Types
-                        </a>
-                    </div>
-                </div>
-
-                <!-- Tax & NI -->
-                <div class="card mb-4">
-                    <div class="card-header bg-secondary text-white">
-                        <h5 class="mb-0"><i class="bi bi-percent"></i> Tax &amp; National Insurance</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="mb-3">
-                            UK income tax and NI bands used to estimate take-home pay, per tax year.
-                        </p>
-                        <a href="{{ url_for('settings.tax_settings') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-sliders"></i> Manage Tax Years
-                        </a>
-                    </div>
-                </div>
-
-                <!-- Net Worth Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Net Worth Settings</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="networth_start_date" class="form-label">Timeline Start Date</label>
-                            <input type="date"
-                                   class="form-control"
-                                   id="networth_start_date"
-                                   name="networth_start_date"
-                                   value="{{ networth_start_date }}">
-                            <small class="text-muted">
-                                The net worth timeline will start from this date (e.g. your first transaction or
-                                property purchase date). Leave blank to use the default 5-year lookback.
-                            </small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Save Button -->
-                <div class="d-flex justify-content-between">
-                    <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">
-                        <i class="bi bi-arrow-left"></i> Back to Dashboard
-                    </a>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-circle"></i> Save Settings
-                    </button>
-                </div>
-            </form>
-
-            <!-- Appearance (client-side only, no server submit) -->
-            <div class="card form-card mt-4" id="appearance-card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-palette"></i> Appearance</h5>
-                </div>
+    <h2 class="h4">Household configuration <span class="badge bg-secondary fs-6">Owner only</span></h2>
+    <p class="text-muted">Shared rules and defaults for your household, not other households.</p>
+    <div class="row g-3 mb-4">
+        {% for section, title, description in [
+            ('household', 'Household & payday', 'The shared payday used for budget periods and weekend adjustments.'),
+            ('credit-cards', 'Credit cards', 'Default horizon for generating future card transactions.'),
+            ('expenses', 'Work expenses', 'Reimbursement accounts, transaction sync and claim-period rules.'),
+            ('networth', 'Net worth', 'The shared start date for the net worth timeline.')
+        ] %}
+        <div class="col-md-6">
+            <div class="card h-100">
                 <div class="card-body">
-                    <p class="text-muted mb-3" style="font-size:0.875rem;">
-                        Choose your preferred colour theme. Your selection is saved in your browser.
-                    </p>
-                    <div class="row g-3">
-                        <!-- Light -->
-                        <div class="col-4">
-                            <label class="theme-option-card" for="themeRadioLight">
-                                <input class="visually-hidden" type="radio" name="jhq-theme-radio" id="themeRadioLight" value="light">
-                                <div class="theme-preview theme-preview-light">
-                                    <div class="preview-nav"></div>
-                                    <div class="preview-body">
-                                        <div class="preview-card"></div>
-                                        <div class="preview-card"></div>
-                                        <div class="preview-card"></div>
-                                    </div>
-                                </div>
-                                <span class="theme-option-label"><i class="bi bi-sun-fill me-1"></i>Light</span>
-                            </label>
-                        </div>
-                        <!-- Dark -->
-                        <div class="col-4">
-                            <label class="theme-option-card" for="themeRadioDark">
-                                <input class="visually-hidden" type="radio" name="jhq-theme-radio" id="themeRadioDark" value="dark">
-                                <div class="theme-preview theme-preview-dark">
-                                    <div class="preview-nav"></div>
-                                    <div class="preview-body">
-                                        <div class="preview-card"></div>
-                                        <div class="preview-card"></div>
-                                        <div class="preview-card"></div>
-                                    </div>
-                                </div>
-                                <span class="theme-option-label"><i class="bi bi-moon-stars-fill me-1"></i>Dark</span>
-                            </label>
-                        </div>
-                        <!-- Auto -->
-                        <div class="col-4">
-                            <label class="theme-option-card" for="themeRadioAuto">
-                                <input class="visually-hidden" type="radio" name="jhq-theme-radio" id="themeRadioAuto" value="auto">
-                                <div class="theme-preview theme-preview-auto">
-                                    <div class="preview-nav"></div>
-                                    <div class="preview-body">
-                                        <div class="preview-card"></div>
-                                        <div class="preview-card"></div>
-                                    </div>
-                                </div>
-                                <span class="theme-option-label"><i class="bi bi-circle-half me-1"></i>Auto</span>
-                            </label>
-                        </div>
-                    </div>
-                    <small class="text-muted d-block mt-3">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <strong>Auto</strong> follows your device's system preference. The quick toggle (sun/moon icon in the navbar) cycles between all three modes.
-                    </small>
+                    <h3 class="h5">{{ title }}</h3>
+                    <p>{{ description }}</p>
+                    <a class="btn btn-outline-primary" href="{{ url_for('settings.module_settings', section=section) }}">Manage {{ title|lower }}</a>
                 </div>
             </div>
         </div>
-
-        <!-- Help/Info Sidebar -->
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0"><i class="bi bi-question-circle"></i> About Settings</h5>
-                </div>
+        {% endfor %}
+        {% for endpoint, title, description in [
+            ('settings.tax_settings', 'Tax & National Insurance', 'Tax-year bands and rates used to estimate take-home pay.'),
+            ('vendors.types_index', 'Vendor types', 'Add, edit and order your household vendor types.'),
+            ('family.index', 'Family & members', 'Household members, access permissions and assignment labels.')
+        ] %}
+        <div class="col-md-6">
+            <div class="card h-100">
                 <div class="card-body">
-                    <h6>Generation Period</h6>
-                    <p class="small">
-                        This controls how far into the future the system generates interest and payment transactions.
-                        A longer period gives you better long-term visibility of your debt repayment journey.
-                    </p>
-                    <hr>
-                    <h6>Default: 10 Years</h6>
-                    <p class="small">
-                        The default is set to 10 years, which is suitable for most credit card repayment scenarios.
-                        You can adjust this from 1 to 50 years based on your planning needs.
-                    </p>
-                    <hr>
-                    <h6>Vendor Types</h6>
-                    <p class="small mb-2">
-                        Keep vendor types organized and tailored to your spending.
-                    </p>
-                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vendors.types_index') }}">
-                        <i class="bi bi-tags"></i> Manage Vendor Types
-                    </a>
-                    <hr>
-                    <h6>Family &amp; Assignments</h6>
-                    <p class="small mb-2">
-                        Manage family members and transaction assignment labels (e.g. children or anyone without a login account).
-                    </p>
-                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('family.index') }}">
-                        <i class="bi bi-people"></i> Family Settings
-                    </a>
+                    <h3 class="h5">{{ title }}</h3>
+                    <p>{{ description }}</p>
+                    <a class="btn btn-outline-secondary" href="{{ url_for(endpoint) }}">Manage {{ title|lower }}</a>
                 </div>
             </div>
         </div>
+        {% endfor %}
     </div>
 </div>
 {% endblock %}

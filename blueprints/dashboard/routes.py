@@ -3,6 +3,7 @@ from flask_login import current_user
 from . import dashboard_bp
 from services.analytics.dashboard_service import DashboardService
 from models.settings import Settings
+from services.platform.preference_service import PreferenceService
 from datetime import date
 
 
@@ -46,8 +47,8 @@ def index():
                          mortgage_summary=dashboard_data['mortgage_summary'],
                          pension_summary=dashboard_data['pension_summary'],
                          onboarding_incomplete=onboarding_incomplete,
-                         networth_expanded=Settings.get_value('dashboard.networth_expanded', True),
-                         account_selection_expanded=Settings.get_value('dashboard.account_selection_expanded', True),
-                         payday_expanded=Settings.get_value('dashboard.payday_expanded', True),
-                         summaries_expanded=Settings.get_value('dashboard.summaries_expanded', True),
-                         quick_nav_expanded=Settings.get_value('dashboard.quick_nav_expanded', True))
+                         networth_expanded=PreferenceService.get_value('dashboard.networth_expanded'),
+                         account_selection_expanded=PreferenceService.get_value('dashboard.account_selection_expanded'),
+                         payday_expanded=PreferenceService.get_value('dashboard.payday_expanded'),
+                         summaries_expanded=PreferenceService.get_value('dashboard.summaries_expanded'),
+                         quick_nav_expanded=PreferenceService.get_value('dashboard.quick_nav_expanded'))

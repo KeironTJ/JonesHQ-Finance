@@ -1,0 +1,7 @@
+{% extends "settings/section.html" %}
+{% block settings_fields %}
+<label class="form-label" for="payday_day">Payday (day of month)</label>
+<input class="form-control" type="number" id="payday_day" name="payday_day" min="1" max="31" value="{{ values.get('payday_day', '') }}" required>
+<p class="form-text">Budget periods run from payday to payday. Weekend paydays use the previous working day. Changing this affects periods calculated from this setting; it does not rewrite existing transactions.</p>
+<p class="mb-0">Your default dashboard account is personal, not shared. Change it in <a href="{{ url_for('preferences.index') }}">Personal preferences</a>.</p>
+{% endblock %}

@@ -86,6 +86,27 @@ const ThemeManager = (function () {
     return { init, setTheme, getStored, getResolved, THEMES };
 })();
 
+async function savePersonalPreference(toggle, url, key, headers) {
+    const value = toggle.checked;
+    toggle.disabled = true;
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ key, value }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Unable to save your preference. Please try again.');
+        }
+    } catch (error) {
+        toggle.checked = !value;
+        window.alert(error.message || 'Unable to save your preference. Please try again.');
+    } finally {
+        toggle.disabled = false;
+    }
+}
+
 // ── Chart.js Theme Integration ────────────────────────────────────────────────
 window.updateChartTheme = function (theme) {
     if (typeof Chart === 'undefined') return;

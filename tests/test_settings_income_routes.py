@@ -21,12 +21,11 @@ def test_settings_preference_route_persists_json_value(app, family, user):
 
     assert response.status_code == 200
     assert response.get_json() == {'success': True}
-    setting = Settings.query.filter_by(
+    assert user.preferences == {'categories.collapse_all_default': True}
+    assert Settings.query.filter_by(
         key='categories.collapse_all_default',
         family_id=family.id,
-    ).one()
-    assert setting.value == 'True'
-    assert setting.setting_type == 'boolean'
+    ).count() == 0
 
 
 def test_settings_preference_route_rejects_unknown_keys(app, family, user):

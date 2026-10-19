@@ -25,9 +25,11 @@
             <a href="{{ url_for('expenses.mileage_review') }}" class="btn btn-outline-primary btn-sm" title="Open full mileage review workspace">
                 <i class="bi bi-speedometer2"></i> Mileage Workspace
             </a>
-            <a href="{{ url_for('settings.index') }}" class="btn btn-outline-secondary btn-sm" title="Configure expense accounts and settings">
+            {% if can_access_section('settings') %}
+            <a href="{{ url_for('settings.module_settings', section='expenses') }}" class="btn btn-outline-secondary btn-sm" title="Configure expense accounts and settings">
                 <i class="bi bi-gear"></i> Settings
             </a>
+            {% endif %}
             <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#generateAllModal" title="Sync reimbursements and CC payments">
                 <i class="bi bi-arrow-repeat"></i> Sync Transactions
             </button>

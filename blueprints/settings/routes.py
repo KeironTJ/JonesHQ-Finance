@@ -1,296 +1,73 @@
-from flask import render_template, request, redirect, url_for, flash
-from flask import jsonify
+from flask import abort, current_app, flash, redirect, render_template, request, url_for
+from decimal import InvalidOperation
+from sqlalchemy.exc import SQLAlchemyError
+
 from . import settings_bp
-from models.settings import Settings
-from models.accounts import Account
-from models.categories import Category
-from models.vendors import Vendor
-from models.tax_settings import TaxSettings
 from extensions import db
-from decimal import Decimal
-from datetime import datetime
-from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from models.tax_settings import TaxSettings
 from services.platform.settings_service import SettingsService
-
-
-ALLOWED_PREFERENCE_KEYS = {
-    'categories.collapse_all_default',
-    'vendors.collapse_all_default',
-}
+from utils.db_helpers import family_get_or_404, family_query
 
 
 @settings_bp.route('/settings')
 def index():
-    """Display application settings"""
-    # Get or create default settings
-    default_generation_years = Settings.get_value('default_generation_years', 10)
-    payday_day = Settings.get_value('payday_day', 15)
-    
-    # Expense settings
-    expense_reimburse_account = Settings.get_value('expenses.reimburse_account_id')
-    expense_payment_account = Settings.get_value('expenses.payment_account_id')
-    expense_auto_sync = Settings.get_value('expenses.auto_sync', True)
-    expense_period_mode = Settings.get_value('expenses.period_mode', 'calendar_month')
-    expense_cutoff_day = Settings.get_value('expenses.cutoff_day', 0)
-    expense_reimburse_day = Settings.get_value('expenses.reimburse_day', 0)
-    expense_reimburse_category_id = Settings.get_value('expenses.reimburse_category_id')
-    expense_reimburse_vendor_id   = Settings.get_value('expenses.reimburse_vendor_id')
+    return render_template('settings/index.html')
 
-    # Net Worth settings
-    networth_start_date = Settings.get_value('networth.start_date', '')
 
-    # Dashboard preferences
-    networth_expanded = Settings.get_value('dashboard.networth_expanded', True)
-    account_selection_expanded = Settings.get_value('dashboard.account_selection_expanded', True)
-    payday_expanded = Settings.get_value('dashboard.payday_expanded', True)
-    summaries_expanded = Settings.get_value('dashboard.summaries_expanded', True)
-    quick_nav_expanded = Settings.get_value('dashboard.quick_nav_expanded', True)
-
-    
-    # Get all active accounts
-    accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    default_account = SettingsService.get_default_account(accounts)
-    categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
-    vendors    = family_query(Vendor).order_by(Vendor.name).all()
-    
-    return render_template('settings/index.html',
-                         default_generation_years=default_generation_years,
-                         payday_day=payday_day,
-                         expense_reimburse_account=int(expense_reimburse_account) if expense_reimburse_account else None,
-                         expense_payment_account=int(expense_payment_account) if expense_payment_account else None,
-                         expense_auto_sync=expense_auto_sync,
-                         expense_period_mode=expense_period_mode,
-                         expense_cutoff_day=int(expense_cutoff_day) if expense_cutoff_day else 0,
-                         expense_reimburse_day=int(expense_reimburse_day) if expense_reimburse_day else 0,
-                         expense_reimburse_category_id=int(expense_reimburse_category_id) if expense_reimburse_category_id else None,
-                         expense_reimburse_vendor_id=int(expense_reimburse_vendor_id) if expense_reimburse_vendor_id else None,
-                         accounts=accounts,
-                         default_account_id=default_account.id if default_account else None,
-                         categories=categories,
-                         vendors=vendors,
-                         networth_start_date=networth_start_date,
-                         networth_expanded=networth_expanded,
-                         account_selection_expanded=account_selection_expanded,
-                         payday_expanded=payday_expanded,
-                         summaries_expanded=summaries_expanded,
-                         quick_nav_expanded=quick_nav_expanded)
+@settings_bp.route('/settings/modules/<section>', methods=['GET', 'POST'])
+def module_settings(section):
+    if section not in SettingsService.SECTIONS:
+        abort(404)
+    if request.method == 'POST':
+        try:
+            SettingsService.update_section(section, request.form)
+            flash(f'{SettingsService.SECTIONS[section][0]} settings saved.', 'success')
+            return redirect(url_for('settings.module_settings', section=section))
+        except (ValueError, TypeError) as error:
+            db.session.rollback()
+            flash(str(error) or 'Invalid setting value.', 'danger')
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.exception('Unable to update %s settings', section)
+            flash('Unable to save settings. Please try again.', 'danger')
+    context = SettingsService.get_section_data(section)
+    if request.method == 'POST':
+        context['values'] = request.form
+    return render_template(f'settings/{section}.html', **context)
 
 
 @settings_bp.route('/settings/update', methods=['POST'])
 def update():
-    """Update application settings"""
-    try:
-        # Credit Card Settings
-        generation_years = int(request.form.get('default_generation_years', 10))
-        
-        # Payday Settings
-        payday_day = int(request.form.get('payday_day', 15))
-        
-        # Validate
-        if generation_years < 1 or generation_years > 50:
-            flash('Generation period must be between 1 and 50 years!', 'danger')
-            return redirect(url_for('settings.index'))
-        
-        if payday_day < 1 or payday_day > 31:
-            flash('Payday must be between 1 and 31!', 'danger')
-            return redirect(url_for('settings.index'))
-        
-        # Update settings
-        Settings.set_value(
-            'default_generation_years',
-            generation_years,
-            'Default number of years to generate future credit card transactions',
-            'int'
-        )
-        
-        Settings.set_value(
-            'payday_day',
-            payday_day,
-            'Day of month when payday occurs (adjusted for weekends)',
-            'int'
-        )
-
-        SettingsService.update_default_account(request.form)
-        
-        # Expense Settings
-        expense_reimburse_account = request.form.get('expense_reimburse_account')
-        expense_payment_account = request.form.get('expense_payment_account')
-        expense_auto_sync = request.form.get('expense_auto_sync') == '1'
-        
-        if expense_reimburse_account:
-            family_get_or_404(Account, int(expense_reimburse_account))
-            Settings.set_value(
-                'expenses.reimburse_account_id',
-                int(expense_reimburse_account),
-                'Account where expense reimbursements are deposited',
-                'int'
-            )
-        
-        if expense_payment_account:
-            family_get_or_404(Account, int(expense_payment_account))
-            Settings.set_value(
-                'expenses.payment_account_id',
-                int(expense_payment_account),
-                'Default account for bank-paid expenses',
-                'int'
-            )
-        
-        Settings.set_value(
-            'expenses.auto_sync',
-            expense_auto_sync,
-            'Automatically sync expense transactions',
-            'bool'
-        )
-
-        expense_reimburse_category = request.form.get('expense_reimburse_category')
-        if expense_reimburse_category:
-            family_get_or_404(Category, int(expense_reimburse_category))
-            Settings.set_value('expenses.reimburse_category_id', int(expense_reimburse_category),
-                               'Category for reimbursement/bank-expense transactions', 'int')
-        expense_reimburse_vendor = request.form.get('expense_reimburse_vendor')
-        if expense_reimburse_vendor:
-            family_get_or_404(Vendor, int(expense_reimburse_vendor))
-            Settings.set_value('expenses.reimburse_vendor_id', int(expense_reimburse_vendor),
-                               'Vendor for reimbursement/bank-expense transactions', 'int')
-
-        expense_period_mode = request.form.get('expense_period_mode', 'calendar_month')
-        if expense_period_mode not in ('calendar_month', 'payday_period'):
-            expense_period_mode = 'calendar_month'
-        Settings.set_value(
-            'expenses.period_mode',
-            expense_period_mode,
-            'Expense accumulation period: calendar_month or payday_period',
-            'string'
-        )
-
-        expense_cutoff_day = int(request.form.get('expense_cutoff_day', 0) or 0)
-        if not (0 <= expense_cutoff_day <= 28):
-            flash('Expense cutoff day must be between 0 (last day of month) and 28.', 'danger')
-            return redirect(url_for('settings.index'))
-        Settings.set_value(
-            'expenses.cutoff_day',
-            expense_cutoff_day,
-            'Day of month expenses are cut off for claiming (0 = last day of month)',
-            'int'
-        )
-
-        expense_reimburse_day = int(request.form.get('expense_reimburse_day', 0) or 0)
-        if not (0 <= expense_reimburse_day <= 28):
-            flash('Reimbursement day must be between 0 (auto) and 28.', 'danger')
-            return redirect(url_for('settings.index'))
-        Settings.set_value(
-            'expenses.reimburse_day',
-            expense_reimburse_day,
-            'Fixed day of month for reimbursement date (0 = derive from cutoff/period-end)',
-            'int'
-        )
-
-        # Net Worth Settings
-        networth_start_date_str = request.form.get('networth_start_date', '').strip()
-        if networth_start_date_str:
-            datetime.strptime(networth_start_date_str, '%Y-%m-%d')  # validate
-            Settings.set_value(
-                'networth.start_date',
-                networth_start_date_str,
-                'Earliest date to show on the net worth timeline',
-                'date'
-            )
-        else:
-            # Blank = clear the setting (revert to 5-year default)
-            SettingsService.clear_networth_start_date()
-
-        # Dashboard Preferences
-        networth_expanded = request.form.get('dashboard_networth_expanded') == '1'
-        account_selection_expanded = request.form.get('dashboard_account_selection_expanded') == '1'
-        payday_expanded = request.form.get('dashboard_payday_expanded') == '1'
-        summaries_expanded = request.form.get('dashboard_summaries_expanded') == '1'
-        quick_nav_expanded = request.form.get('dashboard_quick_nav_expanded') == '1'
-
-        Settings.set_value(
-            'dashboard.networth_expanded',
-            networth_expanded,
-            'Default expanded state for Net Worth Summary on dashboard',
-            'boolean'
-        )
-        Settings.set_value(
-            'dashboard.account_selection_expanded',
-            account_selection_expanded,
-            'Default expanded state for Account Selection on dashboard',
-            'boolean'
-        )
-        Settings.set_value(
-            'dashboard.payday_expanded',
-            payday_expanded,
-            'Default expanded state for Payday Period Tracking on dashboard',
-            'boolean'
-        )
-        Settings.set_value(
-            'dashboard.summaries_expanded',
-            summaries_expanded,
-            'Default expanded state for Financial Summaries on dashboard',
-            'boolean'
-        )
-        Settings.set_value(
-            'dashboard.quick_nav_expanded',
-            quick_nav_expanded,
-            'Default expanded state for Quick Navigation on dashboard',
-            'boolean'
-        )
-
-        
-        db.session.commit()
-        flash(f'Settings updated successfully! Payday set to {payday_day} of each month.', 'success')
-        
-    except ValueError:
-        db.session.rollback()
-        flash('Invalid value provided!', 'danger')
-    except Exception as e:
-        db.session.rollback()
-        flash('Unable to update settings. Please try again.', 'danger')
-    
+    flash('Settings now save independently. Please open the relevant settings page.', 'warning')
     return redirect(url_for('settings.index'))
 
 
 @settings_bp.route('/settings/save_preference', methods=['POST'])
 def save_preference():
-    """Save a lightweight user preference (AJAX)"""
-    data = request.get_json() or {}
-    key = data.get('key')
-    value = data.get('value')
-
-    if key not in ALLOWED_PREFERENCE_KEYS:
-        return jsonify({'success': False, 'error': 'Unsupported preference key'}), 400
-
-    if not isinstance(value, bool):
-        return jsonify({'success': False, 'error': 'Preference value must be boolean'}), 400
-
-    Settings.set_value(key, value, f'User preference: {key}', 'boolean')
-    db.session.commit()
-
-    return jsonify({'success': True})
+    # Preserve the legacy endpoint for existing clients; writes are now personal.
+    from blueprints.preferences.routes import save_preference as save_personal_preference
+    return save_personal_preference()
 
 
 @settings_bp.route('/settings/tax')
 def tax_settings():
-    """Display tax and NI settings"""
     tax_years = family_query(TaxSettings).order_by(TaxSettings.effective_from.desc()).all()
     return render_template('settings/tax_settings.html', tax_years=tax_years)
-        
 
 
 @settings_bp.route('/settings/tax/<int:id>/edit', methods=['GET', 'POST'])
 def edit_tax_settings(id):
-    """Edit tax settings for a specific tax year"""
     tax_year = family_get_or_404(TaxSettings, id)
-    
     if request.method == 'POST':
         try:
             tax_year = SettingsService.update_tax_settings(id, request.form)
             flash(f'Tax settings for {tax_year.tax_year} updated successfully!', 'success')
             return redirect(url_for('settings.tax_settings'))
-            
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, InvalidOperation) as error:
             db.session.rollback()
+            flash(str(error) or 'Invalid tax setting value.', 'danger')
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.exception('Unable to update tax settings')
             flash('Unable to update tax settings. Please try again.', 'danger')
-    
     return render_template('settings/edit_tax_settings.html', tax_year=tax_year)

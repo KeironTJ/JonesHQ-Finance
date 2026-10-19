@@ -1,0 +1,6 @@
+{% extends "settings/section.html" %}
+{% block settings_fields %}
+<label class="form-label" for="networth_start_date">Timeline start date</label>
+<input class="form-control" type="date" id="networth_start_date" name="networth_start_date" value="{{ values.get('networth_start_date', '') }}">
+<p class="form-text">The household's net worth timeline starts from this date. Leave blank for the default five-year lookback. This changes the timeline window, not the underlying asset or balance records.</p>
+{% endblock %}

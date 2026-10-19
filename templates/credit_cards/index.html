@@ -11,6 +11,11 @@
     <div class="credit-card-index-header mb-4">
         <h1>Credit Cards</h1>
         <div class="credit-card-index-actions">
+            {% if can_access_section('settings') %}
+            <a href="{{ url_for('settings.module_settings', section='credit-cards') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-gear"></i> Card settings
+            </a>
+            {% endif %}
             {% if cards|selectattr('is_active')|list|length > 1 %}
             <a href="{{ url_for('credit_cards.create_balance_transfer') }}" class="btn btn-outline-primary me-2">
                 <i class="bi bi-arrow-left-right"></i> Balance Transfer
