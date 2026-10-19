@@ -29,7 +29,9 @@ Flask blueprints for modular route organization
 - `expenses/` - General and work expense management
 - `family/` - Family membership and assignments
 - `income/` - Income and payslip tracking
-- `settings/` - User and application settings
+- `settings/` - Owner-only household settings hub, independent configuration pages,
+  and tax-year editing
+- `preferences/` - Personal display and default-account preferences for all signed-in users
 
 ### `/models/`
 SQLAlchemy database models
@@ -57,7 +59,8 @@ SQLAlchemy database models
 - `vehicles.py` - Vehicle model
 - `vendors.py` - Vendor model
 - `family.py` / `users.py` - Family and user identity models
-- `settings.py` / `tax_settings.py` - User configuration
+- `settings.py` / `tax_settings.py` - Household configuration; personal display
+  preferences are stored in `User.preferences`
 - `property.py` / `property_valuation_snapshot.py` - Property assets and valuations
 - `recurring_income.py` - Recurring income
 - `monthly_account_balance.py` - Monthly account balances
@@ -75,7 +78,12 @@ for the package map and compatibility-import policy.
 
 ### `/templates/`
 Jinja2 HTML templates
-- `base.html` - Base template with navigation
+- `base.html` - Base template with navigation; household Settings is in the profile
+  dropdown under "Your household" (owners only), not in the main module navigation.
+  Personal preferences is under "Your account" for every signed-in user.
+- `settings/` - Settings hub and independently saved household, credit-card,
+  work-expense, net-worth and tax configuration
+- `preferences/` - Personal dashboard/list defaults and browser-local appearance
 - `categories/` - Category templates
 - `components/` - Reusable components
 - `credit_cards/` - Credit card templates

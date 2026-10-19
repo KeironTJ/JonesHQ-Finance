@@ -174,13 +174,6 @@
                         </ul>
                     </li>
                     {% endif %}
-                    {% if can_access_section('settings') %}
-                    <li class="nav-item">
-                        <a class="nav-link {% if '/settings' in request.path %}active{% endif %}" href="/settings">
-                            <i class="bi bi-gear"></i> Settings
-                        </a>
-                    </li>
-                    {% endif %}
                 </ul>
                 <ul class="navbar-nav align-items-lg-center gap-1">
                     <li class="nav-item d-lg-none">
@@ -197,7 +190,7 @@
                     </li>
                     {% if current_user.is_authenticated %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button"
+                        <a class="nav-link dropdown-toggle {% if request.blueprint in ('settings', 'preferences') %}active{% endif %}" href="#" role="button"
                            data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i>
                             <span class="ms-1">{{ current_user.name }}</span>
@@ -213,9 +206,17 @@
                             <li><a class="dropdown-item" href="{{ url_for('family.index') }}">
                                 <i class="bi bi-people-fill"></i> Family &amp; members
                             </a></li>
+                            {% if can_access_section('settings') %}
+                            <li><a class="dropdown-item {% if request.blueprint == 'settings' %}active{% endif %}" href="{{ url_for('settings.index') }}"{% if request.blueprint == 'settings' %} aria-current="page"{% endif %}>
+                                <i class="bi bi-gear"></i> Settings
+                            </a></li>
+                            {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
                             <li><h6 class="dropdown-header">Your account</h6></li>
+                            <li><a class="dropdown-item {% if request.blueprint == 'preferences' %}active{% endif %}" href="{{ url_for('preferences.index') }}"{% if request.blueprint == 'preferences' %} aria-current="page"{% endif %}>
+                                <i class="bi bi-sliders"></i> Personal preferences
+                            </a></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.account_security') }}">
                                 <i class="bi bi-shield-lock"></i> Account security
                             </a></li>

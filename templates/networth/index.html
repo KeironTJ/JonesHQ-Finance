@@ -7,6 +7,11 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1><i class="bi bi-graph-up"></i> Net Worth Timeline</h1>
         <div>
+            {% if can_access_section('settings') %}
+            <a class="btn btn-outline-secondary" href="{{ url_for('settings.module_settings', section='networth') }}">
+                <i class="bi bi-gear"></i> Timeline settings
+            </a>
+            {% endif %}
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#periodModal">
                 <i class="bi bi-calendar-range"></i> Projection Period
             </button>

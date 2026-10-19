@@ -5,7 +5,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from blueprints.categories import bp
 from extensions import db
 from models import Category
-from models.settings import Settings
+from services.platform.preference_service import PreferenceService
 from models.transactions import Transaction
 from services.finance.payday_service import PaydayService
 from services.finance.category_service import CategoryService
@@ -18,7 +18,7 @@ from utils.db_helpers import family_query, family_get, family_get_or_404, get_fa
 @bp.route('/')
 def index():
     """List all categories grouped by head budget"""
-    collapse_all_default = Settings.get_value('categories.collapse_all_default', False)
+    collapse_all_default = PreferenceService.get_value('categories.collapse_all_default')
     
     return render_template('categories/categories.html', 
                          categories_by_head=CategoryService.get_categories_by_head(),

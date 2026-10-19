@@ -32,7 +32,7 @@ class Settings(db.Model):
             return int(setting.value)
         elif setting.setting_type == 'float':
             return float(setting.value)
-        elif setting.setting_type == 'boolean':
+        elif setting.setting_type in ('boolean', 'bool'):
             return setting.value.lower() in ('true', '1', 'yes')
         else:
             return setting.value

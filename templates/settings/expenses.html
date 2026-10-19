@@ -1,0 +1,72 @@
+{% extends "settings/section.html" %}
+{% block settings_fields %}
+<p class="text-muted">Defaults used by expense workflows. Saving does not itself resync or rebuild existing expense transactions.</p>
+<div class="row g-3">
+    {% for field, label, help_text in [
+        ('expense_reimburse_account', 'Reimbursement account', 'Where monthly reimbursements are deposited.'),
+        ('expense_payment_account', 'Default payment account', 'Default for bank-paid expenses; can be overridden per expense.')
+    ] %}
+    <div class="col-md-6">
+        <label class="form-label" for="{{ field }}">{{ label }}</label>
+        <select class="form-select" id="{{ field }}" name="{{ field }}">
+            <option value="">No default account</option>
+            {% for account in accounts %}
+            <option value="{{ account.id }}" {% if values.get(field)|string == account.id|string %}selected{% endif %}>{{ account.name }}</option>
+            {% endfor %}
+        </select>
+        <div class="form-text">{{ help_text }}</div>
+    </div>
+    {% endfor %}
+    <div class="col-md-6">
+        <label class="form-label" for="expense_reimburse_category">Reimbursement category</label>
+        <select class="form-select" id="expense_reimburse_category" name="expense_reimburse_category">
+            <option value="">No default category</option>
+            {% for category in categories %}
+            <option value="{{ category.id }}" {% if values.get('expense_reimburse_category')|string == category.id|string %}selected{% endif %}>{{ category.name }}</option>
+            {% endfor %}
+        </select>
+        <div class="form-text">Used on reimbursement bank transactions.</div>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="expense_reimburse_vendor">Reimbursement vendor</label>
+        <select class="form-select" id="expense_reimburse_vendor" name="expense_reimburse_vendor">
+            <option value="">No default vendor</option>
+            {% for vendor in vendors %}
+            <option value="{{ vendor.id }}" {% if values.get('expense_reimburse_vendor')|string == vendor.id|string %}selected{% endif %}>{{ vendor.name }}</option>
+            {% endfor %}
+        </select>
+        <div class="form-text">Used on reimbursement bank transactions (for example, your employer).</div>
+    </div>
+</div>
+<div class="form-check my-3">
+    <input class="form-check-input" type="checkbox" id="expense_auto_sync" name="expense_auto_sync" value="1" {% if values.get('expense_auto_sync') %}checked{% endif %}>
+    <label class="form-check-label" for="expense_auto_sync">Auto-sync expense transactions</label>
+    <div class="form-text">Automatically create bank/credit card transactions when expenses are added or updated.</div>
+</div>
+<fieldset class="mb-3">
+    <legend class="h6">Expense accumulation period</legend>
+    {% for mode, label, help_text in [
+        ('calendar_month', 'Calendar month', 'Group by calendar month, reimbursed on the last working day of that month.'),
+        ('payday_period', 'Payday period', 'Group by the household payday period, reimbursed on its last working day.')
+    ] %}
+    <div class="form-check mb-2">
+        <input class="form-check-input" type="radio" id="{{ mode }}" name="expense_period_mode" value="{{ mode }}" {% if values.get('expense_period_mode') == mode %}checked{% endif %} required>
+        <label class="form-check-label" for="{{ mode }}">{{ label }}</label>
+        <div class="form-text">{{ help_text }}</div>
+    </div>
+    {% endfor %}
+</fieldset>
+<div class="row g-3">
+    <div class="col-md-6">
+        <label class="form-label" for="expense_cutoff_day">Monthly cutoff day</label>
+        <input class="form-control" type="number" id="expense_cutoff_day" name="expense_cutoff_day" min="0" max="28" value="{{ values.get('expense_cutoff_day', '') }}" required>
+        <div class="form-text">0 = last day of month. 1-28: expenses on or after this day belong to next month's claim period. Only applies in calendar-month mode.</div>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="expense_reimburse_day">Reimbursement day</label>
+        <input class="form-control" type="number" id="expense_reimburse_day" name="expense_reimburse_day" min="0" max="28" value="{{ values.get('expense_reimburse_day', '') }}" required>
+        <div class="form-text">0 = derive from cutoff or period end. 1-28: a fixed day, adjusted to the previous working day at weekends.</div>
+    </div>
+</div>
+<div class="alert alert-info mt-3 mb-0">Linked bank and credit-card transactions always use the payday period of their transaction date, regardless of the expense accumulation setting.</div>
+{% endblock %}

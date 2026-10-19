@@ -1,0 +1,6 @@
+{% extends "settings/section.html" %}
+{% block settings_fields %}
+<label class="form-label" for="default_generation_years">Default generation period (years)</label>
+<input class="form-control" type="number" id="default_generation_years" name="default_generation_years" min="1" max="50" value="{{ values.get('default_generation_years', '') }}" required>
+<p class="form-text">Default: 10 years. Used for individual card generation and Generate All. Saving this default does not regenerate or alter existing transactions.</p>
+{% endblock %}

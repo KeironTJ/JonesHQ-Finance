@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Personal preferences{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h1><i class="bi bi-sliders"></i> Personal preferences</h1>
+        {% if can_access_section('settings') %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('settings.index') }}">All settings</a>
+        {% endif %}
+    </div>
+    <p class="text-muted">Applies only to you, not other household members.</p>
+    <form method="POST" action="{{ url_for('preferences.index') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h2 class="h5">Dashboard defaults</h2>
+                <label class="form-label" for="default_account_id">Default account</label>
+                <select class="form-select mb-3" id="default_account_id" name="default_account_id">
+                    <option value="">Automatic (first available account)</option>
+                    {% for account in accounts %}
+                    <option value="{{ account.id }}" {% if account.id == default_account_id %}selected{% endif %}>{{ account.name }} ({{ account.account_type }})</option>
+                    {% endfor %}
+                </select>
+                {% for key, label in [
+                    ('dashboard.networth_expanded', 'Net worth summary expanded by default'),
+                    ('dashboard.account_selection_expanded', 'Account selection expanded by default'),
+                    ('dashboard.payday_expanded', 'Payday period tracking expanded by default'),
+                    ('dashboard.summaries_expanded', 'Financial summaries expanded by default'),
+                    ('dashboard.quick_nav_expanded', 'Quick navigation expanded by default')
+                ] %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="{{ key }}" name="{{ key }}" value="1" {% if preferences[key] %}checked{% endif %}>
+                    <label class="form-check-label" for="{{ key }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-body">
+                <h2 class="h5">List display</h2>
+                {% for key, label in [
+                    ('categories.collapse_all_default', 'Collapse all category groups by default'),
+                    ('vendors.collapse_all_default', 'Collapse all vendor groups by default')
+                ] %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="{{ key }}" name="{{ key }}" value="1" {% if preferences[key] %}checked{% endif %}>
+                    <label class="form-check-label" for="{{ key }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <button class="btn btn-primary mb-4" type="submit">Save personal preferences</button>
+    </form>
+    <div class="card" id="appearance-card">
+        <div class="card-body">
+            <h2 class="h5"><i class="bi bi-palette"></i> Appearance</h2>
+            <p class="text-muted">Saved immediately in this browser, not to your account. It may be shared by people using the same browser profile.</p>
+            {% for value, label in [('light', 'Light'), ('dark', 'Dark'), ('auto', 'Auto (follow device)')] %}
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="jhq-theme-radio" id="theme-{{ value }}" value="{{ value }}">
+                <label class="form-check-label" for="theme-{{ value }}">{{ label }}</label>
+            </div>
+            {% endfor %}
+            <p class="form-text mb-0">Auto follows your device's appearance preference. The navbar sun/moon button switches between light and dark.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

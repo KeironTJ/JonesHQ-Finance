@@ -12,6 +12,24 @@ Production runs on PostgreSQL 17 (configured via `DATABASE_URL` or
 users can share a financial workspace while permissions remain enforced by the
 application.
 
+## Configuration and Personal Preferences
+
+- `Settings` stores family-scoped functional rules and defaults, including payday,
+  credit-card generation, expense workflow and the shared net-worth timeline start.
+  Household owners edit each area independently; saving one never resets another.
+- `User.preferences` is a nullable JSON object containing allowlisted boolean
+  dashboard and category/vendor display preferences. Reads and writes use only the
+  authenticated user; members do not need household-settings permission.
+- `User.default_account_id` remains the personal dashboard account. Submitted IDs
+  must identify an active account visible to the current user and family.
+- Appearance continues to use browser-local `jhq-theme` storage; it is not an
+  account-synchronised preference and may be shared within a browser profile.
+- Migration `f2a4c6e8b0d1` copies existing household display defaults to each attached
+  user's initial preferences without altering financial rules. Legacy rows remain
+  for downgrade compatibility but are no longer read or written by preference
+  screens. New users receive application display defaults. Downgrading removes
+  personal display choices and restores the original household defaults.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)

@@ -68,6 +68,7 @@ class User(UserMixin, db.Model):
     # JSON list of section keys this member may access, e.g. '["transactions","income"]'
     # NULL / empty means all sections (used automatically for admins)
     allowed_sections = db.Column(db.Text, nullable=True)
+    preferences = db.Column(db.JSON, nullable=True)
 
     # Relationship back to Family
     family = db.relationship('Family', back_populates='members', foreign_keys=[family_id])
