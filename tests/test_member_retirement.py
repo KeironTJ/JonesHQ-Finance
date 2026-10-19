@@ -259,9 +259,12 @@ def test_preferences_and_retirement_migrations_have_one_head():
     config = Config()
     config.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'migrations'))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ['a8d3f6b0c4e5']
-    revisions = {revision.revision for revision in script.walk_revisions()}
-    assert {'f2a4c6e8b0d1', 'f7c2e5a9b3d4'} <= revisions
+    heads = script.get_heads()
+    assert len(heads) == 1
+    revisions = {revision.revision for revision in script.walk_revisions(head=heads[0])}
+    assert {'a8d3f6b0c4e5', 'f2a4c6e8b0d1', 'f7c2e5a9b3d4'} <= revisions
+    merge = script.get_revision('a8d3f6b0c4e5')
+    assert set(merge.down_revision) == {'f2a4c6e8b0d1', 'f7c2e5a9b3d4'}
 
 
 def test_migration_backfills_unique_names_and_preserves_conflicts():
