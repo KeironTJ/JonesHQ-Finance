@@ -379,6 +379,19 @@ name or account name in the same household (case-insensitive). Other rows (e.g.
 a first name only, or 'Household') stay unlinked; their edit form shows
 "(not linked to a member)" and re-selecting the member links them.
 
+Migration `f7c2e5a9b3d4` adds the same nullable member link to pensions and copies
+unambiguous name-based retirement settings into household-scoped
+`retirement.member.<id>.date_of_birth` / `.retirement_age` settings. Legacy values
+are retained. When no legacy target age exists, a member's single agreed pension
+target is copied; conflicting aliases or pot ages are logged for manual review,
+not guessed. Unmatched and duplicate-name pots stay unlinked until explicitly
+assigned. The forms submit IDs, so duplicate names can now be selected separately.
+Review the shared retirement profile on Income -> Plan or a pension edit page,
+then regenerate pension projections. Member-linked planning defaults to age 67
+when no shared target exists; original per-pot ages remain stored, but do not
+override a shared profile. Downgrade removes only the pension member column;
+member-keyed settings and original legacy settings remain available.
+
 ## Leftover income forecasts (one-off, after the income fixes)
 
 Older versions left a deleted income template's future forecasts (and their

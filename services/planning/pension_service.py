@@ -31,6 +31,8 @@ from decimal import Decimal
 import calendar
 from utils import db_helpers
 from utils.db_helpers import family_query, family_get, family_get_or_404
+from services.household.member_identity_service import MemberIdentityService, UNSPECIFIED_MEMBER
+from services.planning.retirement_service import RetirementService
 
 
 class PensionService:
@@ -57,19 +59,22 @@ class PensionService:
 
     @staticmethod
     def create_pension(data):
+        person, member_id = MemberIdentityService.resolve(data)
         pension = Pension(
             family_id=db_helpers.get_family_id(),
-            person=data.get('person', 'Household'),
+            person=person,
+            member_id=member_id,
             provider=data['provider'],
             account_number=data.get('account_number', ''),
             current_value=Decimal(data.get('current_value') or 0),
             contribution_rate=Decimal(data.get('contribution_rate') or 0),
             employer_contribution=Decimal(data.get('employer_contribution') or 0),
             is_active=data.get('is_active') == 'on',
-            retirement_age=int(data.get('retirement_age') or 65),
+            retirement_age=RetirementService.age_for(person, member_id),
             monthly_contribution=Decimal(data.get('monthly_contribution') or 0),
             owner_id=db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None,
         )
+        PensionService._save_retirement_age(pension, data)
         db.session.add(pension)
         db.session.commit()
         return pension
@@ -77,18 +82,30 @@ class PensionService:
     @staticmethod
     def update_pension(pension_id, data):
         pension = family_get_or_404(Pension, pension_id)
-        pension.person = data.get('person', pension.person)
+        pension.person, pension.member_id = MemberIdentityService.resolve(data, pension)
         pension.provider = data['provider']
         pension.account_number = data.get('account_number', '')
         pension.current_value = Decimal(data.get('current_value') or 0)
         pension.contribution_rate = Decimal(data.get('contribution_rate') or 0)
         pension.employer_contribution = Decimal(data.get('employer_contribution') or 0)
         pension.is_active = data.get('is_active') == 'on'
-        pension.retirement_age = int(data.get('retirement_age') or 65)
+        PensionService._save_retirement_age(pension, data)
         pension.monthly_contribution = Decimal(data.get('monthly_contribution') or 0)
         pension.owner_id = db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
         db.session.commit()
         return pension
+
+    @staticmethod
+    def _save_retirement_age(pension, data):
+        if 'date_of_birth' in data:
+            RetirementService.save(pension.person, data, pension.member_id, commit=False)
+        if data.get('retirement_age'):
+            pension.retirement_age = RetirementService.save_age(
+                pension.person, data['retirement_age'], pension.member_id)
+        else:
+            pension.retirement_age = RetirementService.age_for(
+                pension.person, pension.member_id,
+                default=67 if pension.member_id else pension.retirement_age or 65)
 
     @staticmethod
     def delete_pension(pension_id):
@@ -169,39 +186,32 @@ class PensionService:
         return snapshot, growth_percent, pension
 
     @staticmethod
-    def get_person_age(person):
+    def get_person_age(person, member_id=UNSPECIFIED_MEMBER):
         """Get current age of person from their date of birth"""
-        dob_str = Settings.get_value(f'{person.lower()}_date_of_birth')
-        if not dob_str:
+        profile = RetirementService.profile(person, member_id)
+        if not profile:
             return None
-        
-        dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+        dob = profile['date_of_birth']
         today = date.today()
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
         return age
     
     @staticmethod
-    def get_months_until_retirement(person, retirement_age=None):
+    def get_months_until_retirement(person, retirement_age=None, member_id=UNSPECIFIED_MEMBER):
         """Calculate months remaining until retirement"""
-        current_age = PensionService.get_person_age(person)
-        if current_age is None:
+        profile = RetirementService.profile(person, member_id)
+        if profile is None:
             return None
-        
-        if retirement_age is None:
-            retirement_age = Settings.get_value(f'{person.lower()}_retirement_age', 65)
-        
-        years_remaining = retirement_age - current_age
-        months_remaining = years_remaining * 12
-        
-        # Adjust for partial year
-        dob_str = Settings.get_value(f'{person.lower()}_date_of_birth')
-        dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+        dob = profile['date_of_birth']
+        age = retirement_age if retirement_age is not None else profile['age']
+        try:
+            retire_on = dob.replace(year=dob.year + age)
+        except ValueError:
+            retire_on = date(dob.year + age, 3, 1)
         today = date.today()
-        
-        # More precise month calculation
-        months_remaining = (retirement_age - current_age) * 12
-        months_remaining -= today.month - dob.month
-        
+        months_remaining = (retire_on.year - today.year) * 12 + retire_on.month - today.month
+        if retire_on.day < today.day:
+            months_remaining -= 1
         return max(0, months_remaining)
     
     @staticmethod
@@ -237,8 +247,10 @@ class PensionService:
         # Determine how many months to project
         if months_to_project is None:
             months_to_project = PensionService.get_months_until_retirement(
-                pension.person, 
-                pension.retirement_age
+                pension.person,
+                RetirementService.age_for(pension.person, pension.member_id,
+                                          default=67 if pension.member_id else pension.retirement_age or 65),
+                pension.member_id,
             )
         
         if months_to_project is None or months_to_project <= 0:

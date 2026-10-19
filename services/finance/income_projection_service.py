@@ -18,12 +18,14 @@ from models.income import Income
 from models.income_change import IncomeChange
 from models.recurring_income import RecurringIncome
 from services.finance import income_schedule, payroll_calculator
+from services.household.member_identity_service import MemberIdentityService, UNSPECIFIED_MEMBER
+from services.planning.retirement_service import (
+    RetirementService, MIN_RETIREMENT_AGE, MAX_RETIREMENT_AGE, DEFAULT_RETIREMENT_AGE,
+)
 from utils.db_helpers import family_query
 
 MAX_PLAN_YEARS = 50
 DEFAULT_PLAN_YEARS = 10
-MIN_RETIREMENT_AGE, MAX_RETIREMENT_AGE = 50, 80
-DEFAULT_RETIREMENT_AGE = 67
 # Income that stops at retirement; pensions, rental, benefits carry on.
 WORK_INCOME_TYPES = {'employment', 'self_employed'}
 PENSION_INCOME_TYPES = {'private_pension', 'state_pension'}
@@ -92,60 +94,24 @@ class IncomeProjectionService:
 
     # Same household settings the pension planner reads.
     @staticmethod
-    def _retirement_keys(person):
-        key = person.strip().lower()
-        return f'{key}_date_of_birth', f'{key}_retirement_age'
+    def _retirement_keys(person, member_id=UNSPECIFIED_MEMBER):
+        return RetirementService.keys(person, member_id)
 
     @staticmethod
-    def retirement_for(person):
+    def retirement_for(person, member_id=UNSPECIFIED_MEMBER):
         """{'date_of_birth', 'age', 'date'} for a person, or None when no date of birth is set."""
-        from models.settings import Settings
-
-        dob_key, age_key = IncomeProjectionService._retirement_keys(person)
-        try:
-            dob = date.fromisoformat(str(Settings.get_value(dob_key) or ''))
-            age = int(Settings.get_value(age_key, DEFAULT_RETIREMENT_AGE) or DEFAULT_RETIREMENT_AGE)
-        except (TypeError, ValueError):
-            return None
-        try:
-            retire_on = dob.replace(year=dob.year + age)
-        except ValueError:  # 29 Feb birthday
-            retire_on = date(dob.year + age, 3, 1)
-        return {'date_of_birth': dob, 'age': age, 'date': retire_on}
+        return RetirementService.profile(person, member_id)
 
     @staticmethod
     def set_retirement(person, data, today=None):
         """Save (or clear, with a blank date of birth) a person's date of birth and retirement age."""
-        from extensions import db
-        from models.settings import Settings
-
-        today = today or date.today()
-        known = {p for p, in family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct()}
-        if not person or person not in known:
+        person, member_id = MemberIdentityService.resolve(dict(data, person=person))
+        query = family_query(RecurringIncome)
+        query = query.filter_by(member_id=member_id) if member_id else query.filter_by(person=person)
+        if not query.first():
             raise ValueError('Choose a person who has an income source.')
-        dob_key, age_key = IncomeProjectionService._retirement_keys(person)
-        raw_dob = (data.get('date_of_birth') or '').strip()
-        if not raw_dob:
-            for key in (dob_key, age_key):
-                family_query(Settings).filter(Settings.key == key).delete(synchronize_session=False)
-            db.session.commit()
-            return None
-        try:
-            dob = date.fromisoformat(raw_dob)
-        except ValueError:
-            raise ValueError('Enter a valid date of birth.') from None
-        if not date(today.year - 100, 1, 1) <= dob <= today.replace(year=today.year - 16):
-            raise ValueError('Date of birth must be 16 to 100 years ago.')
-        try:
-            age = int(data.get('retirement_age') or DEFAULT_RETIREMENT_AGE)
-        except (TypeError, ValueError):
-            raise ValueError('Enter a whole-number retirement age.') from None
-        if not MIN_RETIREMENT_AGE <= age <= MAX_RETIREMENT_AGE:
-            raise ValueError(f'Retirement age must be between {MIN_RETIREMENT_AGE} and {MAX_RETIREMENT_AGE}.')
-        Settings.set_value(dob_key, dob.isoformat(), f'Date of birth: {person}', 'string')
-        Settings.set_value(age_key, age, f'Target retirement age: {person}', 'int')
-        db.session.commit()
-        return IncomeProjectionService.retirement_for(person)
+        return RetirementService.save(person, data, member_id, today)
+
     @staticmethod
     def source_snapshot(source, today=None):
         """Current terms, next saved payslip and timeline for one source."""
@@ -239,8 +205,9 @@ class IncomeProjectionService:
         if person:
             sources = [s for s in sources if s.person == person]
         retirements = {}
-        for name in sorted({s.person for s in sources}):
-            info = IncomeProjectionService.retirement_for(name)
+        for source in sources:
+            name = MemberIdentityService.label(source.person, source.member_id)
+            info = IncomeProjectionService.retirement_for(source.person, source.member_id)
             if info:
                 retirements[name] = info
         if until_year is None:
@@ -288,7 +255,8 @@ class IncomeProjectionService:
             else:
                 # Paused / closed sources only contribute what was actually saved.
                 payslips, source_warnings = [(row.pay_date, _from_row(row), True) for row in saved], []
-            retirement = retirements.get(source.person)
+            person_label = MemberIdentityService.label(source.person, source.member_id)
+            retirement = retirements.get(person_label)
             if retirement and (source.income_type or 'employment') in WORK_INCOME_TYPES:
                 retire_on = retirement['date']
                 if any(pay_date > retire_on for pay_date, _, _ in payslips):
@@ -311,7 +279,7 @@ class IncomeProjectionService:
                     continue
                 _add(per_year[year], values)
                 _add(years[year]['totals'], values)
-                _add(years[year]['by_person'][source.person], values)
+                _add(years[year]['by_person'][person_label], values)
                 _add(years[year]['by_type'][type_key], values)
                 if not is_saved:
                     years[year]['projected'] = True
@@ -332,7 +300,7 @@ class IncomeProjectionService:
             year = payroll_calculator.tax_year_start(income.pay_date)
             values = _from_row(income)
             _add(years[year]['totals'], values)
-            _add(years[year]['by_person'][income.person], values)
+            _add(years[year]['by_person'][MemberIdentityService.label(income.person, income.member_id)], values)
             _add(years[year]['by_type']['one_off'], values)
 
         ordered = [years[y] for y in sorted(years)]
@@ -343,7 +311,8 @@ class IncomeProjectionService:
                                 if payroll_calculator.tax_year_start(info['date']) == year['start']]
         for name, info in retirements.items():
             if info['date'] <= window_end and not any(
-                    s.person == name and s.income_type in PENSION_INCOME_TYPES for s in sources):
+                    MemberIdentityService.label(s.person, s.member_id) == name
+                    and s.income_type in PENSION_INCOME_TYPES for s in sources):
                 warnings.add(f'{name} retires on {info["date"].strftime("%d %b %Y")} but has no pension income source. '
                              'Add one (private or state pension) starting then to see retirement income.')
         return {

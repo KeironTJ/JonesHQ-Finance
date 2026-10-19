@@ -8,6 +8,7 @@ class Pension(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     person = db.Column(db.String(50), nullable=False, default='Keiron')  # 'Keiron', 'Emma'
+    member_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
     provider = db.Column(db.String(100), nullable=False)  # Peoples Pension, Aviva, Aegon, etc.
     account_number = db.Column(db.String(50))
     current_value = db.Column(db.Numeric(10, 2), nullable=False)
@@ -29,6 +30,7 @@ class Pension(db.Model):
     # Relationships
     snapshots = db.relationship('PensionSnapshot', backref='pension', lazy=True, cascade='all, delete-orphan')
     owner = db.relationship('User', foreign_keys=[owner_id])
+    member = db.relationship('User', foreign_keys=[member_id])
 
     @property
     def is_private(self):

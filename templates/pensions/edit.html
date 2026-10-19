@@ -11,12 +11,8 @@
             <form method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-3">
-                    <label for="person" class="form-label">Person</label>
-                    <select class="form-select" id="person" name="person" required>
-                        {% for p in people %}
-                        <option value="{{ p }}" {% if pension.person == p %}selected{% endif %}>{{ p }}</option>
-                        {% endfor %}
-                    </select>
+                    <label for="member_id" class="form-label">Person</label>
+                    {% with record=pension %}{% include 'shared/_member_select.html' %}{% endwith %}
                 </div>
                 
                 <div class="mb-3">
@@ -81,7 +77,8 @@
                         <div class="mb-3">
                             <label for="retirement_age" class="form-label">Target Retirement Age</label>
                             <input type="number" class="form-control" id="retirement_age" 
-                                   name="retirement_age" value="{{ pension.retirement_age or 65 }}">
+                                   name="retirement_age" min="50" max="80" value="" placeholder="{{ shared_retirement_age }}">
+                            <small class="text-muted">Currently {{ shared_retirement_age }}. Leave blank to keep the selected person's age; changing it updates both planners.</small>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -116,6 +113,24 @@
                         <i class="bi bi-x-circle"></i> Cancel
                     </a>
                 </div>
+            </form>
+            <hr>
+            <h5>Shared retirement profile for {{ pension.person }}</h5>
+            <p class="text-muted small">Used by all this person's pensions and their income plan. Save pension ownership changes above before editing this profile.</p>
+            <form method="post" action="{{ url_for('pensions.save_retirement', id=pension.id) }}" class="row g-2 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-sm-5">
+                    <label for="profile_dob" class="form-label">Date of birth</label>
+                    <input type="date" id="profile_dob" name="date_of_birth" class="form-control"
+                           value="{{ retirement_profile.date_of_birth.isoformat() if retirement_profile else '' }}">
+                </div>
+                <div class="col-sm-3">
+                    <label for="profile_age" class="form-label">Retire at</label>
+                    <input type="number" id="profile_age" name="retirement_age" min="50" max="80"
+                           class="form-control" value="{{ shared_retirement_age }}">
+                </div>
+                <div class="col-sm-4"><button class="btn btn-outline-primary">Save retirement profile</button></div>
+                <div class="col-12 text-muted small">Clear the date to remove the profile. Regenerate pension projections after changing it.</div>
             </form>
         </div>
     </div>

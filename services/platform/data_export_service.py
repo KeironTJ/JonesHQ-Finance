@@ -48,7 +48,7 @@ EXPORTS = {
                 (IncomeChange, 'id recurring_income_id effective_date change_type amount percent tax_code employee_pension_percent employer_pension_percent bonus_pensionable description'),
     ),
     'pensions': (
-        (Pension, 'id person provider account_number current_value contribution_rate employer_contribution is_active retirement_age monthly_contribution projected_value_at_retirement owner_id'),
+        (Pension, 'id person member_id provider account_number current_value contribution_rate employer_contribution is_active retirement_age monthly_contribution projected_value_at_retirement owner_id'),
         (PensionSnapshot, 'id pension_id review_date value growth_percent is_projection scenario_name growth_rate_used notes'),
     ),
     'mortgage': (

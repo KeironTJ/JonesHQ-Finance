@@ -13,6 +13,7 @@ from models import (
     UserRecoveryCode, UserSession, Vehicle,
 )
 from models.expense_calendar import ExpenseCalendarEntry
+from models.settings import Settings
 from services.platform.deletion_helpers import deletion_references
 from utils.db_helpers import get_current_user_id
 
@@ -120,6 +121,8 @@ class AccountDeletionService:
             ).values(revoked_at=datetime.now(timezone.utc).replace(tzinfo=None)))
             for table, column, condition in references:
                 db.session.execute(update(table).where(condition).values({column.name: None}))
+            db.session.execute(delete(Settings).where(Settings.key.in_(
+                (f'retirement.member.{user.id}.date_of_birth', f'retirement.member.{user.id}.retirement_age'))))
             for model in DELETE_ORDER:
                 ids = plan.get(model.__table__, {})
                 if ids:

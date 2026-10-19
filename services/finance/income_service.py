@@ -58,7 +58,9 @@ from services.finance import income_schedule, payroll_calculator
 from services.finance.payday_service import PaydayService
 from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
+from services.household.member_identity_service import MemberIdentityService
 
+_MEMBER_UNSET = object()
 
 MAX_MONEY = Decimal('99999999.99')  # Numeric(10, 2) ceiling
 MAX_TEMPLATE_YEARS = 60             # Longest a single job template may run
@@ -200,16 +202,7 @@ class IncomeService:
     def _member_id_for(person):
         """User id of the household member whose name is *person* (member name or
         account name, case-insensitive), or None if it isn't exactly one member."""
-        from models.users import User
-
-        key = (person or '').strip().lower()
-        if not key:
-            return None
-        matches = {
-            member.id for member in family_query(User).all()
-            if key in {(member.member_name or '').strip().lower(), (member.name or '').strip().lower()}
-        }
-        return matches.pop() if len(matches) == 1 else None
+        return MemberIdentityService.member_id_for(person)
 
     @staticmethod
     def sync_member_link(member, family_id, previous_names=()):
@@ -226,7 +219,9 @@ class IncomeService:
         keys = {(name or '').strip().lower() for name in (member.member_name, member.name, *previous_names)} - {''}
         for other in User.query.filter(User.family_id == family_id, User.id != member.id).all():
             keys -= {(other.member_name or '').strip().lower(), (other.name or '').strip().lower()}
-        for model in (RecurringIncome, Income):
+        from services.planning.retirement_service import RetirementService
+        RetirementService.link_legacy(member, family_id, keys)
+        for model in (RecurringIncome, Income, Pension):
             if keys:
                 model.query.filter(
                     model.family_id == family_id,
@@ -239,7 +234,7 @@ class IncomeService:
     @staticmethod
     def unlink_member(member_id, family_id):
         """Detach a departing member from the household's income; names are kept."""
-        for model in (RecurringIncome, Income):
+        for model in (RecurringIncome, Income, Pension):
             model.query.filter(model.family_id == family_id, model.member_id == member_id).update(
                 {'member_id': None}, synchronize_session=False)
 
@@ -259,13 +254,11 @@ class IncomeService:
         if member_id is not None:
             return member_id == user.id
         person_key = (person or '').strip().lower()
-        own_names = {(user.member_name or '').strip().lower(), (user.name or '').strip().lower()} - {''}
-        if person_key in own_names:
-            return True
         member_names = set()
         for member in family_query(User).all():
             member_names |= {(member.member_name or '').strip().lower(), (member.name or '').strip().lower()}
-        return person_key not in member_names and user.is_household_owner
+        matched_member = IncomeService._member_id_for(person)
+        return matched_member == uid or (person_key not in member_names and user.is_household_owner)
 
     @staticmethod
     def _resolve_owner_id(data, person, record=None, member_id=None):
@@ -301,8 +294,7 @@ class IncomeService:
         end_date = IncomeService._date(data, 'end_date', 'End date', required=False)
         IncomeService._validate_template_dates(start_date, end_date)
 
-        person = IncomeService._text(data, 'person', 50, default=recurring.person or 'Household') or 'Household'
-        member_id = IncomeService._member_id_for(person)
+        person, member_id = MemberIdentityService.resolve(data, recurring if recurring.id else None)
         recurring.owner_id = IncomeService._resolve_owner_id(
             data, person, record=recurring if recurring.id else None, member_id=member_id,
         )
@@ -339,8 +331,12 @@ class IncomeService:
         if not recurring.annual_increase_percent:
             recurring.annual_increase_start = None
         pension_id = IncomeService._int_id(data, 'pension_id', 'pension')
-        if pension_id is not None and not family_get(Pension, pension_id):
-            raise ValueError('Invalid pension selected')
+        if pension_id is not None:
+            pension = family_get(Pension, pension_id)
+            if pension is None:
+                raise ValueError('Invalid pension selected')
+            if member_id is not None and pension.member_id is not None and pension.member_id != member_id:
+                raise ValueError('Choose a pension belonging to the same household member.')
         recurring.pension_id = pension_id
         recurring.gross_annual_income = IncomeService._decimal(
             data, 'gross_annual', 'Gross annual income', required=True
@@ -708,7 +704,7 @@ class IncomeService:
                              employee_pension_pct=0, tax_code='1257L', avc=0, other=0,
                              deposit_account_id=None, source='', create_transaction=True,
                              recurring_income_id=None, owner_id=None, recalculate_balance=True,
-                             commit=True):
+                             commit=True, member_id=_MEMBER_UNSET):
         """Create an income record with estimated tax/NI/pension deductions."""
         IncomeService._validate_family_references(deposit_account_id=deposit_account_id)
         gross_annual = IncomeService._check_decimal(gross_annual, 'Gross annual income')
@@ -724,6 +720,7 @@ class IncomeService:
         income = Income(
             family_id=db_helpers.get_family_id(),
             person=person,
+            member_id=IncomeService._member_id_for(person) if member_id is _MEMBER_UNSET else member_id,
             pay_date=pay_date,
             employer_pension_percent=employer_pension_pct,
             employee_pension_percent=employee_pension_pct,
@@ -741,7 +738,7 @@ class IncomeService:
                                     employee_pension, tax, ni, take_home, tax_code='1257L',
                                     avc=0, other=0, deposit_account_id=None, source='',
                                     create_transaction=True, recurring_income_id=None, owner_id=None,
-                                    recalculate_balance=True, commit=True):
+                                    recalculate_balance=True, commit=True, member_id=_MEMBER_UNSET):
         """Create an income record with manual (actual payslip) monthly values."""
         IncomeService._validate_family_references(deposit_account_id=deposit_account_id)
         check = IncomeService._check_decimal
@@ -758,6 +755,7 @@ class IncomeService:
         income = Income(
             family_id=db_helpers.get_family_id(),
             person=person,
+            member_id=IncomeService._member_id_for(person) if member_id is _MEMBER_UNSET else member_id,
             pay_date=pay_date,
             tax_year=payroll_calculator.tax_year_for(pay_date),
             gross_annual_income=gross_annual,
@@ -786,8 +784,6 @@ class IncomeService:
 
     @staticmethod
     def _save_new_income(income, create_transaction, recalculate_balance, commit):
-        if income.member_id is None:
-            income.member_id = IncomeService._member_id_for(income.person)
         db.session.add(income)
         db.session.flush()
         if create_transaction and income.deposit_account_id:
@@ -805,8 +801,7 @@ class IncomeService:
     @staticmethod
     def create_one_off_income(data):
         """Create a single (non-recurring) income record from form data."""
-        person = IncomeService._text(data, 'person', 50, default='Household') or 'Household'
-        member_id = IncomeService._member_id_for(person)
+        person, member_id = MemberIdentityService.resolve(data)
         deposit_account_id = IncomeService._int_id(data, 'deposit_account_id', 'deposit account')
         return IncomeService.create_income_record(
             person=person,
@@ -821,6 +816,7 @@ class IncomeService:
             source=IncomeService._text(data, 'source', 100),
             create_transaction=data.get('create_transaction') == 'on',
             owner_id=IncomeService._resolve_owner_id(data, person, member_id=member_id),
+            member_id=member_id,
         )
 
     @staticmethod
@@ -831,10 +827,9 @@ class IncomeService:
         deposit_account_id = IncomeService._int_id(data, 'deposit_account_id', 'deposit account')
         IncomeService._validate_family_references(deposit_account_id=deposit_account_id)
 
-        person = IncomeService._text(data, 'person', 50, default=income.person) or income.person
+        person, member_id = MemberIdentityService.resolve(data, income)
         income.owner_id = IncomeService._resolve_owner_id(data, person, record=income)
-        if person != income.person or income.member_id is None:
-            income.member_id = IncomeService._member_id_for(person)
+        income.member_id = member_id
         income.person = person
         income.pay_date = IncomeService._date(data, 'pay_date', 'Pay date')
         income.source = IncomeService._text(data, 'source', 100)

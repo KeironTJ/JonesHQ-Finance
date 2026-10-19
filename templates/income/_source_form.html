@@ -27,16 +27,8 @@
                 <div class="card-header fw-semibold"><i class="bi bi-person"></i> Who &amp; what</div>
                 <div class="card-body row g-3">
                     <div class="col-md-4">
-                        <label for="person" class="form-label">Person</label>
-                        {% set cur_person = posted.get('person') or (src.person if src else '') %}
-                        <select class="form-select" id="person" name="person" required>
-                            {% for p in people %}
-                            <option value="{{ p }}" {% if p == cur_person or (not cur_person and loop.first) %}selected{% endif %}>{{ p }}</option>
-                            {% endfor %}
-                            {% if cur_person and cur_person not in people %}
-                            <option value="{{ cur_person }}" selected>{{ cur_person }} (not linked to a member)</option>
-                            {% endif %}
-                        </select>
+                        <label for="member_id" class="form-label">Person</label>
+                        {% with record=src %}{% include 'shared/_member_select.html' %}{% endwith %}
                     </div>
                     <div class="col-md-4">
                         <label for="source" class="form-label">Name</label>

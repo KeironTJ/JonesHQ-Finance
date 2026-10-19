@@ -108,11 +108,12 @@
             <div class="card mb-4">
                 <div class="card-header"><i class="bi bi-sunset"></i> Retirement</div>
                 <ul class="list-group list-group-flush">
-                    {% for name, info in retirement_people %}
+                    {% for name, person, member_id, info, age in retirement_people %}
                     <li class="list-group-item">
                         <form method="post" action="{{ url_for('income.save_retirement') }}" class="row g-2 align-items-end">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <input type="hidden" name="person" value="{{ name }}"/>
+                            <input type="hidden" name="person" value="{{ person }}"/>
+                            <input type="hidden" name="member_id" value="{{ member_id or '' }}"/>
                             <div class="col-12 small">
                                 <strong>{{ name }}</strong>
                                 {% if info %}<span class="text-muted">· retires {{ info.date.strftime('%d %b %Y') }}</span>
@@ -126,7 +127,7 @@
                             <div class="col-3">
                                 <label class="form-label small mb-0" for="age-{{ loop.index }}">Retire at</label>
                                 <input type="number" class="form-control form-control-sm" id="age-{{ loop.index }}" name="retirement_age"
-                                       min="50" max="80" value="{{ info.age if info else 67 }}">
+                                       min="50" max="80" value="{{ age }}">
                             </div>
                             <div class="col-3"><button class="btn btn-sm btn-outline-primary w-100">Save</button></div>
                         </form>

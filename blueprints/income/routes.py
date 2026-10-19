@@ -11,6 +11,8 @@ from extensions import db
 from datetime import datetime, date
 from decimal import Decimal
 from utils.db_helpers import family_query, family_get_or_404
+from services.household.member_identity_service import MemberIdentityService
+from services.planning.retirement_service import RetirementService
 
 
 GENERIC_ERROR = 'Something went wrong — please try again.'
@@ -147,7 +149,8 @@ def add():
             return redirect(url_for('income.add'))
 
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    return render_template('income/add.html', accounts=accounts, people=_get_income_people())
+    return render_template('income/add.html', accounts=accounts, people=_get_income_people(),
+                           member_options=MemberIdentityService.options())
 
 
 @income_bp.route('/income/<int:id>/edit', methods=['GET', 'POST'])
@@ -165,7 +168,9 @@ def edit(id):
             income = family_get_or_404(Income, id)
 
     accounts = family_query(Account).filter_by(is_active=True).order_by(Account.name).all()
-    return render_template('income/edit.html', income=income, accounts=accounts, people=_get_income_people())
+    return render_template('income/edit.html', income=income, accounts=accounts, people=_get_income_people(),
+                           member_options=MemberIdentityService.options(income),
+                           form=request.form if request.method == 'POST' else None)
 
 
 @income_bp.route('/income/<int:id>/delete', methods=['POST'])
@@ -245,6 +250,7 @@ def _source_form_context(source=None):
         accounts=family_query(Account).filter_by(is_active=True).order_by(Account.name).all(),
         categories=_income_categories(),
         people=_get_income_people(),
+        member_options=MemberIdentityService.options(source),
         pensions=family_query(Pension).filter_by(is_active=True).order_by(Pension.person, Pension.provider).all(),
         income_types=pc.INCOME_TYPE_LABELS,
         frequencies=pc.PAY_FREQUENCY_LABELS,
@@ -280,7 +286,8 @@ def recurring():
 
     by_person = {}
     for snap in snapshots:
-        group = by_person.setdefault(snap['source'].person, {'snapshots': [], 'gross': Decimal('0'), 'monthly': Decimal('0')})
+        label = MemberIdentityService.label(snap['source'].person, snap['source'].member_id)
+        group = by_person.setdefault(label, {'snapshots': [], 'gross': Decimal('0'), 'monthly': Decimal('0')})
         group['snapshots'].append(snap)
         if snap['source'].is_active and not snap['ended']:
             group['gross'] += snap['terms'].gross_annual
@@ -420,8 +427,20 @@ def plan():
         flash(str(e), 'danger')
         result = IncomeProjectionService.build_plan()
     people = [p[0] for p in family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()]
+    retirement_people = []
+    seen = set()
+    for source in family_query(RecurringIncome).order_by(RecurringIncome.person, RecurringIncome.id).all():
+        identity = (source.member_id, source.person if source.member_id is None else '')
+        if identity in seen:
+            continue
+        seen.add(identity)
+        retirement_people.append((
+            MemberIdentityService.label(source.person, source.member_id), source.person, source.member_id,
+            IncomeProjectionService.retirement_for(source.person, source.member_id),
+            RetirementService.age_for(source.person, source.member_id),
+        ))
     return render_template('income/plan.html', plan=result, people=people,
-                           retirement_people=[(p, IncomeProjectionService.retirement_for(p)) for p in people],
+                           retirement_people=retirement_people,
                            current_person=request.args.get('person') or None, **_labels())
 
 
@@ -434,7 +453,8 @@ def save_retirement():
     try:
         info = IncomeProjectionService.set_retirement(person, request.form)
         if info:
-            flash(f"{person} retires on {info['date'].strftime('%d %b %Y')} (age {info['age']}).", 'success')
+            flash(f"{person} retires on {info['date'].strftime('%d %b %Y')} (age {info['age']}). "
+                  'Regenerate pension projections to apply this change there.', 'success')
         else:
             flash(f'Retirement details cleared for {person}.', 'info')
     except Exception as e:
@@ -549,4 +569,3 @@ def reperiod_transactions():
         _fail(e, 'Error updating payday periods.')
 
     return redirect(url_for('income.recurring'))
-

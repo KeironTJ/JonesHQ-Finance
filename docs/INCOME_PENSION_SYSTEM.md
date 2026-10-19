@@ -43,8 +43,10 @@ monthly figures (`use_manual_deductions`); those sources ignore yearly rises and
 the timeline until switched to "calculated".
 
 **Retirement:** on the Plan page set each person's date of birth and retirement
-age (household settings `<person>_date_of_birth` / `<person>_retirement_age`,
-shared with the pension planner). The plan then runs to the last retirement and
+age (household settings `retirement.member.<id>.date_of_birth` /
+`retirement.member.<id>.retirement_age`, shared with the pension planner).
+Unlinked labels retain the legacy `<person>_date_of_birth` /
+`<person>_retirement_age` settings. The plan then runs to the last retirement and
 stops `employment` / `self_employed` income at it (paid or actual payslips still
 count), warning if the job has no end date or the person has no pension source.
 Set the job's end date (**End income**) so saved forecasts stop too, and add a
@@ -217,13 +219,23 @@ summary = IncomeService.get_income_summary(person='Keiron', year=2024)
   generated records.
 - **Household member link:** sources and payslips store `member_id` (FK to
   `users`, `ON DELETE SET NULL`) alongside the `person` display name. It is set
-  when the chosen person matches exactly one member's member name or account name
-  (case-insensitive); forecasts inherit it from their source. Renaming a member
+  by an explicit member-ID selector; duplicate names are distinguished by member ID.
+  Older name-only service callers still resolve unique names (case-insensitive).
+  Forecasts inherit the link from their source. Renaming a member
   renames their linked income, and also links unlinked rows recorded under their
   old or new name. Someone joining via invite is linked to income recorded under
   their invited name. Removing a member unlinks their income but keeps the name.
-  Privacy checks use the link when present. Retirement settings and pension pots
-  are still keyed by name.
+  Privacy checks use the link when present; belonging to a member does not make
+  income or pensions private.
+- **Pensions and retirement:** pension pots also have `member_id`. The income plan,
+  pension projections and pension retirement summary use one member-keyed date of
+  birth and retirement age (default 67). Set the profile on Income -> Plan or the
+  pension edit page. Changing a pension's target age updates the shared target;
+  leave it blank to retain the selected person's age. Regenerate pension
+  projections after changing a profile, as existing saved projections are not
+  recalculated automatically across every pot. Legacy pot ages are kept for
+  unlinked pensions. Clearing a profile leaves empty setting keys to prevent a
+  later member rename from importing old name-based values again.
 
 ## Integration Points
 

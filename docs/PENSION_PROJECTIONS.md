@@ -28,15 +28,21 @@ Your pension management system now includes comprehensive projection capabilitie
 ## How to Use
 
 ### Initial Setup
-1. **Update Personal Settings** (Settings page):
-   - Set your and Emma's dates of birth
-   - Confirm retirement ages (default: 65)
-   - Adjust government pension amounts
-   - Fine-tune growth rate assumptions
+1. **Set the shared retirement profile** (pension edit page or Income -> Plan):
+   - Select the household member by ID when adding/editing their pension
+   - Set their date of birth and retirement age (default: 67)
+   - The same profile is used by income and all that member's pension pots,
+     including after a member rename
+   - Regenerate pension projections after changing the profile
+   - In Settings, you can still:
+     - Adjust government pension amounts
+     - Fine-tune growth rate assumptions
 
 2. **Configure Each Pension**:
-   - Add/edit pensions with retirement age and monthly contribution amounts
-   - System uses this for accurate projections
+   - Add/edit pensions with monthly contribution amounts
+   - A target age entered on a pension updates the person's shared retirement age;
+     leave it blank to retain that member's age
+   - Unmatched legacy labels remain available and are not silently reassigned
 
 ### Monthly Workflow
 1. **Add Monthly Snapshot**:

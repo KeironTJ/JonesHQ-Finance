@@ -1,0 +1,13 @@
+{% set posted = form if form is defined and form else {} %}
+{% set selected_member = posted.get('member_id', record.member_id if record else 'household') %}
+{% set legacy_person = posted.get('person', record.person if record else 'Household') %}
+<input type="hidden" name="person" value="{{ legacy_person }}">
+<select class="form-select" id="member_id" name="member_id">
+    <option value="household" {% if selected_member == 'household' or (not selected_member and legacy_person == 'Household') %}selected{% endif %}>Household</option>
+    {% for member_id, name, active in member_options %}
+    <option value="{{ member_id }}" {% if selected_member|string == member_id|string %}selected{% endif %}>{{ name }} (member #{{ member_id }}){% if not active %} - inactive{% endif %}</option>
+    {% endfor %}
+    {% if not selected_member and legacy_person != 'Household' %}
+    <option value="" selected>{{ legacy_person }} (not linked to a member)</option>
+    {% endif %}
+</select>

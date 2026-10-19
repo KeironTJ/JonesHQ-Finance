@@ -151,16 +151,16 @@
                             <td><span class="badge bg-secondary">{{ pension.person }}</span></td>
                             <td>{{ pension.provider }}</td>
                             <td class="text-end">£{{ "{:,.2f}".format(pension.current_value) }}</td>
-                            <td class="text-end">£{{ "{:,.2f}".format(pension.projected_value) }}</td>
+                            <td class="text-end">{% if pension.projected_value is not none %}£{{ "{:,.2f}".format(pension.projected_value) }}{% else %}<span class="text-muted">Not generated</span>{% endif %}</td>
                             <td class="text-end">
-                                {% if pension.current_value > 0 %}
+                                {% if pension.current_value > 0 and pension.projected_value is not none %}
                                 <span class="badge bg-success">
                                     +£{{ "{:,.0f}".format(pension.projected_value - pension.current_value) }}
                                 </span>
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                {% if summary.total_projected_value > 0 %}
+                                {% if summary.total_projected_value > 0 and pension.projected_value is not none %}
                                 {{ "{:.1f}".format((pension.projected_value / summary.total_projected_value) * 100) }}%
                                 {% endif %}
                             </td>

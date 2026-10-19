@@ -9,6 +9,8 @@ from extensions import db
 from datetime import datetime
 from decimal import Decimal
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id
+from services.household.member_identity_service import MemberIdentityService
+from services.planning.retirement_service import RetirementService
 
 
 def _get_pension_people():
@@ -72,7 +74,8 @@ def add():
             db.session.rollback()
             flash(f'Error adding pension: {str(e)}', 'danger')
     
-    return render_template('pensions/add.html', people=_get_pension_people())
+    return render_template('pensions/add.html', people=_get_pension_people(),
+                           member_options=MemberIdentityService.options(), form=request.form)
 
 
 @pensions_bp.route('/pensions/<int:id>/edit', methods=['GET', 'POST'])
@@ -95,7 +98,25 @@ def edit(id):
             db.session.rollback()
             flash(f'Error updating pension: {str(e)}', 'danger')
     
-    return render_template('pensions/edit.html', pension=pension, people=_get_pension_people())
+    return render_template('pensions/edit.html', pension=pension, people=_get_pension_people(),
+                           member_options=MemberIdentityService.options(pension),
+                           shared_retirement_age=RetirementService.age_for(
+                               pension.person, pension.member_id,
+                               default=67 if pension.member_id else pension.retirement_age or 67),
+                           retirement_profile=RetirementService.profile(pension.person, pension.member_id),
+                           form=request.form if request.method == 'POST' else None)
+
+
+@pensions_bp.route('/pensions/<int:id>/retirement', methods=['POST'])
+def save_retirement(id):
+    pension = family_get_or_404(Pension, id)
+    try:
+        RetirementService.save(pension.person, request.form, pension.member_id)
+        flash('Retirement profile updated for both planners. Regenerate pension projections to apply it.', 'success')
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Unable to update retirement settings.', 'danger')
+    return redirect(url_for('pensions.edit', id=id))
 
 
 @pensions_bp.route('/pensions/<int:id>/delete', methods=['POST'])
@@ -280,14 +301,15 @@ def retirement_summary():
     
     # Get age information
     people_info = []
-    for p in _get_pension_people():
-        age = PensionService.get_person_age(p)
-        retirement_age = Settings.get_value(f'{p.lower()}_retirement_age', 65)
-        months_remaining = PensionService.get_months_until_retirement(p, retirement_age)
+    identities = {(p.member_id, p.person) for p in family_query(Pension).all()}
+    for member_id, p in sorted(identities, key=lambda item: (item[1], item[0] or 0)):
+        age = PensionService.get_person_age(p, member_id)
+        retirement_age = RetirementService.age_for(p, member_id)
+        months_remaining = PensionService.get_months_until_retirement(p, retirement_age, member_id)
         years_remaining = months_remaining / 12 if months_remaining else 0
         
         people_info.append({
-            'name': p,
+            'name': MemberIdentityService.label(p, member_id),
             'current_age': age,
             'retirement_age': retirement_age,
             'months_remaining': months_remaining,
