@@ -1,4 +1,4 @@
-"""Recalculate card balances and test generation with fixed payment sign"""
+"""Manually recalculate card balances and generate credit card statements."""
 from datetime import date
 from app import create_app
 from extensions import db
