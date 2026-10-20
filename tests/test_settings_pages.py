@@ -141,6 +141,53 @@ def test_personal_default_account_can_be_selected_and_reset(app, family, user):
     assert user.default_account_id is None
 
 
+@pytest.mark.parametrize('days', [1, 30, 60, 365])
+def test_attention_window_is_personal_and_persistent(app, family, user, days):
+    member = _member(family)
+    client = _client(app, member)
+    assert client.post('/preferences', data={
+        'dashboard.attention_days': str(days),
+    }).status_code == 302
+    assert member.preferences['dashboard.attention_days'] == days
+    assert not user.preferences
+    html = client.get('/preferences').get_data(as_text=True)
+    assert f'value="{days}" aria-describedby="attentionDaysHelp"' in html
+    assert Settings.query.count() == 0
+
+
+@pytest.mark.parametrize('value', [0, 366, True, 1.5, '', 'abc', None, [], {}])
+def test_invalid_attention_windows_return_explicit_error(app, user, value):
+    response = _client(app, user).post('/preferences/save', json={
+        'key': 'dashboard.attention_days', 'value': value,
+    })
+    assert response.status_code == 400
+    assert response.get_json()['error']
+    assert not user.preferences
+
+
+def test_invalid_attention_form_retains_input_and_does_not_save(app, user):
+    client = _client(app, user)
+    user.preferences = {'dashboard.attention_days': 30}
+    db.session.commit()
+    response = client.post('/preferences', data={'dashboard.attention_days': '366'})
+    assert response.status_code == 200
+    assert b'Reminder window must be between 1 and 365 days.' in response.data
+    assert b'value="366" aria-describedby="attentionDaysHelp"' in response.data
+    assert user.preferences == {'dashboard.attention_days': 30}
+
+
+def test_saving_other_preferences_keeps_existing_attention_window(app, user):
+    user.preferences = {'dashboard.attention_days': 90}
+    db.session.commit()
+    client = _client(app, user)
+    assert client.post('/preferences', data={}).status_code == 302
+    assert user.preferences['dashboard.attention_days'] == 90
+    assert client.post('/preferences/save', json={
+        'key': 'dashboard.attention_days', 'value': 120,
+    }).status_code == 200
+    assert user.preferences['dashboard.attention_days'] == 120
+
+
 def test_dashboard_consumes_personal_not_household_display_preferences(app, family, user):
     db.session.add(Account(
         family_id=family.id, name='Current', account_type='Current', is_active=True,

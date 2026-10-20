@@ -19,7 +19,7 @@
         </button>
     </header>
 
-    {% set active_plans = plans | rejectattr('status', 'equalto', 'archived') | list %}
+    {% set active_plans = plans | selectattr('status', 'in', ['active', 'draft']) | list %}
     <section class="plans-summary" aria-label="Plan summary">
         <div><span>Open plans</span><strong>{{ active_plans | length }}</strong></div>
         <div><span>Ideas tracked</span><strong>{{ active_plans | map(attribute='items') | map('length') | sum }}</strong></div>
@@ -31,13 +31,18 @@
         <div class="btn-group" role="group" aria-label="Filter plans">
             <button class="btn btn-sm btn-dark plan-filter active" type="button" data-filter="open">Open</button>
             <button class="btn btn-sm btn-outline-secondary plan-filter" type="button" data-filter="all">All</button>
+            <button class="btn btn-sm btn-outline-secondary plan-filter" type="button" data-filter="completed">Completed</button>
             <button class="btn btn-sm btn-outline-secondary plan-filter" type="button" data-filter="archived">Archived</button>
         </div>
     </div>
 
+    {% if plans %}
+    <p class="text-muted" id="noMatchingPlans" {% if active_plans %}hidden{% endif %}>No open plans. Use Completed, Archived or All to find closed plans.</p>
+    {% endif %}
+
     <section class="plan-grid" id="planGrid">
         {% for plan in plans %}
-        <a class="plan-tile" href="{{ url_for('plans.detail', plan_id=plan.id) }}" data-status="{{ plan.status }}">
+        <a class="plan-tile" href="{{ url_for('plans.detail', plan_id=plan.id) }}" data-status="{{ plan.status }}" {% if plan.status in ['completed', 'archived'] %}hidden{% endif %}>
             <div class="plan-tile-top">
                 <span class="plan-type plan-type-{{ plan.plan_type }}">
                     {% if plan.plan_type == 'savings_goal' %}<i class="bi bi-piggy-bank"></i>
@@ -140,8 +145,13 @@ document.querySelectorAll('.plan-filter').forEach(function (button) {
         });
         document.querySelectorAll('.plan-tile').forEach(function (tile) {
             var filter = button.dataset.filter;
-            tile.hidden = filter === 'open' ? tile.dataset.status === 'archived' : filter === 'archived' ? tile.dataset.status !== 'archived' : false;
+            tile.hidden = filter === 'open' ? !['active', 'draft'].includes(tile.dataset.status) : filter === 'all' ? false : tile.dataset.status !== filter;
         });
+        var emptyState = document.getElementById('noMatchingPlans');
+        if (emptyState) {
+            emptyState.hidden = Array.from(document.querySelectorAll('.plan-tile')).some(function (tile) { return !tile.hidden; });
+            emptyState.textContent = 'No plans match this filter. Choose another filter or create a new plan.';
+        }
     });
 });
 </script>

@@ -181,6 +181,18 @@ class PlanService:
         db.session.commit()
 
     @staticmethod
+    def change_status(plan_id, data):
+        plan = family_get(Plan, plan_id)
+        if plan is None:
+            raise ValueError('That plan is not available.')
+        status = data.get('status')
+        if status not in {'active', 'completed', 'archived'}:
+            raise ValueError('Choose Complete, Archive or Reopen.')
+        plan.status = status
+        db.session.commit()
+        return plan
+
+    @staticmethod
     def add_item(plan, data):
         """Create a PlanItem under *plan* from form data. Raises ValueError/TypeError on bad input."""
         title = (data.get('title') or '').strip()

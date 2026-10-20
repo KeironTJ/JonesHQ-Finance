@@ -85,6 +85,7 @@
     transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
 
+.plan-tile[hidden] { display: none; }
 .plan-tile:hover { color: inherit; transform: translateY(-3px); border-color: #9eaaa2; box-shadow: 0 12px 28px rgba(29, 51, 39, .09); }
 .plan-tile-top,
 .plan-progress-copy,

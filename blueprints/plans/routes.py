@@ -80,6 +80,19 @@ def delete_plan(plan_id):
     return redirect(url_for('plans.index'))
 
 
+@plans_bp.route('/plans/<int:plan_id>/status', methods=['POST'])
+def change_status(plan_id):
+    plan = family_get_or_404(Plan, plan_id)
+    try:
+        PlanService.change_status(plan.id, request.form)
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Unable to change plan status.', 'danger')
+    else:
+        flash(f'Plan is now {plan.status}. Items and transaction links were kept.', 'success')
+    return redirect(url_for('plans.detail', plan_id=plan.id))
+
+
 @plans_bp.route('/plans/<int:plan_id>/items/add', methods=['POST'])
 def add_item(plan_id):
     plan = family_get_or_404(Plan, plan_id)
@@ -139,4 +152,3 @@ def link_transaction(transaction_id):
         return redirect(url_for('transactions.index', id=transaction.id))
     flash(f'Transaction linked to {item.plan.title}: {item.title}.', 'success')
     return redirect(url_for('transactions.index', id=transaction.id))
-

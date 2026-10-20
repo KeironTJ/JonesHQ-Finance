@@ -18,11 +18,22 @@
             <h1>{{ plan.title }}</h1>
             <p>{% if plan.person %}For {{ plan.person }}{% else %}Shared family plan{% endif %}{% if plan.target_date %} · {{ plan.target_date.strftime('%d %B %Y') }}{% endif %}</p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
+            {% for status, label, icon in [('completed', 'Complete', 'check-circle'), ('archived', 'Archive', 'archive'), ('active', 'Reopen', 'arrow-counterclockwise')] %}
+            {% if (status == 'active' and plan.status in ['completed', 'archived']) or (status == 'completed' and plan.status in ['active', 'draft']) or (status == 'archived' and plan.status != 'archived') %}
+            <form method="post" action="{{ url_for('plans.change_status', plan_id=plan.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="status" value="{{ status }}">
+                <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ label }}</button>
+            </form>
+            {% endif %}
+            {% endfor %}
             <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editPlanModal"><i class="bi bi-sliders"></i> Edit</button>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addItemModal"><i class="bi bi-plus-lg"></i> {% if plan.plan_type == 'savings_goal' %}Add contribution{% else %}Add item{% endif %}</button>
         </div>
     </header>
+
+    <p class="text-muted small">Complete or archive a plan at any stage to remove it from Open and dashboard reminders. Items, amounts and transaction links are kept unchanged. Reopen it whenever needed.</p>
 
     <section class="detail-metrics">
         <div><span>{% if plan.plan_type == 'savings_goal' %}Planned contributions{% else %}Estimated{% endif %}</span><strong>£{{ '%.2f' | format(plan.estimated_total) }}</strong></div>

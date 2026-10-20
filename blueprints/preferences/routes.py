@@ -23,8 +23,11 @@ def index():
     context = PreferenceService.get_page_data()
     if request.method == 'POST':
         context['preferences'] = {
-            key: request.form.get(key) == '1'
-            for key in PreferenceService.DEFAULTS
+            key: (
+                request.form.get(key) == '1' if isinstance(default, bool)
+                else request.form.get(key, context['preferences'][key])
+            )
+            for key, default in PreferenceService.DEFAULTS.items()
         }
     return render_template('preferences/index.html', **context)
 

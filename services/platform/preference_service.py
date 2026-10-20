@@ -14,6 +14,7 @@ class PreferenceService:
         'dashboard.quick_nav_expanded': True,
         'categories.collapse_all_default': False,
         'vendors.collapse_all_default': False,
+        'dashboard.attention_days': 60,
     }
 
     @staticmethod
@@ -50,7 +51,12 @@ class PreferenceService:
     @staticmethod
     def update(data):
         values = {}
-        for key in PreferenceService.DEFAULTS:
+        for key, default in PreferenceService.DEFAULTS.items():
+            if not isinstance(default, bool):
+                values[key] = PreferenceService._attention_days(
+                    data.get(key, PreferenceService.get_value(key)),
+                )
+                continue
             value = data.get(key)
             if value not in (None, '1'):
                 raise ValueError('Preference values must be checked or unchecked.')
@@ -61,6 +67,18 @@ class PreferenceService:
         db.session.commit()
 
     @staticmethod
+    def _attention_days(value):
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            raise ValueError('Reminder window must be a whole number from 1 to 365 days.')
+        try:
+            days = int(value)
+        except ValueError as error:
+            raise ValueError('Reminder window must be a whole number from 1 to 365 days.') from error
+        if not 1 <= days <= 365:
+            raise ValueError('Reminder window must be between 1 and 365 days.')
+        return days
+
+    @staticmethod
     def save_preference(data):
         if not isinstance(data, dict):
             raise ValueError('Preference data must be an object.')
@@ -68,7 +86,9 @@ class PreferenceService:
         if not isinstance(key, str) or key not in PreferenceService.DEFAULTS:
             raise ValueError('Unsupported preference key.')
         value = data.get('value')
-        if not isinstance(value, bool):
+        if key == 'dashboard.attention_days':
+            value = PreferenceService._attention_days(value)
+        elif not isinstance(value, bool):
             raise ValueError('Preference value must be boolean.')
         user = PreferenceService._user()
         user.preferences = {**(user.preferences or {}), key: value}

@@ -14,6 +14,9 @@
         <div class="card mb-3">
             <div class="card-body">
                 <h2 class="h5">Dashboard defaults</h2>
+                <label class="form-label" for="attentionDays">Needs attention: upcoming reminder window (days)</label>
+                <input class="form-control" id="attentionDays" name="dashboard.attention_days" type="number" min="1" max="365" step="1" required value="{{ preferences['dashboard.attention_days'] }}" aria-describedby="attentionDaysHelp">
+                <p class="form-text" id="attentionDaysHelp">Show upcoming dates within this many days (1–365). Overdue active plans and past pending bank entries remain visible regardless of this window.</p>
                 <label class="form-label" for="default_account_id">Default account</label>
                 <select class="form-select mb-3" id="default_account_id" name="default_account_id">
                     <option value="">Automatic (first available account)</option>

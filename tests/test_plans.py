@@ -2,6 +2,8 @@ from tests.auth_helpers import login_client
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from extensions import db
 from models.categories import Category
 from models.credit_cards import CreditCard
@@ -12,6 +14,115 @@ from models.transactions import Transaction
 
 def _login(client, user_id):
     login_client(client, user_id)
+
+
+@pytest.mark.parametrize('status', ['completed', 'archived', 'active'])
+def test_plan_status_actions_preserve_partial_items_and_transaction_links(
+    app, family, user, status,
+):
+    category = Category(family_id=family.id, name='Gifts', category_type='expense')
+    transaction = Transaction(
+        family_id=family.id, category=category, amount=-25,
+        transaction_date=date.today(), is_paid=True,
+    )
+    plan = Plan(
+        family_id=family.id, title='Partially finished', status='active',
+        owner_id=user.id, saved_amount=10, target_amount=100,
+        target_date=date.today(),
+    )
+    plan.items = [
+        PlanItem(family_id=family.id, title='Bought', status='purchased', transaction=transaction),
+        PlanItem(family_id=family.id, title='Unfinished', status='planned', estimated_cost=50),
+    ]
+    db.session.add(plan)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post(f'/plans/{plan.id}/status', data={'status': status})
+    assert response.status_code == 302
+    assert plan.status == status
+    assert plan.owner_id == user.id
+    assert plan.saved_amount == 10
+    assert plan.target_amount == 100
+    assert [item.status for item in plan.items] == ['purchased', 'planned']
+    assert plan.items[0].transaction_id == transaction.id
+    assert transaction.amount == -25
+    assert transaction.is_paid is True
+    dashboard = client.get('/').get_data(as_text=True)
+    assert ('Partially finished' in dashboard) == (status == 'active')
+    if status != 'active':
+        assert client.post(f'/plans/{plan.id}/status', data={'status': 'active'}).status_code == 302
+        assert plan.status == 'active'
+
+
+def test_plan_status_actions_reject_invalid_status(app, family, user):
+    plan = Plan(family_id=family.id, title='Keep active')
+    db.session.add(plan)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post(f'/plans/{plan.id}/status', data={'status': 'deleted'}, follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Choose Complete, Archive or Reopen.' in response.data
+    assert plan.status == 'active'
+
+
+def test_closed_plans_are_hidden_from_open_view_and_have_reopen_action(app, family, user):
+    plans = [
+        Plan(family_id=family.id, title=status, status=status)
+        for status in ['active', 'draft', 'completed', 'archived']
+    ]
+    db.session.add_all(plans)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    html = client.get('/plans').get_data(as_text=True)
+    assert '<span>Open plans</span><strong>2</strong>' in html
+    assert 'data-status="completed" hidden' in html
+    assert 'data-status="archived" hidden' in html
+    assert 'data-status="active" hidden' not in html
+    assert 'data-filter="completed"' in html
+    detail = client.get(f'/plans/{plans[2].id}').get_data(as_text=True)
+    assert 'Reopen</button>' in detail
+    assert 'Archive</button>' in detail
+
+
+@pytest.mark.parametrize('private', [False, True])
+def test_plan_status_actions_cannot_change_hidden_plans(app, family, user, private):
+    from models.family import Family
+    from models.users import User
+
+    other_family = Family(name='Other')
+    db.session.add(other_family)
+    db.session.flush()
+    other_user = User(
+        family_id=family.id, email='hidden@example.com', name='Other member', role='member',
+        password_hash='unused',
+    )
+    db.session.add(other_user)
+    db.session.flush()
+    plan = Plan(
+        family_id=family.id if private else other_family.id, title='Hidden',
+        owner_id=other_user.id if private else None,
+    )
+    db.session.add(plan)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    assert client.post(f'/plans/{plan.id}/status', data={'status': 'archived'}).status_code == 404
+    assert plan.status == 'active'
+
+
+def test_plan_status_action_requires_section_access(app, family, user):
+    plan = Plan(family_id=family.id, title='Restricted')
+    user.role = 'member'
+    user.set_allowed_sections([])
+    db.session.add(plan)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    assert client.post(f'/plans/{plan.id}/status', data={'status': 'completed'}).status_code == 403
+    assert plan.status == 'active'
 
 
 def test_plan_totals_use_linked_transaction_over_manual_cost(family):

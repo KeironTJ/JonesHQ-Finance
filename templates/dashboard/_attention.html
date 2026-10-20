@@ -1,0 +1,117 @@
+{% macro queue_url(kind=attention.kind, timing=attention.timing, view=attention.view, page=1) -%}
+{{ url_for('dashboard.index', attention_kind=kind, attention_timing=timing, attention_view=view, attention_page=page, account_id=selected_account.id if selected_account else none, year=selected_year, _anchor='needs-attention') }}
+{%- endmacro %}
+<section class="card mb-4 border-primary dashboard-section" id="needs-attention" aria-labelledby="attentionHeading">
+    {% set attention_expanded = 'attention_kind' in request.args or 'attention_timing' in request.args or 'attention_view' in request.args or 'attention_page' in request.args %}
+    <div class="card-header bg-primary text-white p-0">
+        <h2 class="h5 mb-0 w-100" id="attentionHeading">
+            <button class="attention-toggle w-100 d-flex justify-content-between align-items-center gap-2 text-start {% if not attention_expanded %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#attentionCollapse" aria-expanded="{{ 'true' if attention_expanded else 'false' }}" aria-controls="attentionCollapse">
+                <span><i class="bi bi-bell" aria-hidden="true"></i> Needs attention <span class="badge bg-light text-dark">{{ attention.active_count }}</span></span>
+                <i class="bi bi-chevron-down dashboard-chevron" aria-hidden="true"></i>
+            </button>
+        </h2>
+    </div>
+    <div id="attentionCollapse" class="collapse{% if attention_expanded %} show{% endif %}">
+    <div class="card-body">
+        <div class="text-end mb-3"><a href="{{ url_for('preferences.index', _anchor='attentionDays') }}" class="small">Reminder window: {{ attention.window_days }} days</a></div>
+        <div class="attention-toolbar justify-content-between mb-3">
+            <nav class="btn-group" aria-label="Reminder state">
+                {% for value, label, count in [('active', 'Active', attention.active_count), ('snoozed', 'Snoozed', attention.snoozed_count)] %}
+                <a class="btn btn-sm {{ 'btn-primary' if attention.view == value else 'btn-outline-secondary' }}" href="{{ queue_url(view=value) }}" {% if attention.view == value %}aria-current="true"{% endif %}>{{ label }} <span class="badge {{ 'bg-light text-dark' if attention.view == value else 'bg-secondary' }}">{{ count }}</span></a>
+                {% endfor %}
+            </nav>
+            <form method="get" action="{{ url_for('dashboard.index', _anchor='needs-attention') }}" class="d-flex flex-wrap align-items-center gap-2">
+                <input type="hidden" name="attention_kind" value="{{ attention.kind }}">
+                <input type="hidden" name="attention_view" value="{{ attention.view }}">
+                {% if selected_account %}<input type="hidden" name="account_id" value="{{ selected_account.id }}">{% endif %}
+                <input type="hidden" name="year" value="{{ selected_year }}">
+                <label class="small" for="attentionTiming">Dates</label>
+                <select class="form-select form-select-sm w-auto" name="attention_timing" id="attentionTiming">
+                    {% for value, label in [('all', 'All dates'), ('past', 'Past date'), ('today', 'Today'), ('upcoming', 'Upcoming')] %}
+                    <option value="{{ value }}" {% if attention.timing == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-primary">Apply</button>
+            </form>
+        </div>
+        <nav class="attention-categories mb-3" aria-label="Reminder categories">
+            <a class="btn btn-sm {{ 'btn-primary' if attention.kind == 'all' else 'btn-outline-secondary' }}" href="{{ queue_url(kind='all') }}" {% if attention.kind == 'all' %}aria-current="true"{% endif %}>All <span class="ms-1">{{ attention.pool_count }}</span></a>
+            {% for kind, (label, icon) in attention.kinds.items() %}
+            <a class="btn btn-sm {{ 'btn-primary' if attention.kind == kind else 'btn-outline-secondary' }}" href="{{ queue_url(kind=kind) }}" {% if attention.kind == kind %}aria-current="true"{% endif %}><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ label }} <span class="ms-1">{{ attention.counts[kind] }}</span></a>
+            {% endfor %}
+        </nav>
+        <div class="small text-muted d-flex flex-wrap justify-content-between gap-2 mb-2">
+            <span>Showing {{ attention.start }}–{{ attention.end }} of {{ attention.total }} {{ 'snoozed' if attention.view == 'snoozed' else 'active' }} reminders</span>
+            {% if attention.kind != 'all' or attention.timing != 'all' %}<a href="{{ queue_url(kind='all', timing='all') }}">Clear filters</a>{% endif %}
+        </div>
+        {% if attention['items'] %}
+        <ul class="list-unstyled mb-0 attention-list" aria-label="Attention work queue">
+            {% for item in attention['items'] %}
+            <li class="attention-item border-top">
+                <span class="attention-icon text-primary" title="{{ attention.kinds[item.kind][0] }}"><i class="bi bi-{{ attention.kinds[item.kind][1] }}" aria-hidden="true"></i><span class="visually-hidden">{{ attention.kinds[item.kind][0] }}</span></span>
+                <div class="attention-title">
+                    <a class="fw-semibold" href="{{ url_for(item.endpoint, **item.params) }}">{{ item.title }}</a>
+                    {% if item.context %}<div class="attention-context">{{ item.context }}</div>{% endif %}
+                    <div class="attention-meta">
+                        <span class="attention-status {{ 'is-past' if item.days_remaining < 0 else 'is-today' if item.days_remaining == 0 else '' }}">
+                            {% if item.days_remaining < 0 %}{{ -item.days_remaining }} day{{ '' if item.days_remaining == -1 else 's' }} past{% elif item.days_remaining == 0 %}Today{% else %}In {{ item.days_remaining }} day{{ '' if item.days_remaining == 1 else 's' }}{% endif %}
+                        </span>
+                        <time datetime="{{ item.due_date.isoformat() }}">{{ item.due_date.strftime('%d %b %Y') }}</time>
+                    </div>
+                    <details class="small text-muted mt-1 attention-detail">
+                        <summary>Details<span class="visually-hidden"> for {{ item.title }}</span></summary>
+                        <p class="mb-0 mt-1">{{ item.message }}</p>
+                    </details>
+                </div>
+                <div class="attention-item-actions">
+                    {% if not item.snoozed_until %}
+                    <details class="attention-snooze-options">
+                        <summary><i class="bi bi-clock" aria-hidden="true"></i> Snooze<span class="visually-hidden"> reminder for {{ item.title }}</span><i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('dashboard.snooze_attention') }}" class="attention-snooze">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="key" value="{{ item.key }}">
+                        <input type="hidden" name="attention_kind" value="{{ attention.kind }}">
+                        <input type="hidden" name="attention_timing" value="{{ attention.timing }}">
+                        <input type="hidden" name="attention_view" value="{{ attention.view }}">
+                        <input type="hidden" name="attention_page" value="{{ attention.page }}">
+                        {% if selected_account %}<input type="hidden" name="account_id" value="{{ selected_account.id }}">{% endif %}
+                        <input type="hidden" name="year" value="{{ selected_year }}">
+                        {% if item.snoozed_until %}
+                        <input type="hidden" name="days" value="0">
+                        <button class="btn btn-sm btn-outline-secondary" type="submit" aria-label="Restore reminder for {{ item.title }}">Restore</button>
+                        {% else %}
+                        <label class="visually-hidden" for="snooze-{{ loop.index }}">Snooze duration for {{ item.title }}</label>
+                        <select class="form-select form-select-sm" id="snooze-{{ loop.index }}" name="days">
+                            <option value="1">1 day</option>
+                            <option value="7" selected>7 days</option>
+                            <option value="30">30 days</option>
+                        </select>
+                        <button class="btn btn-sm btn-outline-secondary" type="submit" aria-label="Snooze reminder for {{ item.title }}">Snooze</button>
+                        {% endif %}
+                    </form>
+                    {% if not item.snoozed_until %}</details>{% endif %}
+                    {% if item.snoozed_until %}<span class="small text-muted"><i class="bi bi-clock" aria-hidden="true"></i> Until {{ item.snoozed_until.strftime('%d %b %Y') }}</span>{% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% elif attention.active_count == 0 and attention.snoozed_count == 0 %}
+        <p class="py-3 mb-0"><i class="bi bi-check-circle text-success" aria-hidden="true"></i> No items need attention in your accessible sections for this window.</p>
+        {% else %}
+        <p class="py-3 mb-0">No reminders match this view. Choose another category, date filter or reminder state.</p>
+        {% endif %}
+        {% if attention.pages > 1 %}
+        <nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-3" aria-label="Reminder pages">
+            {% if attention.page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ queue_url(page=attention.page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}
+            <span class="small text-muted">Page {{ attention.page }} of {{ attention.pages }}</span>
+            {% if attention.page < attention.pages %}<a class="btn btn-sm btn-outline-primary" href="{{ queue_url(page=attention.page + 1) }}">Next</a>{% else %}<span></span>{% endif %}
+        </nav>
+        {% endif %}
+        <details class="small text-muted mt-3">
+            <summary>About these reminders</summary>
+            <p class="mb-0 mt-2">Across all your accessible records, regardless of the dashboard account or year. Upcoming dates use your {{ attention.window_days }}-day window; overdue plans, current mortgage products past their end date and past pending bank entries remain included. Pending entries may be forecasts, not missed bills. Snoozing never marks a payment paid or a plan complete. Changed target dates produce fresh reminders.</p>
+        </details>
+    </div>
+    </div>
+</section>
