@@ -120,7 +120,32 @@ class Config:
 
 class DevelopmentConfig(Config):
     """Development configuration"""
-    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
+    @classmethod
+    def init_app(cls, app):
+        Config.init_app(app)
+        if app.config.get('SECRET_KEY'):
+            return
+
+        os.makedirs(app.instance_path, exist_ok=True)
+        key_path = os.path.join(app.instance_path, 'development_secret_key')
+        try:
+            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            with os.fdopen(descriptor, 'w', encoding='ascii') as key_file:
+                key_file.write(secrets.token_hex(32))
+
+        with open(key_path, encoding='ascii') as key_file:
+            key = key_file.read().strip()
+        if len(key) != 64 or any(char not in '0123456789abcdef' for char in key):
+            raise ValueError(
+                "Invalid local development key. Remove instance/development_secret_key "
+                "and restart to generate a new key; existing logins will be invalidated."
+            )
+        app.config['SECRET_KEY'] = key
+
     # Safe for localhost development, but disable before sharing/deploying
     DEBUG = os.environ.get('FLASK_DEBUG', '0') == '1'
     SQLALCHEMY_ECHO = False  # Set to True only when debugging SQL queries

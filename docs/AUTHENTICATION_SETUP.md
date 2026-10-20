@@ -16,6 +16,20 @@ venv\Scripts\python.exe -m flask run
 Open `http://127.0.0.1:5000/login`. Development uses an in-memory rate-limit
 backend and does not require SMTP or Redis.
 
+When `SECRET_KEY` is not configured, development automatically generates a random
+key in `instance/development_secret_key` and reuses it across restarts and code
+reloads. The instance directory is ignored by Git; keep this key private and do
+not use it for production. An explicitly configured `SECRET_KEY` takes precedence.
+Deleting the file generates a new key on the next startup and invalidates existing
+login cookies. Unreadable or invalid key files cause startup to fail rather than
+silently signing everyone out.
+
+After this change, sign in once more and select **Remember Me** to stay signed in
+for up to seven days, including across server restarts. Without Remember Me,
+the usual 60-minute idle and 12-hour absolute limits apply (configurable with
+`SESSION_IDLE_MINUTES` and `SESSION_ABSOLUTE_HOURS`). Two-factor login, session
+revocation, and production authentication requirements are unchanged.
+
 ## Production prerequisites
 
 Install `requirements.txt`, select `FLASK_ENV=production`, and configure:
