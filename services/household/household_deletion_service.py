@@ -18,7 +18,7 @@ HOUSEHOLD_TABLES = (
     'balances', 'monthly_account_balances', 'daily_childcare_activities',
     'monthly_childcare_summaries', 'child_activity_types', 'children',
     'mortgage_snapshots', 'mortgage_products', 'mortgage_payments',
-    'property_valuation_snapshots', 'transactions', 'subscriptions',
+    'property_valuation_snapshots', 'transactions', 'subscription_price_changes', 'subscriptions',
     'expense_reimbursement_groups', 'recurring_income', 'planned_transactions',
     'budgets', 'plans', 'vehicles', 'pensions', 'loans', 'credit_cards',
     'accounts', 'vendors', 'vendor_types', 'categories', 'mortgages',

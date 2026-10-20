@@ -11,7 +11,8 @@ from models import (
     Account, Budget, ChildcareRecord, ExpenseReimbursementGroup, Family, FamilyAssignmentLabel,
     FamilyInvite, HouseholdInvite, Mortgage, MortgagePayment, MortgageProduct, MortgageSnapshot,
     NetWorth, PlannedTransaction, Property, PropertyValuationSnapshot, SecurityEvent, Settings,
-    TaxSettings, Transaction, User, UserRecoveryCode, UserSession, Vendor, VendorType,
+    Subscription, SubscriptionPriceChange, TaxSettings, Transaction, User, UserRecoveryCode,
+    UserSession, Vendor, VendorType,
 )
 from models.childcare import Child, ChildActivityType, DailyChildcareActivity, MonthlyChildcareSummary
 from services.household.household_deletion_service import HOUSEHOLD_TABLES, HouseholdDeletionService
@@ -41,6 +42,11 @@ def isolate_state(app, family, monkeypatch):
 def extended_domains(owner, family_id, prefix):
     data = make_domains(owner, family_id, prefix)
     account, category, transaction = (data[key] for key in ('account', 'category', 'transaction'))
+    subscription = db.session.execute(select(Subscription).where(
+        Subscription.family_id == family_id, Subscription.account_id == account.id,
+    )).scalar_one()
+    add(SubscriptionPriceChange, family_id=family_id, subscription_id=subscription.id,
+        amount=-12, effective_date=TODAY, note='Annual increase')
     vendor_type = add(VendorType, family_id=family_id, name=prefix)
     vendor = add(Vendor, family_id=family_id, name=prefix, vendor_type_id=vendor_type.id,
                  default_category_id=category.id)
