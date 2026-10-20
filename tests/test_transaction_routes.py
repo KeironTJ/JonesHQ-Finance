@@ -99,6 +99,20 @@ def test_transaction_create_and_transfer_render_compact_editors(app, family, use
     assert b'transferEditorForm' in transfer_response.data
 
 
+@pytest.mark.parametrize('data', [
+    {},
+    {'from_account_id': '1', 'to_account_id': '2'},
+])
+def test_transfer_form_renders_after_missing_required_input(app, family, user, data):
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post('/transactions/transfer', data=data)
+
+    assert response.status_code == 200
+    assert date.today().isoformat().encode() in response.data
+
+
 def test_transaction_routes_create_edit_delete(app, family, user):
     family_id = family.id
     user_id = user.id

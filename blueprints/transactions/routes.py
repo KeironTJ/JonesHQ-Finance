@@ -449,7 +449,6 @@ def create():
             return redirect(url_for('transactions.index'))
     
     # GET request - show form
-    from datetime import date
     accounts = family_query(Account).order_by(Account.name).all()
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     vendors = family_query(Vendor).order_by(Vendor.name).all()
@@ -740,14 +739,18 @@ def create_transfer():
                 flash('Please select both accounts', 'danger')
                 accounts = family_query(Account).order_by(Account.name).all()
                 categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
-                return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
+                return render_template(
+                    'transactions/transfer_form.html', accounts=accounts, categories=categories,
+                    today=date.today())
             
             amount_str = request.form.get('amount', '')
             if not amount_str:
                 flash('Please enter an amount', 'danger')
                 accounts = family_query(Account).order_by(Account.name).all()
                 categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
-                return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
+                return render_template(
+                    'transactions/transfer_form.html', accounts=accounts, categories=categories,
+                    today=date.today())
             
             amount = abs(float(amount_str))  # Ensure positive
             transfer_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d').date()
@@ -792,20 +795,20 @@ def create_transfer():
             flash(f'Invalid input: {str(e)}', 'danger')
             accounts = family_query(Account).order_by(Account.name).all()
             categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
-            return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories)
+            return render_template(
+                'transactions/transfer_form.html', accounts=accounts, categories=categories,
+                today=date.today())
         except Exception as e:
             db.session.rollback()
             import traceback
             error_detail = traceback.format_exc()
             print(f"Transfer creation error: {error_detail}")  # Log to console
             flash(f'Error creating transfer: {str(e)}', 'danger')
-            from datetime import date
             accounts = family_query(Account).order_by(Account.name).all()
             categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
             return render_template('transactions/transfer_form.html', accounts=accounts, categories=categories, today=date.today())
     
     # GET request - show form
-    from datetime import date
     accounts = family_query(Account).order_by(Account.name).all()
     categories = family_query(Category).order_by(Category.head_budget, Category.sub_budget).all()
     
