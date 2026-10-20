@@ -26,6 +26,10 @@ A comprehensive personal finance management web application built with Flask, de
 - **Net Worth Analysis**: Historical net worth snapshots with trend analysis
 - **Work Expenses**: Track business expenses and mileage reimbursements
 - **Income Tracking**: Detailed payslip tracking with pension contributions
+- **Subscription Tracking**: Manage recurring bank and credit-card charges, review
+  estimated annual costs, compare paid history, and preview dated price changes
+- **Cash-Flow Reminders**: Review upcoming subscription charges and other attention
+  items from the dashboard
 
 ## Setup Instructions
 
@@ -206,14 +210,14 @@ with app.app_context():
 
 ## Future Enhancements
 
-- [ ] Data visualization with charts (Chart.js/Plotly)
-- [ ] Export to Excel/PDF reports
-- [ ] Budget alerts and notifications
-- [ ] Mobile responsive improvements
-- [ ] REST API for mobile app integration
-- [ ] Automated data import from bank feeds
-- [ ] Multi-currency support
-- [ ] Tax reporting features
+Potential areas to explore:
+
+- Guided bank-statement import with duplicate detection and category suggestions
+- What-if cash-flow scenarios for large purchases or changes in income and bills
+- User-defined transaction rules for categorization and recurring-charge matching
+- Deeper budget-versus-actual comparisons across monthly and payday periods
+- Custom Excel/PDF financial reports
+- Multi-currency support and tax-focused reporting
 
 Authentication, family membership, section permissions, CSRF protection,
 rate limiting, and password policy are already implemented. See

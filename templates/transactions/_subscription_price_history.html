@@ -1,0 +1,78 @@
+<section class="card subscription-price-history" aria-labelledby="price-history-title">
+    <div class="card-header">
+        <h2 id="price-history-title" class="h5 mb-0">Price history</h2>
+    </div>
+    <div class="table-responsive d-none d-md-block">
+        <table class="table mb-0 price-history-table">
+            <thead>
+                <tr>
+                    <th scope="col">Amount</th>
+                    <th scope="col">Effective date</th>
+                    <th scope="col">Reason</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>£{{ "%.2f"|format(subscription.amount|abs) }}</td>
+                    <td>From {{ subscription.start_date.strftime('%d %b %Y') }}</td>
+                    <td>Original subscription price</td>
+                    <td></td>
+                </tr>
+                {% for change in price_history %}
+                <tr>
+                    <td>£{{ "%.2f"|format(change.amount|abs) }}</td>
+                    <td>{{ change.effective_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ change.note or 'No reason recorded' }}</td>
+                    <td class="text-end">
+                        {% if change.effective_date >= today %}
+                        <a href="{{ url_for('transactions.change_subscription_price', id=subscription.id, change_id=change.id) }}"
+                           class="btn btn-sm btn-outline-secondary">Edit</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-body-secondary">No dated price changes yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="list-group list-group-flush d-md-none price-history-mobile">
+        <div class="list-group-item">
+            <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+                <span class="price-history-amount">£{{ "%.2f"|format(subscription.amount|abs) }}</span>
+                <span class="badge text-bg-secondary">Starting price</span>
+            </div>
+            <div class="small text-body-secondary">From {{ subscription.start_date.strftime('%d %b %Y') }}</div>
+            <div class="price-history-reason small">
+                <div class="text-body-secondary">Reason</div>
+                Original subscription price
+            </div>
+        </div>
+        {% for change in price_history %}
+        <div class="list-group-item">
+            <div class="d-flex justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="price-history-amount">£{{ "%.2f"|format(change.amount|abs) }}</div>
+                    <div class="small text-body-secondary">Effective {{ change.effective_date.strftime('%d %b %Y') }}</div>
+                </div>
+                {% if change.effective_date >= today %}
+                <a href="{{ url_for('transactions.change_subscription_price', id=subscription.id, change_id=change.id) }}"
+                   class="btn btn-outline-secondary price-history-edit"
+                   title="Edit price change" aria-label="Edit price change">
+                    <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                </a>
+                {% endif %}
+            </div>
+            <div class="price-history-reason small">
+                <div class="text-body-secondary">Reason</div>
+                {{ change.note or 'No reason recorded' }}
+            </div>
+        </div>
+        {% else %}
+        <div class="list-group-item text-body-secondary">No dated price changes yet.</div>
+        {% endfor %}
+    </div>
+</section>

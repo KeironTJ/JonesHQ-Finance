@@ -122,6 +122,7 @@
   --bs-body-font-family: var(--font);
   --bs-body-bg: var(--bg-page);
   --bs-body-color: var(--text-primary);
+  --bs-secondary-color: var(--text-secondary);
   --bs-border-color: var(--border-color);
   --bs-primary: var(--brand);
   --bs-primary-rgb: 79, 70, 229;

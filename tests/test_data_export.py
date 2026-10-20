@@ -14,6 +14,7 @@ from models.income import Income
 from models.loan_term_changes import LoanTermChange
 from models.loans import Loan
 from models.plans import Plan, PlanItem
+from models.subscriptions import Subscription, SubscriptionPriceChange
 from models.transactions import Transaction
 from models.users import SecurityEvent, User, UserSession
 from services.platform.data_export_service import DataExportService, EXPORTS
@@ -113,6 +114,43 @@ def test_export_keeps_private_and_foreign_records_out_even_for_admin(app, user, 
     assert len(data['loans']) == len(data['loan_term_changes']) == 2
     assert 'Private account' not in response.get_data(as_text=True)
     assert 'Foreign account' not in response.get_data(as_text=True)
+
+
+def test_export_includes_dated_subscription_prices(app, user, family):
+    account = Account(
+        family_id=family.id, name='Shared account', account_type='Current',
+    )
+    category = Category(
+        family_id=family.id, name='Streaming', category_type='expense',
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    subscription = Subscription(
+        family_id=family.id, name='Streaming service', amount=Decimal('-12.99'),
+        frequency='monthly', start_date=date(2026, 1, 1), horizon_years=1,
+        account_id=account.id, category_id=category.id,
+    )
+    db.session.add(subscription)
+    db.session.flush()
+    db.session.add(SubscriptionPriceChange(
+        family_id=family.id, subscription_id=subscription.id,
+        amount=Decimal('-15.99'), effective_date=date(2026, 7, 1),
+        note='Annual price increase',
+    ))
+    db.session.commit()
+
+    _, response = download(app, user)
+
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['subscriptions'][0]['amount'] == '-12.99'
+    assert data['subscription_price_changes'][0] == {
+        'id': 1,
+        'subscription_id': subscription.id,
+        'amount': '-15.99',
+        'effective_date': '2026-07-01',
+        'note': 'Annual price increase',
+    }
 
 
 def test_site_admin_export_still_has_normal_record_visibility(app, user, export_records):

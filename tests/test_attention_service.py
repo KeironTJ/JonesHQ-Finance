@@ -10,6 +10,7 @@ from models.family import Family
 from models.mortgage import MortgageProduct
 from models.plans import Plan
 from models.property import Property
+from models.subscriptions import Subscription
 from models.transactions import Transaction
 from models.users import User
 from services.analytics.attention_service import AttentionService
@@ -139,6 +140,38 @@ def test_attention_excludes_inaccessible_sections(app, family, user, monkeypatch
     user.set_allowed_sections([])
     db.session.commit()
     assert AttentionService.get_data(TODAY)['items'] == []
+
+
+def test_attention_includes_next_active_subscription_charge(app, family, user, monkeypatch):
+    _scope(monkeypatch, family, user)
+    account, _, _, _, _, _ = _records(family.id, 'Subscription target')
+    subscription = Subscription(
+        family_id=family.id,
+        name='Streaming',
+        amount=-12.99,
+        frequency='monthly',
+        start_date=TODAY + timedelta(days=10),
+        horizon_years=1,
+        account_id=account.id,
+        is_active=True,
+    )
+    db.session.add(subscription)
+    db.session.commit()
+
+    result = AttentionService.get_data(TODAY)
+    item = next(item for item in result['items'] if item['kind'] == 'subscription')
+    assert item['title'] == 'Streaming'
+    assert item['due_date'] == TODAY + timedelta(days=10)
+    assert item['endpoint'] == 'transactions.edit_subscription'
+    assert item['params'] == {'id': subscription.id}
+    assert item['context'] == 'Subscription target / £12.99'
+
+    subscription.is_active = False
+    db.session.commit()
+    assert not any(
+        item['kind'] == 'subscription'
+        for item in AttentionService.get_data(TODAY)['items']
+    )
 
 
 @pytest.mark.parametrize('change', ['paid', 'today', 'future', 'inactive_account'])
@@ -312,7 +345,13 @@ def test_attention_queue_paginates_filters_and_clamps_after_removal(
     assert {item['key'] for item in first['items']}.isdisjoint(
         {item['key'] for item in second['items']},
     )
-    assert first['counts'] == {'transaction': 1, 'plan': 24, 'credit_card': 1, 'mortgage': 1}
+    assert first['counts'] == {
+        'transaction': 1,
+        'plan': 24,
+        'credit_card': 1,
+        'mortgage': 1,
+        'subscription': 0,
+    }
     past = AttentionService.get_queue({'attention_timing': 'past'}, TODAY)
     assert [item['kind'] for item in past['items']] == ['transaction']
     today = AttentionService.get_queue({'attention_timing': 'today', 'attention_kind': 'plan'}, TODAY)

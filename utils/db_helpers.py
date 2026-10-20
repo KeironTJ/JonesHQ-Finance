@@ -140,6 +140,38 @@ def _apply_visibility(model, query):
             )
         )
 
+    if getattr(model, '__tablename__', None) == 'subscription_price_changes':
+        from models.accounts import Account
+        from models.credit_cards import CreditCard
+        from models.subscriptions import Subscription
+
+        account_owner_id = (
+            Account.query.with_entities(Account.owner_id)
+            .filter(Account.id == Subscription.account_id)
+            .correlate(Subscription)
+            .scalar_subquery()
+        )
+        card_owner_id = (
+            CreditCard.query.with_entities(CreditCard.owner_id)
+            .filter(CreditCard.id == Subscription.credit_card_id)
+            .correlate(Subscription)
+            .scalar_subquery()
+        )
+        visible_subscription = Subscription.query.filter(
+            Subscription.id == model.subscription_id,
+            or_(
+                and_(
+                    Subscription.account_id.is_not(None),
+                    or_(account_owner_id.is_(None), account_owner_id == uid),
+                ),
+                and_(
+                    Subscription.credit_card_id.is_not(None),
+                    or_(card_owner_id.is_(None), card_owner_id == uid),
+                ),
+            ),
+        ).correlate(model).exists()
+        conditions.append(visible_subscription)
+
     entry = _inherited_visibility_models().get(model)
     if entry:
         fk_name, parent_model = entry

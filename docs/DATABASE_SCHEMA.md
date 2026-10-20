@@ -369,6 +369,17 @@ Generated pending entries reference the subscription from
 `credit_card_transactions.subscription_id`. Paid entries are retained when a
 subscription changes or is cancelled.
 
+### 23. **SubscriptionPriceChange** (subscriptions.py)
+Dated charge amounts for upgrades, downgrades, discounts and price increases
+- `family_id`, `subscription_id`: Household scope and parent subscription
+- `amount`: New charge amount, stored as a negative expense
+- `effective_date`: Applies to subscription charges on or after this date
+- `note`: Optional plan or price-change description
+
+One price change is allowed per subscription per effective date. Forecast
+charges are previewed before a change is confirmed; paid and manually fixed
+entries remain unchanged.
+
 ## Key Design Decisions
 
 ### 1. **Normalized Structure**

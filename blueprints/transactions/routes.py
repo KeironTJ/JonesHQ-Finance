@@ -1,8 +1,23 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify, current_app
-from sqlalchemy import func, case
-from datetime import datetime, timedelta, date, timezone
-from decimal import Decimal
+import hashlib
+import hmac
+import json
 from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+
+from flask import (
+    abort,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from sqlalchemy import func, case
+from sqlalchemy.exc import SQLAlchemyError
 from . import transactions_bp
 from models.transactions import Transaction
 from models.accounts import Account
@@ -15,7 +30,7 @@ from models.loans import Loan
 from models.settings import Settings
 from models.users import User
 from models.plans import Plan, PlanItem
-from models.subscriptions import Subscription
+from models.subscriptions import Subscription, SubscriptionPriceChange
 from services.finance.payday_service import PaydayService
 from services.finance.subscription_service import SubscriptionService
 from services.finance.transaction_service import TransactionService
@@ -44,6 +59,15 @@ def _subscription_form_options():
     }
 
 
+def _price_change_preview_hash(values, change_id):
+    return hashlib.sha256(json.dumps([
+        format(abs(values['amount']), 'f'),
+        values['effective_date'].isoformat(),
+        values['note'],
+        change_id,
+    ]).encode()).hexdigest()
+
+
 @transactions_bp.route('/transactions/subscriptions')
 def subscriptions():
     """List active and paused subscription rules and keep their forecast populated."""
@@ -55,24 +79,10 @@ def subscriptions():
             SubscriptionService.sync_pending(subscription)
     db.session.commit()
 
-    summaries = {}
-    for subscription in subscriptions:
-        bank = family_query(Transaction).filter_by(subscription_id=subscription.id)
-        card = family_query(CreditCardTransaction).filter_by(
-            subscription_id=subscription.id
-        )
-        bank_pending = bank.filter_by(is_paid=False).all()
-        card_pending = card.filter_by(is_paid=False).all()
-        bank_paid_count = bank.filter_by(is_paid=True).count()
-        card_paid_count = card.filter_by(is_paid=True).count()
-        pending_dates = [
-            transaction.transaction_date for transaction in bank_pending
-        ] + [transaction.date for transaction in card_pending]
-        summaries[subscription.id] = {
-            'pending_count': len(bank_pending) + len(card_pending),
-            'paid_count': bank_paid_count + card_paid_count,
-            'next_date': min(pending_dates) if pending_dates else None,
-        }
+    summaries = {
+        subscription.id: SubscriptionService.get_summary(subscription)
+        for subscription in subscriptions
+    }
     return render_template(
         'transactions/subscriptions.html',
         subscriptions=subscriptions,
@@ -107,6 +117,12 @@ def create_subscription():
 @transactions_bp.route('/transactions/subscriptions/<int:id>/edit', methods=['GET', 'POST'])
 def edit_subscription(id):
     subscription = family_get_or_404(Subscription, id)
+    history = family_query(SubscriptionPriceChange).filter_by(
+        subscription_id=subscription.id
+    ).order_by(
+        SubscriptionPriceChange.effective_date,
+        SubscriptionPriceChange.id,
+    ).all()
     if request.method == 'POST':
         try:
             SubscriptionService.update(id, request.form)
@@ -122,9 +138,104 @@ def edit_subscription(id):
     return render_template(
         'transactions/subscription_form.html',
         subscription=subscription,
+        price_history=history,
         target_type='credit_card' if subscription.credit_card_id else 'bank',
         today=date.today(),
+        current_amount=abs(
+            SubscriptionService._amount_for_date(subscription, date.today())
+        ),
         **_subscription_form_options(),
+    )
+
+
+@transactions_bp.route(
+    '/transactions/subscriptions/<int:id>/price-change',
+    defaults={'change_id': None},
+    methods=['GET', 'POST'],
+)
+@transactions_bp.route(
+    '/transactions/subscriptions/<int:id>/price-change/<int:change_id>',
+    methods=['GET', 'POST'],
+)
+def change_subscription_price(id, change_id):
+    subscription = family_get_or_404(Subscription, id)
+    editing_price_change = (
+        family_get_or_404(SubscriptionPriceChange, change_id)
+        if change_id is not None
+        else None
+    )
+    if (
+        editing_price_change
+        and editing_price_change.subscription_id != subscription.id
+    ):
+        abort(404)
+    history = family_query(SubscriptionPriceChange).filter_by(
+        subscription_id=subscription.id
+    ).order_by(
+        SubscriptionPriceChange.effective_date,
+        SubscriptionPriceChange.id,
+    ).all()
+    if request.method == 'POST':
+        try:
+            if request.form.get('confirm_change') == '1':
+                preview_hash = session.get(
+                    'subscription_price_previews', {}
+                ).get(str(id))
+                preview = SubscriptionService.preview_price_change(
+                    id, request.form, change_id=change_id
+                )
+                submitted_hash = _price_change_preview_hash(
+                    preview['values'], change_id
+                )
+                if not preview_hash or not hmac.compare_digest(
+                    preview_hash, submitted_hash
+                ):
+                    raise ValueError('Review the price change preview before confirming')
+                previews = session.get('subscription_price_previews', {})
+                previews.pop(str(id), None)
+                session['subscription_price_previews'] = previews
+                SubscriptionService.apply_price_change(
+                    id, request.form, change_id=change_id
+                )
+                db.session.commit()
+                flash(
+                    'Price change saved. Future unpaid charges affected by the updated date and amount were refreshed; paid charges were left unchanged.',
+                    'success',
+                )
+                return redirect(url_for('transactions.subscriptions'))
+            preview = SubscriptionService.preview_price_change(
+                id, request.form, change_id=change_id
+            )
+            previews = session.get('subscription_price_previews', {})
+            previews[str(id)] = _price_change_preview_hash(
+                preview['values'], change_id
+            )
+            session['subscription_price_previews'] = previews
+            return render_template(
+                'transactions/subscription_price_change.html',
+                subscription=subscription,
+                price_history=history,
+                preview=preview,
+                editing_price_change=editing_price_change,
+                today=date.today(),
+            )
+        except (ValueError, TypeError) as error:
+            db.session.rollback()
+            flash(f'Unable to change subscription price: {error}', 'danger')
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.exception('Unable to save subscription price change')
+            flash('Unable to save the subscription price change. Please try again.', 'danger')
+    return render_template(
+        'transactions/subscription_price_change.html',
+        subscription=subscription,
+        price_history=history,
+        preview=None,
+        editing_price_change=editing_price_change,
+        today=date.today(),
+        current_amount=abs(
+            SubscriptionService._amount_for_date(subscription, date.today())
+        ),
     )
 
 

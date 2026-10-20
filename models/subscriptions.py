@@ -46,6 +46,12 @@ class Subscription(db.Model):
     credit_card = db.relationship('CreditCard', foreign_keys=[credit_card_id])
     category = db.relationship('Category', foreign_keys=[category_id])
     vendor = db.relationship('Vendor', foreign_keys=[vendor_id])
+    price_changes = db.relationship(
+        'SubscriptionPriceChange',
+        back_populates='subscription',
+        cascade='all, delete-orphan',
+        order_by='SubscriptionPriceChange.effective_date',
+    )
 
     @property
     def target_name(self):
@@ -57,3 +63,35 @@ class Subscription(db.Model):
 
     def __repr__(self):
         return f'<Subscription {self.name}: {self.frequency}>'
+
+
+class SubscriptionPriceChange(db.Model):
+    __tablename__ = 'subscription_price_changes'
+    __table_args__ = (
+        db.CheckConstraint('amount < 0', name='ck_subscription_price_changes_expense_amount'),
+        db.UniqueConstraint(
+            'subscription_id',
+            'effective_date',
+            name='uq_subscription_price_changes_effective_date',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    family_id = db.Column(
+        db.Integer, db.ForeignKey('families.id'), nullable=False, index=True
+    )
+    subscription_id = db.Column(
+        db.Integer, db.ForeignKey('subscriptions.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    effective_date = db.Column(db.Date, nullable=False)
+    note = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(
+        db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+
+    subscription = db.relationship('Subscription', back_populates='price_changes')
+
+    def __repr__(self):
+        return f'<SubscriptionPriceChange {self.subscription_id}: {self.effective_date}>'

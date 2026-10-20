@@ -6,7 +6,9 @@ from models.credit_cards import CreditCard, CreditCardPromotion
 from models.mortgage import MortgageProduct
 from models.plans import Plan
 from models.property import Property
+from models.subscriptions import Subscription
 from models.transactions import Transaction
+from services.finance.subscription_service import SubscriptionService
 from services.platform.preference_service import PreferenceService
 from utils.permissions import can_access_section
 from utils.db_helpers import family_query
@@ -18,6 +20,7 @@ class AttentionService:
         'plan': ('Plans', 'journal-check'),
         'credit_card': ('Credit cards', 'credit-card'),
         'mortgage': ('Mortgages', 'house-door'),
+        'subscription': ('Subscriptions', 'arrow-repeat'),
     }
     PAGE_SIZE = 10
 
@@ -106,6 +109,36 @@ class AttentionService:
                     plan.target_date, 'plans.detail', plan_id=plan.id)
 
         if can_access_section('transactions'):
+            subscriptions = family_query(Subscription).filter_by(is_active=True).all()
+            for subscription in subscriptions:
+                if (
+                    subscription.account_id and not subscription.account.is_active
+                ) or (
+                    subscription.credit_card_id and not subscription.credit_card.is_active
+                ):
+                    continue
+                due_date = next(
+                    (
+                        scheduled_date
+                        for scheduled_date in SubscriptionService._scheduled_dates(
+                            subscription, today
+                        )
+                        if scheduled_date <= horizon
+                    ),
+                    None,
+                )
+                if due_date:
+                    add(
+                        'subscription',
+                        str(subscription.id),
+                        subscription.name,
+                        'Upcoming recurring charge. Review the amount and schedule.',
+                        due_date,
+                        'transactions.edit_subscription',
+                        context=f'{subscription.target_name} / £{abs(subscription.amount):,.2f}',
+                        id=subscription.id,
+                    )
+
             accounts = {
                 account.id: account
                 for account in family_query(Account).filter_by(is_active=True).all()

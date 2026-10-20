@@ -8,7 +8,7 @@ from models.accounts import Account
 from models.categories import Category
 from models.credit_card_transactions import CreditCardTransaction
 from models.credit_cards import CreditCard
-from models.subscriptions import Subscription
+from models.subscriptions import Subscription, SubscriptionPriceChange
 from models.transactions import Transaction
 from models.vendors import Vendor
 from services.finance.payday_service import PaydayService
@@ -24,6 +24,265 @@ class SubscriptionService:
         'quarterly': relativedelta(months=3),
         'yearly': relativedelta(years=1),
     }
+    ANNUAL_OCCURRENCES = {
+        'weekly': 52,
+        '4weekly': 13,
+        'monthly': 12,
+        'quarterly': 4,
+        'yearly': 1,
+    }
+
+    @staticmethod
+    def get_summary(subscription):
+        if subscription.account_id:
+            date_attribute = 'transaction_date'
+            transactions = family_query(Transaction).filter_by(
+                subscription_id=subscription.id
+            ).order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
+        else:
+            date_attribute = 'date'
+            transactions = family_query(CreditCardTransaction).filter_by(
+                subscription_id=subscription.id
+            ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).all()
+
+        paid_transactions = [
+            transaction for transaction in transactions if transaction.is_paid
+        ]
+        pending_transactions = [
+            transaction for transaction in transactions if not transaction.is_paid
+        ]
+        latest_paid = paid_transactions[0] if paid_transactions else None
+        current_amount = SubscriptionService._amount_for_date(
+            subscription, date.today()
+        )
+        effective_price_change = max(
+            (
+                change for change in subscription.price_changes
+                if change.effective_date <= date.today()
+            ),
+            key=lambda change: (change.effective_date, change.id),
+            default=None,
+        )
+        upcoming_price_change = min(
+            (
+                change for change in subscription.price_changes
+                if change.effective_date > date.today()
+            ),
+            key=lambda change: (change.effective_date, change.id),
+            default=None,
+        )
+        annual_cost = (
+            abs(current_amount)
+            * SubscriptionService.ANNUAL_OCCURRENCES[subscription.frequency]
+        )
+        return {
+            'pending_count': len(pending_transactions),
+            'paid_count': len(paid_transactions),
+            'next_date': min(
+                (
+                    getattr(transaction, date_attribute)
+                    for transaction in pending_transactions
+                ),
+                default=None,
+            ),
+            'annual_cost': annual_cost,
+            'current_amount': abs(current_amount),
+            'current_price_reason': (
+                effective_price_change.note if effective_price_change else None
+            ),
+            'upcoming_price_change': upcoming_price_change,
+            'last_paid_amount': abs(latest_paid.amount) if latest_paid else None,
+            'amount_changed': (
+                latest_paid is not None
+                and abs(latest_paid.amount) != abs(current_amount)
+            ),
+        }
+
+    @staticmethod
+    def _amount_for_date(
+        subscription,
+        charge_date,
+        excluded_change_id=None,
+        change_override=None,
+    ):
+        changes = [
+            (change.effective_date, change.id, change.amount)
+            for change in subscription.price_changes
+            if change.id != excluded_change_id
+        ]
+        if change_override:
+            changes.append((
+                change_override['effective_date'],
+                change_override.get('id') or 0,
+                change_override['amount'],
+            ))
+        applicable = [
+            change for change in changes if change[0] <= charge_date
+        ]
+        return max(applicable, default=(None, None, subscription.amount))[2]
+
+    @staticmethod
+    def _parse_price_change(data):
+        try:
+            amount = Decimal(str(data.get('amount', '')).strip())
+        except (InvalidOperation, ValueError):
+            raise ValueError('Enter a valid charge amount') from None
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError('Charge amount must be greater than zero')
+        if amount > Decimal('99999999.99'):
+            raise ValueError('Charge amount cannot exceed £99,999,999.99')
+        if amount != amount.quantize(Decimal('0.01')):
+            raise ValueError('Enter a charge amount with no more than two decimal places')
+
+        try:
+            effective_date = date.fromisoformat(data.get('effective_date', ''))
+        except (TypeError, ValueError):
+            raise ValueError('Enter a valid effective date') from None
+
+        note = (data.get('note') or '').strip()
+        if not note:
+            raise ValueError('Enter a reason for the price change')
+        if len(note) > 255:
+            raise ValueError('The reason must be 255 characters or fewer')
+        return {
+            'amount': -amount,
+            'effective_date': effective_date,
+            'note': note,
+        }
+
+    @staticmethod
+    def preview_price_change(subscription_id, data, today=None, change_id=None):
+        subscription = family_get_or_404(Subscription, subscription_id)
+        values = SubscriptionService._parse_price_change(data)
+        today = today or date.today()
+        if values['effective_date'] < today:
+            raise ValueError('The effective date must be today or a future date')
+        if values['effective_date'] < subscription.start_date:
+            raise ValueError('The effective date cannot be before the subscription start date')
+        if subscription.end_date and values['effective_date'] > subscription.end_date:
+            raise ValueError('The effective date cannot be after the subscription end date')
+        existing_change = (
+            family_get_or_404(SubscriptionPriceChange, change_id)
+            if change_id is not None
+            else None
+        )
+        if existing_change and existing_change.subscription_id != subscription.id:
+            raise ValueError('Select a price change for this subscription')
+        if existing_change and existing_change.effective_date < today:
+            raise ValueError('Past price changes cannot be edited')
+        duplicate_query = family_query(SubscriptionPriceChange).filter_by(
+            subscription_id=subscription.id,
+            effective_date=values['effective_date'],
+        )
+        if existing_change:
+            duplicate_query = duplicate_query.filter(
+                SubscriptionPriceChange.id != existing_change.id
+            )
+        if duplicate_query.first():
+            raise ValueError('A price change is already scheduled for that date')
+
+        if subscription.account_id:
+            transactions = family_query(Transaction).filter_by(
+                subscription_id=subscription.id
+            ).all()
+            date_attribute = 'transaction_date'
+        else:
+            transactions = family_query(CreditCardTransaction).filter_by(
+                subscription_id=subscription.id
+            ).all()
+            date_attribute = 'date'
+
+        paid_or_fixed_dates = {
+            getattr(transaction, date_attribute)
+            for transaction in transactions
+            if transaction.is_paid or transaction.is_fixed
+        }
+        pending_by_date = {
+            getattr(transaction, date_attribute): transaction
+            for transaction in transactions
+            if not transaction.is_paid and not transaction.is_fixed
+        }
+        if subscription.is_active:
+            eligible_dates = set(SubscriptionService._scheduled_dates(subscription, today))
+        else:
+            eligible_dates = set(pending_by_date)
+        change_start_date = min(
+            values['effective_date'],
+            existing_change.effective_date if existing_change else values['effective_date'],
+        )
+        override = {
+            'id': existing_change.id if existing_change else None,
+            'effective_date': values['effective_date'],
+            'amount': values['amount'],
+        }
+        affected_dates = sorted(
+            charge_date
+            for charge_date in eligible_dates
+            if charge_date >= max(today, change_start_date)
+            and charge_date not in paid_or_fixed_dates
+        )
+        changes = []
+        for charge_date in affected_dates:
+            old_amount = abs(
+                pending_by_date[charge_date].amount
+                if charge_date in pending_by_date
+                else SubscriptionService._amount_for_date(subscription, charge_date)
+            )
+            new_amount = abs(
+                SubscriptionService._amount_for_date(
+                    subscription,
+                    charge_date,
+                    excluded_change_id=(
+                        existing_change.id if existing_change else None
+                    ),
+                    change_override=override,
+                )
+            )
+            if old_amount != new_amount:
+                changes.append({
+                    'date': charge_date,
+                    'old_amount': old_amount,
+                    'new_amount': new_amount,
+                })
+        return {
+            'subscription': subscription,
+            'existing_change': existing_change,
+            'values': values,
+            'changes': changes,
+            'existing_count': sum(
+                change['date'] in pending_by_date for change in changes
+            ),
+            'new_count': sum(
+                change['date'] not in pending_by_date for change in changes
+            ),
+        }
+
+    @staticmethod
+    def apply_price_change(subscription_id, data, today=None, change_id=None):
+        preview = SubscriptionService.preview_price_change(
+            subscription_id, data, today, change_id
+        )
+        subscription = preview['subscription']
+        values = preview['values']
+        change = preview['existing_change']
+        if change is None:
+            change = SubscriptionPriceChange(
+                family_id=subscription.family_id,
+                subscription_id=subscription.id,
+                amount=values['amount'],
+                effective_date=values['effective_date'],
+                note=values['note'] or None,
+            )
+            db.session.add(change)
+        else:
+            change.amount = values['amount']
+            change.effective_date = values['effective_date']
+            change.note = values['note'] or None
+        db.session.flush()
+        db.session.expire(subscription, ['price_changes'])
+        SubscriptionService.sync_pending(subscription, today=today)
+        preview['change'] = change
+        return preview
 
     @staticmethod
     def _parse_data(data):
@@ -123,6 +382,7 @@ class SubscriptionService:
     def update(subscription_id, data):
         subscription = family_get_or_404(Subscription, subscription_id)
         values = SubscriptionService._parse_data(data)
+        values['amount'] = subscription.amount
         new_account_id = values['account'].id if values['account'] else None
         new_card_id = values['credit_card'].id if values['credit_card'] else None
         if (
@@ -227,7 +487,9 @@ class SubscriptionService:
                     transaction.category_id = subscription.category_id
                     transaction.vendor_id = subscription.vendor_id
                     transaction.description = subscription.name
-                    transaction.amount = values['amount']
+                    transaction.amount = SubscriptionService._amount_for_date(
+                        subscription, transaction.transaction_date
+                    )
                 continue
             if transaction.transaction_date in pending_by_date:
                 if transaction.is_fixed:
@@ -254,7 +516,9 @@ class SubscriptionService:
                     subscription_id=subscription.id,
                     account_id=subscription.account_id,
                     transaction_date=transaction_date,
-                    amount=values['amount'],
+                    amount=SubscriptionService._amount_for_date(
+                        subscription, transaction_date
+                    ),
                     is_paid=False,
                 )
                 db.session.add(transaction)
@@ -263,7 +527,9 @@ class SubscriptionService:
             transaction.category_id = subscription.category_id
             transaction.vendor_id = subscription.vendor_id
             transaction.description = subscription.name
-            transaction.amount = values['amount']
+            transaction.amount = SubscriptionService._amount_for_date(
+                subscription, transaction_date
+            )
             transaction.is_paid = False
             transaction.year_month = transaction_date.strftime('%Y-%m')
             transaction.week_year = (
@@ -301,7 +567,9 @@ class SubscriptionService:
                     transaction.head_budget = category.head_budget if category else None
                     transaction.sub_budget = category.sub_budget if category else None
                     transaction.item = subscription.name
-                    transaction.amount = values['amount']
+                    transaction.amount = SubscriptionService._amount_for_date(
+                        subscription, transaction.date
+                    )
                 continue
             if transaction.date in pending_by_date:
                 if transaction.is_fixed:
@@ -330,6 +598,9 @@ class SubscriptionService:
                     subscription_id=subscription.id,
                     credit_card_id=subscription.credit_card_id,
                     date=transaction_date,
+                    amount=SubscriptionService._amount_for_date(
+                        subscription, transaction_date
+                    ),
                     transaction_type='Purchase',
                     is_paid=False,
                 )
@@ -348,7 +619,9 @@ class SubscriptionService:
             transaction.sub_budget = category.sub_budget if category else None
             transaction.item = subscription.name
             transaction.vendor_id = vendor.id if vendor else None
-            transaction.amount = values['amount']
+            transaction.amount = SubscriptionService._amount_for_date(
+                subscription, transaction_date
+            )
             transaction.transaction_type = 'Purchase'
             transaction.is_paid = False
 

@@ -1,0 +1,30 @@
+.subscription-price-history .price-history-table td {
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+}
+
+.subscription-price-history .price-history-mobile .list-group-item {
+    padding: 1rem;
+    overflow-wrap: anywhere;
+}
+
+.subscription-price-history .price-history-amount {
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.subscription-price-history .price-history-reason {
+    border-left: 3px solid var(--bs-border-color);
+    margin-top: 0.75rem;
+    padding-left: 0.75rem;
+}
+
+.subscription-price-history .price-history-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 2.75rem;
+    height: 2.75rem;
+}

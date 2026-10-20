@@ -42,6 +42,10 @@ SKIP_ENDPOINT_PREFIXES = ('static', 'admin.', 'auth.', 'onboarding.')
 # Satisfy table CHECK constraints the generic seeder cannot infer.
 TABLE_OVERRIDES = {
     'subscriptions': {'amount': Decimal('-1'), 'account_id': FOREIGN_ID, 'credit_card_id': None},
+    'subscription_price_changes': {
+        'amount': Decimal('-1'),
+        'subscription_id': FOREIGN_ID,
+    },
 }
 
 

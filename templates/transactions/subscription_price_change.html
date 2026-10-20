@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Change price - {{ subscription.name }} - Family HQ{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subscription_price_history.css') }}">
+<style>
+    .price-preview-charge {
+        border: 1px solid var(--bs-border-color);
+        border-radius: var(--bs-border-radius);
+        padding: 0.75rem;
+    }
+
+    .price-preview-amounts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 767.98px) {
+        .price-change-actions .btn {
+            width: 100%;
+            white-space: normal;
+            min-height: 2.75rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width: 860px;">
+    <header class="page-header mb-4">
+        <h1>Change subscription price</h1>
+        <p class="page-subtitle mb-0">
+            {{ subscription.name }} · {{ subscription.target_name }} ·
+            {{ subscription.frequency|replace('4weekly', 'every 4 weeks')|title }}
+        </p>
+    </header>
+
+    <div class="alert alert-info" role="note">
+        The new amount applies to charges dated on or after the effective date.
+        Review the forecast before confirming. Paid charges and manually fixed
+        charges are never changed.
+    </div>
+
+    {% if preview %}
+    <section class="card mb-4" aria-labelledby="price-change-preview-title">
+        <div class="card-header">
+            <h2 id="price-change-preview-title" class="h5 mb-0">Review forecast changes</h2>
+        </div>
+        <div class="card-body">
+            <p class="text-break"><strong>Reason:</strong> {{ preview['values']['note'] }}</p>
+            {% if preview.changes %}
+            <p>
+                {{ preview.changes|length }} future charge{{ 's' if preview.changes|length != 1 else '' }}
+                will use the new amount.
+                {% if preview.new_count %}
+                {{ preview.new_count }} will be added to the forecast.
+                {% endif %}
+            </p>
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th scope="col">Charge date</th>
+                            <th scope="col">Current forecast</th>
+                            <th scope="col">New forecast</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for change in preview.changes %}
+                        <tr>
+                            <td>{{ change.date.strftime('%d %b %Y') }}</td>
+                            <td>£{{ "%.2f"|format(change.old_amount) }}</td>
+                            <td>£{{ "%.2f"|format(change.new_amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-grid gap-3 d-md-none price-preview-mobile">
+                {% for change in preview.changes %}
+                <div class="price-preview-charge">
+                    <div class="fw-semibold mb-2">
+                        <span class="text-body-secondary fw-normal">Charge date:</span>
+                        {{ change.date.strftime('%d %b %Y') }}
+                    </div>
+                    <div class="price-preview-amounts">
+                        <div>
+                            <div class="small text-body-secondary">Current forecast</div>
+                            <div>£{{ "%.2f"|format(change.old_amount) }}</div>
+                        </div>
+                        <div>
+                            <div class="small text-body-secondary">New forecast</div>
+                            <div class="fw-semibold">£{{ "%.2f"|format(change.new_amount) }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="mb-0">
+                No charges in the current forecast fall on or after this effective
+                date. The price change will still be saved and used when future
+                charges are generated.
+            </p>
+            {% endif %}
+        </div>
+        <div class="card-footer d-grid d-md-flex flex-wrap justify-content-md-between gap-2 price-change-actions">
+            <a href="{{ url_for('transactions.change_subscription_price', id=subscription.id, change_id=editing_price_change.id if editing_price_change else None) }}"
+               class="btn btn-outline-secondary">Change details</a>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="amount" value="{{ preview['values']['amount']|abs }}">
+                <input type="hidden" name="effective_date" value="{{ preview['values']['effective_date'].isoformat() }}">
+                <input type="hidden" name="note" value="{{ preview['values']['note'] }}">
+                <input type="hidden" name="confirm_change" value="1">
+                <button type="submit" class="btn btn-primary">Confirm price change</button>
+            </form>
+        </div>
+    </section>
+    {% else %}
+    <form method="post" class="card mb-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="amount" class="form-label">New charge amount (£)</label>
+                    <input id="amount" name="amount" type="number" min="0.01" step="0.01"
+                           class="form-control" required
+                           value="{{ request.form.get('amount', '%.2f'|format(editing_price_change.amount|abs if editing_price_change else current_amount)) }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="effective_date" class="form-label">Effective from</label>
+                    <input id="effective_date" name="effective_date" type="date"
+                           class="form-control" required
+                           min="{{ today.isoformat() }}"
+                           value="{{ request.form.get('effective_date', editing_price_change.effective_date.isoformat() if editing_price_change else today.isoformat()) }}">
+                    <div class="form-text">Applies to charge dates on or after this date.</div>
+                </div>
+                <div class="col-12">
+                    <label for="note" class="form-label">Reason</label>
+                    <input id="note" name="note" class="form-control" maxlength="255"
+                           placeholder="For example: Premium plan, annual increase, or introductory discount"
+                           required
+                           value="{{ request.form.get('note', editing_price_change.note if editing_price_change and editing_price_change.note else '') }}">
+                </div>
+            </div>
+        </div>
+        <div class="card-footer d-grid d-md-flex justify-content-md-between gap-2 price-change-actions">
+            <a href="{{ url_for('transactions.subscriptions') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Preview changes</button>
+        </div>
+    </form>
+    {% endif %}
+
+    {% include 'transactions/_subscription_price_history.html' %}
+</div>
+{% endblock %}
