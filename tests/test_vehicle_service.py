@@ -1,10 +1,13 @@
 from decimal import Decimal
 from datetime import date
 
+import pytest
 from extensions import db
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
+from models.accounts import Account
+from models.family import Family
 from services.vehicles.vehicle_service import VehicleService
 from services.vehicles.fuel_forecasting_service import FuelForecastingService
 from werkzeug.datastructures import MultiDict
@@ -49,6 +52,59 @@ def test_vehicle_crud_assigns_family_and_normalizes_values(app, family, monkeypa
     assert updated.fuel_type == 'Diesel'
     assert deleted_name == 'Updated Car'
     assert db.session.get(Vehicle, vehicle.id) is None
+
+
+def test_vehicle_rejects_fuel_account_from_another_family_on_create(
+    app, family, monkeypatch
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    other_family = Family(name='Other Family')
+    db.session.add(other_family)
+    db.session.flush()
+    account = Account(
+        family_id=other_family.id, name='Other account',
+        account_type='Current', balance=0, is_active=True,
+    )
+    db.session.add(account)
+    db.session.commit()
+
+    with pytest.raises(ValueError, match='Invalid fuel account selected'):
+        VehicleService.create_vehicle({
+            'name': 'Family Car',
+            'registration': 'AB12 CDE',
+            'fuel_account_id': str(account.id),
+        })
+
+    assert Vehicle.query.filter_by(family_id=family.id).count() == 0
+
+
+def test_vehicle_rejects_fuel_account_from_another_family_on_update(
+    app, family, monkeypatch
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    vehicle = VehicleService.create_vehicle({
+        'name': 'Family Car',
+        'registration': 'AB12 CDE',
+        'fuel_account_id': '',
+    })
+    other_family = Family(name='Other Family')
+    db.session.add(other_family)
+    db.session.flush()
+    account = Account(
+        family_id=other_family.id, name='Other account',
+        account_type='Current', balance=0, is_active=True,
+    )
+    db.session.add(account)
+    db.session.commit()
+
+    with pytest.raises(ValueError, match='Invalid fuel account selected'):
+        VehicleService.update_vehicle(vehicle.id, {
+            'name': 'Changed Car',
+            'fuel_account_id': str(account.id),
+        })
+
+    assert vehicle.name == 'Family Car'
+    assert vehicle.fuel_account_id is None
 
 
 def test_fuel_crud_assigns_family_and_recalculates_metrics(app, family, monkeypatch):

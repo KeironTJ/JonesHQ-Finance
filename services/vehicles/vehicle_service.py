@@ -40,7 +40,15 @@ class VehicleService:
     """
 
     @staticmethod
+    def _get_fuel_account_id(data):
+        account_id = int(data['fuel_account_id']) if data.get('fuel_account_id') else None
+        if account_id is not None and not family_get(Account, account_id):
+            raise ValueError('Invalid fuel account selected')
+        return account_id
+
+    @staticmethod
     def create_vehicle(data):
+        fuel_account_id = VehicleService._get_fuel_account_id(data)
         vehicle = Vehicle(
             family_id=db_helpers.get_family_id(),
             name=data.get('name'),
@@ -54,10 +62,7 @@ class VehicleService:
                 int(data['starting_mileage'])
                 if data.get('starting_mileage') else None
             ),
-            fuel_account_id=(
-                int(data['fuel_account_id'])
-                if data.get('fuel_account_id') else None
-            ),
+            fuel_account_id=fuel_account_id,
             refuel_threshold_pct=Decimal(
                 data.get('refuel_threshold_pct') or '95'
             ),
@@ -73,6 +78,7 @@ class VehicleService:
     @staticmethod
     def update_vehicle(vehicle_id, data):
         vehicle = family_get_or_404(Vehicle, vehicle_id)
+        fuel_account_id = VehicleService._get_fuel_account_id(data)
         vehicle.name = data.get('name', vehicle.name)
         vehicle.make = data.get('make', vehicle.make)
         vehicle.model = data.get('model', vehicle.model)
@@ -85,9 +91,7 @@ class VehicleService:
             vehicle.refuel_threshold_pct = Decimal(data['refuel_threshold_pct'])
         if data.get('year'):
             vehicle.year = int(data['year'])
-        vehicle.fuel_account_id = (
-            int(data['fuel_account_id']) if data.get('fuel_account_id') else None
-        )
+        vehicle.fuel_account_id = fuel_account_id
         vehicle.owner_id = (
             db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
         )
