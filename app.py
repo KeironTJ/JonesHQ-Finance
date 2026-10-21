@@ -201,11 +201,15 @@ def create_app(config_name=None):
     def utility_processor():
         from datetime import date, timedelta
         from utils.permissions import can_access_section
+        from flask_login import current_user
+        from services.platform.preference_service import PreferenceService
         return dict(
             today=lambda: date.today().strftime('%Y-%m-%d'),
             timedelta=timedelta,
             can_access_section=can_access_section,
             site_settings_banner=_site_settings_banner,
+            appearance=PreferenceService.appearance_for(current_user),
+            appearance_palettes=PreferenceService.PALETTES,
         )
 
     def _site_settings_banner():

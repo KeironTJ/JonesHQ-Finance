@@ -12,7 +12,7 @@
                     <i class="bi bi-cash-stack"></i>
                 </div>
                 <h2>Family HQ</h2>
-                <p>Sign in to your account</p>
+                <p>Your household. Your plans. All together.</p>
             </div>
             <!-- Form body -->
             <div class="auth-card-body">
@@ -34,7 +34,8 @@
                     <div class="mb-3">
                         {{ form.password.label(class="form-label") }}
                         {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
-                                        placeholder="Enter your password", autocomplete="current-password") }}
+                                        placeholder="Enter your password", autocomplete="current-password",
+                                        **{'data-password-toggle': ''}) }}
                         {% if form.password.errors %}
                             <div class="invalid-feedback">
                                 {% for error in form.password.errors %}{{ error }}{% endfor %}

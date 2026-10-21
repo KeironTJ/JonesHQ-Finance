@@ -71,6 +71,34 @@ def test_transaction_index_renders_compact_filters(app, family, user):
     assert b'rent' in response.data
 
 
+@pytest.mark.parametrize('is_paid', [False, True])
+def test_transaction_row_actions_omit_lock_control(app, family, user, is_paid):
+    account = Account(family_id=family.id, name='Current', account_type='Current')
+    category = Category(family_id=family.id, name='General', category_type='expense')
+    db.session.add_all([account, category])
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        transaction_date=date.today(), amount=-25, is_paid=is_paid,
+    )
+    db.session.add(transaction)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.get('/transactions?payday_period=&is_paid=')
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'aria-label="Transaction actions"' in html
+    assert 'title="Link to a plan"' in html
+    assert 'title="Lock Transaction"' not in html
+    assert 'title="Unlock Transaction"' not in html
+    assert ('title="Edit Transaction"' in html) is not is_paid
+    assert ('title="Mark as Paid"' in html) is not is_paid
+    assert ('title="Delete"' in html) is not is_paid
+
+
 def test_consolidated_index_renders_responsive_filters(app, family, user):
     client = app.test_client()
     _login(client, user.id)

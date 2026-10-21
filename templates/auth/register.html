@@ -76,7 +76,8 @@
                     <div class="mb-3">
                         {{ form.password.label(class="form-label fw-semibold") }}
                         {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
-                                        placeholder="At least 10 characters") }}
+                                        placeholder="At least 10 characters", autocomplete="new-password",
+                                        **{'data-password-toggle': ''}) }}
                         {% if form.password.errors %}
                             <div class="invalid-feedback">
                                 {% for error in form.password.errors %}{{ error }}{% endfor %}
@@ -88,7 +89,8 @@
                     <div class="mb-4">
                         {{ form.confirm_password.label(class="form-label fw-semibold") }}
                         {{ form.confirm_password(class="form-control" + (" is-invalid" if form.confirm_password.errors else ""),
-                                                 placeholder="Repeat your password") }}
+                                                 placeholder="Repeat your password", autocomplete="new-password",
+                                                 **{'data-password-toggle': ''}) }}
                         {% if form.confirm_password.errors %}
                             <div class="invalid-feedback">
                                 {% for error in form.confirm_password.errors %}{{ error }}{% endfor %}

@@ -1,0 +1,8 @@
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/analytics-chart.js') }}"></script>
+<script>
+    createFinanceAnalyticsChart(
+        document.getElementById({{ chart_canvas_id|tojson }}),
+        JSON.parse({{ chart_payload|tojson }})
+    );
+</script>

@@ -294,7 +294,19 @@
 .txn-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.65rem; margin-top: 0.2rem; color: var(--text-muted); font-size: 0.72rem; }
 .txn-meta span { white-space: nowrap; }
 .txn-amount, .txn-running { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.txn-actions .btn { padding-inline: 0.45rem; }
+.transactions-table .txn-actions .btn-group { display: flex; width: 100%; }
+.transactions-table .txn-actions .btn-group > .btn,
+.transactions-table .txn-actions .btn-group > form { flex: 1 1 0; min-width: 0; }
+.transactions-table .txn-actions .btn-group > form { display: flex; }
+.transactions-table .txn-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.4rem 0.45rem;
+  font-size: 0.75rem;
+  min-height: 32px;
+}
 
 .consolidated-table { table-layout: fixed; }
 .consolidated-table .consolidated-col-date { width: 96px; }
@@ -708,7 +720,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    min-height: 38px;
+    min-height: 44px;
   }
   .transactions-table .transaction-empty { grid-column: 1 / 4; }
 

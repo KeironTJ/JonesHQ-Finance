@@ -413,6 +413,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const monthlyAmounts = chartData.monthlyAmounts;
     const vehicleLabels = chartData.vehicleLabels;
     const vehicleAmounts = chartData.vehicleAmounts;
+    const palette = financeChartPalette();
 
     const monthlyCtx = document.getElementById('monthlyMileageChart');
     if (monthlyCtx) {
@@ -425,8 +426,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         label: 'Miles',
                         data: monthlyMiles,
                         yAxisID: 'yMiles',
-                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: palette[1] + '80',
+                        borderColor: palette[1],
+                        financeColour: 1,
+                        financeAlpha: '80',
                         borderWidth: 1,
                     },
                     {
@@ -434,8 +437,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         label: 'Amount (£)',
                         data: monthlyAmounts,
                         yAxisID: 'yAmount',
-                        borderColor: 'rgba(25, 135, 84, 1)',
-                        backgroundColor: 'rgba(25, 135, 84, 0.15)',
+                        borderColor: palette[0],
+                        backgroundColor: palette[0] + '26',
+                        financeColour: 0,
+                        financeAlpha: '26',
                         tension: 0.25,
                     }
                 ]
@@ -471,9 +476,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 datasets: [{
                     label: 'Claim Value (£)',
                     data: vehicleAmounts,
-                    backgroundColor: [
-                        '#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#20c997', '#fd7e14', '#6c757d'
-                    ]
+                    backgroundColor: vehicleLabels.map((_, index) => palette[index % palette.length]),
+                    financeColours: true,
                 }]
             },
             options: {

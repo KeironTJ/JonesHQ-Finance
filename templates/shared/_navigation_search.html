@@ -1,0 +1,21 @@
+<div class="modal fade navigation-search" id="navigationSearch" tabindex="-1" aria-labelledby="navigationSearchTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="navigationSearchTitle">Where would you like to go?</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close search"></button>
+            </div>
+            <div class="modal-body">
+                <label for="navigationSearchInput" class="visually-hidden">Search application pages</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
+                    <input id="navigationSearchInput" type="search" class="form-control" placeholder="Accounts, income, plans..." autocomplete="off" aria-controls="navigationSearchResults">
+                </div>
+                <p class="search-hint">Search pages, not your financial data.</p>
+                <div id="navigationSearchResults" class="navigation-search-results" aria-label="Matching pages"></div>
+                <p id="navigationSearchStatus" class="search-status" role="status" aria-live="polite"></p>
+            </div>
+            <div class="modal-footer"><span class="text-muted small">Use the arrow keys to browse &middot; Enter to open &middot; Esc to close</span></div>
+        </div>
+    </div>
+</div>

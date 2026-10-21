@@ -1,291 +1,97 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="{{ 'dark' if appearance.mode == 'dark' else 'light' }}" data-palette="{{ appearance.palette }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="theme-color" content="#182b50">
     <title>{% block title %}Family HQ{% endblock %}</title>
-    <!-- Bootstrap CSS -->
+    {% include 'shared/_appearance_init.html' %}
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
-    <!-- Favicon -->
     <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
-    <!-- Family HQ Design System -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/system/tokens.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    {% for stylesheet in ['components', 'workspace', 'domain', 'public'] %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/system/' ~ stylesheet ~ '.css') }}">
+    {% endfor %}
     {% block extra_css %}{% endblock %}
-    <!-- Prevent theme flash: apply stored theme before first paint -->
-    <script>
-        (function () {
-            var stored = localStorage.getItem('jhq-theme');
-            if (stored === 'dark') {
-                document.documentElement.setAttribute('data-theme', 'dark');
-            } else if (stored === 'auto') {
-                var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-            } else {
-                document.documentElement.setAttribute('data-theme', 'light');
-            }
-        })();
-    </script>
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">
-                <span class="brand-icon"><i class="bi bi-cash-stack"></i></span>
-                <span class="brand-text">
-                    <span class="brand-title">Family HQ</span>
-                    <span class="brand-sub">Finance</span>
-                </span>
-            </a>
-            <button class="navbar-toggler border-0 ms-auto me-2" type="button"
-                    data-bs-toggle="collapse" data-bs-target="#navbarNav"
-                    aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <button class="btn-theme-toggle d-none d-lg-flex me-2" id="themeToggleBtn"
-                    title="Toggle theme" aria-label="Toggle theme" type="button">
-                <i class="bi bi-sun-fill" id="themeIcon"></i>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">
-                            <i class="bi bi-speedometer2"></i> Dashboard
-                        </a>
-                    </li>
-                    {% if can_access_section('accounts') or can_access_section('transactions') or can_access_section('expenses') or can_access_section('categories') or can_access_section('vendors') %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if '/accounts' in request.path or '/transactions' in request.path or '/expenses' in request.path or '/categories' in request.path or '/vendors' in request.path %}active{% endif %}"
-                           href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-bank"></i> Banking
-                        </a>
-                        <ul class="dropdown-menu">
-                            {% if can_access_section('accounts') %}
-                            <li><a class="dropdown-item" href="/accounts">
-                                <i class="bi bi-wallet2"></i> Accounts
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('transactions') %}
-                            <li><a class="dropdown-item" href="/transactions">
-                                <i class="bi bi-list-ul"></i> Transactions
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('transactions.subscriptions') }}">
-                                <i class="bi bi-arrow-repeat"></i> Subscriptions
-                            </a></li>
-                            <li><a class="dropdown-item" href="/transactions/consolidated">
-                                <i class="bi bi-diagram-3"></i> Consolidated View
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('expenses') %}
-                            <li><a class="dropdown-item" href="/expenses">
-                                <i class="bi bi-receipt"></i> Work Expenses
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('categories') or can_access_section('vendors') %}
-                            <li><hr class="dropdown-divider"></li>
-                            {% endif %}
-                            {% if can_access_section('categories') %}
-                            <li><a class="dropdown-item" href="/categories">
-                                <i class="bi bi-tags"></i> Categories
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('vendors') %}
-                            <li><a class="dropdown-item" href="/vendors">
-                                <i class="bi bi-shop"></i> Vendors
-                            </a></li>
-                            {% endif %}
-                        </ul>
-                    </li>
-                    {% endif %}
-                    {% if can_access_section('credit_cards') or can_access_section('loans') or can_access_section('mortgage') %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if '/credit-cards' in request.path or '/loans' in request.path or '/mortgage' in request.path %}active{% endif %}"
-                           href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-credit-card"></i> Credit & Debt
-                        </a>
-                        <ul class="dropdown-menu">
-                            {% if can_access_section('credit_cards') %}
-                            <li><a class="dropdown-item" href="/credit-cards">
-                                <i class="bi bi-credit-card-2-front"></i> Credit Cards
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('loans') %}
-                            <li><a class="dropdown-item" href="/loans">
-                                <i class="bi bi-cash-stack"></i> Loans
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('mortgage') %}
-                            <li><a class="dropdown-item" href="/mortgage">
-                                <i class="bi bi-house-door"></i> Mortgage
-                            </a></li>
-                            {% endif %}
-                        </ul>
-                    </li>
-                    {% endif %}
-                    {% if can_access_section('income') or can_access_section('pensions') or can_access_section('networth') %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if '/income' in request.path or '/pensions' in request.path or '/networth' in request.path %}active{% endif %}"
-                           href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-graph-up-arrow"></i> Wealth
-                        </a>
-                        <ul class="dropdown-menu">
-                            {% if can_access_section('income') %}
-                            <li><a class="dropdown-item" href="/income">
-                                <i class="bi bi-cash-coin"></i> Income
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('pensions') %}
-                            <li><a class="dropdown-item" href="/pensions">
-                                <i class="bi bi-piggy-bank"></i> Pensions
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('networth') %}
-                            <li><a class="dropdown-item" href="/networth">
-                                <i class="bi bi-trophy"></i> Net Worth
-                            </a></li>
-                            {% endif %}
-                        </ul>
-                    </li>
-                    {% endif %}
-                    {% if can_access_section('vehicles') or can_access_section('childcare') or can_access_section('plans') %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if '/vehicles' in request.path or '/childcare' in request.path or '/plans' in request.path %}active{% endif %}"
-                           href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-heart"></i> Lifestyle
-                        </a>
-                        <ul class="dropdown-menu">
-                            {% if can_access_section('vehicles') %}
-                            <li><a class="dropdown-item" href="/vehicles">
-                                <i class="bi bi-car-front-fill"></i> My Garage
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('childcare') %}
-                            <li><a class="dropdown-item" href="/childcare">
-                                <i class="bi bi-people"></i> Childcare
-                            </a></li>
-                            {% endif %}
-                            {% if can_access_section('plans') %}
-                            <li><a class="dropdown-item" href="{{ url_for('plans.index') }}">
-                                <i class="bi bi-journal-check"></i> Plans
-                            </a></li>
-                            {% endif %}
-                        </ul>
-                    </li>
-                    {% endif %}
-                </ul>
-                <ul class="navbar-nav align-items-lg-center gap-1">
-                    <li class="nav-item d-lg-none">
-                        <button class="nav-link btn w-100 text-start ps-2 py-2"
-                                id="themeToggleBtnMobile" type="button" style="color:var(--nav-text)!important;background:transparent;border:none;">
-                            <i class="bi bi-sun-fill me-2" id="themeIconMobile"></i>
-                            <span id="themeLabel">Light Mode</span>
-                        </button>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/help' %}active{% endif %}" href="{{ url_for('auth.help') }}">
-                            <i class="bi bi-question-circle"></i> Help
-                        </a>
-                    </li>
-                    {% if current_user.is_authenticated %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.blueprint in ('settings', 'preferences') %}active{% endif %}" href="#" role="button"
-                           data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle"></i>
-                            <span class="ms-1">{{ current_user.name }}</span>
-                            {% if current_user.is_household_owner %}
-                            <span class="badge bg-secondary ms-1" style="font-size:0.65em;">Owner</span>
-                            {% else %}
-                            <span class="badge bg-secondary ms-1" style="font-size:0.65em;">Member</span>
-                            {% endif %}
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            {% if current_user.is_household_owner %}
-                            <li><h6 class="dropdown-header">Your household</h6></li>
-                            <li><a class="dropdown-item" href="{{ url_for('family.index') }}">
-                                <i class="bi bi-people-fill"></i> Family &amp; members
-                            </a></li>
-                            {% if can_access_section('settings') %}
-                            <li><a class="dropdown-item {% if request.blueprint == 'settings' %}active{% endif %}" href="{{ url_for('settings.index') }}"{% if request.blueprint == 'settings' %} aria-current="page"{% endif %}>
-                                <i class="bi bi-gear"></i> Settings
-                            </a></li>
-                            {% endif %}
-                            <li><hr class="dropdown-divider"></li>
-                            {% endif %}
-                            <li><h6 class="dropdown-header">Your account</h6></li>
-                            <li><a class="dropdown-item {% if request.blueprint == 'preferences' %}active{% endif %}" href="{{ url_for('preferences.index') }}"{% if request.blueprint == 'preferences' %} aria-current="page"{% endif %}>
-                                <i class="bi bi-sliders"></i> Personal preferences
-                            </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('auth.account_security') }}">
-                                <i class="bi bi-shield-lock"></i> Account security
-                            </a></li>
-                            {% if current_user.is_site_admin %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header" style="color:var(--clr-danger);">Site admin (all households)</h6></li>
-                            <li><a class="dropdown-item" href="{{ url_for('site_admin.index') }}">
-                                <i class="bi bi-shield-shaded"></i> Site admin area
-                            </a></li>
-                            {% endif %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <form method="POST" action="{{ url_for('auth.logout') }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="dropdown-item" style="color:var(--clr-danger)!important;">
-                                        <i class="bi bi-box-arrow-right"></i> Logout
-                                    </button>
-                                </form>
-                            </li>
-                        </ul>
-                    </li>
-                    {% endif %}
-                </ul>
+<body class="{{ 'workspace' if current_user.is_authenticated else 'public-layout' }}">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    {% if current_user.is_authenticated %}
+        {% include 'shared/_navigation.html' %}
+    {% endif %}
+    <div class="workspace-body">
+        <header class="workspace-topbar">
+            {% if current_user.is_authenticated %}
+            <div class="d-flex align-items-center gap-3 min-w-0">
+                <button class="btn btn-icon d-lg-none" type="button" data-bs-toggle="offcanvas"
+                        data-bs-target="#workspaceNav" aria-controls="workspaceNav" aria-label="Open navigation">
+                    <i class="bi bi-list" aria-hidden="true"></i>
+                </button>
+                <a class="workspace-home" href="{{ url_for('dashboard.index') }}">Your household</a>
+                <span class="topbar-divider" aria-hidden="true">/</span>
+                <span class="workspace-location">{{ {'dashboard': 'Overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title) }}</span>
             </div>
-        </div>
-    </nav>
-    <main>
-        <div class="container-fluid px-3 px-lg-4">
-            {% set banner = site_settings_banner() %}
-            {% if banner %}
-            <div class="alert alert-{{ banner.level }} mt-3 mb-0" role="status">
-                <i class="bi bi-megaphone-fill me-1"></i> {{ banner.text }}
+            <div class="topbar-actions">
+                <button class="workspace-search" type="button" data-bs-toggle="modal" data-bs-target="#navigationSearch"
+                        aria-label="Search pages">
+                    <i class="bi bi-search" aria-hidden="true"></i><span>Find a page</span><kbd>Ctrl K</kbd>
+                </button>
+                <button class="btn btn-icon" id="themeToggleBtn" type="button" aria-label="Switch to dark theme" title="Switch theme">
+                    <i class="bi bi-moon" id="themeIcon" aria-hidden="true"></i>
+                </button>
+                <a class="user-avatar" href="{{ url_for('preferences.index') }}" aria-label="Personal preferences for {{ current_user.name }}">
+                    {{ current_user.name[:1]|upper }}
+                </a>
+            </div>
+            {% else %}
+            <a class="public-brand" href="{{ url_for('auth.intro') }}"><span class="brand-mark"><i class="bi bi-house-heart" aria-hidden="true"></i></span>Family HQ<span class="brand-descriptor">Household finance</span></a>
+            <div class="topbar-actions">
+                <a class="public-help" href="{{ url_for('auth.help') }}">Help &amp; support</a>
+                <button class="btn btn-icon" id="themeToggleBtn" type="button" aria-label="Switch to dark theme" title="Switch theme">
+                    <i class="bi bi-moon" id="themeIcon" aria-hidden="true"></i>
+                </button>
+                <a class="btn btn-primary btn-sm" href="{{ url_for('auth.login') }}">Sign in <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
             </div>
             {% endif %}
-            {% with messages = get_flashed_messages(with_categories=True) %}
-                {% if messages %}
-                    <div class="flash-zone">
+        </header>
+        <main id="main-content" tabindex="-1">
+            <div class="workspace-content">
+                {% set banner = site_settings_banner() %}
+                {% if banner %}
+                <div class="alert alert-{{ banner.level }}" role="status">
+                    <i class="bi bi-megaphone-fill me-1" aria-hidden="true"></i> {{ banner.text }}
+                </div>
+                {% endif %}
+                {% with messages = get_flashed_messages(with_categories=True) %}
+                    {% if messages %}
+                    <div class="flash-zone" aria-label="Notifications">
                         {% for category, message in messages %}
-                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                                <i class="bi bi-{% if category == 'success' %}check-circle-fill{% elif category == 'danger' or category == 'error' %}exclamation-circle-fill{% elif category == 'warning' %}exclamation-triangle-fill{% else %}info-circle-fill{% endif %}"></i>
-                                <span>{{ message }}</span>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="{{ 'alert' if category in ('danger', 'error', 'warning') else 'status' }}">
+                            <i class="bi bi-{% if category == 'success' %}check-circle{% elif category in ('danger', 'error') %}exclamation-circle{% elif category == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}" aria-hidden="true"></i>
+                            <span>{{ message }}</span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss notification"></button>
+                        </div>
                         {% endfor %}
                     </div>
-                {% endif %}
-            {% endwith %}
-            {% block content %}{% endblock %}
-        </div>
-    </main>
-    <footer>
-        <p>
-            <i class="bi bi-shield-check me-1"></i>
-            &copy; 2026 Family HQ &mdash; All rights reserved.
-            <a href="{{ url_for('auth.storage_notice') }}" class="ms-2">Cookies &amp; storage</a>
-            <a href="{{ url_for('auth.privacy_notice') }}" class="ms-2">Privacy</a>
-        </p>
-    </footer>
+                    {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+        <footer class="workspace-footer">
+            <span><i class="bi bi-house-heart me-1" aria-hidden="true"></i> Family HQ <span class="footer-tagline">&middot; A little clarity. A lot of possibility.</span></span>
+            <div><a href="{{ url_for('auth.help') }}">Help</a><a href="{{ url_for('auth.storage_notice') }}">Cookies &amp; storage</a><a href="{{ url_for('auth.privacy_notice') }}">Privacy</a></div>
+        </footer>
+    </div>
+    {% if current_user.is_authenticated %}
+        {% include 'shared/_navigation_search.html' %}
+    {% endif %}
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script>
-        // Global: initialise all Bootstrap popovers on every page.
-        // Any element with data-bs-toggle="popover" will work automatically.
-        document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
-                new bootstrap.Popover(el, { sanitize: false });
-            });
-        });
-    </script>
+    <script src="{{ url_for('static', filename='js/workspace.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

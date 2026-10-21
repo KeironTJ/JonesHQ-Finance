@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'shared/_ui.html' import page_header, metric %}
 
 {% block title %}Credit Cards - Family HQ{% endblock %}
 
@@ -8,8 +9,7 @@
 
 {% block content %}
 <div class="container-fluid credit-card-index">
-    <div class="credit-card-index-header mb-4">
-        <h1>Credit Cards</h1>
+    {% call page_header('Credit Cards', 'Stay on top of balances, payment dates and the cost of borrowing.', 'Build your future') %}
         <div class="credit-card-index-actions">
             {% if can_access_section('settings') %}
             <a href="{{ url_for('settings.module_settings', section='credit-cards') }}" class="btn btn-outline-secondary me-2">
@@ -27,46 +27,22 @@
             <a href="{{ url_for('credit_cards.add') }}" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> Add Credit Card
             </a>
-        </div>
+        {% endcall %}
     </div>
 
     <!-- Summary Cards -->
-    <div class="row mb-4 row-cols-2 row-cols-md-4 g-3 credit-card-summary">
+    <div class="row mb-4 row-cols-2 row-cols-xl-4 g-3 credit-card-summary">
         <div class="col">
-            <div class="card bg-info text-white h-100">
-                <div class="card-body">
-                    <h6 class="card-title">Total Credit Limit</h6>
-                    <h3>£{{ "%.2f"|format(total_limit) }}</h3>
-                    <small>{{ cards|selectattr('is_active')|list|length }} active cards</small>
-                </div>
-            </div>
+            {{ metric('Total Credit Limit', '£{:,.2f}'.format(total_limit), 'credit-card', 'info', '{} active cards'.format(cards|selectattr('is_active')|list|length)) }}
         </div>
         <div class="col">
-            <div class="card bg-danger text-white h-100">
-                <div class="card-body">
-                    <h6 class="card-title">Total Balance</h6>
-                    <h3>£{{ "%.2f"|format(total_balance) }}</h3>
-                    <small>{{ ((total_balance / total_limit * 100) if total_limit > 0 else 0)|round(1) }}% utilization</small>
-                </div>
-            </div>
+            {{ metric('Total Balance', '£{:,.2f}'.format(total_balance), 'wallet2', 'danger', '{}% utilization'.format(((total_balance / total_limit * 100) if total_limit > 0 else 0)|round(1))) }}
         </div>
         <div class="col">
-            <div class="card bg-success text-white h-100">
-                <div class="card-body">
-                    <h6 class="card-title">Available Credit</h6>
-                    <h3>£{{ "%.2f"|format(total_available) }}</h3>
-                    <small>Remaining credit</small>
-                </div>
-            </div>
+            {{ metric('Available Credit', '£{:,.2f}'.format(total_available), 'check2-circle', 'success', 'Remaining credit') }}
         </div>
         <div class="col">
-            <div class="card bg-warning text-dark h-100">
-                <div class="card-body">
-                    <h6 class="card-title">Monthly Payments</h6>
-                    <h3>£{{ "%.2f"|format(total_payments) }}</h3>
-                    <small>Avg APR: {{ "%.2f"|format(weighted_apr) }}%</small>
-                </div>
-            </div>
+            {{ metric('Monthly Payments', '£{:,.2f}'.format(total_payments), 'calendar-check', 'warning', 'Avg APR: {:.2f}%'.format(weighted_apr)) }}
         </div>
     </div>
 

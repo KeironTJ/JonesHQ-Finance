@@ -1,11 +1,11 @@
 ﻿{% extends "base.html" %}
 
 {% block title %}Work Expenses{% endblock %}
+{% from 'shared/_ui.html' import page_header %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>Work Expenses</h1>
+<div class="container-fluid">
+    {% call page_header('Work Expenses', 'Track what you have paid, what you can claim and what is coming back.', 'Day to day') %}
         <!-- Info Popover about Expense Workflow -->
         <button type="button"
                 class="btn btn-link p-0 mb-3 text-muted"
@@ -18,7 +18,7 @@
                 title="How this works">
             <i class="bi bi-info-circle fs-5"></i>
         </button>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
             <a href="{{ url_for('expenses.groups') }}" class="btn btn-outline-primary btn-sm" title="Manage reimbursement groups (separate vs folded into payslip)">
                 <i class="bi bi-diagram-3"></i> Reimbursement Groups
             </a>
@@ -37,7 +37,7 @@
                 <i class="bi bi-plus-circle"></i> Add Expense
             </button>
             <a href="{{ url_for('transactions.index') }}" class="btn btn-secondary">Back to Transactions</a>
-        </div>
+        {% endcall %}
     </div>
 
     <div class="card mb-4 border-primary-subtle">

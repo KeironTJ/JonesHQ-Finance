@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'shared/_ui.html' import page_header %}
 
 {% block title %}Income — Family HQ{% endblock %}
 
@@ -6,12 +7,8 @@
 <div class="container-fluid">
 
     {# ─── Page Header ──────────────────────────────────────────────────────── #}
-    <div class="row mb-3 align-items-center">
-        <div class="col">
-            <h1 class="mb-0"><i class="bi bi-cash-coin me-2"></i>Income</h1>
-            <div class="text-muted small">Every payslip — paid, actual and forecast. Forecasts run {{ forecast_years }} year{{ 's' if forecast_years > 1 }} ahead; the <a href="{{ url_for('income.plan') }}">plan</a> goes further.</div>
-        </div>
-        <div class="col-auto d-flex gap-2 flex-wrap">
+    {% call page_header('Income', 'Every payslip, paid and forecast. A clearer picture of what comes in.', 'Build your future') %}
+        <div class="d-flex gap-2 flex-wrap">
             <button id="deleteSelectedBtn" class="btn btn-danger" style="display:none">
                 <i class="bi bi-trash"></i> Delete Selected
             </button>
@@ -43,7 +40,8 @@
                         </button>
                     </li>
                 </ul>
-            </div>
+            {% endcall %}
+            <p class="text-muted small mb-4">Forecasts run {{ forecast_years }} year{{ 's' if forecast_years > 1 }} ahead; the <a href="{{ url_for('income.plan') }}">plan</a> goes further.</p>
             <a href="{{ url_for('income.add_recurring') }}" class="btn btn-primary">
                 <i class="bi bi-plus-lg"></i> Add source
             </a>

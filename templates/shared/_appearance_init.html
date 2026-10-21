@@ -1,0 +1,4 @@
+<script src="{{ url_for('static', filename='js/theme-init.js') }}"
+        data-account="{{ 'true' if current_user.is_authenticated else 'false' }}"
+        data-mode="{{ appearance.mode }}" data-palette="{{ appearance.palette }}"
+        {% if current_user.is_authenticated %}data-save-url="{{ url_for('preferences.appearance') }}"{% endif %}></script>

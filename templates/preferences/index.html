@@ -9,6 +9,47 @@
         {% endif %}
     </div>
     <p class="text-muted">Applies only to you, not other household members.</p>
+    <form method="POST" action="{{ url_for('preferences.appearance') }}" id="appearanceForm" class="card mb-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body" id="appearance-card">
+            <span class="eyebrow">Make yourself at home</span>
+            <h2 class="h4"><i class="bi bi-palette" aria-hidden="true"></i> Appearance</h2>
+            <p class="text-muted">Choose your colours and lighting. Saved to your account, across devices, just for you.</p>
+            <fieldset class="mb-4">
+                <legend class="h6">Colour palette</legend>
+                <div class="palette-options">
+                    {% for value, details in appearance_palettes.items() %}
+                    <label class="palette-option" for="palette-{{ value }}">
+                        <input type="radio" name="palette" id="palette-{{ value }}" value="{{ value }}" {% if appearance.palette == value %}checked{% endif %} required>
+                        <span class="palette-preview" data-palette="{{ value }}" aria-hidden="true">
+                            <span class="palette-preview-nav"><span></span><span></span><span></span></span>
+                            <span class="palette-preview-body"><span></span><span></span><span></span></span>
+                        </span>
+                        <span class="palette-name">{{ details[0] }}<i class="bi bi-check-circle-fill" aria-hidden="true"></i></span>
+                        <span class="palette-description">{{ details[1] }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            <fieldset class="mb-3">
+                <legend class="h6">Display mode</legend>
+                <div class="appearance-modes">
+                    {% for value, label, icon in [('light', 'Light', 'sun'), ('dark', 'Dark', 'moon-stars'), ('auto', 'Follow device', 'display')] %}
+                    <label class="appearance-mode" for="theme-{{ value }}">
+                        <input type="radio" name="mode" id="theme-{{ value }}" value="{{ value }}" {% if appearance.mode == value %}checked{% endif %} required>
+                        <span><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <p class="form-text">Follow device switches automatically with your device's light and dark settings.</p>
+            </fieldset>
+            <div class="page-actions">
+                <button class="btn btn-primary" type="submit">Save appearance</button>
+                <button class="btn btn-outline-secondary d-none" type="button" id="appearanceReset">Undo preview</button>
+                <span id="appearanceStatus" class="small text-muted" role="status" aria-live="polite">Preview your choices, then save.</span>
+            </div>
+        </div>
+    </form>
     <form method="POST" action="{{ url_for('preferences.index') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card mb-3">
@@ -54,18 +95,5 @@
         </div>
         <button class="btn btn-primary mb-4" type="submit">Save personal preferences</button>
     </form>
-    <div class="card" id="appearance-card">
-        <div class="card-body">
-            <h2 class="h5"><i class="bi bi-palette"></i> Appearance</h2>
-            <p class="text-muted">Saved immediately in this browser, not to your account. It may be shared by people using the same browser profile.</p>
-            {% for value, label in [('light', 'Light'), ('dark', 'Dark'), ('auto', 'Auto (follow device)')] %}
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="jhq-theme-radio" id="theme-{{ value }}" value="{{ value }}">
-                <label class="form-check-label" for="theme-{{ value }}">{{ label }}</label>
-            </div>
-            {% endfor %}
-            <p class="form-text mb-0">Auto follows your device's appearance preference. The navbar sun/moon button switches between light and dark.</p>
-        </div>
-    </div>
 </div>
 {% endblock %}

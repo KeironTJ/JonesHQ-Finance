@@ -8,6 +8,7 @@ Complete documentation for the FamilyHQ Finance personal finance management syst
 - **[Quick Start Guide](QUICKSTART.md)** - Installation and first steps
 
 ### Technical Documentation
+- **[Design System](DESIGN_SYSTEM.md)** - Visual tokens, reusable templates, responsive shell and interaction patterns
 - **[Database Schema](DATABASE_SCHEMA.md)** - Complete database structure and relationships
 - **[Category Mapping](CATEGORY_MAPPING.md)** - Excel to database category mapping reference
 - **[Vendor System](VENDOR_SYSTEM.md)** - Vendor tracking and management implementation

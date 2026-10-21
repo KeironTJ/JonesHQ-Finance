@@ -44,3 +44,28 @@ def save_preference():
         current_app.logger.exception('Unable to save a personal preference')
         return jsonify(success=False, error='Unable to save your preference. Please try again.'), 500
     return jsonify(success=True)
+
+
+@preferences_bp.route('/appearance', methods=['POST'])
+def appearance():
+    try:
+        data = request.get_json() if request.is_json else request.form
+        PreferenceService.update_appearance(data)
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        message = str(error) or 'Invalid appearance choice.'
+        if request.is_json:
+            return jsonify(success=False, error=message), 400
+        flash(message, 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to save appearance preferences')
+        message = 'Unable to save your appearance. Please try again.'
+        if request.is_json:
+            return jsonify(success=False, error=message), 500
+        flash(message, 'danger')
+    else:
+        if request.is_json:
+            return jsonify(success=True)
+        flash('Your appearance has been saved to your account.', 'success')
+    return redirect(url_for('preferences.index', _anchor='appearance-card'))

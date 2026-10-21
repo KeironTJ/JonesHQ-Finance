@@ -26,38 +26,21 @@
 
 /* ── Trip row colour tokens — light & dark aware ──────────── */
 :root {
-    --trip-personal-bg:        rgba(79,  70,  229, 0.08);
-    --trip-personal-bg-hover:  rgba(79,  70,  229, 0.15);
-    --trip-personal-border:    #4f46e5;
+    --trip-personal-bg:        var(--brand-soft);
+    --trip-personal-bg-hover:  var(--bg-surface-3);
+    --trip-personal-border:    var(--brand);
 
-    --trip-business-bg:        rgba(217, 119,   6, 0.09);
-    --trip-business-bg-hover:  rgba(217, 119,   6, 0.17);
-    --trip-business-border:    #d97706;
+    --trip-business-bg:        var(--clr-info-bg);
+    --trip-business-bg-hover:  var(--bg-surface-3);
+    --trip-business-border:    var(--clr-info);
 
-    --trip-fuel-bg:            rgba(  5, 150, 105, 0.09);
-    --trip-fuel-bg-hover:      rgba(  5, 150, 105, 0.17);
-    --trip-fuel-border:        #059669;
+    --trip-fuel-bg:            var(--clr-success-bg);
+    --trip-fuel-bg-hover:      var(--bg-surface-3);
+    --trip-fuel-border:        var(--clr-success);
 
-    --trip-forecast-bg:        rgba(217, 119,   6, 0.07);
-    --trip-forecast-bg-hover:  rgba(217, 119,   6, 0.15);
-    --trip-forecast-border:    #d97706;
-}
-[data-theme="dark"] {
-    --trip-personal-bg:        rgba(129, 140, 248, 0.13);
-    --trip-personal-bg-hover:  rgba(129, 140, 248, 0.22);
-    --trip-personal-border:    #818cf8;
-
-    --trip-business-bg:        rgba(251, 191,  36, 0.12);
-    --trip-business-bg-hover:  rgba(251, 191,  36, 0.21);
-    --trip-business-border:    #fbbf24;
-
-    --trip-fuel-bg:            rgba( 52, 211, 153, 0.12);
-    --trip-fuel-bg-hover:      rgba( 52, 211, 153, 0.21);
-    --trip-fuel-border:        #34d399;
-
-    --trip-forecast-bg:        rgba(251, 191,  36, 0.10);
-    --trip-forecast-bg-hover:  rgba(251, 191,  36, 0.19);
-    --trip-forecast-border:    #fbbf24;
+    --trip-forecast-bg:        var(--clr-warning-bg);
+    --trip-forecast-bg-hover:  var(--bg-surface-3);
+    --trip-forecast-border:    var(--clr-warning);
 }
 
 /*
@@ -341,7 +324,7 @@
                                     {% if event.type == 'personal' %}
                                         <span class="badge bg-primary"><i class="bi bi-person-fill"></i> Personal</span>
                                     {% elif event.type == 'business' %}
-                                        <span class="badge text-white" style="background:#fd7e14;"><i class="bi bi-briefcase-fill"></i> Business</span>
+                                        <span class="badge bg-info"><i class="bi bi-briefcase-fill"></i> Business</span>
                                     {% elif event.type == 'fuel' %}
                                         {% if event.fill.linked_transaction_id %}
                                             <span class="badge bg-success"><i class="bi bi-fuel-pump-fill"></i> Fill</span>

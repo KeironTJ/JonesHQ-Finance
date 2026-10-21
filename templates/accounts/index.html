@@ -1,59 +1,32 @@
 {% extends "base.html" %}
+{% from 'shared/_ui.html' import page_header, metric, empty_state %}
 
 {% block title %}Accounts - Family HQ{% endblock %}
 
 {% block content %}
 <div class="container-fluid accounts-page">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-bank"></i> Bank Accounts</h1>
+    {% call page_header('Bank Accounts', 'A clear view of the money you share, save and spend.', 'Day to day') %}
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAccountModal">
-            <i class="bi bi-plus-circle"></i> Add Account
+            <i class="bi bi-plus-lg" aria-hidden="true"></i> Add Account
         </button>
-    </div>
+    {% endcall %}
 
     <!-- Summary Cards -->
-    <div class="alert alert-info mb-3">
-        <i class="bi bi-info-circle"></i> <strong>Balance Calculation:</strong> All balances shown are calculated from PAID transactions only, giving you the actual current balance.
-    </div>
-    
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-cash-stack display-4"></i>
-                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Total Balance</h6>
-                    <h2 class="card-title mb-0">£{{ "%.2f"|format(total_balance) }}</h2>
-                </div>
-            </div>
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-xl-3">
+            {{ metric('Total balance', '£{:,.2f}'.format(total_balance), 'wallet2', 'danger' if total_balance < 0 else 'primary', 'Across all accounts') }}
         </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-bank display-4"></i>
-                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Active Accounts</h6>
-                    <h2 class="card-title mb-0">{{ active_accounts|length }}</h2>
-                </div>
-            </div>
+        <div class="col-6 col-xl-3">
+            {{ metric('Active accounts', active_accounts|length, 'bank', 'success', 'Ready for everyday use') }}
         </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-diagram-3 display-4"></i>
-                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Account Types</h6>
-                    <h2 class="card-title mb-0">{{ accounts_by_type|length }}</h2>
-                </div>
-            </div>
+        <div class="col-6 col-xl-3">
+            {{ metric('Account types', accounts_by_type|length, 'collection', 'info', 'A place for every purpose') }}
         </div>
-        <div class="col-md-3">
-            <div class="card bg-secondary text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-archive display-4"></i>
-                    <h6 class="card-subtitle mt-3 mb-2 opacity-75">Inactive</h6>
-                    <h2 class="card-title mb-0">{{ inactive_accounts|length }}</h2>
-                </div>
-            </div>
+        <div class="col-6 col-xl-3">
+            {{ metric('Inactive accounts', inactive_accounts|length, 'archive', 'primary', 'Kept for your records') }}
         </div>
     </div>
+    <p class="text-muted small mb-4"><i class="bi bi-info-circle me-1" aria-hidden="true"></i> Balances include paid transactions only, so you see what is actually in each account.</p>
 
     <!-- Accounts by Type -->
     {% for acc_type, type_accounts in accounts_by_type.items() %}
@@ -78,7 +51,7 @@
         <div class="card-body">
             <div class="row">
                 {% for account in type_accounts %}
-                <div class="col-md-3 mb-3">
+                <div class="col-sm-6 col-xl-4 col-xxl-3 mb-3">
                     <div class="card h-100 shadow-sm hover-shadow account-card-compact">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
@@ -248,13 +221,12 @@
     {% endif %}
 
     {% if not active_accounts %}
-    <div class="alert alert-info accounts-empty-state text-center" role="status">
-        <i class="bi bi-info-circle" aria-hidden="true"></i>
-        <h4 class="mt-3">No Accounts Yet</h4>
-        <p>Get started by adding your first bank account.</p>
+    <div class="card accounts-empty-state" role="status">
+        {% call empty_state('No Accounts Yet', 'Get started by adding your first bank account.', 'wallet2') %}
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAccountModal">
             <i class="bi bi-plus-circle"></i> Add Your First Account
         </button>
+        {% endcall %}
     </div>
     {% endif %}
 </div>
@@ -333,7 +305,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 </form>
 
-
+{% endblock %}
+{% block extra_js %}
 <script>
 function confirmDelete(accountName, accountId) {
     if (confirm(`Are you sure you want to delete "${accountName}"?\n\nThis will permanently delete the account and all associated data.`)) {

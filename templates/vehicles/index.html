@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'shared/_ui.html' import page_header %}
 
 {% block title %}My Garage{% endblock %}
 
@@ -22,7 +23,7 @@
     transition: all 0.15s ease;
 }
 .vehicle-section-nav .nav-link:hover  { background: var(--bg-surface-2); }
-.vehicle-section-nav .nav-link.active { background: var(--brand); color: #fff; }
+.vehicle-section-nav .nav-link.active { background: var(--brand); color: var(--action-text); }
 
 /* Metric tiles */
 .jhq-metric-tile {
@@ -48,14 +49,12 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4 jhq-page-enter">
+<div class="container-fluid jhq-page-enter">
     <div class="row">
         <div class="col-12">
 
             <!-- Page header -->
-            <div class="d-flex align-items-center mb-3">
-                <h1 class="mb-0"><i class="bi bi-car-front"></i> My Garage</h1>
-            </div>
+            {{ page_header('My Garage', 'The everyday costs and journeys that keep your household moving.', 'Household life') }}
 
             <nav class="vehicle-section-navigation" aria-label="Vehicle pages">
             <ul class="nav vehicle-page-nav mb-3">

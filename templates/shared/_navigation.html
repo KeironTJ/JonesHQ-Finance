@@ -1,0 +1,83 @@
+{% macro nav_link(endpoint, label, icon, section=none, exact=false, values=none) -%}
+    {% if not section or can_access_section(section) %}
+        {% set href = url_for(endpoint, **(values or {})) %}
+        {% set active = (request.endpoint == endpoint) if endpoint == 'dashboard.index' else (request.path.rstrip('/') == href.rstrip('/') if exact else (request.path.rstrip('/') == href.rstrip('/') or request.path.startswith(href.rstrip('/') ~ '/'))) %}
+        {% if endpoint == 'transactions.index' %}
+            {% set active = request.blueprint == 'transactions' and not request.path.startswith('/transactions/subscriptions') and request.endpoint != 'transactions.consolidated' %}
+        {% endif %}
+        <a class="workspace-nav-link{{ ' active' if active else '' }}" href="{{ href }}"{% if active %} aria-current="page"{% endif %} data-nav-search>
+            <i class="bi bi-{{ icon }}" aria-hidden="true"></i><span>{{ label }}</span>
+        </a>
+    {% endif %}
+{%- endmacro %}
+<aside class="workspace-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="workspaceNav" aria-labelledby="workspaceNavLabel">
+    <div class="sidebar-brand">
+        <a href="{{ url_for('dashboard.index') }}" aria-label="Family HQ home">
+            <span class="brand-mark"><i class="bi bi-house-heart" aria-hidden="true"></i></span>
+            <span><strong id="workspaceNavLabel">Family HQ</strong><small>Household finance</small></span>
+        </a>
+        <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#workspaceNav" aria-label="Close navigation"></button>
+    </div>
+    <div class="offcanvas-body sidebar-body">
+        <nav aria-label="Main navigation">
+            {{ nav_link('dashboard.index', 'Overview', 'grid-1x2', exact=true) }}
+            {% for label, links in [
+                ('Day to day', [
+                    ('accounts.index', 'Accounts', 'wallet2', 'accounts', true),
+                    ('transactions.index', 'Transactions', 'arrow-left-right', 'transactions', true),
+                    ('transactions.subscriptions', 'Subscriptions', 'arrow-repeat', 'transactions', false),
+                    ('expenses.index', 'Work expenses', 'receipt', 'expenses', false)
+                ]),
+                ('Build your future', [
+                    ('income.index', 'Income', 'cash-coin', 'income', false),
+                    ('credit_cards.index', 'Credit cards', 'credit-card-2-front', 'credit_cards', false),
+                    ('loans.index', 'Loans', 'bank', 'loans', false),
+                    ('mortgage.index', 'Home & mortgage', 'house-door', 'mortgage', false),
+                    ('pensions.index', 'Pensions', 'sunrise', 'pensions', false),
+                    ('networth.index', 'Net worth', 'graph-up-arrow', 'networth', false)
+                ]),
+                ('Household life', [
+                    ('plans.index', 'Plans', 'journal-check', 'plans', false),
+                    ('vehicles.index', 'Garage', 'car-front', 'vehicles', false),
+                    ('childcare.index', 'Childcare', 'balloon', 'childcare', false)
+                ]),
+                ('Organise', [
+                    ('categories.index', 'Categories', 'tags', 'categories', false),
+                    ('vendors.index', 'Vendors', 'shop', 'vendors', false),
+                    ('transactions.consolidated', 'Consolidated view', 'diagram-3', 'transactions', false)
+                ])
+            ] %}
+                {% set visible = namespace(value=false) %}
+                {% for endpoint, title, icon, section, exact in links %}
+                    {% if can_access_section(section) %}{% set visible.value = true %}{% endif %}
+                {% endfor %}
+                {% if visible.value %}
+                <div class="nav-section-label">{{ label }}</div>
+                {% for endpoint, title, icon, section, exact in links %}
+                    {{ nav_link(endpoint, title, icon, section, exact) }}
+                {% endfor %}
+                {% endif %}
+            {% endfor %}
+            <div class="nav-section-label">Your workspace</div>
+            {% if current_user.is_household_owner %}
+                {{ nav_link('family.index', 'Family & members', 'people') }}
+                {{ nav_link('settings.index', 'Settings', 'gear', 'settings') }}
+            {% endif %}
+            {{ nav_link('preferences.index', 'Personal preferences', 'sliders') }}
+            {{ nav_link('auth.account_security', 'Account security', 'shield-lock') }}
+            {{ nav_link('auth.help', 'Help & support', 'question-circle') }}
+            {% if current_user.is_site_admin %}
+                <div class="nav-section-label">Service operator</div>
+                {{ nav_link('site_admin.index', 'Site admin area', 'shield-shaded') }}
+            {% endif %}
+        </nav>
+        <div class="sidebar-account">
+            <span class="sidebar-avatar" aria-hidden="true">{{ current_user.name[:1]|upper }}</span>
+            <div><strong>{{ current_user.name }}</strong><small>{{ 'Household Owner' if current_user.is_household_owner else 'Household Member' }}</small></div>
+            <form method="POST" action="{{ url_for('auth.logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="sidebar-logout" aria-label="Logout" title="Sign out"><i class="bi bi-box-arrow-right" aria-hidden="true"></i></button>
+            </form>
+        </div>
+    </div>
+</aside>

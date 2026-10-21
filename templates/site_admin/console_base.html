@@ -2,15 +2,43 @@
 
 {% block head_tail %}
 {{ super() }}
+{% include 'shared/_appearance_init.html' %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/system/tokens.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
 <style>
+    body > .container { max-width: 1600px; padding: 1.5rem; }
+    .navbar { background: var(--nav-bg) !important; border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem; }
+    .navbar .navbar-brand, .navbar .nav-link { color: #eff6eb !important; }
+    .navbar .navbar-toggler { background: var(--nav-active); }
+    .card, .well { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+    .table { color: var(--text-primary); background: var(--bg-surface); font-size: .85rem; }
+    .table td, .table th { border-color: var(--border-color); padding: .8rem; }
+    .table thead th, .table-striped tbody tr:nth-of-type(odd) { background: var(--bg-surface-2); }
+    .table-hover tbody tr:hover { background: var(--brand-soft); color: var(--text-primary); }
+    .form-control, .custom-select { background: var(--bg-surface); color: var(--text-primary); border-color: var(--border-color); }
+    .btn-primary { background: var(--brand); border-color: var(--brand); color: var(--action-text); }
+    .btn-default, .btn-secondary, .page-link { background: var(--bg-surface-2); border-color: var(--border-color); color: var(--text-primary); }
+    .dropdown-menu { background: var(--bg-surface); border-color: var(--border-color); box-shadow: var(--shadow-md); }
+    .dropdown-item { color: var(--text-primary); }
+    .dropdown-item:hover { background: var(--brand-soft); color: var(--brand); }
+    .nav-tabs { border-color: var(--border-color); }
+    .nav-tabs .nav-link.active { background: var(--bg-surface); border-color: var(--border-color); color: var(--brand); }
+    .modal-content { background: var(--bg-surface); color: var(--text-primary); }
     .site-admin-console-banner {
-        background: repeating-linear-gradient(135deg, #7f1d1d 0 18px, #991b1b 18px 36px);
-        color: #fff;
-        border-radius: 0.4rem;
-        padding: 0.7rem 1rem;
-        margin-bottom: 0.75rem;
+        background: var(--clr-danger-bg);
+        color: var(--text-primary);
+        border: 1px solid var(--clr-danger);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin-bottom: 1.25rem;
     }
-    .site-admin-console-banner a { color: #fff; text-decoration: underline; }
+    .site-admin-console-banner strong { color: var(--clr-danger); }
+    .site-admin-console-banner a { color: inherit; text-decoration: underline; }
+    @media (max-width: 767px) {
+        body > .container { padding: .75rem; }
+        .table { display: block; overflow-x: auto; }
+        .btn { min-height: 44px; }
+    }
 </style>
 {% endblock %}
 

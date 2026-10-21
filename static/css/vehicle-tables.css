@@ -39,7 +39,7 @@
 }
 
 .vehicle-page-nav .nav-link.active {
-    color: #fff;
+    color: var(--action-text);
     background: var(--brand);
     box-shadow: var(--shadow-sm);
 }
@@ -58,7 +58,7 @@
 
 @media (max-width: 991.98px) {
     .vehicle-section-navigation {
-        top: 56px;
+        top: var(--nav-height);
         margin: 0 -0.75rem;
         padding: 0.35rem 0.75rem;
         background: var(--bg-surface-1, var(--bg-surface));

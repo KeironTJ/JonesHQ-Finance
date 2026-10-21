@@ -1,9 +1,9 @@
 .plans-page {
-    --plans-ink: #17211b;
-    --plans-muted: #66726b;
-    --plans-line: #dce3de;
-    --plans-paper: #f7f9f7;
-    --plans-accent: #087f5b;
+    --plans-ink: var(--text-primary);
+    --plans-muted: var(--text-secondary);
+    --plans-line: var(--border-color);
+    --plans-paper: var(--bg-surface-2);
+    --plans-accent: var(--brand);
     max-width: 1320px;
     color: var(--plans-ink);
 }
@@ -21,10 +21,10 @@
 .plans-header h1,
 .detail-header h1 {
     margin: 0;
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: clamp(2.25rem, 5vw, 4rem);
-    line-height: 1;
-    letter-spacing: 0;
+    font-family: var(--font);
+    font-size: clamp(1.6rem, 2.5vw, 2.15rem);
+    line-height: 1.2;
+    letter-spacing: -.045em;
 }
 
 .plans-kicker {
@@ -79,43 +79,43 @@
     padding: 20px;
     color: inherit;
     text-decoration: none;
-    background: #fff;
+    background: var(--bg-surface);
     border: 1px solid var(--plans-line);
-    border-radius: 6px;
+    border-radius: var(--radius-lg);
     transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
 
 .plan-tile[hidden] { display: none; }
-.plan-tile:hover { color: inherit; transform: translateY(-3px); border-color: #9eaaa2; box-shadow: 0 12px 28px rgba(29, 51, 39, .09); }
+.plan-tile:hover { color: inherit; border-color: var(--brand-border); box-shadow: var(--shadow-md); }
 .plan-tile-top,
 .plan-progress-copy,
 .plan-tile footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .plan-type,
 .plan-status { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 700; text-transform: uppercase; }
-.plan-type { color: #0b684e; }
-.plan-type-wish_list { color: #9c5200; }
-.plan-type-savings_goal { color: #175ea8; }
-.plan-status { padding: 4px 7px; color: #49534d; background: #eef1ef; border-radius: 4px; }
-.plan-status-completed { color: #08643f; background: #dff3e8; }
-.plan-status-archived { color: #6c6c6c; background: #ededed; }
+.plan-type { color: var(--brand); }
+.plan-type-wish_list { color: var(--clr-warning); }
+.plan-type-savings_goal { color: var(--clr-info); }
+.plan-status { padding: 4px 7px; color: var(--text-secondary); background: var(--bg-surface-3); border-radius: var(--radius-xs); }
+.plan-status-completed { color: var(--clr-success); background: var(--clr-success-bg); }
+.plan-status-archived { color: var(--text-muted); background: var(--bg-surface-3); }
 .plan-tile-body { flex: 1; padding: 34px 0 28px; }
-.plan-tile h2 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 1.75rem; letter-spacing: 0; }
+.plan-tile h2 { margin: 0; font-family: var(--font); font-size: 1.5rem; letter-spacing: -.03em; }
 .plan-tile-body p { margin: 8px 0 0; color: var(--plans-muted); font-size: .9rem; }
 .plan-progress-copy { color: var(--plans-muted); font-size: .78rem; }
-.plan-tile .progress { height: 5px; margin: 8px 0 18px; background: #e8ece9; }
+.plan-tile .progress { height: 5px; margin: 8px 0 18px; background: var(--bg-surface-3); }
 .plan-tile .progress-bar { background: var(--plans-accent); }
 .plan-tile footer { padding-top: 14px; color: var(--plans-muted); font-size: .82rem; border-top: 1px solid var(--plans-line); }
 
 .plans-empty { grid-column: 1 / -1; padding: 72px 24px; text-align: center; border-block: 1px solid var(--plans-line); }
 .plans-empty > i { color: var(--plans-accent); font-size: 2rem; }
 .plans-empty h2,
-.plans-empty h3 { margin: 14px 0 4px; font-family: Georgia, 'Times New Roman', serif; }
+.plans-empty h3 { margin: 14px 0 4px; font-family: var(--font); }
 .plans-empty p { color: var(--plans-muted); }
 .plans-empty.compact { padding: 42px 20px; }
 .plans-back { display: inline-flex; align-items: center; gap: 7px; margin-top: 5px; color: var(--plans-muted); text-decoration: none; }
 .items-section { margin-top: 40px; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
-.section-heading h2 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 2rem; }
+.section-heading h2 { margin: 0; font-family: var(--font); font-size: 1.5rem; }
 .section-heading > span { color: var(--plans-muted); font-size: .85rem; }
 .plan-item-filters { display: flex; align-items: center; gap: 8px; }
 .plan-item-filters .form-select { width: auto; min-width: 150px; }
@@ -126,7 +126,7 @@
 .item-summary:hover { background: var(--plans-paper); }
 .item-state { color: var(--plans-accent); font-size: 1.15rem; }
 .plan-item-skipped .item-state,
-.plan-item-skipped .item-main { color: #8a918d; }
+.plan-item-skipped .item-main { color: var(--text-muted); }
 .item-main,
 .item-costs { display: flex; min-width: 0; flex-direction: column; }
 .item-main strong,
@@ -142,9 +142,6 @@
 .item-editor { padding: 18px 22px 22px 56px; background: var(--plans-paper); border-top: 1px solid var(--plans-line); }
 .item-actions { display: flex; justify-content: space-between; margin-top: 16px; }
 .plan-notes { margin-top: 36px; padding: 20px 0; border-top: 1px solid var(--plans-line); }
-
-[data-theme="dark"] .plans-page { --plans-ink: #edf3ef; --plans-muted: #aab5ae; --plans-line: #3a4740; --plans-paper: #202923; }
-[data-theme="dark"] .plan-tile { background: #17201a; }
 
 @media (max-width: 767px) {
     .plans-header,

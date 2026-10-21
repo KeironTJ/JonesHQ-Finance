@@ -207,7 +207,7 @@
         <div id="analyticsChart" class="collapse show">
             <div class="card-body">
                 <div class="analytics-chart-wrap">
-                    <canvas id="vendorSpendChart"></canvas>
+                    <canvas id="vendorSpendChart" role="img" aria-label="Vendor income and spending over time. Values are available in the tables below."></canvas>
                 </div>
             </div>
         </div>
@@ -399,71 +399,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
-<script>
-const chartPayload = {{ chart_payload | safe }};
-const ctx = document.getElementById('vendorSpendChart');
-
-if (ctx && chartPayload.labels && chartPayload.labels.length) {
-    const datasets = [];
-
-    if (chartPayload.income_datasets) {
-        chartPayload.income_datasets.forEach((set, idx) => {
-            datasets.push({
-                label: set.label,
-                data: set.data,
-                backgroundColor: `hsla(${120 + idx * 30}, 70%, 50%, 0.7)`,
-                borderColor: `hsla(${120 + idx * 30}, 70%, 40%, 1)`,
-                borderWidth: 1,
-                stack: 'income'
-            });
-        });
-    }
-
-    if (chartPayload.expense_datasets) {
-        chartPayload.expense_datasets.forEach((set, idx) => {
-            datasets.push({
-                label: set.label,
-                data: set.data.map(v => -v),
-                backgroundColor: `hsla(${0 + idx * 30}, 70%, 50%, 0.7)`,
-                borderColor: `hsla(${0 + idx * 30}, 70%, 40%, 1)`,
-                borderWidth: 1,
-                stack: 'expense'
-            });
-        });
-    }
-
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: chartPayload.labels,
-            datasets: datasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { stacked: true },
-                y: {
-                    stacked: true,
-                    ticks: {
-                        callback: (value) => `£${Math.abs(value).toLocaleString()}`
-                    }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: £${Math.abs(ctx.raw).toLocaleString()}`
-                    }
-                },
-                legend: {
-                    display: true,
-                    position: 'bottom'
-                }
-            }
-        }
-    });
-}
-</script>
+{% set chart_canvas_id = 'vendorSpendChart' %}
+{% include 'shared/_analytics_chart.html' %}
 {% endblock %}

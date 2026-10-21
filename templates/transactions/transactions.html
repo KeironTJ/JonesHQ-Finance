@@ -454,7 +454,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="txn-actions">
-                                    <div class="btn-group btn-group-sm" role="group">
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Transaction actions">
                                         {% if can_access_section('plans') %}
                                         <button type="button" class="btn btn-outline-success" title="{% if plan_item %}Change plan link{% else %}Link to a plan{% endif %}"
                                                 data-bs-toggle="modal"
@@ -496,28 +496,15 @@
                                             </button>
                                             
                                             <!-- Pay/Unpaid toggle -->
-                                            <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}" 
-                                                  style="display: inline;">
+                                            <form method="POST" action="{{ url_for('transactions.toggle_paid', id=transaction.id) }}">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" class="btn btn-outline-success" title="Mark as Paid">
                                                     <i class="bi bi-check-circle"></i>
                                                 </button>
                                             </form>
                                             
-                                            <!-- Lock/Unlock toggle -->
-                                            <form method="POST" action="{{ url_for('transactions.toggle_fixed', id=transaction.id) }}" 
-                                                  style="display: inline;">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                <button type="submit" 
-                                                        class="btn btn-outline-{% if transaction.is_fixed %}warning{% else %}secondary{% endif %}" 
-                                                        title="{% if transaction.is_fixed %}Unlock Transaction{% else %}Lock Transaction{% endif %}">
-                                                    <i class="bi bi-{% if transaction.is_fixed %}lock-fill{% else %}unlock{% endif %}"></i>
-                                                </button>
-                                            </form>
-                                            
                                             <!-- Delete button -->
-                                            <form method="POST" action="{{ url_for('transactions.delete', id=transaction.id) }}" 
-                                                  style="display: inline;"
+                                            <form method="POST" action="{{ url_for('transactions.delete', id=transaction.id) }}"
                                                   onsubmit="return confirm('Delete this transaction? Account balance will be updated.');">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <input type="hidden" name="return_url" value="{{ request.url }}">

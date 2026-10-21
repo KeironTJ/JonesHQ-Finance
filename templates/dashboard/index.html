@@ -48,15 +48,24 @@
 
 {% block content %}
 <div class="container-fluid dashboard-page">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+    <div class="dashboard-hero">
         <div>
-            <a href="{{ url_for('preferences.index') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-sliders"></i> Personal preferences
+            <span class="eyebrow">{{ today.strftime('%A, %d %B %Y') }} &middot; Your overview</span>
+            <h1>Your household, in focus.</h1>
+            <p>A little clarity for today. A confident plan for what comes next.</p>
+        </div>
+        <div class="dashboard-hero-actions">
+            {% if current_user.is_household_owner %}
+            <a href="{{ url_for('settings.module_settings', section='household') }}" class="btn btn-outline-secondary" aria-label="Household settings">
+                <i class="bi bi-house-gear" aria-hidden="true"></i> Household settings
             </a>
-            {% if can_access_section('settings') %}
-            <a href="{{ url_for('settings.module_settings', section='household') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-calendar-check"></i> Payday settings
+            {% endif %}
+            <a href="{{ url_for('preferences.index') }}" class="btn btn-outline-secondary" aria-label="Personal preferences">
+                <i class="bi bi-sliders" aria-hidden="true"></i> Make it yours
+            </a>
+            {% if can_access_section('transactions') %}
+            <a href="{{ url_for('transactions.create') }}" class="btn btn-primary">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> Add transaction
             </a>
             {% endif %}
         </div>

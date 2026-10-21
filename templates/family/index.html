@@ -1,20 +1,20 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
 
 {% block title %}Family Management - Family HQ{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-people-fill"></i> Family Management</h1>
+    {% call page_header('Family Management', 'One shared workspace, with the right access for every member.', 'Your workspace') %}
         <span class="badge bg-secondary fs-6">{{ family.name }}</span>
-    </div>
+    {% endcall %}
 
     <!-- ── Members ───────────────────────────────────────────────── -->
     <div class="card mb-4">
         <div class="card-header">
             <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Members</h5>
         </div>
-        <div class="card-body p-0">
+        <div class="card-body p-0 table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="table-dark">
                     <tr>

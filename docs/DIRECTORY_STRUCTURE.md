@@ -78,12 +78,13 @@ for the package map and compatibility-import policy.
 
 ### `/templates/`
 Jinja2 HTML templates
-- `base.html` - Base template with navigation; household Settings is in the profile
-  dropdown under "Your household" (owners only), not in the main module navigation.
-  Personal preferences is under "Your account" for every signed-in user.
+- `base.html` - Shared workspace shell and public header. Grouped sidebar navigation
+  becomes a focus-trapped drawer below 992px. Owner-only Settings and Family links
+  live under "Your workspace"; personal preferences is available to every member.
+- `shared/` - Permission-aware navigation, page search, UI macros and shared analytics chart setup
 - `settings/` - Settings hub and independently saved household, credit-card,
   work-expense, net-worth and tax configuration
-- `preferences/` - Personal dashboard/list defaults and browser-local appearance
+- `preferences/` - Personal dashboard/list defaults and account-persisted appearance
 - `categories/` - Category templates
 - `components/` - Reusable components
 - `credit_cards/` - Credit card templates
@@ -93,8 +94,11 @@ Jinja2 HTML templates
 
 ### `/static/`
 Static assets
-- `css/` - Stylesheets
-- `js/` - JavaScript files
+- `css/theme.css` - Shared typography, base styles, layout utilities and accessibility
+- `css/system/` - Theme tokens, reusable Bootstrap components, workspace shell,
+  domain patterns and public/authentication styling (see [Design System](DESIGN_SYSTEM.md))
+- `css/` - Additional domain styles for transactions, credit cards, plans and vehicles
+- `js/` - Shared theme management, workspace interactions, analytics charts and feature scripts
 - `favicon.svg` - Application favicon
 
 ### `/scripts/`

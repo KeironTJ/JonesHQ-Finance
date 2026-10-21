@@ -4,9 +4,13 @@
 const ThemeManager = (function () {
     const STORAGE_KEY = 'jhq-theme';
     const THEMES = { LIGHT: 'light', DARK: 'dark', AUTO: 'auto' };
+    const config = window.FinanceAppearance || { account: false, mode: 'light', palette: 'blue' };
+    let current = { mode: config.mode, palette: config.palette };
+    let saved = { ...current };
+    let saving = false;
 
     function getStored() {
-        return localStorage.getItem(STORAGE_KEY) || THEMES.LIGHT;
+        return current.mode;
     }
 
     function getResolved(stored) {
@@ -17,13 +21,76 @@ const ThemeManager = (function () {
         return stored;
     }
 
-    function apply(stored) {
-        const resolved = getResolved(stored);
+    function apply(appearance) {
+        current = { ...appearance };
+        const resolved = getResolved(current.mode);
         document.documentElement.setAttribute('data-theme', resolved);
-        updateToggleIcons(resolved, stored);
-
-        // Update Chart.js defaults if charts are present
+        document.documentElement.setAttribute('data-bs-theme', resolved);
+        document.documentElement.setAttribute('data-palette', current.palette);
+        updateToggleIcons(resolved, current.mode);
+        document.querySelectorAll('#appearanceForm input[type="radio"]').forEach(radio => {
+            radio.checked = radio.value === current[radio.name];
+        });
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--nav-bg').trim();
         if (window.updateChartTheme) window.updateChartTheme(resolved);
+    }
+
+    function showStatus(message, error = false) {
+        let status = document.getElementById('appearanceStatus');
+        if (!status) {
+            status = document.getElementById('appearanceNotification');
+            if (!status) {
+                status = document.createElement('div');
+                status.id = 'appearanceNotification';
+                document.querySelector('.workspace-content').prepend(status);
+            }
+            status.className = 'alert alert-' + (error ? 'danger' : 'success');
+        } else {
+            status.classList.toggle('text-muted', !error);
+            status.classList.toggle('text-danger', error);
+        }
+        status.setAttribute('role', error ? 'alert' : 'status');
+        status.textContent = message;
+    }
+
+    async function persist(appearance) {
+        if (saving) return;
+        saving = true;
+        const controls = [...document.querySelectorAll('#appearanceForm input:not([type="hidden"]), #appearanceForm button, #themeToggleBtn, #themeToggleBtnMobile')];
+        const disabledStates = controls.map(control => control.disabled);
+        controls.forEach(control => { control.disabled = true; });
+        const form = document.getElementById('appearanceForm');
+        if (form) form.setAttribute('aria-busy', 'true');
+        apply(appearance);
+        showStatus('Saving appearance...');
+        try {
+            const response = await fetch(config.saveUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify(appearance),
+            });
+            if (response.redirected) throw new Error('Your session may have expired. Sign in again before saving your appearance.');
+            if (!response.headers.get('content-type')?.includes('application/json')) {
+                throw new Error('Unable to save your appearance. Reload the page and try again.');
+            }
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Unable to save your appearance. Please try again.');
+            }
+            saved = { ...appearance };
+            showStatus('Saved to your account. Your appearance will follow you across devices.');
+        } catch (error) {
+            apply(saved);
+            showStatus(error.message || 'Unable to save your appearance. Please try again.', true);
+        } finally {
+            saving = false;
+            controls.forEach((control, index) => { control.disabled = disabledStates[index]; });
+            if (form) form.removeAttribute('aria-busy');
+        }
     }
 
     function updateToggleIcons(resolved, stored) {
@@ -32,9 +99,14 @@ const ThemeManager = (function () {
             { btn: document.getElementById('themeToggleBtn'),    icon: document.getElementById('themeIcon') },
             { btn: document.getElementById('themeToggleBtnMobile'), icon: document.getElementById('themeIconMobile') },
         ];
-        icons.forEach(({ icon }) => {
+        icons.forEach(({ btn, icon }) => {
             if (!icon) return;
-            icon.className = isDark ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+            icon.className = isDark ? 'bi bi-sun' : 'bi bi-moon';
+            if (btn) {
+                const label = 'Switch to ' + (isDark ? 'light' : 'dark') + ' theme';
+                btn.setAttribute('aria-label', label);
+                btn.title = label;
+            }
         });
 
         const lbl = document.getElementById('themeLabel');
@@ -46,22 +118,24 @@ const ThemeManager = (function () {
     }
 
     function cycle() {
-        // Simple toggle: light ↔ dark (auto is set explicitly via Settings only)
-        const current = getResolved(getStored());
-        const next = current === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK;
-        localStorage.setItem(STORAGE_KEY, next);
-        apply(next);
+        const next = getResolved(getStored()) === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK;
+        return setTheme(next);
     }
 
     function setTheme(theme) {
         if (!Object.values(THEMES).includes(theme)) return;
-        localStorage.setItem(STORAGE_KEY, theme);
-        apply(theme);
+        if (config.account) return persist({ ...current, mode: theme });
+        apply({ ...current, mode: theme });
+        try {
+            localStorage.setItem(STORAGE_KEY, theme);
+        } catch (error) {
+            console.warn('Family HQ: theme will only be applied to this page.', error);
+            document.dispatchEvent(new CustomEvent('theme-storage-unavailable'));
+        }
     }
 
     function init() {
-        const stored = getStored();
-        apply(stored);
+        apply(current);
 
         // Desktop toggle
         const btn = document.getElementById('themeToggleBtn');
@@ -71,15 +145,33 @@ const ThemeManager = (function () {
         const btnMobile = document.getElementById('themeToggleBtnMobile');
         if (btnMobile) btnMobile.addEventListener('click', cycle);
 
-        // Settings radio buttons (if present)
-        document.querySelectorAll('[name="jhq-theme-radio"]').forEach(radio => {
-            radio.addEventListener('change', () => setTheme(radio.value));
-            radio.checked = radio.value === stored;
-        });
+        const form = document.getElementById('appearanceForm');
+        if (form) {
+            form.addEventListener('change', event => {
+                if (!['mode', 'palette'].includes(event.target.name)) return;
+                apply({ ...current, [event.target.name]: event.target.value });
+                showStatus('Preview only. Save appearance to keep this choice across devices.');
+            });
+            form.addEventListener('submit', event => {
+                event.preventDefault();
+                persist({ ...current });
+            });
+            const reset = document.getElementById('appearanceReset');
+            reset.classList.remove('d-none');
+            reset.addEventListener('click', () => {
+                apply(saved);
+                showStatus('Preview reset to your saved appearance.');
+            });
+        }
 
         // Listen for system preference changes (auto mode)
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-            if (getStored() === THEMES.AUTO) apply(THEMES.AUTO);
+            if (getStored() === THEMES.AUTO) apply(current);
+        });
+        window.addEventListener('storage', event => {
+            if (config.account || (event.key !== STORAGE_KEY && event.key !== null)) return;
+            const mode = event.newValue || THEMES.LIGHT;
+            if (Object.values(THEMES).includes(mode)) apply({ ...current, mode });
         });
     }
 
@@ -108,16 +200,28 @@ async function savePersonalPreference(toggle, url, key, headers) {
 }
 
 // ── Chart.js Theme Integration ────────────────────────────────────────────────
+window.financeChartPalette = function () {
+    const styles = getComputedStyle(document.documentElement);
+    return Array.from({ length: 6 }, (_, index) => styles.getPropertyValue('--chart-' + (index + 1)).trim());
+};
+
 window.updateChartTheme = function (theme) {
     if (typeof Chart === 'undefined') return;
-    const isDark = theme === 'dark';
-    const textColor   = isDark ? '#8b949e' : '#475569';
-    const gridColor   = isDark ? '#30363d' : '#e2e8f0';
-    const bgColor     = isDark ? '#161b22' : '#ffffff';
+    const styles = getComputedStyle(document.documentElement);
+    const textColor = styles.getPropertyValue('--text-secondary').trim();
+    const gridColor = styles.getPropertyValue('--border-color').trim();
+    const bgColor = styles.getPropertyValue('--bg-surface').trim();
 
     Chart.defaults.color            = textColor;
     Chart.defaults.borderColor      = gridColor;
     Chart.defaults.backgroundColor  = bgColor;
+    Chart.defaults.font.family      = styles.getPropertyValue('--font').trim();
+    Chart.defaults.plugins.tooltip.backgroundColor = bgColor;
+    Chart.defaults.plugins.tooltip.titleColor = styles.getPropertyValue('--text-primary').trim();
+    Chart.defaults.plugins.tooltip.bodyColor = textColor;
+    Chart.defaults.plugins.tooltip.borderColor = gridColor;
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.animation = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 350 };
 
     if (Chart.defaults.scales) {
         ['x', 'y', 'r'].forEach(axis => {
@@ -130,6 +234,16 @@ window.updateChartTheme = function (theme) {
 
     // Update all existing chart instances
     Object.values(Chart.instances || {}).forEach(chart => {
+        const palette = window.financeChartPalette();
+        chart.data.datasets.forEach(dataset => {
+            if (dataset.financeColours) {
+                dataset.backgroundColor = chart.data.labels.map((_, index) => palette[index % palette.length]);
+                return;
+            }
+            if (!Number.isInteger(dataset.financeColour)) return;
+            dataset.borderColor = palette[dataset.financeColour % palette.length];
+            dataset.backgroundColor = dataset.borderColor + (dataset.financeAlpha || '');
+        });
         if (chart.options.scales) {
             Object.values(chart.options.scales).forEach(scale => {
                 if (scale.grid)  scale.grid.color  = gridColor;
@@ -142,9 +256,9 @@ window.updateChartTheme = function (theme) {
                 chart.options.plugins.legend.labels.color = textColor;
             }
             if (chart.options.plugins.tooltip) {
-                chart.options.plugins.tooltip.backgroundColor = isDark ? '#1c2128' : '#ffffff';
-                chart.options.plugins.tooltip.titleColor      = isDark ? '#e6edf3' : '#0f172a';
-                chart.options.plugins.tooltip.bodyColor       = isDark ? '#8b949e' : '#475569';
+                chart.options.plugins.tooltip.backgroundColor = bgColor;
+                chart.options.plugins.tooltip.titleColor      = styles.getPropertyValue('--text-primary').trim();
+                chart.options.plugins.tooltip.bodyColor       = textColor;
                 chart.options.plugins.tooltip.borderColor     = gridColor;
                 chart.options.plugins.tooltip.borderWidth     = 1;
             }
@@ -169,84 +283,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // ── Mobile navbar close-on-click-outside & link-click ────────────────────
-    const navCollapse = document.getElementById('navbarNav');
-    const toggler = document.querySelector('.navbar-toggler');
-
-    if (navCollapse && toggler) {
-        function isMobileNav() {
-            return window.getComputedStyle(toggler).display !== 'none';
-        }
-
-        function closeNav() {
-            if (navCollapse.classList.contains('show')) {
-                const bsCollapse = bootstrap.Collapse.getInstance(navCollapse) ||
-                    new bootstrap.Collapse(navCollapse, { toggle: false });
-                bsCollapse.hide();
-            }
-        }
-
-        // Close when clicking off the menu (outside navbar collapse and toggler)
-        document.addEventListener('click', function (event) {
-            if (!isMobileNav()) return;
-            if (!navCollapse.classList.contains('show')) return;
-
-            if (!navCollapse.contains(event.target) && !toggler.contains(event.target)) {
-                closeNav();
-                return;
-            }
-
-            const navLink = event.target.closest('a.nav-link:not(.dropdown-toggle), a.dropdown-item');
-            if (navLink && navCollapse.contains(navLink)) {
-                closeNav();
-            }
-        });
-
-        // Close on Escape key press
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape' && isMobileNav() && navCollapse.classList.contains('show')) {
-                closeNav();
-            }
-        });
-
-        // Clean up open dropdown menus and body state when the mobile navbar closes
-        navCollapse.addEventListener('hide.bs.collapse', function () {
-            document.body.classList.remove('mobile-nav-open');
-            navCollapse.querySelectorAll('.dropdown-toggle[aria-expanded="true"]').forEach(function (toggle) {
-                const bsDropdown = bootstrap.Dropdown.getInstance(toggle);
-                if (bsDropdown) {
-                    bsDropdown.hide();
-                } else {
-                    toggle.setAttribute('aria-expanded', 'false');
-                    toggle.classList.remove('show');
-                    const menu = toggle.nextElementSibling;
-                    if (menu && menu.classList.contains('dropdown-menu')) {
-                        menu.classList.remove('show');
-                    }
-                }
-            });
-        });
-
-        navCollapse.addEventListener('shown.bs.collapse', function () {
-            document.body.classList.add('mobile-nav-open');
-        });
-
-        navCollapse.addEventListener('hidden.bs.collapse', function () {
-            document.body.classList.remove('mobile-nav-open');
-        });
-
-        window.addEventListener('resize', function () {
-            if (!isMobileNav() && navCollapse.classList.contains('show')) {
-                const bsCollapse = bootstrap.Collapse.getInstance(navCollapse);
-                if (bsCollapse) {
-                    bsCollapse.hide();
-                } else {
-                    navCollapse.classList.remove('show');
-                }
-                document.body.classList.remove('mobile-nav-open');
-            }
-        });
-    }
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach(element => {
+        new bootstrap.Popover(element, { sanitize: false });
+    });
 });
 
 // Helper function to format currency

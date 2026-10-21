@@ -1,12 +1,11 @@
 {% extends "base.html" %}
+{% from 'shared/_ui.html' import page_header %}
 
 {% block title %}Net Worth Timeline - Family HQ{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-graph-up"></i> Net Worth Timeline</h1>
-        <div>
+<div class="container-fluid">
+    {% call page_header('Net Worth Timeline', 'Your bigger picture, from where you are now to where you want to be.', 'Build your future') %}
             {% if can_access_section('settings') %}
             <a class="btn btn-outline-secondary" href="{{ url_for('settings.module_settings', section='networth') }}">
                 <i class="bi bi-gear"></i> Timeline settings
@@ -21,8 +20,7 @@
             <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#snapshotModal">
                 <i class="bi bi-camera"></i> Save Snapshot
             </button>
-        </div>
-    </div>
+    {% endcall %}
     
     <!-- Year Navigation -->
     <div class="card mb-4">
@@ -85,7 +83,7 @@
             <h5 class="mb-0"><i class="bi bi-graph-up"></i> Net Worth Timeline</h5>
         </div>
         <div class="card-body">
-            <canvas id="networthChart" class="chart-canvas"></canvas>
+            <canvas id="networthChart" class="chart-canvas" role="img" aria-label="Net worth, liquid net worth, assets and liabilities over time. Monthly values are available in the table below."></canvas>
         </div>
     </div>
     
@@ -307,102 +305,6 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Set default date to today
-    const dateInput = document.getElementById('snapshot_date');
-    if (dateInput && !dateInput.value) {
-        const today = new Date().toISOString().split('T')[0];
-        dateInput.value = today;
-    }
-    
-    // Net Worth Timeline Chart
-    const ctx = document.getElementById('networthChart').getContext('2d');
-    const timelineData = {{ timeline | tojson }};
-    
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: timelineData.map(d => d.month_label),
-            datasets: [
-                {
-                    label: 'Total Net Worth',
-                    data: timelineData.map(d => d.net_worth),
-                    borderColor: 'rgb(40, 167, 69)',
-                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                    borderWidth: 3,
-                    fill: true,
-                    tension: 0.4
-                },
-                {
-                    label: 'Liquid Net Worth',
-                    data: timelineData.map(d => d.liquid_net_worth),
-                    borderColor: 'rgb(0, 123, 255)',
-                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                },
-                {
-                    label: 'Total Assets',
-                    data: timelineData.map(d => d.total_assets),
-                    borderColor: 'rgb(23, 162, 184)',
-                    borderWidth: 1,
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.4
-                },
-                {
-                    label: 'Total Liabilities',
-                    data: timelineData.map(d => d.total_liabilities),
-                    borderColor: 'rgb(220, 53, 69)',
-                    borderWidth: 1,
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.4
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
-            plugins: {
-                legend: {
-                    position: 'top',
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            label += '£' + context.parsed.y.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                            return label;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return '£' + value.toLocaleString('en-GB');
-                        }
-                    }
-                }
-            }
-        }
-    });
-});
-</script>
-
 <!-- Period Selection Modal -->
 <div class="modal fade" id="periodModal" tabindex="-1">
     <div class="modal-dialog">
@@ -486,4 +388,54 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const dateInput = document.getElementById('snapshot_date');
+    if (dateInput && !dateInput.value) {
+        const now = new Date();
+        dateInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    }
+    const timeline = {{ timeline|tojson }};
+    const palette = financeChartPalette();
+    const series = [
+        { label: 'Total Net Worth', key: 'net_worth', colour: 0, fill: true, width: 3 },
+        { label: 'Liquid Net Worth', key: 'liquid_net_worth', colour: 1, fill: true, width: 2 },
+        { label: 'Total Assets', key: 'total_assets', colour: 2, fill: false, width: 1 },
+        { label: 'Total Liabilities', key: 'total_liabilities', colour: 4, fill: false, width: 1 },
+    ];
+    new Chart(document.getElementById('networthChart'), {
+        type: 'line',
+        data: {
+            labels: timeline.map(point => point.month_label),
+            datasets: series.map(item => ({
+                label: item.label,
+                data: timeline.map(point => point[item.key]),
+                borderColor: palette[item.colour],
+                backgroundColor: palette[item.colour] + '1a',
+                financeColour: item.colour,
+                financeAlpha: '1a',
+                borderWidth: item.width,
+                borderDash: item.fill ? [] : [5, 5],
+                fill: item.fill,
+                tension: .35,
+                pointRadius: 2,
+            })),
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, padding: 18 } },
+                tooltip: { callbacks: { label: context => context.dataset.label + ': ' + formatCurrency(context.parsed.y) } },
+            },
+            scales: { y: { beginAtZero: true, ticks: { callback: value => formatCurrency(value) } } },
+        },
+    });
+});
+</script>
 {% endblock %}
