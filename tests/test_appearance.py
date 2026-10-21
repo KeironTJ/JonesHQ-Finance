@@ -1,5 +1,5 @@
 import pytest
-from flask import g
+from flask import g, has_request_context, render_template_string
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
@@ -14,6 +14,17 @@ def client_for(app, user):
     client = app.test_client()
     login_client(client, user.id)
     return client
+
+
+def test_appearance_context_without_request_uses_defaults(app, user):
+    user.preferences = {'appearance.palette': 'purple', 'appearance.mode': 'dark'}
+    db.session.commit()
+    assert not has_request_context()
+
+    rendered = render_template_string('{{ appearance.palette }}:{{ appearance.mode }}')
+
+    assert rendered == 'blue:light'
+    assert user.preferences == {'appearance.palette': 'purple', 'appearance.mode': 'dark'}
 
 
 @pytest.mark.parametrize('palette', PreferenceService.PALETTES)

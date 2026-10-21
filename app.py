@@ -2,7 +2,7 @@ import os
 import logging
 import click
 from logging.handlers import RotatingFileHandler
-from flask import Flask
+from flask import Flask, has_request_context
 from flask_wtf.csrf import CSRFError
 from config import config
 from extensions import db, migrate, login_manager, csrf, limiter
@@ -208,7 +208,11 @@ def create_app(config_name=None):
             timedelta=timedelta,
             can_access_section=can_access_section,
             site_settings_banner=_site_settings_banner,
-            appearance=PreferenceService.appearance_for(current_user),
+            appearance=(
+                PreferenceService.appearance_for(current_user)
+                if has_request_context()
+                else PreferenceService.APPEARANCE_DEFAULTS.copy()
+            ),
             appearance_palettes=PreferenceService.PALETTES,
         )
 

@@ -84,6 +84,8 @@ def test_vehicle_rejects_fuel_account_from_another_family_on_update(
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     vehicle = VehicleService.create_vehicle({
         'name': 'Family Car',
+        'make': 'Test',
+        'model': 'Runner',
         'registration': 'AB12 CDE',
         'fuel_account_id': '',
     })
