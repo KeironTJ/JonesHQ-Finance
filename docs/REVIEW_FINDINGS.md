@@ -79,8 +79,8 @@ creation of a new recovery database via the local `postgres` administrator.
 [The updater](../deployment/quick_update.sh) snapshots code identity, environment,
 virtual environment and recovery helpers. Before public startup, failures restore
 the old code/dependencies; once migrations start, a confirmed dump is restored
-into a new database without modifying the failed one. A private Unix-socket probe
-tests candidate startup before public traffic can resume.
+into a new database without modifying the failed one. A private loopback-only
+probe tests candidate startup before public traffic can resume.
 
 Automatic restore is deliberately disabled once public startup is attempted:
 writes may have resumed. Failed recovery, interruption that bypasses shell traps,
@@ -138,28 +138,31 @@ distinct purchase-vs-reimbursement semantics.
 privacy scoping, and regression coverage for all existing callers; do not add
 compatibility wrappers that only preserve a retired API.
 
-### F-008: Private startup probe raced Unix-socket creation
+### F-008: Private startup probe failed its proxy guard
 
 **Priority:** High (update reliability). **Status:** Resolved in code; awaiting
 the operator's next production update.
 
-Three production updates passed tests and migrations but immediately failed the
-private probe with curl exit 7. Automatic recovery restored the previous code
-and a new database each time; the operator confirmed the recovered app was
-active and returned HTTP 200 from `/healthz`. No candidate-startup journal
-entries were available.
+Three production updates passed tests and migrations but failed the private
+probe and automatically recovered to the prior code and a new database each
+time. The first three attempts failed with curl exit 7 because `systemd-run`
+returns before Gunicorn creates its listener. A bounded readiness retry fixed
+that race, but the next attempt returned HTTP 403, exposing a second issue:
+Unix-domain-socket requests do not provide the loopback IP that the proxy guard
+explicitly permits. The recovered app remained active and returned HTTP 200
+from `/healthz`.
 
-`systemd-run` returns before Gunicorn creates its Unix socket. Curl's
-`--retry-connrefused` does not reliably retry a missing socket, so an expected
-startup delay triggered recovery. The updater now polls health explicitly for
-at most 30 attempts, with a two-second limit per request and one-second gaps.
-Startup output is written to a private recovery-directory log rather than
-depending on transient-unit journal retention.
+The updater now runs the probe on an ephemeral TCP port bound only to
+`127.0.0.1`, which the existing middleware allows without trusting forwarded
+headers. It polls health for at most 30 attempts, with a two-second request
+limit and one-second gaps. Startup output is written to a private recovery-
+directory log rather than depending on transient-unit journal retention.
 
-Delayed-socket regressions reproduced the immediate rollback before the fix.
-They now verify successful startup without recovery, bounded failure, retained
-diagnostics and unchanged safe recovery. A Linux-only test exercises real curl
-against a delayed Unix listener. See the [runbook](../deployment/README.md#installing-a-fix-to-the-updater-itself)
+Delayed-listener regressions verify successful startup without recovery,
+bounded failure, retained diagnostics, and the real proxy guard accepting the
+loopback probe. Existing proxy tests continue to reject non-loopback, untrusted
+direct clients. The focused updater/recovery/proxy suite passes (**53 passed**).
+See the [runbook](../deployment/README.md#installing-a-fix-to-the-updater-itself)
 for adopting the fixed script without losing the currently serving rollback
 commit. The runbook's ad-hoc backup command now reads the configured active
 database instead of assuming the original pre-recovery database name.

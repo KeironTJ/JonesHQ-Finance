@@ -21,6 +21,8 @@ RECOVERY_MARKER="$BACKUP_DIR/postgres-update-incomplete"
 LOCK_FILE="/var/lock/joneshq-quick-update.lock"
 HEALTH_URL="http://127.0.0.1:8000/healthz"
 PROBE_UNIT="joneshq-update-probe"
+PROBE_PORT=""
+PROBE_URL=""
 BACKUP_FILE=""
 PREV_COMMIT=""
 PG_MAINTENANCE=0
@@ -37,7 +39,7 @@ wait_for_probe() {
     local attempt
     for attempt in {1..30}; do
         if curl --fail --silent --show-error --max-time 2 \
-            --unix-socket "$RECOVERY_DIR/probe.sock" http://localhost/healthz \
+            --noproxy '*' "$PROBE_URL" \
             >/dev/null 2>"$RECOVERY_DIR/probe-health-error.log"; then
             return 0
         fi
@@ -226,8 +228,15 @@ if ! sudo -u $APP_USER bash -c "cd $APP_DIR && venv/bin/python deployment/migrat
     exit 1
 fi
 
-echo "Step 6: Checking the candidate on a private Unix socket (no public writes)..."
+echo "Step 6: Checking the candidate on a private loopback port (no public writes)..."
 PROBE_STARTED=1
+PROBE_PORT=$("$APP_DIR/venv/bin/python" -c \
+    'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+if [[ ! "$PROBE_PORT" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: Could not allocate a private loopback probe port."
+    exit 1
+fi
+PROBE_URL="http://127.0.0.1:$PROBE_PORT/healthz"
 systemd-run --unit="$PROBE_UNIT" --collect \
     --property="User=$APP_USER" --property="Group=$APP_USER" \
     --property="WorkingDirectory=$APP_DIR" \
@@ -235,7 +244,7 @@ systemd-run --unit="$PROBE_UNIT" --collect \
     --property="StandardOutput=append:$RECOVERY_DIR/probe.log" \
     --property="StandardError=inherit" \
     "$APP_DIR/venv/bin/gunicorn" --workers 1 --timeout 60 \
-    --bind "unix:$RECOVERY_DIR/probe.sock" 'app:create_app()'
+    --bind "127.0.0.1:$PROBE_PORT" 'app:create_app()'
 wait_for_probe
 systemctl stop "$PROBE_UNIT"
 

@@ -174,6 +174,10 @@ for helper in postgres_update_recovery postgres_update_backup check_production_c
 done
 cat > "$TEST_ROOT/app/venv/bin/python" <<'PYTHON'
 #!/bin/bash
+if [ "$1" = "-c" ]; then
+    printf '49152\n'
+    exit 0
+fi
 printf 'recover-db\n' >> "$TEST_ROOT/events"
 [ "$RECOVERY_FAILURE" != database ]
 PYTHON
@@ -210,11 +214,11 @@ systemd-run() {
 }
 PROBE_ATTEMPTS=0
 curl() {
-    if [[ "$*" = *--unix-socket* ]]; then
+    if [[ "$*" = *"127.0.0.1:$PROBE_PORT/healthz"* ]]; then
         event probe-health
         PROBE_ATTEMPTS=$((PROBE_ATTEMPTS + 1))
         if [ "$FAILURE" = probe ] || [ "$PROBE_ATTEMPTS" -le "$PROBE_FAILURES" ]; then
-            printf 'curl: (7) Unix socket is not ready\n' >&2
+            printf 'curl: (7) Loopback listener is not ready\n' >&2
             return 7
         fi
         return
@@ -269,6 +273,7 @@ source "$TEST_ROOT/update.sh"
     env['MAINTENANCE_INSTALLED'] = 'yes' if maintenance_installed else 'no'
     env['TIMER_ACTIVE'] = 'yes' if timer_active else 'no'
     env['PROBE_FAILURES'] = str(probe_failures)
+    env['PROBE_PORT'] = '49152'
     result = subprocess.run(
         [executable, str(path)], env=env, capture_output=True, text=True,
     )
@@ -278,7 +283,7 @@ source "$TEST_ROOT/update.sh"
 
 
 @pytest.mark.parametrize('probe_failures', [1, 3])
-def test_probe_waits_for_delayed_unix_socket(tmp_path, probe_failures):
+def test_probe_waits_for_delayed_loopback_listener(tmp_path, probe_failures):
     result, events = run_updater(tmp_path, '', probe_failures=probe_failures)
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -290,6 +295,8 @@ def test_probe_waits_for_delayed_unix_socket(tmp_path, probe_failures):
     assert '--property=StandardOutput=append:' in options
     assert '/probe.log' in options
     assert '--property=StandardError=inherit' in options
+    assert '127.0.0.1:49152' in options
+    assert 'unix:' not in options
 
 
 def test_probe_exhaustion_is_bounded_and_reports_private_diagnostics(tmp_path):
@@ -300,58 +307,61 @@ def test_probe_exhaustion_is_bounded_and_reports_private_diagnostics(tmp_path):
     assert 'Candidate did not become healthy after 30 attempts' in result.stdout
     recovery = next((tmp_path / 'backups').glob('postgres-update-*'))
     assert str(recovery.name) + '/probe.log' in result.stdout
-    assert 'Unix socket is not ready' in (recovery / 'probe-health-error.log').read_text()
+    assert 'Loopback listener is not ready' in (recovery / 'probe-health-error.log').read_text()
     assert 'Automatic recovery completed' in result.stdout
 
 
-@pytest.mark.skipif(os.name == 'nt', reason='Real curl Unix sockets require Linux CI.')
-def test_probe_readiness_with_real_curl_and_delayed_unix_listener():
-    from http.server import BaseHTTPRequestHandler
-    from socketserver import UnixStreamServer
-    from tempfile import TemporaryDirectory
+def test_probe_readiness_with_real_curl_and_proxy_guard(tmp_path):
+    import socket
     from threading import Thread
     from time import sleep
 
+    from flask import Flask, jsonify
+    from werkzeug.serving import make_server
+
+    from utils.proxy_guard import wrap_wsgi_app
+
     if not shutil.which('curl'):
-        pytest.skip('curl is required for the real Unix-socket readiness test.')
+        pytest.skip('curl is required for the real loopback readiness test.')
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            assert self.path == '/healthz'
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b'{"status":"ok"}')
+    app = Flask(__name__)
+    app.config.update(TRUSTED_PROXY_COUNT=1, TRUSTED_PROXY_IPS='192.168.1.233')
 
-        def log_message(self, *_args):
-            pass
+    @app.route('/healthz')
+    def health():
+        return jsonify(status='ok')
+
+    wrap_wsgi_app(app)
+
+    with socket.socket() as reservation:
+        reservation.bind(('127.0.0.1', 0))
+        port = reservation.getsockname()[1]
 
     source = (Path(__file__).resolve().parents[1] / 'deployment' / 'quick_update.sh').read_text()
     prefix = source.split('recover_update() {', 1)[0]
-    # Keep the socket path short enough for AF_UNIX's platform length limit.
-    with TemporaryDirectory(prefix='joneshq-probe-') as directory:
-        socket_path = Path(directory) / 'probe.sock'
-        with UnixStreamServer(str(socket_path), Handler, bind_and_activate=False) as server:
-            server.timeout = 5
 
-            def start_delayed_listener():
-                sleep(0.5)
-                server.server_bind()
-                server.server_activate()
-                server.handle_request()
+    def start_delayed_listener():
+        sleep(0.5)
+        with make_server('127.0.0.1', port, app, threaded=True) as server:
+            server.handle_request()
 
-            listener = Thread(target=start_delayed_listener)
-            listener.start()
-            try:
-                env = os.environ.copy()
-                env['PROBE_TEST_ROOT'] = directory
-                result = subprocess.run(
-                    [bash_executable(), '-c', prefix + '\nRECOVERY_DIR="$PROBE_TEST_ROOT"\nwait_for_probe\n'],
-                    env=env, capture_output=True, text=True, timeout=15,
-                )
-                assert result.returncode == 0, result.stdout + result.stderr
-            finally:
-                listener.join(timeout=10)
-            assert not listener.is_alive()
+    listener = Thread(target=start_delayed_listener)
+    listener.start()
+    try:
+        env = os.environ.copy()
+        env['PROBE_TEST_ROOT'] = str(tmp_path)
+        env['TEST_PROBE_URL'] = f'http://127.0.0.1:{port}/healthz'
+        result = subprocess.run(
+            [
+                bash_executable(), '-c',
+                prefix + '\nRECOVERY_DIR="$PROBE_TEST_ROOT"\nPROBE_URL="$TEST_PROBE_URL"\nwait_for_probe\n',
+            ],
+            env=env, capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+    finally:
+        listener.join(timeout=10)
+    assert not listener.is_alive()
 
 
 @pytest.mark.parametrize('failure', [

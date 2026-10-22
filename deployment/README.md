@@ -49,9 +49,11 @@ On PostgreSQL the updater:
 3. Pulls code, installs `requirements.txt` and `requirements-postgres.txt`,
    checks production configuration and runs the test suite.
 4. Runs migrations against the database in `.env.production`. Starts a temporary
-   Gunicorn probe on a private Unix socket and checks `/healthz` before any public
-   app process is started. Readiness allows 30 attempts, each limited to two
-   seconds, with a one-second gap; a socket that has not appeared yet is retried.
+   Gunicorn probe bound to an ephemeral `127.0.0.1` port and checks `/healthz`
+   before any public app process is started. This uses the proxy guard's explicit
+   loopback allowance without exposing the probe to the LAN. Readiness allows
+   30 attempts, each limited to two seconds, with a one-second gap; a listener
+   that has not appeared yet is retried.
    Probe stdout/stderr is saved privately to `probe.log` in the recovery directory,
    with the final failed curl diagnostic in `probe-health-error.log`. These logs
    remain available even when the transient unit or its journal entries are gone.
