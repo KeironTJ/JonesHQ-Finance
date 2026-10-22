@@ -40,7 +40,7 @@ they do not prove backend compatibility for application workflows.
 
 The [CI workflow](../.github/workflows/tests.yml) now has a separate PostgreSQL 17
 service and application job. It runs household isolation (including route sweeps),
-credit-card and expense writes, payday and balance calculations, decimal/FK
+credit-card, expense and income/forecast writes, payday and balance calculations, decimal/FK
 checks, the current release migration upgrade/downgrade, and a real dump/restore
 that verifies records, sequences and preservation of the failed database.
 The SQLite job still runs the full suite. The historical migration chain assumes
@@ -148,6 +148,10 @@ compatibility wrappers that only preserve a retired API.
   forecast-service extraction: **115 passed**, plus two maintenance-CLI
   dispatch regressions. Full local SQLite suite after the extraction:
   **1,123 passed, 3 skipped**, with 15 warnings.
+- Both CI jobs passed for forecast extraction commit `1176a0d` in
+  [CI run 39763724097](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39763724097).
+  The expanded PostgreSQL 17 job passed **154 tests**, including the migrated
+  income/forecast tests and new shared-helper/CLI regressions.
 - Pylance resolved forecast callers across the app CLI, income routes, source
   workflows, projection service and tests. An AST comparison verified that the
   moved methods differ only in service references and uncommitted balance-service
