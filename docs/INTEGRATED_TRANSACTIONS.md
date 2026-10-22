@@ -19,7 +19,7 @@ triggers a database cascade.
 
 Relevant service methods include:
 
-- `CreditCardService.generate_payment_transaction()` to create a card payment
+- `CreditCardStatementService.generate_payment_transaction()` to create a card payment
   and its bank-side transaction.
 - `CreditCardService.sync_bank_transaction_to_payment()` to propagate bank-side
   edits to a linked card payment.
@@ -28,7 +28,9 @@ Relevant service methods include:
 
 The routes also support payment editing, paid/fixed toggles, manual
 transactions, balance transfers, and future statement/payment regeneration.
-See `blueprints/credit_cards/routes.py` for the current route list.
+Statement generation and regeneration are owned by
+`CreditCardStatementService`; see `blueprints/credit_cards/routes.py` for the
+current route list.
 
 ## Other Linked Workflows
 

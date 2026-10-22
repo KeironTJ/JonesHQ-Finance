@@ -294,12 +294,17 @@ credit-card guide.
 ## Technical Notes
 
 ### Service Layer Pattern
-All business logic is isolated in `services/finance/credit_card_service.py`:
+Card CRUD, manual transactions, and payment/bank synchronization live in
+`services/finance/credit_card_service.py`. Statement lifecycle and interest
+calculation live in `services/finance/credit_card_statement_service.py`:
 - `calculate_interest()` - Interest calculation with 0% override
 - `generate_statement_interest()` - Create interest transaction
 - `generate_payment_transaction()` - Create payment transaction
 - `regenerate_future_transactions()` / `regenerate_all_future_transactions()` - Replace
   unlocked future statement chains for one card or all active cards
+
+Both services use the shared vendor lookup helpers in
+`services/finance/credit_card_helpers.py`.
 
 **Benefits:**
 - Easy to test

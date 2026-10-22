@@ -21,6 +21,7 @@ from models.transactions import Transaction
 from models.expenses import Expense
 from models.family import Family
 from services.finance.credit_card_service import CreditCardService
+from services.finance.credit_card_statement_service import CreditCardStatementService
 
 
 # ---------------------------------------------------------------------------
@@ -96,13 +97,13 @@ def _add_purchase(card, amount, txn_date, family_id):
 
 
 # ---------------------------------------------------------------------------
-# CreditCardService.calculate_interest
+# CreditCardStatementService.calculate_interest
 # ---------------------------------------------------------------------------
 
 class TestCalculateInterest:
     def test_calculates_monthly_interest_correctly(self, app, card, patch_family):
         # 2% monthly on £1000 debt = £20
-        result = CreditCardService.calculate_interest(
+        result = CreditCardStatementService.calculate_interest(
             card.id, date(2026, 2, 15), balance_to_use=-1000.0
         )
         assert result == pytest.approx(20.0)
@@ -110,20 +111,20 @@ class TestCalculateInterest:
     def test_returns_zero_during_zero_percent_promo(self, app, card, patch_family):
         card.purchase_0_percent_until = date(2026, 12, 31)
         db.session.commit()
-        result = CreditCardService.calculate_interest(
+        result = CreditCardStatementService.calculate_interest(
             card.id, date(2026, 6, 15), balance_to_use=-1000.0
         )
         assert result == 0.0
 
     def test_returns_zero_for_zero_balance(self, app, card, patch_family):
-        result = CreditCardService.calculate_interest(
+        result = CreditCardStatementService.calculate_interest(
             card.id, date(2026, 2, 15), balance_to_use=0.0
         )
         assert result == 0.0
 
 
 # ---------------------------------------------------------------------------
-# CreditCardService.generate_monthly_statement
+# CreditCardStatementService.generate_monthly_statement
 # ---------------------------------------------------------------------------
 
 class TestGenerateMonthlyStatement:
@@ -132,7 +133,7 @@ class TestGenerateMonthlyStatement:
     ):
         _add_purchase(card, Decimal('-500.00'), date(2026, 2, 1), family_id)
 
-        result = CreditCardService.generate_monthly_statement(card.id, date(2026, 2, 15))
+        result = CreditCardStatementService.generate_monthly_statement(card.id, date(2026, 2, 15))
 
         assert result['interest_txn'] is not None, "Expected an interest transaction"
         assert result['payment_txn'] is not None, "Expected a payment transaction"
@@ -152,7 +153,7 @@ class TestGenerateMonthlyStatement:
         db.session.commit()
         _add_purchase(card, Decimal('-500.00'), date(2026, 2, 1), family_id)
 
-        result = CreditCardService.generate_monthly_statement(card.id, date(2026, 2, 15))
+        result = CreditCardStatementService.generate_monthly_statement(card.id, date(2026, 2, 15))
 
         assert result['interest_txn'] is not None, \
             "A statement transaction should still be created during 0% period"
@@ -162,7 +163,7 @@ class TestGenerateMonthlyStatement:
             "Transaction should be flagged as promotional rate"
 
     def test_no_payment_when_card_has_zero_balance(self, app, card, patch_family):
-        result = CreditCardService.generate_monthly_statement(card.id, date(2026, 2, 15))
+        result = CreditCardStatementService.generate_monthly_statement(card.id, date(2026, 2, 15))
 
         assert result['interest_txn'] is None
         assert result['payment_txn'] is None
@@ -174,10 +175,82 @@ class TestGenerateMonthlyStatement:
         # Debt is only £50 — set_payment is £200, so payment should be capped at £50
         _add_purchase(card, Decimal('-50.00'), date(2026, 2, 1), family_id)
 
-        result = CreditCardService.generate_monthly_statement(card.id, date(2026, 2, 15))
+        result = CreditCardStatementService.generate_monthly_statement(card.id, date(2026, 2, 15))
 
         assert result['payment_txn'] is not None
         assert float(result['payment_txn'].amount) <= 51.0  # at most balance + interest
+
+
+def test_regeneration_replaces_unlocked_chain_and_preserves_locked_statement(
+    app, card, family_id, patch_family, monkeypatch
+):
+    account = Account(
+        family_id=family_id,
+        name='Current',
+        account_type='Joint',
+        balance=0,
+        is_active=True,
+    )
+    db.session.add(account)
+    db.session.flush()
+    card.default_payment_account_id = account.id
+    db.session.commit()
+    monkeypatch.setattr(
+        'services.finance.credit_card_statement_service.PaydayService.get_period_for_date',
+        lambda value: value.strftime('%Y-%m'),
+    )
+    _add_purchase(card, Decimal('-500.00'), date(2026, 2, 1), family_id)
+
+    february = CreditCardStatementService.generate_monthly_statement(
+        card.id, date(2026, 2, 15)
+    )
+    march = CreditCardStatementService.generate_monthly_statement(
+        card.id, date(2026, 3, 15)
+    )
+    february_statement_id = february['interest_txn'].id
+    february_payment_id = february['payment_txn'].id
+    february_bank_transaction_id = february['payment_txn'].bank_transaction_id
+    march_statement_id = march['interest_txn'].id
+    march['interest_txn'].is_fixed = True
+    db.session.commit()
+
+    result = CreditCardStatementService.regenerate_future_transactions(
+        card.id,
+        start_date=date(2026, 2, 15),
+        end_date=date(2026, 3, 15),
+    )
+
+    assert result == {
+        'deleted_count': 3,
+        'statements_created': 1,
+        'payments_created': 1,
+    }
+    assert db.session.get(CreditCardTransaction, february_statement_id) is None
+    assert db.session.get(CreditCardTransaction, february_payment_id) is None
+    assert db.session.get(Transaction, february_bank_transaction_id) is None
+    assert db.session.get(CreditCardTransaction, march_statement_id).is_fixed is True
+    replacement = db.session.query(CreditCardTransaction).filter_by(
+        credit_card_id=card.id,
+        date=date(2026, 2, 15),
+        transaction_type='Interest',
+    ).one()
+    assert replacement.id != february_statement_id
+
+
+def test_regenerate_all_future_transactions_aggregates_active_cards(
+    app, card, family_id, patch_family
+):
+    _add_purchase(card, Decimal('-300.00'), date(2026, 2, 1), family_id)
+
+    result = CreditCardStatementService.regenerate_all_future_transactions(
+        start_date=date(2026, 2, 15),
+        end_date=date(2026, 2, 15),
+    )
+
+    assert result['cards_processed'] == 1
+    assert result['total_statements'] == 1
+    assert result['total_payments'] == 1
+    assert result['total_deleted'] == 0
 
 
 def test_toggle_transaction_fixed_updates_service_owned_state(
@@ -608,7 +681,7 @@ def test_private_credit_card_and_statement_hidden_but_shared_payment_txn_stays_v
     assert private_card.is_private is True
     assert account.owner_id is None  # the account itself stays shared
 
-    payment_txn = CreditCardService.generate_payment_transaction(
+    payment_txn = CreditCardStatementService.generate_payment_transaction(
         private_card.id, date(2026, 2, 15)
     )
     bank_transaction = db.session.get(Transaction, payment_txn.bank_transaction_id)

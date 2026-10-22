@@ -12,6 +12,7 @@ from models.vendors import Vendor
 from models.settings import Settings
 from models.plans import PlanItem
 from services.finance.credit_card_service import CreditCardService
+from services.finance.credit_card_statement_service import CreditCardStatementService
 from services.finance.balance_service import BalanceService
 from services.finance.payday_service import PaydayService
 from services.planning.plan_link_service import PlanLinkService
@@ -554,7 +555,7 @@ def generate_future(id):
             end_date = start_date + relativedelta(years=default_years)
         
         # Use regenerate to delete non-fixed and recreate
-        results = CreditCardService.regenerate_future_transactions(
+        results = CreditCardStatementService.regenerate_future_transactions(
             id, start_date, end_date, payment_offset_days=payment_offset
         )
         
@@ -587,7 +588,7 @@ def generate_all_future():
             end_date = date.today() + relativedelta(years=default_years)
         
         # Use regenerate to delete non-fixed and recreate
-        results = CreditCardService.regenerate_all_future_transactions(
+        results = CreditCardStatementService.regenerate_all_future_transactions(
             end_date=end_date,
             payment_offset_days=payment_offset
         )

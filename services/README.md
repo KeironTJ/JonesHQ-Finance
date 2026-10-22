@@ -64,6 +64,11 @@ delegate to the service to preserve existing callers.
 generation and maintenance. `IncomeService` continues to handle source and
 actual payslip records.
 
+`finance/credit_card_statement_service.py` owns card interest calculation,
+statement/payment generation, and future-chain regeneration.
+`CreditCardService` handles card records, transactions, and payment/bank sync.
+The shared vendor lookup helpers live in `finance/credit_card_helpers.py`.
+
 `platform/passkey_service.py` owns WebAuthn enrollment, one-time challenges,
 passwordless sign-in, recent identity confirmation, removal and server recovery.
 It uses `UserSessionService` for revocation and passkey-authenticated sessions;
