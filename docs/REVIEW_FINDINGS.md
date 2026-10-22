@@ -164,7 +164,9 @@ compatibility wrappers that only preserve a retired API.
   and the card/bank ID collision, single and bulk) all failed on the previous
   code under enforced foreign keys and pass after the fix. The transaction
   service and deletion tests now also run in the PostgreSQL CI job. Full local
-  SQLite suite: **1,130 passed, 3 skipped**.
+  SQLite suite: **1,130 passed, 3 skipped**. Both CI jobs passed for commit
+  `6bf3b61` in [CI run 39765417373](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39765417373),
+  so the deletion fixes are also verified on PostgreSQL 17.
 - Pylance resolved forecast callers across the app CLI, income routes, source
   workflows, projection service and tests. An AST comparison verified that the
   moved methods differ only in service references and uncommitted balance-service
