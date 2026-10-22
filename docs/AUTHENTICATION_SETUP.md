@@ -1,8 +1,9 @@
 # Authentication setup and current limitations
 
-The application uses Flask-Login, Werkzeug password hashing, and Flask-WTF CSRF
-protection. This is a hardened password-login foundation, not a complete public
-financial-service identity system.
+The application supports password sign-in, optional authenticator-app
+two-factor login, WebAuthn passkeys, recovery codes, invite-based household
+registration, and revocable server-side sessions. These controls are not a
+substitute for an independent security audit.
 
 ## Local development
 
@@ -24,11 +25,10 @@ Deleting the file generates a new key on the next startup and invalidates existi
 login cookies. Unreadable or invalid key files cause startup to fail rather than
 silently signing everyone out.
 
-After this change, sign in once more and select **Remember Me** to stay signed in
-for up to seven days, including across server restarts. Without Remember Me,
-the usual 60-minute idle and 12-hour absolute limits apply (configurable with
-`SESSION_IDLE_MINUTES` and `SESSION_ABSOLUTE_HOURS`). Two-factor login, session
-revocation, and production authentication requirements are unchanged.
+Select **Remember Me** to stay signed in for up to seven days, including across
+server restarts. Without Remember Me, sessions expire after the configured idle
+and absolute limits (60 minutes and 12 hours by default). Session revocation and
+the other authentication controls are described below.
 
 ## Production prerequisites
 

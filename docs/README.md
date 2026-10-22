@@ -1,6 +1,6 @@
 # JonesHQ Finance Documentation
 
-Complete documentation for the FamilyHQ Finance personal finance management system.
+Complete documentation for the JonesHQ Finance personal finance management system.
 
 ## Documentation Index
 
@@ -10,13 +10,22 @@ Complete documentation for the FamilyHQ Finance personal finance management syst
 ### Technical Documentation
 - **[Design System](DESIGN_SYSTEM.md)** - Visual tokens, reusable templates, responsive shell and interaction patterns
 - **[Database Schema](DATABASE_SCHEMA.md)** - Complete database structure and relationships
+- **[Expense System](EXPENSE_SYSTEM.md)** - Expense and reimbursement workflows
+- **[Income and Pension System](INCOME_PENSION_SYSTEM.md)** - Income records, forecasts and retirement profiles
+- **[Integrated Transactions](INTEGRATED_TRANSACTIONS.md)** - Transaction and related-domain integration
 - **[Category Mapping](CATEGORY_MAPPING.md)** - Excel to database category mapping reference
 - **[Vendor System](VENDOR_SYSTEM.md)** - Vendor tracking and management implementation
 - **[Authentication Setup](AUTHENTICATION_SETUP.md)** - Users, families, permissions, and login setup
 - **[Security](SECURITY.md)** - Security controls and deployment expectations
+- **[Security Hardening](SECURITY_HARDENING.md)** - Security implementation and deployment controls
 - **[Transaction Editing](TRANSACTION_EDITING.md)** - Transaction editing behavior
-- **[Integrated Transactions](INTEGRATED_TRANSACTIONS.md)** - Transaction and related-domain integration
+- **[Monthly Balance Cache](MONTHLY_BALANCE_CACHE.md)** - Cached monthly account balances
+- **[Payday Tracking](PAYDAY_TRACKING.md)** - Payday periods and balance calculations
+- **[Payday Filtering Proposal](PAYDAY_FILTERING_PROPOSAL.md)** - Payday period filtering behavior
+- **[Pension Projections](PENSION_PROJECTIONS.md)** - Pension projection workflows
+- **[Retirement Planning](RETIREMENT_PLANNING.md)** - Retirement and net-worth planning
 - **[Subscriptions](SUBSCRIPTIONS.md)** - Managed recurring bank and credit-card charges
+- **[Branching Strategy](BRANCHING_STRATEGY.md)** - Repository branching guidance
 - **[Production Runbook](../deployment/README.md)** - Current production setup, updates, backups, recovery and monitoring (authoritative)
 - **[Deployment](DEPLOYMENT.md)** - Historical SQLite-era deployment guidance (do not follow for production)
 - **[Directory Structure](DIRECTORY_STRUCTURE.md)** - Current repository layout
@@ -47,12 +56,18 @@ JonesHQ Finance/
 │   ├── vendors/
 │   ├── auth/
 │   ├── family/
-│   └── ... (17 registered feature blueprints)
+│   ├── plans/
+│   ├── preferences/
+│   ├── settings/
+│   ├── site_admin/
+│   ├── onboarding/
+│   └── ... (21 registered blueprints)
 │
 ├── templates/           # Jinja2 templates
 │   ├── base.html
-│   ├── categories/
-│   ├── vendors/
+│   ├── shared/
+│   ├── transactions/
+│   ├── credit_cards/
 │   └── ...
 │
 ├── static/             # CSS, JS, and favicon
@@ -60,13 +75,17 @@ JonesHQ Finance/
 │   ├── js/
 │   └── favicon.svg
 │
-├── services/           # Business logic
-│   ├── income_service.py
-│   ├── loan_service.py
-│   └── ...
+├── services/           # Business logic grouped by domain
+│   ├── analytics/
+│   ├── finance/
+│   ├── household/
+│   ├── planning/
+│   ├── platform/
+│   └── vehicles/
 │
 ├── migrations/         # Database migrations
 │   └── versions/
+├── scripts/            # Database, import, check, and maintenance tools
 │
 ├── instance/          # Instance-specific files
 │   └── joneshq_finance.db  # SQLite database

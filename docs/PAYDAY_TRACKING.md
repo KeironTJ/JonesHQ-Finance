@@ -12,9 +12,8 @@ Unlike traditional monthly tracking (1st to 31st), payday periods run from your 
 - If your payday is the **1st**, January's period runs from **Jan 1st to Jan 31st**
 
 ### Weekend Adjustment
-If your payday falls on a weekend, the system automatically adjusts to the **previous working day**:
-- Saturday payday → Friday
-- Sunday payday → Friday
+If your payday falls on a weekend or an England and Wales bank holiday, the
+system adjusts it to the **previous working day**.
 
 ### Metrics Tracked
 
@@ -22,7 +21,7 @@ If your payday falls on a weekend, the system automatically adjusts to the **pre
 
 2. **MIN Balance**: The lowest balance point during the period - this is your "danger zone"
 
-3. **Max Extra Spend**: The difference between Rolling Balance and MIN Balance - this is how much you can safely spend without going below your minimum
+3. **Max Extra Spend**: The service's legacy metric name for the net balance change during the period (`Rolling Balance - Opening Balance`); it is not a safe-to-spend estimate
 
 4. **Opening Balance**: The balance at the start of the period
 
@@ -40,23 +39,11 @@ If your payday falls on a weekend, the system automatically adjusts to the **pre
 3. Choose your main bank account (typically "Joint" account)
 4. Click "Update"
 
-## Dashboard Display
+## Where Payday Periods Are Used
 
-The dashboard shows a comprehensive table with:
-- **12 months** of payday periods
-- Color-coded columns for easy reading:
-  - Blue: Rolling Balance (ending balance)
-  - Yellow: MIN Balance (lowest point)
-  - Teal: Max Extra Spend (safe to spend)
-- Date ranges for each period
-- Opening balance for context
-
-### Summary Cards
-
-Three prominent cards show current period metrics:
-1. **Current Period Ending Balance** (Blue) - Where you'll be at end of period
-2. **Current Period Minimum** (Yellow) - Lowest point this period
-3. **Safe Extra Spend** (Teal) - How much extra you can safely spend
+Payday periods are available as a transaction filter and are used by category,
+vendor, and other finance views for period-based analysis. The payday summary
+service can also calculate period balances and summaries.
 
 ## Example
 
@@ -67,19 +54,21 @@ Period: 2026-01 (Jan 15 - Feb 14)
 Opening Balance: £500.00
 Rolling Balance: £739.69
 MIN Balance: £561.14
-Max Extra Spend: £178.54
+Max Extra Spend: £239.69
 ```
 
 **Interpretation:**
 - You started this period with £500
 - By Feb 14th, you'll have £739.69 (if all transactions clear)
 - Your lowest point will be £561.14 (perhaps before your next income)
-- You can safely spend an extra £178.54 without dipping below your minimum
+- The period's ending balance is £239.69 higher than its opening balance. This metric is not a spending recommendation.
 
 ## Technical Details
 
 ### Including Unpaid Transactions
-The system includes **both paid and unpaid** transactions in calculations. This gives you a forward-looking view of your finances, showing where you'll be after all scheduled transactions clear.
+Payday balance calculations include **both paid and unpaid** transactions.
+Although some service methods retain an `include_unpaid` parameter for
+compatibility, it is currently ignored by those calculations.
 
 ### Calculation Logic
 ```python
@@ -88,7 +77,7 @@ The system includes **both paid and unpaid** transactions in calculations. This 
 2. Process all transactions in chronological order
 3. Track running balance and record minimum
 4. Final balance = Rolling Balance
-5. Max Extra Spend = Rolling Balance - MIN Balance
+5. Max Extra Spend = Rolling Balance - Opening Balance
 ```
 
 ### Database
@@ -100,14 +89,13 @@ The system includes **both paid and unpaid** transactions in calculations. This 
 ## Files Modified
 
 ### New Files
-- `services/payday_service.py` - Core payday calculation logic
+- `services/finance/payday_service.py` - Core payday calculation logic
 - `scripts/maintenance/init_payday_setting.py` - Initialization script
 
 ### Modified Files
-- `blueprints/dashboard/routes.py` - Dashboard data loading
-- `blueprints/settings/routes.py` - Settings management
-- `templates/dashboard/index.html` - Dashboard UI
-- `templates/settings/index.html` - Settings UI
+- `blueprints/transactions/routes.py` - Transaction payday-period filtering
+- `blueprints/categories/routes.py` - Payday-period analytics
+- `blueprints/vendors/routes.py` - Payday-period analytics
 
 ## API Reference
 

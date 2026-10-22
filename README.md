@@ -1,6 +1,8 @@
-# Family HQ
+# JonesHQ Finance
 
-A comprehensive personal finance management web application built with Flask, designed to track accounts, budgets, loans, vehicles, childcare, pensions, mortgages, and net worth.
+A household finance management web application built with Flask, designed to
+track accounts, transactions, income, expenses, loans, vehicles, childcare,
+pensions, mortgages, subscriptions, and net worth.
 
 ## Documentation
 
@@ -110,17 +112,24 @@ Family HQ/
 │   ├── vehicles.py
 │   └── ...
 ├── services/              # Business logic and domain workflows
+│   ├── analytics/
 │   ├── finance/
-│   ├── planning/
 │   ├── household/
-│   └── ...
+│   ├── planning/
+│   ├── platform/
+│   └── vehicles/
 ├── blueprints/            # Route blueprints
 │   ├── dashboard/
 │   ├── accounts/
 │   ├── transactions/
+│   ├── credit_cards/
+│   ├── expenses/
+│   ├── income/
+│   ├── plans/
 │   └── ...
 ├── templates/             # HTML templates
 │   ├── base.html
+│   ├── shared/
 │   └── ...
 ├── static/                # Static assets
 │   ├── css/
@@ -160,36 +169,10 @@ flask db downgrade
 
 ## Migration from Excel
 
-To migrate data from your existing Excel spreadsheets:
-
-1. Create import scripts in a `scripts/` directory
-2. Read Excel data using `pandas` or `openpyxl`
-3. Map Excel columns to database fields
-4. Insert data using SQLAlchemy models
-5. Validate imported data
-
-Example:
-```python
-import pandas as pd
-from app import create_app
-from models import Transaction, Category
-
-app = create_app()
-with app.app_context():
-    # Read Excel
-    df = pd.read_excel('your_excel_file.xlsx', sheet_name='JOINTACCOUNT')
-    
-    # Process and insert
-    for _, row in df.iterrows():
-        transaction = Transaction(
-            transaction_date=row['Date'],
-            amount=row['Budget'],
-            # ... map other fields
-        )
-        db.session.add(transaction)
-    
-    db.session.commit()
-```
+Import and maintenance scripts are organized under `scripts/imports/` and
+`scripts/maintenance/`. Reuse the existing import workflows where applicable.
+New data imports must preserve household scoping and use the relevant service
+logic rather than inserting finance records without an explicit `family_id`.
 
 ## Technologies Used
 

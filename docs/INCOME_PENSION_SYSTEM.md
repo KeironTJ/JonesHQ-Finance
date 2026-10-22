@@ -254,41 +254,13 @@ summary = IncomeService.get_income_summary(person='Keiron', year=2024)
 ### 3. Pension Snapshots → Net Worth
 - Pension current values shown in Net Worth "Assets"
 - Growth tracking shows performance over time
-- Ready for future growth projection modeling
+- Pension projections and retirement summaries are available through the pension workflows.
 
-## Next Steps: Implementation
+## Data Import
 
-### Phase 1: Database Migration
-```python
-# Create migration for new fields
-flask db revision -m "Add person field to income and pensions"
-flask db upgrade
-```
-
-### Phase 2: Create Income Blueprint
-Create `blueprints/income/` with:
-- `routes.py`: List, add, edit, delete income records
-- Template for income entry form
-- Template for income history/summary
-
-### Phase 3: Create Import Script
-Based on your Excel data, create:
-```python
-# scripts/imports/import_income_history.py
-# Import historical income data from CSV/Excel
-```
-
-### Phase 4: Pension Snapshot Management
-Create pension snapshot interface:
-- Upload monthly pension values
-- Auto-calculate growth percentages
-- Chart showing pension growth over time
-
-### Phase 5: UI Integration
-- Add "Income" menu item
-- Add "Pensions" menu item
-- Dashboard widget showing latest income & pension values
-- Net Worth integration (already done!)
+No `scripts/imports/import_income_history.py` importer is currently provided.
+Use the income interface for new records; any historical import should be
+implemented as a separately reviewed script under `scripts/imports/`.
 
 ## Usage Examples
 

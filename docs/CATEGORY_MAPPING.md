@@ -1,5 +1,10 @@
 # Category Mapping Guide
 
+This is a mapping reference, not the implementation of a transaction importer.
+The code examples below are illustrative pseudocode; they are not a ready-to-run
+script. The Nationwide import workflow is maintained separately under
+`scripts/imports/`.
+
 This document maps your Excel categories to the new generic database structure.
 
 ## Mapping Rules for Transaction Import
@@ -69,16 +74,17 @@ The following categories remain the same:
 - **Household**: All sub-categories unchanged
 - **Insurance**: All sub-categories unchanged
 
-## Import Script Logic
+## Illustrative Mapping Logic (Pseudocode)
 
-When importing transactions:
+When writing a provider-specific import:
 
 ```python
 # Example for Loan Payment
 if excel_head_budget == "Loans":
     if excel_sub_budget in ["JN Bank", "Zopa", "Creation", "EE", "Loft Loan", "Oakbrook"]:
         category = get_category("Loans", "Loan Payment")
-        loan = Loan.query.filter_by(name=excel_sub_budget).first()
+        # Resolve the loan and category within the active family.
+        loan = family_query(Loan).filter_by(name=excel_sub_budget).first()
         transaction.loan_id = loan.id if loan else None
     elif "Credit" in excel_item:
         category = get_category("Loans", "Loan Credit")
@@ -86,7 +92,8 @@ if excel_head_budget == "Loans":
 # Example for Credit Card Payment
 if excel_head_budget == "Credit Cards":
     category = get_category("Credit Cards", "Payment")
-    card = CreditCard.query.filter_by(card_name=excel_sub_budget).first()
+    # Resolve the card and category within the active family.
+    card = family_query(CreditCard).filter_by(card_name=excel_sub_budget).first()
     transaction.credit_card_id = card.id if card else None
 
 # Example for Savings

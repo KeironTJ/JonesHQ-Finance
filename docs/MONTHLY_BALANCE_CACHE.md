@@ -56,12 +56,12 @@ The Monthly Account Balance Cache system optimizes Net Worth timeline calculatio
    - SQLAlchemy model definition
    - Relationships to Account model
 
-2. **Service**: `services/monthly_balance_service.py`
+2. **Service**: `services/finance/monthly_balance_service.py`
    - `calculate_month_balance(account_id, year, month)` - Core calculation logic
    - `update_month_cache(account_id, year, month)` - Update single month
-   - `update_account_from_month(account_id, start_year, start_month)` - Update from month forward
-   - `get_balance_for_month(account_id, year, month, use_projected)` - Retrieve cached balance
-   - `rebuild_all_cache()` - Full cache rebuild
+   - `update_account_from_month(account_id, start_year, start_month, num_months=None, future_months=24)` - Update from month forward
+   - `get_balance_for_month(account_id, year, month, use_projected=False)` - Retrieve cached balance
+   - `rebuild_all_cache(future_months=24)` - Full cache rebuild
    - `handle_transaction_change(account_id, transaction_date)` - Auto-update trigger
 
 3. **Event Listeners**: `models/transactions.py`
@@ -83,7 +83,7 @@ python scripts/maintenance/populate_monthly_balances.py
 This will:
 - Clear existing cache
 - Find earliest transaction across all accounts
-- Calculate monthly balances from earliest month to 12 months in future
+- Calculate monthly balances from earliest month to 24 months in future by default
 - Populate cache for all active accounts
 
 ### Automatic Updates
@@ -98,7 +98,7 @@ Example:
 # User adds transaction on 2024-12-15
 # Automatically triggers:
 MonthlyBalanceService.handle_transaction_change(account_id, date(2024, 12, 15))
-# Updates: 2024-12, 2025-01, 2025-02, ... up to 12 months from now
+# Updates: 2024-12, 2025-01, 2025-02, ... up to 24 months from now by default
 ```
 
 ### Manual Updates
@@ -216,6 +216,6 @@ Creates:
 
 ## Related Documentation
 
-- [Net Worth System](NETWORTH_SYSTEM.md) - Overview of Net Worth functionality
+- [Retirement Planning](RETIREMENT_PLANNING.md) - Net Worth and retirement planning
 - [Database Schema](DATABASE_SCHEMA.md) - Full database structure
 - [Transaction System](INTEGRATED_TRANSACTIONS.md) - Transaction management

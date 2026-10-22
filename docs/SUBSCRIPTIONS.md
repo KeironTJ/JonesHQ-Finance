@@ -4,6 +4,11 @@ Subscriptions manage recurring expenses as reusable rules rather than one-time
 batches. A rule can create pending charges for either a bank account or a
 credit card.
 
+Subscriptions and dated price changes are household-scoped. Submitted account,
+card, category, vendor, and subscription IDs must be resolved within the
+current family. A rule targets either a bank account or a credit card, and its
+generated records use separate synchronization paths for those destinations.
+
 ## Scheduling
 
 Choose a first charge date, a frequency (weekly, every four weeks, monthly,

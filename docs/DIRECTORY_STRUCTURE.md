@@ -13,7 +13,6 @@
 ### `/blueprints/`
 Flask blueprints for modular route organization
 - `accounts/` - Bank account management
-- `budgets/` - Budget tracking
 - `categories/` - Transaction categories
 - `childcare/` - Childcare expense tracking
 - `credit_cards/` - Credit card management
@@ -32,6 +31,9 @@ Flask blueprints for modular route organization
 - `settings/` - Owner-only household settings hub, independent configuration pages,
   and tax-year editing
 - `preferences/` - Personal display and default-account preferences for all signed-in users
+- `onboarding/` - Household onboarding
+- `plans/` - Financial plans and plan items
+- `site_admin/` - Service-operator administration
 
 ### `/models/`
 SQLAlchemy database models
@@ -44,15 +46,21 @@ SQLAlchemy database models
 - `credit_cards.py` - Credit card model
 - `credit_card_transactions.py` - Credit card transactions
 - `expenses.py` - Expense tracking
+- `expense_calendar.py` - Expense calendar entries
+- `expense_reimbursement_group.py` - Reimbursement groups
 - `fuel.py` - Fuel records
 - `income.py` - Income tracking
+- `income_change.py` - Income change history
 - `loans.py` - Loan model
 - `loan_payments.py` - Loan payment history
+- `loan_term_changes.py` - Loan term changes
 - `mortgage.py` - Mortgage model
 - `mortgage_payments.py` - Mortgage payment history
 - `networth.py` - Net worth snapshots
 - `pensions.py` - Pension model
 - `pension_snapshots.py` - Pension history
+- `passkeys.py` - Passkey credentials
+- `plans.py` - Plans and plan items
 - `planned.py` - Planned transactions
 - `transactions.py` - Bank transaction model
 - `trips.py` - Trip tracking
@@ -61,6 +69,7 @@ SQLAlchemy database models
 - `family.py` / `users.py` - Family and user identity models
 - `settings.py` / `tax_settings.py` - Household configuration; personal display
   preferences are stored in `User.preferences`
+- `site_settings.py` - Service-wide site settings
 - `property.py` / `property_valuation_snapshot.py` - Property assets and valuations
 - `recurring_income.py` - Recurring income
 - `monthly_account_balance.py` - Monthly account balances
@@ -74,7 +83,6 @@ for the package map and compatibility-import policy.
 - `vehicles/` - Vehicles, fuel forecasting, and mileage
 - `platform/` - Authentication and settings
 - `analytics/` - Dashboard and net-worth read models
-- Top-level `*_service.py` files - Compatibility shims for existing imports
 
 ### `/templates/`
 Jinja2 HTML templates
@@ -82,13 +90,28 @@ Jinja2 HTML templates
   becomes a focus-trapped drawer below 992px. Owner-only Settings and Family links
   live under "Your workspace"; personal preferences is available to every member.
 - `shared/` - Permission-aware navigation, page search, UI macros and shared analytics chart setup
+- `email/` - Email templates
+- `errors/` - Error pages
 - `settings/` - Settings hub and independently saved household, credit-card,
   work-expense, net-worth and tax configuration
 - `preferences/` - Personal dashboard/list defaults and account-persisted appearance
+- `auth/` - Authentication pages
+- `childcare/` - Childcare pages
 - `categories/` - Category templates
-- `components/` - Reusable components
 - `credit_cards/` - Credit card templates
-- `layout/` - Layout components
+- `dashboard/` - Dashboard pages
+- `expenses/` - Expense pages
+- `family/` - Household pages
+- `income/` - Income pages
+- `loans/` - Loan pages
+- `mortgage/` - Mortgage pages
+- `networth/` - Net-worth pages
+- `onboarding/` - Onboarding pages
+- `pensions/` - Pension pages
+- `plans/` - Planning pages
+- `public/` - Public pages
+- `site_admin/` - Site-administration pages
+- `vehicles/` - Vehicle pages
 - `transactions/` - Transaction templates
 - `vendors/` - Vendor templates
 
@@ -112,15 +135,29 @@ Database management and import scripts
 ### `/docs/`
 Documentation
 - `README.md` - Main documentation
-- `SECURITY.md` - Security guidelines
-- `TRANSACTION_EDITING.md` - Transaction editing guide
-- `BRANCHING_STRATEGY.md` - Git branching strategy
+- `AUTHENTICATION_SETUP.md` - Authentication setup and behavior
+- `BRANCHING_STRATEGY.md` - Branching strategy
 - `CATEGORY_MAPPING.md` - Category mapping documentation
-- `CREDIT_CARD_IMPLEMENTATION.md` - Credit card system docs
+- `CREDIT_CARD_IMPLEMENTATION.md` - Credit card system documentation
 - `DATABASE_SCHEMA.md` - Database schema documentation
-- `VENDOR_SYSTEM.md` - Vendor system documentation
+- `DESIGN_SYSTEM.md` - Design tokens and UI patterns
+- `EXPENSE_SYSTEM.md` - Expense workflows
+- `INCOME_PENSION_SYSTEM.md` - Income and pension workflows
+- `INTEGRATED_TRANSACTIONS.md` - Transaction and domain integrations
+- `MONTHLY_BALANCE_CACHE.md` - Monthly balance cache
+- `PAYDAY_FILTERING_PROPOSAL.md` - Payday filtering behavior
+- `PAYDAY_TRACKING.md` - Payday tracking
+- `PENSION_PROJECTIONS.md` - Pension projections
+- `PROXMOX_DEPLOYMENT.md` - Historical Proxmox deployment guidance
 - `QUICKSTART.md` - Quick start guide
+- `RETIREMENT_PLANNING.md` - Retirement planning
+- `SECURITY.md` - Security guidelines
+- `SECURITY_HARDENING.md` - Security controls and hardening
+- `SUBSCRIPTIONS.md` - Subscription workflows
+- `TRANSACTION_EDITING.md` - Transaction editing guide
+- `VENDOR_SYSTEM.md` - Vendor system documentation
 - `DIRECTORY_STRUCTURE.md` - This file
+- `DEPLOYMENT.md` - Historical deployment guidance
 
 ### `/instance/`
 Instance-specific files (gitignored)

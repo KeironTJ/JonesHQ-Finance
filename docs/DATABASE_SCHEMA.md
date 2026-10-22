@@ -8,9 +8,11 @@ complete generated table catalog.
 
 The application uses SQLite by default for local development and tests.
 Production runs on PostgreSQL 17 (configured via `DATABASE_URL` or
-`SQLALCHEMY_DATABASE_URI`); migrations must work on both backends. Most domain records support family ownership so authenticated
-users can share a financial workspace while permissions remain enforced by the
-application.
+`SQLALCHEMY_DATABASE_URI`); migrations must work on both backends. Most household domain records carry `family_id` and are queried through the
+family-scoped helpers. A separate, optional `owner_id` controls within-family
+privacy on supported records; see the application instructions and model code
+for the exact models and inherited visibility rules. Service-wide and
+account-owned records are not household financial data.
 
 ## Configuration and Personal Preferences
 
@@ -88,6 +90,7 @@ Standardized vendor/merchant tracking for consistent transaction categorization
 
 ### 3. **Transaction** (transactions.py)
 Main transaction table combining data from JOINTACCOUNT and SECONDBANKACCOUNT sheets
+- `family_id`: Household security boundary
 - `account_id`: Link to account
 - `category_id`: Link to category (Head Budget + Sub Budget)
 - `vendor_id`: Link to vendor/merchant (standardized names)
@@ -99,11 +102,16 @@ Main transaction table combining data from JOINTACCOUNT and SECONDBANKACCOUNT sh
 - `payment_type`: BACS, Direct Debit, Card Payment, Transfer
 - `running_balance`: Balance after transaction
 - `is_paid`: Payment status
-- `credit_card_id`: Optional link to credit card (if paid by card)
-- `loan_id`: Optional link to loan (if loan payment)
+- `is_fixed`, `is_forecasted`: Lock and forecast flags
+- `credit_card_id`, `loan_id`: Optional related finance records
+- `linked_transaction_id`: Paired account-to-account transfer
+- `subscription_id`: Source recurring subscription, if generated
+- `claim_group`, `reimbursement_group_id`: Expense reimbursement tracking
+- `payday_period`: Assigned payday period
 - `year_month`: For reporting (2026-01)
 - `week_year`: For reporting (03-2026)
 - `day_name`: Day of week
+- `created_at`, `updated_at`: Audit timestamps
 
 **Relationships:**
 - Many-to-one with `Account`
@@ -116,6 +124,7 @@ Main transaction table combining data from JOINTACCOUNT and SECONDBANKACCOUNT sh
 
 ### 4. **CreditCard** (credit_cards.py)
 From your CREDIT CARD HEADER sheet
+- `family_id`, `owner_id`: Household boundary and optional within-family privacy
 - `card_name`: Barclaycard, M&S, Natwest
 - `annual_apr`: Annual interest rate %
 - `monthly_apr`: Monthly interest rate %
@@ -130,9 +139,13 @@ From your CREDIT CARD HEADER sheet
 **Relationships:**
 - One-to-many with `CreditCardTransaction`
 
+The same module defines `CreditCardPromotion` for dated promotional APR offers.
+
 ### 5. **CreditCardTransaction** (credit_card_transactions.py)
 From your CREDIT CARD TRANSACTIONS sheet
+- `family_id`: Household security boundary
 - `credit_card_id`: Which card
+- `category_id`, `vendor_id`: Optional classification and vendor links
 - `date`: Transaction date
 - `head_budget`, `sub_budget`: Category
 - `item`: Merchant
@@ -144,6 +157,11 @@ From your CREDIT CARD TRANSACTIONS sheet
 - `amount`: Amount (negative for purchases, positive for payments)
 - `balance`: Card balance after transaction
 - `credit_available`: Available credit after transaction
+- `bank_transaction_id`: Linked bank-side payment, when applicable
+- `statement_id`, `linked_cc_transaction_id`: Statement and paired balance-transfer links
+- `subscription_id`: Source subscription for generated card charges
+- `is_paid`, `is_fixed`: Reconciliation and regeneration controls
+- `applied_apr`, `is_promotional_rate`: Interest audit fields
 
 ## Loan & Mortgage Models
 
@@ -176,7 +194,7 @@ From your LOAN TRANSACTIONS sheet
 - `is_paid`: Payment status
 
 ### 8. **Mortgage** (mortgage.py)
-From your HOUSE sheet
+Legacy-compatible mortgage record; current property workflows use mortgage products.
 - `property_address`: Property address
 - `principal`: Original mortgage amount
 - `current_balance`: Current balance
@@ -201,14 +219,22 @@ Monthly mortgage payment history
 - `property_valuation`: Property value at time
 - `equity_amount`, `equity_percent`: Equity tracking
 
+`MortgageProduct` and `MortgageSnapshot` model product terms over time,
+including current and future products, balances, and snapshots. Properties are
+modeled separately in `property.py`.
+
 ## Vehicle & Fuel Models
 
 ### 10. **Vehicle** (vehicles.py)
 From your FUEL LOG HEADER sheet
+- `family_id`, `owner_id`: Household boundary and optional within-family privacy
 - `name`: Vauxhall Zafira, Audi A6
+- `make`, `model`, `year`: Vehicle identity
 - `registration`: VRN (MV15LZJ, WF60RKA)
 - `tank_size`: Fuel tank size in gallons
 - `fuel_type`: Diesel, Petrol
+- `refuel_threshold_pct`, `starting_mileage`, `fuel_account_id`: Forecasting and transaction settings
+- `purchase_date`, `purchase_price`: Vehicle purchase information
 - `is_active`: Active status
 
 **Relationships:**
@@ -217,6 +243,7 @@ From your FUEL LOG HEADER sheet
 
 ### 11. **FuelRecord** (fuel.py)
 From your FUEL LOG Table
+- `family_id`: Household security boundary
 - `vehicle_id`: Which vehicle
 - `date`: Fill-up date
 - `price_per_litre`: Fuel price (pence)
@@ -228,6 +255,8 @@ From your FUEL LOG Table
 - `mpg`: Calculated MPG
 - `price_per_mile`: Cost per mile
 - `last_fill_date`: Previous fill date
+- `is_partial_fill`: Whether this record represents a partial fill
+- `linked_transaction_id`: Related bank transaction, when present
 
 **Relationships:**
 - Many-to-one with `Vehicle`
@@ -254,22 +283,30 @@ From your CAR FUEL TRIPS sheet
 
 ### 13. **Expense** (expenses.py)
 From your WORK EXPENSES sheet
+- `family_id`, `owner_id`: Household boundary and optional private visibility
 - `date`: Expense date
 - `description`: Tetrad, Garner Hotel, etc.
 - `expense_type`: Fuel, Hotel, Food
 - `credit_card_id`: Card used (optional)
+- `account_id`: Direct-payment account, when applicable
+- `credit_card_transaction_id`, `bank_transaction_id`: Linked payment records
 - `covered_miles`: Business miles
 - `rate_per_mile`: Mileage rate (£0.45)
 - `total_cost`: Total expense
-- `cumulative_miles_ytd`: Year-to-date miles
+- `days`, `cumulative_miles_ytd`, `vehicle_registration`: Mileage claim data
+- `claim_group`, `reimbursement_group_id`, `payday_period`: Claim grouping and period
+- `income_id`: Payslip receiving a folded reimbursement
 - `paid_for`, `submitted`, `reimbursed`: Status tracking
 
-**Relationships:**
-- Many-to-one with `CreditCard` (optional)
+`ExpenseCalendarEntry` stores dated calendar items; `ExpenseReimbursementGroup`
+selects whether a claim is paid as a separate transaction or folded into a
+linked recurring-income payslip.
 
 ### 14. **Income** (income.py)
 From your INCOME sheet - comprehensive payslip tracking
+- `family_id`, `member_id`, `owner_id`: Household, linked member, and optional private visibility
 - `pay_date`: Payment date
+- `pay_frequency`, `bonus`, `student_loan`: Pay-period and pay inputs
 - `tax_year`: Tax year (2022-2023)
 - `gross_annual_income`, `gross_monthly_income`: Gross pay
 - `employer_pension_percent`, `employee_pension_percent`: Pension rates
@@ -281,11 +318,28 @@ From your INCOME sheet - comprehensive payslip tracking
 - `avc`: Additional Voluntary Contributions
 - `take_home`: Net pay
 - `estimated_annual_take_home`: Estimated annual
+- `deposit_account_id`, `transaction_id`, `recurring_income_id`: Linked records
+- `expense_reimbursement_total`: Expenses folded into this payslip's deposit
+
+`RecurringIncome` stores recurring pay-source schedules and calculation
+settings. `IncomeChange` stores effective-dated salary, bonus, tax-code, and
+pension changes for future forecasts.
 
 ## Childcare Models
 
-### 15. **ChildcareRecord** (childcare.py)
-Legacy-compatible childcare record
+### 15. **Childcare** (childcare.py)
+The current workflow is based on children, activity types, dated activity
+records, and monthly summaries:
+
+- `Child`: Household child and default account/category/vendor settings
+- `ChildActivityType`: Cost, provider, and weekly schedule for an activity
+- `DailyChildcareActivity`: Whether an activity occurred, with optional cost override
+- `MonthlyChildcareSummary`: Monthly total and linked account transaction
+
+`ChildcareRecord` remains as a legacy-compatible record; it is not the primary
+model used by the current childcare workflow.
+
+### Legacy `ChildcareRecord`
 - `date`: Date
 - `child_name`: Michael, Emily, Ivy, Brian
 - `service_type`: AM, PM1, PM2, Lunch, Breakfast Club, School Dinner
@@ -301,10 +355,12 @@ childcare workflows.
 
 ### 16. **Pension** (pensions.py)
 Pension account header
+- `family_id`, `member_id`, `owner_id`: Household, linked member, and optional private visibility
 - `provider`: Peoples Pension, Aviva, Aegon, Scottish Widows
 - `current_value`: Current value
 - `contribution_rate`: Employee contribution %
 - `employer_contribution`: Employer contribution %
+- `retirement_age`, `monthly_contribution`, `projected_value_at_retirement`: Projection inputs/results
 - `is_active`: Active status
 
 **Relationships:**
@@ -316,6 +372,8 @@ From your PENSIONS sheet - monthly pension values
 - `review_date`: Snapshot date
 - `value`: Value at date
 - `growth_percent`: % growth since last snapshot
+- `is_projection`, `scenario_name`, `growth_rate_used`: Distinguish scenario projections from actual values
+- `notes`: Snapshot or projection notes
 
 ### 18. **NetWorth** (networth.py)
 From your NETWORTH sheet
@@ -332,6 +390,11 @@ From your NETWORTH sheet
   - `net_worth`: Total net worth
   - `one_month_track`: % change from previous month
   - `three_month_track`: % change from 3 months ago
+
+The current net-worth timeline is calculated by `NetWorthService`; it combines
+account balances, pension values, credit-card and loan liabilities, and
+property valuations/mortgage products for the selected date. `Property` and
+`PropertyValuationSnapshot` hold property details and actual/projected values.
 
 ## Supporting Models
 
@@ -382,6 +445,40 @@ Dated charge amounts for upgrades, downgrades, discounts and price increases
 One price change is allowed per subscription per effective date. Forecast
 charges are previewed before a change is confirmed; paid and manually fixed
 entries remain unchanged.
+
+## Current Model and Table Inventory
+
+This inventory is derived from the current SQLAlchemy models. It includes the
+primary and supporting tables; model files remain authoritative for exact
+columns, indexes, and constraints.
+
+| Model module | Models / tables |
+| --- | --- |
+| `accounts.py` | `Account` / `accounts` |
+| `balances.py` | `Balance` / `balances` |
+| `categories.py` | `Category` / `categories` |
+| `vendors.py` | `VendorType` / `vendor_types`, `Vendor` / `vendors` |
+| `transactions.py` | `Transaction` / `transactions` |
+| `credit_cards.py` | `CreditCard` / `credit_cards`, `CreditCardPromotion` / `credit_card_promotions` |
+| `credit_card_transactions.py` | `CreditCardTransaction` / `credit_card_transactions` |
+| `loans.py`, `loan_payments.py`, `loan_term_changes.py` | `Loan` / `loans`, `LoanPayment` / `loan_payments`, `LoanTermChange` / `loan_term_changes` |
+| `mortgage.py`, `mortgage_payments.py` | `MortgageProduct` / `mortgage_products`, `Mortgage` / `mortgages`, `MortgageSnapshot` / `mortgage_snapshots`, `MortgagePayment` / `mortgage_payments` |
+| `vehicles.py`, `fuel.py`, `trips.py` | `Vehicle` / `vehicles`, `FuelRecord` / `fuel_records`, `Trip` / `trips` |
+| `expenses.py`, `expense_calendar.py`, `expense_reimbursement_group.py` | `Expense` / `expenses`, `ExpenseCalendarEntry` / `expense_calendar_entries`, `ExpenseReimbursementGroup` / `expense_reimbursement_groups` |
+| `income.py`, `recurring_income.py`, `income_change.py` | `Income` / `income`, `RecurringIncome` / `recurring_income`, `IncomeChange` / `income_changes` |
+| `childcare.py` | `Child` / `children`, `ChildActivityType` / `child_activity_types`, `DailyChildcareActivity` / `daily_childcare_activities`, `MonthlyChildcareSummary` / `monthly_childcare_summaries`, legacy `ChildcareRecord` / `childcare_records` |
+| `pensions.py`, `pension_snapshots.py` | `Pension` / `pensions`, `PensionSnapshot` / `pension_snapshots` |
+| `networth.py` | `NetWorth` / `net_worth` |
+| `budgets.py`, `planned.py` | `Budget` / `budgets`, `PlannedTransaction` / `planned_transactions` |
+| `subscriptions.py` | `Subscription` / `subscriptions`, `SubscriptionPriceChange` / `subscription_price_changes` |
+| `property.py`, `property_valuation_snapshot.py` | `Property` / `properties`, `PropertyValuationSnapshot` / `property_valuation_snapshots` |
+| `monthly_account_balance.py` | `MonthlyAccountBalance` / `monthly_account_balances` |
+| `family.py` | `Family` / `families`, `FamilyInvite` / `family_invites`, `HouseholdInvite` / `household_invites` |
+| `users.py` | `User` / `users`, `UserSession` / `user_sessions`, `SecurityEvent` / `security_events`, `UserRecoveryCode` / `user_recovery_codes` |
+| `passkeys.py` | `UserPasskey` / `user_passkeys`, `PasskeyChallenge` / `passkey_challenges` |
+| `family_assignment_labels.py` | `FamilyAssignmentLabel` / `family_assignment_labels` |
+| `plans.py` | `Plan` / `plans`, `PlanItem` / `plan_items` |
+| `settings.py`, `tax_settings.py`, `site_settings.py` | `Settings` / `settings`, `TaxSettings` / `tax_settings`, `SiteSettings` / `site_settings` |
 
 ## Key Design Decisions
 

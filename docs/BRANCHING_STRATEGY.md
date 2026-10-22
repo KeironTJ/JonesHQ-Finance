@@ -1,21 +1,15 @@
 # Branching Strategy - JonesHQ Finance
 
-## Current Phase: Solo Development (Pre-Production)
+## Current State
 
-### Simple Strategy (Current)
-For now, you can commit directly to `main` since there's no production deployment.
+The repository includes a production deployment and runbook. This document
+cannot establish the team's current branch-protection rules or release process;
+follow the repository's configured policy rather than assuming direct commits
+to `main` are appropriate.
 
-```powershell
-# Make changes, then commit
-git add .
-git commit -m "Your commit message"
-git push origin main
-```
+## Proposed Branching Strategy
 
----
-
-## Future Strategy: When Production Deployed
-
+The workflow below is a proposal, not a description of configured automation.
 ### Branch Structure
 
 ```
@@ -32,7 +26,7 @@ main (production-ready code)
 #### 1. `main` Branch
 - **Purpose:** Production-ready code
 - **Protected:** Yes (when deployed)
-- **Deployment:** Auto-deploys to production
+- **Deployment:** Production release process is not verified as automated; use the deployment runbook
 - **Rules:** Only merge from `develop` or `hotfix/*`
 
 #### 2. `develop` Branch

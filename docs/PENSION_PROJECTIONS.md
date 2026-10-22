@@ -12,7 +12,7 @@ Your pension management system now includes comprehensive projection capabilitie
 - Automatic growth calculations
 - Total values across all pensions
 
-### 2. **Retirement Summary Dashboard** (`/pensions/retirement_summary`)
+### 2. **Retirement Summary Dashboard** (`/pensions/retirement-summary`)
 - Current age and years to retirement
 - Total current vs projected values
 - Estimated annual annuity income
@@ -55,7 +55,6 @@ Your pension management system now includes comprehensive projection capabilitie
    - Click "View Projections" from pensions page
    - See complete timeline from now to retirement
    - Compare different scenarios
-   - Export to Excel if needed
 
 3. **Check Retirement Readiness**:
    - Visit "Retirement Summary"
@@ -64,29 +63,18 @@ Your pension management system now includes comprehensive projection capabilitie
 
 ## Settings You Can Configure
 
-### In Database (via Settings page or scripts):
+### Growth and Government Pension Settings
 - `pension_default_monthly_growth_rate`: Default 0.12% (0.0012)
 - `pension_optimistic_monthly_growth_rate`: 0.5% (0.005)
 - `pension_pessimistic_monthly_growth_rate`: 0.05% (0.0005)
-- `keiron_retirement_age`: Default 65
-- `emma_retirement_age`: Default 65
-- `keiron_date_of_birth`: Format: YYYY-MM-DD
-- `emma_date_of_birth`: Format: YYYY-MM-DD
 - `government_pension_annual_keiron`: Annual amount
 - `government_pension_annual_emma`: Annual amount
-- `annuity_conversion_rate`: Default 5% (0.05)
-- `auto_regenerate_projections`: true/false
 
-### Update Dates of Birth:
-```python
-# Run this in Python console or create a script
-from models.settings import Settings
-from extensions import db
-
-Settings.set_value('keiron_date_of_birth', '1985-06-15', setting_type='string')
-Settings.set_value('emma_date_of_birth', '1987-03-20', setting_type='string')
-db.session.commit()
-```
+Date of birth and target retirement age belong to each household member's shared
+retirement profile. Set or update that profile through the pension edit workflow
+or the Income planning flow; do not write fixed `keiron_*` or `emma_*` keys
+directly. Legacy name-based profiles may still be read for members without a
+linked profile.
 
 ## Technical Details
 
