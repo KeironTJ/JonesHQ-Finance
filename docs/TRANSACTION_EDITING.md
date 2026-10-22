@@ -49,6 +49,18 @@ These links are maintained by the domain services. Do not assume that setting a
 foreign key alone performs the full synchronization or that database cascades
 cover every workflow.
 
+### Deleting
+
+Single and bulk delete share `TransactionService._delete_with_links()`:
+
+- Both legs of a transfer are deleted, even if only one leg was selected, and
+  both accounts are recalculated.
+- A linked credit-card payment is deleted and its card recalculated.
+- Every other household record that points at a deleted transaction (expense,
+  loan payment, income, fuel record, plan item, mortgage snapshot, childcare
+  summary) is unlinked, not deleted. This includes other members' private
+  records, because a remaining reference would block the delete on PostgreSQL.
+
 ## Household Isolation
 
 Routes and services resolve transaction IDs with household-scoped helpers and

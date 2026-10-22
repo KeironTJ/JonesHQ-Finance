@@ -298,7 +298,8 @@ All business logic is isolated in `services/finance/credit_card_service.py`:
 - `calculate_interest()` - Interest calculation with 0% override
 - `generate_statement_interest()` - Create interest transaction
 - `generate_payment_transaction()` - Create payment transaction
-- `generate_all_monthly_statements()` - Batch generate interest and payments for all cards
+- `regenerate_future_transactions()` / `regenerate_all_future_transactions()` - Replace
+  unlocked future statement chains for one card or all active cards
 
 **Benefits:**
 - Easy to test

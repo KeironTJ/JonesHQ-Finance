@@ -26,6 +26,8 @@ validation requirements prevent a safe fix.
 | Route balance orchestration | Transaction, credit-card and loan routes directly invoked model-level recalculation, with repeated loops, conditionals, and separate commits. | Centralized account/card calculations and combined commits in [BalanceService](../services/finance/balance_service.py). The three routes now pass affected IDs to the service; model methods remain compatibility wrappers for existing service callers. Regression tests verify deduplication, household scope and a single combined commit. |
 | F-003: SQLite updater branch | `quick_update.sh` still carried a SQLite backup/rollback path, `backup.sh` and `rehearse_update_guard.py` although production is PostgreSQL-only (owner confirmed). The runbook also claimed failed config checks roll back and keep the site up, which was untrue for PostgreSQL. | Removed the SQLite branch, rollback helpers, `backup.sh` and the guard. `postgres_update_backup.py --check` is now the fail-closed preflight before any code pull, and owns the URL parser. Runbook corrected. [Updater tests](../tests/test_postgres_update.py) cover preflight URL validation and every failure stage of the real script. |
 | Dead service/model code | 17 functions had no callers in Python, templates, JavaScript or tests, several marked deprecated or "kept for scripts" whose scripts were removed (e.g. `generate_all_future_transactions` and its two batch helpers, `calculate_tax_and_ni`, `sync_transaction_to_snapshot`, `get_mortgage_free_projection`, `TaxSettings.get_current`, `User.update_last_login`). | Removed them and the imports they left unused; corrected the [credit-card](CREDIT_CARD_IMPLEMENTATION.md) and [income](INCOME_PENSION_SYSTEM.md) method lists. Routes and WTForms validators (called implicitly) were excluded. Full suite passes. |
+| Bank transaction deletion | Deleting any account transfer failed on PostgreSQL: the two legs reference each other and were deleted without unlinking. Bulk delete ignored the unselected leg entirely. A loan payment, income, fuel record, plan item, mortgage snapshot or childcare summary pointing at the transaction also blocked the delete, and privacy filtering hid other members' private links. Both paths also cleared `Expense.credit_card_transaction_id` whenever a *card* transaction ID equalled the deleted *bank* ID, silently unlinking unrelated expenses. | Single and bulk delete now share [`_delete_with_links`](../services/finance/transaction_service.py): it deletes both transfer legs and linked card payments, unlinks every other household reference regardless of member privacy, and breaks the circular link before deleting. Card-payment plan/expense links are cleared too. [Regression tests](../tests/test_transaction_deletion_links.py) run with foreign keys enforced; all failed before the fix. Documented in [Transaction Editing](TRANSACTION_EDITING.md). |
+| Dead credit-card API | `generate_all_monthly_statements`, `delete_non_fixed_future_transactions` and `unlink_payment_and_transaction` had no callers; the module docstring still listed them as blueprint entry points. Both live delete paths already handle their own links. | Removed the methods, corrected the docstring and the [credit-card guide](CREDIT_CARD_IMPLEMENTATION.md). |
 
 ## Follow-up Findings
 
@@ -97,10 +99,12 @@ redacted, and remote targets are rejected.
 generation extracted and validated; other service boundaries remain.
 
 `income_service.py` (previously about 1,600 lines), `credit_card_service.py`
-(about 1,400) and `expense_sync_service.py` (about 1,350) contain multiple
+(previously about 1,400) and `expense_sync_service.py` (about 1,350) contain multiple
 workflows. A repository-wide reference screen found no uncalled public methods
-in these services, and the reviewed expense purchase-vs-reimbursement paths have
-distinct financial semantics rather than being duplicate implementations.
+in the income and expense services; the credit-card call-graph mapping found
+three, which were removed (see Dead credit-card API). The reviewed expense
+purchase-vs-reimbursement paths have distinct financial semantics rather than
+being duplicate implementations.
 
 Recurring payslip forecast generation and maintenance have moved into
 [IncomeForecastService](../services/finance/income_forecast_service.py). Route,
@@ -115,9 +119,12 @@ a new regression reproduced the extraction's missing-helper error before it was
 corrected, and verifies amount/date updates and the caller-owned commit boundary.
 The PostgreSQL CI job now includes the migrated income service/forecast tests.
 
-**Next follow-up:** map the credit-card public call graph and identify an
-independent workflow boundary before extracting a service. Keep each migration
-separate and verify full financial and household behavior before continuing.
+**Next follow-up:** the remaining credit-card service has two candidate
+boundaries: statement-chain generation/regeneration (routes call only
+`regenerate_future_transactions` and `regenerate_all_future_transactions`) and
+card-payment/bank-transaction sync (`sync_*`, called from the transaction and
+credit-card edit routes). Extract one at a time and verify full financial and
+household behavior before continuing.
 
 **Acceptance:** each extraction has unchanged financial results, household and
 privacy scoping, and regression coverage for all existing callers; do not add
@@ -152,6 +159,12 @@ compatibility wrappers that only preserve a retired API.
   [CI run 39763724097](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39763724097).
   The expanded PostgreSQL 17 job passed **154 tests**, including the migrated
   income/forecast tests and new shared-helper/CLI regressions.
+- Bank transaction deletion: **7 new regressions** (transfer pair, bulk partial
+  transfer, both legs selected, every household reference including private rows,
+  and the card/bank ID collision, single and bulk) all failed on the previous
+  code under enforced foreign keys and pass after the fix. The transaction
+  service and deletion tests now also run in the PostgreSQL CI job. Full local
+  SQLite suite: **1,130 passed, 3 skipped**.
 - Pylance resolved forecast callers across the app CLI, income routes, source
   workflows, projection service and tests. An AST comparison verified that the
   moved methods differ only in service references and uncommitted balance-service

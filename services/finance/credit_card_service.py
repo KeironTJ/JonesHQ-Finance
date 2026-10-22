@@ -41,11 +41,8 @@ Primary entry points (called from blueprints)
 ---------------------------------------------
   regenerate_future_transactions()       — delete + recreate future chains for one card
   regenerate_all_future_transactions()   — same for all active cards
-  generate_all_monthly_statements()      — bulk-generate statements across a date range
-  delete_non_fixed_future_transactions() — delete all unlocked future chains
   sync_bank_transaction_to_payment()     — called when a bank transaction is edited
   sync_payment_to_bank_transaction()     — called when a CC payment transaction is edited
-  unlink_payment_and_transaction()       — called before either linked record is deleted
 """
 import logging
 from datetime import datetime, date, timedelta
@@ -919,48 +916,6 @@ class CreditCardService:
         return transaction
     
     @staticmethod
-    def generate_all_monthly_statements(start_date=None, end_date=None, payment_offset_days=14):
-        """
-        Generate monthly statements for all active cards with intelligent payment triggering:
-        - Creates interest transaction on statement date
-        - Only creates payment if statement balance > 0
-        - Payment scheduled payment_offset_days after statement (default 14 days)
-        
-        Returns: dict with counts and details
-        """
-        if not start_date:
-            start_date = date.today()
-        if not end_date:
-            end_date = start_date + relativedelta(years=10)
-        
-        active_cards = family_query(CreditCard).filter_by(is_active=True).all()
-        
-        results = {
-            'cards_processed': 0,
-            'statements_created': 0,
-            'payments_created': 0,
-            'zero_balance_statements': 0,
-            'details': []
-        }
-        
-        for card in active_cards:
-            card_results = CreditCardService.generate_future_monthly_statements(
-                card.id, start_date, end_date, payment_offset_days
-            )
-            
-            results['cards_processed'] += 1
-            results['statements_created'] += card_results['statements_created']
-            results['payments_created'] += card_results['payments_created']
-            results['zero_balance_statements'] += card_results['zero_balance_statements']
-            results['details'].append({
-                'card_name': card.card_name,
-                'statements': card_results['statements_created'],
-                'payments': card_results['payments_created']
-            })
-        
-        return results
-    
-    @staticmethod
     def generate_future_monthly_statements(card_id, start_date, end_date, payment_offset_days=14):
         """
         Generate full statement chains (Interest + Payment + bank txn) for a single card.
@@ -1065,32 +1020,6 @@ class CreditCardService:
         db.session.delete(stmt)
         count += 1
         return count
-
-    @staticmethod
-    def delete_non_fixed_future_transactions(card_id=None, from_date=None):
-        """
-        Delete all future unlocked statement chains for a card (or all cards).
-        Each chain: Interest (statement) → CC Payment → bank transaction.
-        Skips statements marked is_fixed=True.
-        """
-        if not from_date:
-            from_date = date.today()
-
-        query = family_query(CreditCardTransaction).filter(
-            CreditCardTransaction.date >= from_date,
-            CreditCardTransaction.transaction_type == 'Interest',
-            CreditCardTransaction.is_fixed == False
-        )
-        if card_id:
-            query = query.filter(CreditCardTransaction.credit_card_id == card_id)
-
-        statements = query.all()
-        deleted = 0
-        for stmt in statements:
-            deleted += CreditCardService._delete_statement_chain(stmt, stmt.credit_card_id)
-
-        db.session.commit()
-        return deleted
 
     @staticmethod
     def regenerate_future_transactions(card_id, start_date=None, end_date=None, payment_offset_days=14):
@@ -1368,40 +1297,3 @@ class CreditCardService:
             Transaction.recalculate_account_balance(bank_txn.account_id)
         
         return bank_txn
-
-    @staticmethod
-    def unlink_payment_and_transaction(cc_payment_id=None, bank_txn_id=None):
-        """
-        Remove the foreign-key links between a CC Payment and a bank Transaction.
-
-        Called before either record is deleted so the remaining record is left in
-        a clean, unlinked state rather than pointing at a deleted row.
-
-        Both arguments are optional; pass whichever side is being unlinked.  If both
-        are provided, each side is cleaned up independently.
-
-        Args:
-            cc_payment_id: ID of the CreditCardTransaction (Payment) to unlink.
-            bank_txn_id:   ID of the bank Transaction to unlink.
-
-        Side effects:
-            Sets cc_payment.bank_transaction_id = None and/or bank_txn.credit_card_id = None.
-            Does NOT commit — the caller's transaction boundary handles that.
-        """
-        if cc_payment_id:
-            cc_payment = family_get(CreditCardTransaction, cc_payment_id)
-            if cc_payment and cc_payment.bank_transaction_id:
-                bank_txn = family_get(Transaction, cc_payment.bank_transaction_id)
-                if bank_txn:
-                    bank_txn.credit_card_id = None
-                cc_payment.bank_transaction_id = None
-        
-        if bank_txn_id:
-            bank_txn = family_get(Transaction, bank_txn_id)
-            if bank_txn and bank_txn.credit_card_id:
-                cc_payment = family_query(CreditCardTransaction).filter_by(
-                    bank_transaction_id=bank_txn_id
-                ).first()
-                if cc_payment:
-                    cc_payment.bank_transaction_id = None
-                bank_txn.credit_card_id = None

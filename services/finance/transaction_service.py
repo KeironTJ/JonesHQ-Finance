@@ -285,39 +285,87 @@ class TransactionService:
         return transaction, old_account_id, linked_account_id
 
     @staticmethod
+    def _bank_transaction_references():
+        from models.childcare import MonthlyChildcareSummary
+        from models.fuel import FuelRecord
+        from models.income import Income
+        from models.mortgage_payments import MortgageSnapshot
+        from models.plans import PlanItem
+
+        return (
+            (Expense, Expense.bank_transaction_id),
+            (LoanPayment, LoanPayment.bank_transaction_id),
+            (Income, Income.transaction_id),
+            (FuelRecord, FuelRecord.linked_transaction_id),
+            (PlanItem, PlanItem.transaction_id),
+            (MortgageSnapshot, MortgageSnapshot.transaction_id),
+            (MonthlyChildcareSummary, MonthlyChildcareSummary.transaction_id),
+        )
+
+    @staticmethod
+    def _unlink(model, column, ids):
+        if ids:
+            model.query.filter(
+                model.family_id == db_helpers.get_family_id(), column.in_(ids)
+            ).update({column: None}, synchronize_session='fetch')
+
+    @staticmethod
+    def _delete_with_links(transactions):
+        """Delete bank transactions with their transfer legs and card payments.
+
+        Linked rows are found across the whole household, ignoring member
+        privacy, because any remaining reference would block the delete. Other
+        records that point at a deleted row are unlinked. Transfer legs reference
+        each other, so those links are cleared and flushed before deleting.
+        Returns ``(deleted_rows, card_ids)``; does not commit.
+        """
+        household_id = db_helpers.get_family_id()
+        rows = {transaction.id: transaction for transaction in transactions}
+        partner_ids = [
+            transaction.linked_transaction_id for transaction in rows.values()
+            if transaction.linked_transaction_id
+        ]
+        partners = Transaction.query.filter(
+            Transaction.family_id == household_id,
+            Transaction.id.in_(partner_ids) | Transaction.linked_transaction_id.in_(list(rows)),
+        ).all()
+        for partner in partners:
+            rows.setdefault(partner.id, partner)
+
+        ids = list(rows)
+        payments = CreditCardTransaction.query.filter(
+            CreditCardTransaction.family_id == household_id,
+            CreditCardTransaction.bank_transaction_id.in_(ids),
+        ).all()
+        card_ids = {payment.credit_card_id for payment in payments}
+        payment_ids = [payment.id for payment in payments]
+
+        from models.plans import PlanItem
+        TransactionService._unlink(PlanItem, PlanItem.credit_card_transaction_id, payment_ids)
+        TransactionService._unlink(Expense, Expense.credit_card_transaction_id, payment_ids)
+        for model, column in TransactionService._bank_transaction_references():
+            TransactionService._unlink(model, column, ids)
+        for payment in payments:
+            db.session.delete(payment)
+        for transaction in rows.values():
+            transaction.linked_transaction_id = None
+        db.session.flush()
+        for transaction in rows.values():
+            db.session.delete(transaction)
+        return list(rows.values()), card_ids
+
+    @staticmethod
     def delete_transaction(transaction_id):
         transaction = family_get_or_404(Transaction, transaction_id)
         account_id = transaction.account_id
         account_name = transaction.account.name if transaction.account else 'Unknown'
-        linked_card_id = None
-        linked_transfer_account_id = None
 
-        if transaction.credit_card_id:
-            linked_payment = family_query(CreditCardTransaction).filter_by(
-                bank_transaction_id=transaction.id
-            ).first()
-            if linked_payment:
-                linked_card_id = linked_payment.credit_card_id
-                db.session.delete(linked_payment)
-
-        if transaction.linked_transaction_id:
-            linked_transaction = family_get(Transaction, transaction.linked_transaction_id)
-            if linked_transaction:
-                linked_transfer_account_id = linked_transaction.account_id
-                db.session.delete(linked_transaction)
-
-        linked_expenses = family_query(Expense).filter(
-            (Expense.bank_transaction_id == transaction_id)
-            | (Expense.credit_card_transaction_id == transaction_id)
-        ).all()
-        for expense in linked_expenses:
-            if expense.bank_transaction_id == transaction_id:
-                expense.bank_transaction_id = None
-            if expense.credit_card_transaction_id == transaction_id:
-                expense.credit_card_transaction_id = None
-
-        db.session.delete(transaction)
+        deleted, card_ids = TransactionService._delete_with_links([transaction])
         db.session.commit()
+        linked_transfer_account_id = next(
+            (row.account_id for row in deleted if row.id != transaction.id), None
+        )
+        linked_card_id = next(iter(card_ids), None)
         return account_id, account_name, linked_card_id, linked_transfer_account_id
 
     @staticmethod
@@ -531,31 +579,10 @@ class TransactionService:
 
     @staticmethod
     def bulk_delete(transaction_ids):
-        deleted = 0
-        affected_accounts = set()
-        cards_to_recalculate = set()
-        for transaction_id in transaction_ids:
-            transaction = family_get(Transaction, transaction_id)
-            if not transaction:
-                continue
-            affected_accounts.add(transaction.account_id)
-            if transaction.credit_card_id:
-                linked_payment = family_query(CreditCardTransaction).filter_by(
-                    bank_transaction_id=transaction.id
-                ).first()
-                if linked_payment:
-                    cards_to_recalculate.add(linked_payment.credit_card_id)
-                    db.session.delete(linked_payment)
-            linked_expenses = family_query(Expense).filter(
-                (Expense.bank_transaction_id == transaction_id)
-                | (Expense.credit_card_transaction_id == transaction_id)
-            ).all()
-            for expense in linked_expenses:
-                if expense.bank_transaction_id == transaction_id:
-                    expense.bank_transaction_id = None
-                if expense.credit_card_transaction_id == transaction_id:
-                    expense.credit_card_transaction_id = None
-            db.session.delete(transaction)
-            deleted += 1
+        selected = family_query(Transaction).filter(Transaction.id.in_(transaction_ids)).all()
+        if not selected:
+            return 0, set(), set()
+        deleted, cards_to_recalculate = TransactionService._delete_with_links(selected)
         db.session.commit()
-        return deleted, affected_accounts, cards_to_recalculate
+        affected_accounts = {row.account_id for row in deleted}
+        return len(selected), affected_accounts, cards_to_recalculate

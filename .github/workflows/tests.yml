@@ -77,6 +77,8 @@ jobs:
           tests/test_balance_recalculation.py
           tests/test_payday_service.py
           tests/test_credit_card_service.py
+          tests/test_transaction_service.py
+          tests/test_transaction_deletion_links.py
           tests/test_expense_service.py
           tests/test_income_service.py
           tests/test_income_phase0_fixes.py
