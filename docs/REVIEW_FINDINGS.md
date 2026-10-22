@@ -92,17 +92,21 @@ redacted, and remote targets are rejected.
 
 ## Validation for This Pass
 
-- Full SQLite suite after recovery/CI changes: **1,118 passed, 3 skipped**,
+- Full SQLite CI suite after recovery/CI changes: **1,119 passed, 3 skipped**,
   with 15 warnings. PostgreSQL-only integration tests are skipped on SQLite.
-- Local PostgreSQL application, constraint and current-migration checks passed.
-  Windows Application Control blocked `psql` in the real recovery integration
-  test; the Linux CI job runs that test without bypassing the local restriction.
+- PostgreSQL 17 CI suite: **56 passed**, including real dump/restore, preserved
+  failed-database contents, sequence continuity, constraints and migration round-trip.
+  Both jobs passed in [CI run 39755403685](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39755403685).
+  This run exposed a deprecated Alembic `db.get_engine()` compatibility branch;
+  replaced it with `db.engine`, supported by the pinned Flask-SQLAlchemy version.
+- Windows Application Control blocked local `psql`; real recovery was verified
+  in Linux CI without bypassing that restriction.
 - New regressions were confirmed to fail before their fixes where the bug was
   reproducible (F-002 background recalculation; payday cases noted above).
 - Bash syntax check passed for `quick_update.sh`; updater control-flow tests
   execute the real script for every failure stage.
-- Relative link targets passed across all 28 Markdown files; no references to
-  removed scripts, deployment files or functions remain.
+- Relative link targets passed across all 28 Markdown files; no operational
+  references to removed scripts, deployment files or functions remain.
 - The warnings comprise the Flask-Login deprecation (F-005) and an intentional
   test exercising the production-on-SQLite configuration warning.
 - No production maintenance command, import, or data migration was run.
