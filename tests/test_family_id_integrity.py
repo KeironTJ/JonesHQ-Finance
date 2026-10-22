@@ -2,7 +2,16 @@ from sqlalchemy import text
 
 from extensions import db
 from models.family import Family
-from scripts.checks.check_family_id_integrity import find_missing_family_ids
+from scripts.checks.check_family_id_integrity import find_missing_family_ids, tenant_tables
+
+
+def test_family_id_integrity_covers_every_tenant_table():
+    tables = tenant_tables()
+    for name in ('subscriptions', 'plans', 'plan_items', 'expense_calendar_entries',
+                 'income_changes', 'loan_term_changes', 'property_valuation_snapshots'):
+        assert name in tables
+    for name in ('users', 'security_events', 'tax_settings', 'expense_calendar'):
+        assert name not in tables
 
 
 def test_family_id_integrity_reports_only_tables_with_null_rows(app):

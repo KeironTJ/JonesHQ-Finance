@@ -125,19 +125,15 @@ Static assets
 - `favicon.svg` - Application favicon
 
 ### `/scripts/`
-Database management and import scripts
-- `checks/` - Repository and data checks
-- `database/` - Database setup and sample-data scripts
-- `imports/` - Import and migration scripts
-- `maintenance/` - Maintenance and recalculation scripts
-- `README.md` - Script conventions and inventory
+Retained diagnostics
+- `checks/check_family_id_integrity.py` - Detect missing household IDs
+- `README.md` - Usage and supported operational alternatives
 
 ### `/docs/`
 Documentation
 - `README.md` - Main documentation
 - `AUTHENTICATION_SETUP.md` - Authentication setup and behavior
 - `BRANCHING_STRATEGY.md` - Branching strategy
-- `CATEGORY_MAPPING.md` - Category mapping documentation
 - `CREDIT_CARD_IMPLEMENTATION.md` - Credit card system documentation
 - `DATABASE_SCHEMA.md` - Database schema documentation
 - `DESIGN_SYSTEM.md` - Design tokens and UI patterns
@@ -145,10 +141,8 @@ Documentation
 - `INCOME_PENSION_SYSTEM.md` - Income and pension workflows
 - `INTEGRATED_TRANSACTIONS.md` - Transaction and domain integrations
 - `MONTHLY_BALANCE_CACHE.md` - Monthly balance cache
-- `PAYDAY_FILTERING_PROPOSAL.md` - Payday filtering behavior
 - `PAYDAY_TRACKING.md` - Payday tracking
 - `PENSION_PROJECTIONS.md` - Pension projections
-- `PROXMOX_DEPLOYMENT.md` - Historical Proxmox deployment guidance
 - `QUICKSTART.md` - Quick start guide
 - `RETIREMENT_PLANNING.md` - Retirement planning
 - `SECURITY.md` - Security guidelines
@@ -157,7 +151,7 @@ Documentation
 - `TRANSACTION_EDITING.md` - Transaction editing guide
 - `VENDOR_SYSTEM.md` - Vendor system documentation
 - `DIRECTORY_STRUCTURE.md` - This file
-- `DEPLOYMENT.md` - Historical deployment guidance
+- `REVIEW_FINDINGS.md` - Resolved findings and detailed follow-up work
 
 ### `/instance/`
 Instance-specific files (gitignored)

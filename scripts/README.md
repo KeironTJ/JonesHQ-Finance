@@ -1,168 +1,43 @@
-# Scripts Directory
+# Scripts
 
-Scripts for managing and maintaining the FamilyHQ Finance database.
+Only the model-driven family-ID diagnostic is retained here. Historical
+imports, one-off data repairs, completed migrations, and ad-hoc test scripts
+have been removed. Their source remains in Git history, but they are not
+supported operational tools and should not be restored as setup steps.
 
-## 📁 Structure
+## Missing Family IDs
 
-```
-scripts/
-├── README.md                  # This file
-├── imports/                   # Data import scripts
-│   ├── import_accounts.py
-│   ├── import_accounts_ACTUAL.py
-│   ├── import_categories.py
-│   ├── import_credit_cards.py
-│   ├── import_credit_cards_ACTUAL.py
-│   ├── import_credit_card_transactions.py
-│   ├── import_loans.py
-│   ├── import_loans_ACTUAL.py
-│   ├── import_transactions_csv.py
-│   ├── import_transactions_nationwide.py
-│   └── import_vendors.py
-├── checks/                    # Verification & validation scripts
-│   ├── check_active_cards.py
-│   ├── check_card_balances.py
-│   ├── check_paid_status.py
-│   └── check_vendors.py
-├── maintenance/               # Data maintenance & recalculation scripts
-│   ├── delete_future_txns.py
-│   ├── mark_past_transactions_paid.py
-│   ├── migrate_credit_cards.py
-│   ├── recalculate_active_cards.py
-│   ├── recalculate_balances.py
-│   ├── recalculate_credit_available.py
-│   ├── reset_credit_cards.py
-│   ├── sync_transfer_transactions.py
-│   ├── update_account_balance.py
-│   └── update_savings_balances.py
-├── database/                  # Database initialization scripts
-│   ├── init_db.py
-│   └── populate_sample_data.py
-└── data/                      # Sample data files
-```
+From the repository root, after confirming the application's target database:
 
-## 🚀 Usage
-
-### Database Initialization
-
-**Initialize Database:**
 ```powershell
-cd "c:\Users\keiro\OneDrive\Documents\Programming\JonesHQ Finance"
-.\.venv\Scripts\Activate.ps1
-python scripts\database\init_db.py
+venv\Scripts\python.exe scripts\checks\check_family_id_integrity.py
 ```
 
-**Populate Sample Data:**
+The check reads registered SQLAlchemy models rather than a copied table list.
+It reports tenant-owned rows with a missing `family_id` and exits non-zero when
+any are found. Global tax defaults, household-less users, and security events
+are deliberately excluded because a NULL household is valid for those records.
+
+For foreign keys that cross household boundaries, use the application's
+read-only tenancy checker:
+
 ```powershell
-python scripts\database\populate_sample_data.py
+venv\Scripts\python.exe -m flask maintenance check-tenancy
 ```
 
-### Import Scripts
+## Supported Alternatives
 
-**Import Categories:** ✅ COMPLETED
-```powershell
-python scripts\imports\import_categories.py
-```
-- 42 categories across 10 head budgets imported
+- **Database setup and upgrades:** apply checked-in Flask-Migrate revisions;
+  see the [Quick Start](../docs/QUICKSTART.md).
+- **Account creation:** use household-invite registration or family invitations;
+  see [authentication setup](../docs/AUTHENTICATION_SETUP.md).
+- **Payday changes:** use the household settings or recurring-income update flow;
+  see [payday tracking](../docs/PAYDAY_TRACKING.md).
+- **Balance-cache rebuilds:** use the net-worth cache-refresh action;
+  see [monthly balance cache](../docs/MONTHLY_BALANCE_CACHE.md).
+- **Production updates, backups, and recovery:** follow the
+  [production runbook](../deployment/README.md).
 
-**Import Vendors:** ✅ COMPLETED
-```powershell
-python scripts\imports\import_vendors.py
-```
-- 177 vendors imported and categorized by type
-
-**Import Accounts:** ✅ COMPLETED
-```powershell
-python scripts\imports\import_accounts_ACTUAL.py
-```
-
-**Import Credit Cards:** ✅ COMPLETED
-```powershell
-python scripts\imports\import_credit_cards_ACTUAL.py
-```
-
-**Import Loans:** ✅ COMPLETED
-```powershell
-python scripts\imports\import_loans_ACTUAL.py
-```
-
-**Import Transactions:**
-```powershell
-python scripts\imports\import_transactions_csv.py
-# or
-python scripts\imports\import_transactions_nationwide.py
-```
-
-### Verification Scripts
-
-**Check Active Cards:**
-```powershell
-python scripts\checks\check_active_cards.py
-```
-
-**Check Card Balances:**
-```powershell
-python scripts\checks\check_card_balances.py
-```
-
-**Check Payment Status:**
-```powershell
-python scripts\checks\check_paid_status.py
-```
-
-**Check Vendors:**
-```powershell
-python scripts\checks\check_vendors.py
-```
-
-**Check Family IDs:**
-```powershell
-python scripts\checks\check_family_id_integrity.py
-```
-
-Exits with a non-zero status when tenant-owned rows are missing `family_id`.
-
-### Maintenance Scripts
-
-**Recalculate Balances:**
-```powershell
-python scripts\maintenance\recalculate_balances.py
-python scripts\maintenance\recalculate_credit_available.py
-python scripts\maintenance\update_account_balance.py
-```
-
-**Clean Up Data:**
-```powershell
-python scripts\maintenance\delete_future_txns.py
-python scripts\maintenance\reset_credit_cards.py
-```
-
-**Sync Transactions:**
-```powershell
-python scripts\maintenance\sync_transfer_transactions.py
-python scripts\maintenance\mark_past_transactions_paid.py
-```
-
-## 📝 Notes
-
-- All import scripts check for duplicates before inserting
-- Maintenance scripts include safety confirmations where appropriate
-- Check scripts provide verification without modifying data
-- Database scripts should be run before imports
-- Scripts are idempotent - safe to run multiple times
-- Always backup database before running bulk operations
-
-## ✅ Completed Imports
-
-- **Categories:** 42 categories across 10 head budgets
-- **Vendors:** 177 vendors with type classification
-- **Accounts:** Bank accounts with balances
-- **Credit Cards:** 11 cards (3 active, 8 inactive)
-- **Loans:** Active loan accounts
-
-## 🎯 Script Organization
-
-- **imports/** - One-time data import from Excel/CSV
-- **checks/** - Verification and validation (read-only)
-- **maintenance/** - Data cleanup and recalculation
-- **database/** - Database initialization and setup
+New imports or bulk repair tools need explicit household scoping, reviewed
+inputs, regression tests, and a recovery plan. Do not add hard-coded personal
+records or duplicate service logic.

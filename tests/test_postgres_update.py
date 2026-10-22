@@ -10,7 +10,6 @@ from sqlalchemy.engine import make_url
 
 from deployment import postgres_update_backup as backup
 from deployment import migrate_production as migration
-from deployment import rehearse_update_guard as guard
 
 
 def test_postgres_connection_settings_do_not_leak_into_arguments(monkeypatch):
@@ -40,22 +39,18 @@ def test_backup_rejects_unsupported_connection_settings(url):
         backup.connection_environment(make_url(url))
 
 
-def test_backend_flag_explicitly_enables_postgres(monkeypatch, capsys):
-    monkeypatch.setattr(guard, 'load_env_file', lambda path: {
-        'DATABASE_URL': 'postgresql+psycopg:///finance'})
-    assert guard.main(['--backend']) == 0
-    assert capsys.readouterr().out == 'postgresql\n'
-
-
-@pytest.mark.parametrize('url,backend', [
-    ('sqlite:///finance.db', 'sqlite'),
-    ('postgresql+psycopg:///finance?host=other', None),
-    ('postgresql+psycopg://localhost', None),
+@pytest.mark.parametrize('url,expected', [
+    ('postgresql+psycopg:///finance', 0),
+    ('sqlite:////home/joneshq/snapshot.db', 1),
+    ('postgresql+psycopg:///finance?host=other', 1),
+    ('postgresql+psycopg://localhost', 1),
+    ('not-a-url', 1),
 ])
-def test_backend_flag_fails_closed(monkeypatch, capsys, url, backend):
-    monkeypatch.setattr(guard, 'load_env_file', lambda path: {'DATABASE_URL': url})
-    assert guard.main(['--backend']) == (0 if backend else 1)
-    assert capsys.readouterr().out.strip() == (backend or '')
+def test_preflight_only_allows_supported_postgres(monkeypatch, capsys, url, expected):
+    monkeypatch.setattr(backup, 'load_env_file', lambda path: {'DATABASE_URL': url})
+    monkeypatch.setattr(backup, 'check_tools', lambda: None)
+    assert backup.main(['--check']) == expected
+    assert capsys.readouterr().out == ''
 
 
 @pytest.mark.parametrize('failure', [None, 'pg_dump', 'pg_restore'])
@@ -157,7 +152,7 @@ def bash_executable():
     pytest.skip('Bash is required to exercise updater control flow.')
 
 
-def run_updater(tmp_path, failure, backend='postgresql', timer_active=True):
+def run_updater(tmp_path, failure, timer_active=True):
     executable = bash_executable()
     source = (Path(__file__).resolve().parents[1] / 'deployment' / 'quick_update.sh').read_text()
     # Only paths and the root check change; execute the actual updater control flow.
@@ -186,15 +181,6 @@ systemctl() {
     if [ "$1" = restart ] && [ "$FAILURE" = restart ]; then return 1; fi
     return 0
 }
-bash() {
-    if [[ "$*" = *deployment/backup.sh ]]; then
-        event sqlite-backup
-        mkdir -p "$BACKUP_DIR"
-        touch "$BACKUP_DIR/joneshq_finance_test.db.gz"
-    else
-        command bash "$@"
-    fi
-}
 curl() {
     event health
     if [ "$FAILURE" = health ]; then printf 500; else printf 200; fi
@@ -202,7 +188,6 @@ curl() {
 sudo() {
     shift 2
     case "$*" in
-        *rehearse_update_guard.py*) printf '%s\n' "$BACKEND" ;;
         *postgres_update_backup.py*--check*)
             event preflight
             [ "$FAILURE" != preflight ] ;;
@@ -213,7 +198,6 @@ sudo() {
         *"git rev-parse"*) printf 'previous-commit\n' ;;
         *"git pull"*) event pull; [ "$FAILURE" != pull ] ;;
         *"git reset"*) event rollback-code ;;
-        *gunzip*) event restore-sqlite ;;
         *"pip install"*) event dependencies ;;
         *check_production_config.py*) event config ;;
         *"&& pytest -q"*) event tests; [ "$FAILURE" != tests ] ;;
@@ -228,7 +212,6 @@ source "$TEST_ROOT/update.sh"
     path.write_text(harness, newline='\n')
     env = os.environ.copy()
     env['FAILURE'] = failure
-    env['BACKEND'] = backend
     env['TIMER_ACTIVE'] = 'yes' if timer_active else 'no'
     result = subprocess.run(
         [executable, str(path)], env=env, capture_output=True, text=True,
@@ -244,7 +227,6 @@ source "$TEST_ROOT/update.sh"
 def test_postgres_updater_stops_on_failure_without_automatic_restore(tmp_path, failure):
     result, events = run_updater(tmp_path, failure)
     assert result.returncode == (1 if failure else 0), result.stdout + result.stderr
-    assert 'restore-sqlite' not in events
     assert 'rollback-code' not in events
     if failure == 'preflight':
         assert not (tmp_path / 'backups' / 'postgres-update-incomplete').exists()
@@ -284,17 +266,3 @@ def test_failed_postgres_update_blocks_another_attempt(tmp_path):
     assert second.returncode == 1
     assert 'previous PostgreSQL update requires manual recovery' in second.stdout
     assert later_events == events
-
-
-@pytest.mark.parametrize('failure', ['', 'tests', 'migration', 'health'])
-def test_sqlite_update_and_rollback_path_is_preserved(tmp_path, failure):
-    result, events = run_updater(tmp_path, failure, backend='sqlite')
-    assert result.returncode == (1 if failure else 0), result.stdout + result.stderr
-    assert 'sqlite-backup' in events
-    assert 'dump' not in events
-    assert 'systemctl stop joneshq-finance' not in events
-    if failure:
-        assert 'rollback-code' in events
-        assert ('restore-sqlite' in events) == (failure in ('migration', 'health'))
-    else:
-        assert 'Update Complete!' in result.stdout

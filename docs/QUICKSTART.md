@@ -84,8 +84,8 @@ flask db upgrade
 
 The development SQLite database is stored under `instance/`. Do not delete or
 recreate it as a troubleshooting shortcut; back it up before any intentional
-reset. `scripts/database/init_db.py` is for creating tables in a fresh local
-database, not for upgrading an existing database.
+reset. Use the checked-in migrations for fresh databases as well as upgrades;
+the old table-creation scripts have been removed.
 
 ## Environment Variables
 

@@ -70,7 +70,12 @@ class CreditCardTransaction(db.Model):
     
     @staticmethod
     def recalculate_card_balance(credit_card_id, commit=True):
-        """Recalculate balance for a credit card based on PAID transactions only"""
+        """Recalculate balance for a credit card based on PAID transactions only.
+
+        In a request the card must belong to the current household; outside a
+        request the card's own household is used. Transactions are always
+        restricted to the card's household.
+        """
         from models.credit_cards import CreditCard
 
         try:
@@ -87,12 +92,9 @@ class CreditCardTransaction(db.Model):
             return
 
         # Get all transactions ordered by date (then by ID for stability)
-        transactions_query = CreditCardTransaction.query.filter_by(
-            credit_card_id=credit_card_id
-        )
-        if family_id is not None:
-            transactions_query = transactions_query.filter_by(family_id=family_id)
-        transactions = transactions_query.order_by(
+        transactions = CreditCardTransaction.query.filter_by(
+            credit_card_id=credit_card_id, family_id=card.family_id
+        ).order_by(
             CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()
         ).all()
         
@@ -115,15 +117,11 @@ class CreditCardTransaction(db.Model):
         
         # Update card's current balance using ONLY PAID transactions
         paid_balance = 0.0
-        paid_transactions_query = CreditCardTransaction.query.filter_by(
+        paid_transactions = CreditCardTransaction.query.filter_by(
             credit_card_id=credit_card_id,
+            family_id=card.family_id,
             is_paid=True
-        )
-        if family_id is not None:
-            paid_transactions_query = paid_transactions_query.filter_by(
-                family_id=family_id
-            )
-        paid_transactions = paid_transactions_query.order_by(
+        ).order_by(
             CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()
         ).all()
         

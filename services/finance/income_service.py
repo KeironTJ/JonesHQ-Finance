@@ -626,29 +626,6 @@ class IncomeService:
         )
 
     @staticmethod
-    def calculate_tax_and_ni(gross_annual, tax_code='1257L', pension_amount=0, pay_date=None):
-        """
-        Annual income tax and NI. Kept for scripts/back-compat.
-
-        *gross_annual* is total gross pay; *pension_amount* is the annual pre-tax
-        (salary-sacrifice) pension, removed from both taxable and NI-able pay.
-        """
-        gross_annual = Decimal(str(gross_annual))
-        pension_amount = Decimal(str(pension_amount))
-        settings = IncomeService.get_tax_settings_for_date(pay_date or date.today())
-        pay = max(Decimal('0'), gross_annual - pension_amount)
-        tax, _ = payroll_calculator.calculate_annual_income_tax(pay, tax_code, settings)
-        ni = payroll_calculator.calculate_annual_ni(pay, settings)
-        tax = tax.quantize(Decimal('0.01'))
-        ni = ni.quantize(Decimal('0.01'))
-        return {
-            'tax': tax,
-            'ni': ni,
-            'total_deductions': (tax + ni + pension_amount).quantize(Decimal('0.01')),
-            'net_annual': (gross_annual - tax - ni - pension_amount).quantize(Decimal('0.01')),
-        }
-
-    @staticmethod
     def preview_payslip(data):
         """Parse a preview request and return the estimate as a JSON-safe dict.
         Accepts the source-form fields, so the live preview matches forecasts."""
@@ -1073,12 +1050,6 @@ class IncomeService:
     def forecast_horizon(today=None):
         """Forecast rows are saved up to this date; the plan projects beyond it."""
         return (today or date.today()) + relativedelta(years=IncomeService.forecast_years())
-
-    @staticmethod
-    def pay_date_for_month(recurring_income, target_date):
-        """Monthly pay date for the template in *target_date*'s month, moved back
-        to the previous working day if it falls on a weekend or bank holiday."""
-        return income_schedule.monthly_pay_date(recurring_income.pay_day, target_date.year, target_date.month)
 
     @staticmethod
     def _existing_income_for(recurring_income, pay_date):

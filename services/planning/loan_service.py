@@ -467,13 +467,6 @@ class LoanService:
         }
     
     @staticmethod
-    def calculate_total_interest(loan_id):
-        """Calculate total interest paid/to be paid over life of loan"""
-        payments = family_query(LoanPayment).filter_by(loan_id=loan_id).all()
-        total_interest = sum(float(p.interest_charge) for p in payments)
-        return total_interest
-    
-    @staticmethod
     def calculate_remaining_balance(loan_id):
         """Get the most recent closing balance from paid payments only"""
         last_payment = family_query(LoanPayment).filter_by(loan_id=loan_id, is_paid=True)\

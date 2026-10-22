@@ -85,11 +85,6 @@ class User(UserMixin, db.Model):
         """Check if provided password matches the hash"""
         return check_password_hash(self.password_hash, password)
     
-    def update_last_login(self):
-        """Update the last login timestamp"""
-        self.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
-        db.session.commit()
-    
     def is_locked(self):
         """Check if account is locked due to failed login attempts"""
         if self.locked_until and self.locked_until > datetime.now(timezone.utc).replace(tzinfo=None):

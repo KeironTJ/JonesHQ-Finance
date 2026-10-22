@@ -10,12 +10,15 @@ substitute for an independent security audit.
 From the repository root:
 
 ```powershell
-venv\Scripts\python.exe -m scripts.create_initial_users
 venv\Scripts\python.exe -m flask run
 ```
 
 Open `http://127.0.0.1:5000/login`. Development uses an in-memory rate-limit
 backend and does not require SMTP or Redis.
+
+For a new household, use the household-invite registration flow below. Legacy
+account-creation scripts have been removed; do not restore hard-coded accounts
+or credentials from old setup instructions.
 
 When `SECRET_KEY` is not configured, development automatically generates a random
 key in `instance/development_secret_key` and reuses it across restarts and code
@@ -76,7 +79,7 @@ See [Deployment setup](../deployment/README.md).
   use the same public message for incorrect, unknown, locked, and inactive accounts.
   Expired lockouts start a new failure window. Unknown users still incur a password
   hash check; this is not a guarantee of identical response timing.
-- Registration, invited-member signup, and account-creation scripts use the same
+- Registration and invited-member signup use the same
   configured password policy: at least 10 characters with uppercase, lowercase,
   number, and supported special character. Existing passwords are not invalidated.
 - Login business rules live in `AuthService`. Invalid registration passwords are

@@ -325,19 +325,6 @@ class VehicleService:
         return family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(FuelRecord.date.desc()).first()
     
     @staticmethod
-    def calculate_fuel_efficiency(vehicle_id, num_records=10):
-        """Calculate average fuel efficiency for a vehicle"""
-        records = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(
-            FuelRecord.date.desc()
-        ).limit(num_records).all()
-        
-        if not records:
-            return Decimal('0')
-        
-        avg_mpg = sum([r.mpg or Decimal('0') for r in records]) / len(records)
-        return avg_mpg
-    
-    @staticmethod
     def get_total_fuel_cost(vehicle_id, start_date=None, end_date=None):
         """Calculate total fuel costs for a vehicle"""
         query = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id)

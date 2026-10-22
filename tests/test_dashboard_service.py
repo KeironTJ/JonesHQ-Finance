@@ -13,7 +13,7 @@ def test_dashboard_data_scopes_accounts_and_builds_empty_summaries(
     )
     monkeypatch.setattr(
         'services.analytics.dashboard_service.PaydayService.get_payday_summary_for_year',
-        lambda account_id, year, include_unpaid: [{'account_id': account_id, 'year': year}],
+        lambda account_id, year: [{'account_id': account_id, 'year': year}],
     )
     account = Account(
         family_id=family.id,

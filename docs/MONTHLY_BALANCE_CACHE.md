@@ -68,7 +68,7 @@ The Monthly Account Balance Cache system optimizes Net Worth timeline calculatio
    - Auto-update cache when transactions are added/edited/deleted
    - Uses SQLAlchemy `@event.listens_for` hooks
 
-4. **Net Worth Integration**: `services/networth_service.py`
+4. **Net Worth Integration**: `services/analytics/networth_service.py`
    - `calculate_networth_at_date()` updated to use cache via `MonthlyBalanceService.get_balance_for_month()`
    - Falls back to `Account.balance` if cache miss
 
@@ -76,15 +76,14 @@ The Monthly Account Balance Cache system optimizes Net Worth timeline calculatio
 
 ### Initial Population
 
-```bash
-python scripts/maintenance/populate_monthly_balances.py
-```
+Use **Net Worth → Refresh Cache**. The authenticated
+`POST /networth/refresh-cache` action calls
+`MonthlyBalanceService.rebuild_all_cache()`. Its future horizon defaults to
+24 months and is constrained to 12-240 months.
 
-This will:
-- Clear existing cache
-- Find earliest transaction across all accounts
-- Calculate monthly balances from earliest month to 24 months in future by default
-- Populate cache for all active accounts
+The service clears and rebuilds the current scope's cache from the earliest
+transaction through the selected future horizon. The old standalone population
+script has been removed.
 
 ### Automatic Updates
 
@@ -140,50 +139,13 @@ for month in timeline:
     print(f"{month['month_label']}: £{month['net_worth']:.2f}")
 ```
 
-## Performance Gains
-
-### Before (Direct Transaction Queries)
-- **Query**: 14 accounts × 24 months = 336 queries
-- **Records Scanned**: Up to 7,912 transactions per query
-- **Time**: 3-5 seconds for timeline load
-
-### After (Monthly Balance Cache)
-- **Query**: 14 accounts × 24 months = 336 cache lookups
-- **Records Scanned**: 1 record per lookup
-- **Time**: < 100ms for timeline load
-
-**Result**: ~50x performance improvement
-
 ## Maintenance
-
-### Check Cache Status
-
-```bash
-python scripts/checks/check_balance_cache.py
-```
-
-Shows:
-- Total cache entries
-- Active accounts
-- Sample balances
-- Month range covered
-
-### Test Net Worth Calculations
-
-```bash
-python scripts/checks/test_networth_cache.py
-```
-
-Verifies:
-- Current net worth calculation
-- Historical point-in-time calculation
-- Timeline generation
-- Comparison data
 
 ### Common Issues
 
 **Problem**: Timeline shows same values for all months
-**Solution**: Run `populate_monthly_balances.py` to rebuild cache
+**Solution**: Check the selected dates and transactions, then use **Refresh Cache**
+on the net-worth page if the cache needs rebuilding.
 
 **Problem**: New transactions not reflected in timeline
 **Solution**: Check event listeners are working. Manually run:
@@ -205,14 +167,6 @@ Creates:
 - `monthly_account_balances` table
 - Unique constraint on `(account_id, year_month)`
 - Index on `(account_id, year_month)` for performance
-
-## Future Enhancements
-
-1. **Scheduled Refresh**: Nightly cron job to ensure future months stay up to date
-2. **Cache Warming**: Pre-calculate next 6 months on app startup
-3. **Incremental Updates**: Only recalculate changed months (currently recalculates from month forward)
-4. **Cache Invalidation**: Track when Account.balance is manually edited
-5. **Historical Snapshots**: Preserve actual historical values even if transactions are edited later
 
 ## Related Documentation
 

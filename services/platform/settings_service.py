@@ -124,6 +124,7 @@ class SettingsService:
                 values[field] = record.id
 
         # Validate the whole section before writing anything.
+        old_payday = Settings.get_value('payday_day', 15) if section == 'household' else None
         for field, value in values.items():
             key, _, setting_type, description = SettingsService.SECTIONS[section][1][field]
             if value is None:
@@ -132,17 +133,11 @@ class SettingsService:
                     db.session.delete(setting)
             else:
                 Settings.set_value(key, value, description, setting_type)
+        if section == 'household' and values['payday_day'] != old_payday:
+            from services.finance.payday_service import PaydayService
+            # Stored payday_period labels drive transaction filters and analytics.
+            PaydayService.reperiod_all_transactions()
         db.session.commit()
-
-    @staticmethod
-    def get_default_account(accounts):
-        user_id = get_current_user_id()
-        user = db.session.get(User, user_id) if user_id else None
-        if user:
-            for account in accounts:
-                if account.id == user.default_account_id:
-                    return account
-        return accounts[0] if accounts else None
 
     @staticmethod
     def update_default_account(data):

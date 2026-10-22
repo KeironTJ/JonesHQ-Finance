@@ -62,9 +62,3 @@ class TaxSettings(db.Model):
                 TaxSettings.is_active == True,
             ).first()
         return setting
-    
-    @staticmethod
-    def get_current():
-        """Get the currently active tax settings"""
-        from datetime import date
-        return TaxSettings.get_for_date(date.today())

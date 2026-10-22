@@ -208,16 +208,6 @@ class ChildcareService:
         return created
     
     @staticmethod
-    def get_or_create_child(name, year_group=None):
-        """Get existing child or create new one"""
-        child = family_query(Child).filter_by(name=name).first()
-        if not child:
-            child = Child(name=name, year_group=year_group)
-            db.session.add(child)
-            db.session.commit()
-        return child
-    
-    @staticmethod
     def add_activity_type(child_id, name, cost, provider=None):
         """Add an activity type for a child"""
         activity_type = ChildActivityType(

@@ -38,7 +38,7 @@ Primary entry points
   calculate_ltv()              — current loan-to-value ratio
 """
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import date, timedelta
+from datetime import date
 from dateutil.relativedelta import relativedelta
 from extensions import db
 from models.property import Property
@@ -47,7 +47,6 @@ from models.mortgage import MortgageProduct
 from models.mortgage_payments import MortgageSnapshot
 from models.transactions import Transaction
 from models.categories import Category
-from models.settings import Settings
 from services.finance.payday_service import PaydayService
 from utils import db_helpers
 from utils.db_helpers import family_query, family_get, family_get_or_404
@@ -994,59 +993,6 @@ class MortgageService:
         
         # Link transaction to snapshot
         snapshot.transaction_id = transaction.id
-    
-    @staticmethod
-    def sync_transaction_to_snapshot(transaction_id):
-        """
-        Sync transaction changes back to the mortgage snapshot
-        Updates snapshot when transaction is modified
-        """
-        from models.transactions import Transaction
-        
-        transaction = family_get(Transaction, transaction_id)
-        if not transaction or not hasattr(transaction, 'mortgage_snapshot'):
-            return False
-        
-        snapshot = transaction.mortgage_snapshot
-        if not snapshot:
-            return False
-        
-        # Update snapshot based on transaction
-        total_payment = abs(transaction.amount)
-        snapshot.monthly_payment = total_payment - snapshot.overpayment
-        
-        # Recalculate balance
-        # Note: This is complex and might require recalculating the entire projection chain
-        # For now, just mark it for review
-        if snapshot.notes:
-            snapshot.notes += " | Transaction updated - verify balance"
-        else:
-            snapshot.notes = "Transaction updated - verify balance"
-        
-        db.session.commit()
-        return True
-    
-    @staticmethod
-    def get_mortgage_free_projection(property_id, scenario='base'):
-        """Calculate when the property will be mortgage-free"""
-        products = family_query(MortgageProduct).filter_by(property_id=property_id).all()
-        
-        latest_date = None
-        
-        for product in products:
-            last_snapshot = family_query(MortgageSnapshot).filter_by(
-                mortgage_product_id=product.id,
-                is_projection=True,
-                scenario_name=scenario
-            ).filter(
-                MortgageSnapshot.balance == 0
-            ).order_by(MortgageSnapshot.date.desc()).first()
-            
-            if last_snapshot:
-                if not latest_date or last_snapshot.date > latest_date:
-                    latest_date = last_snapshot.date
-        
-        return latest_date
     
     @staticmethod
     def calculate_ltv(property_id):

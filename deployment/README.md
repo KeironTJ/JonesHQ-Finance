@@ -2,12 +2,8 @@
 
 This is the **authoritative, current** guide for operating JonesHQ Finance in
 production. Where any other document disagrees with this one, this one wins.
-Older guides ([DEPLOYMENT_CHECKLIST](DEPLOYMENT_CHECKLIST.md),
-[LXC_SIMPLE_DEPLOYMENT](LXC_SIMPLE_DEPLOYMENT.md),
-[docs/PROXMOX_DEPLOYMENT](../docs/PROXMOX_DEPLOYMENT.md),
-[docs/DEPLOYMENT](../docs/DEPLOYMENT.md)) describe the original SQLite install and
-are kept for history only. [POSTGRES_REHEARSAL](POSTGRES_REHEARSAL.md) is the record
-of the completed migration; do not re-run it.
+The October 2026 SQLite → PostgreSQL migration is complete; its one-off tooling
+and the original SQLite install guides have been removed (see Git history).
 
 ## Current production
 
@@ -71,9 +67,8 @@ until you resolve it; follow [Recovering from a failed update](#recovering-from-
   has been tested. Check the Proxmox backup job's task history periodically.
 - **Per update:** each `quick_update.sh` run leaves a point-in-time
   `database.dump` in its recovery directory.
-- **Not a backup:** [backup.sh](backup.sh) is a legacy SQLite script. It now
-  refuses to run against a PostgreSQL configuration. Do not schedule it; remove
-  any old `joneshq-backup` cron entry.
+- Remove any old `joneshq-backup` cron entry; the legacy SQLite backup script
+  has been deleted.
 
 A PostgreSQL dump/restore rehearsal matched every row and sequence. To take an
 ad-hoc dump (for example before risky manual work), as root:
@@ -189,8 +184,10 @@ bash deployment/quick_update.sh     # deploys the update as normal
   This logs everyone out once;
 - makes the app service start after Redis. It does not restart the app.
 
-`quick_update.sh` now runs `deployment/check_production_config.py` before restarting
-and rolls back the code if settings or Redis are not ready, so the live site stays up.
+`quick_update.sh` runs `deployment/check_production_config.py` before migrating or
+restarting. If settings or Redis are not ready it stops, leaving the app stopped and
+the recovery marker in place; follow
+[Recovering from a failed update](#recovering-from-a-failed-update).
 You can run the check yourself at any time:
 
 ```bash
@@ -495,7 +492,7 @@ unaffected. To undo, set the container's Firewall option back to `No`.
 Current:
 
 - **quick_update.sh** - Backs up (PostgreSQL dump), pulls, tests, migrates and restarts production
-- **postgres_update_backup.py** - PostgreSQL dump/verify helper used by `quick_update.sh`
+- **postgres_update_backup.py** - PostgreSQL preflight (`--check`, run first by `quick_update.sh`) and dump/verify helper
 - **check_production_config.py** - Verifies `.env.production` and Redis before restarts
 - **joneshq-finance.service** - App systemd unit
 - **joneshq-maintenance.service / .timer** - Daily security-log/session retention job
@@ -503,19 +500,9 @@ Current:
 - **setup_redis.sh** - One-time Redis setup for login rate limiting
 - **migrate_production.py** - Runs migrations using `.env.production` (called by `quick_update.sh`)
 
-Historical / do not use on current production:
-
-- **POSTGRES_REHEARSAL.md**, **prepare_postgres_source.py**, **rehearse_postgres.py**,
-  **rehearse_update_guard.py** - SQLite ? PostgreSQL migration tooling (completed October 2026)
-- **backup.sh** - Legacy SQLite backup (used by `quick_update.sh` only on SQLite installs); refuses to run on PostgreSQL
-- **deploy.sh** - Original fresh-install script; configures SQLite. Refuses to run unless `ALLOW_LEGACY_SQLITE_DEPLOY=1`
-- **nginx.conf** - Only for a self-hosted Nginx; production uses Nginx Proxy Manager
-- **DEPLOYMENT_CHECKLIST.md**, **LXC_SIMPLE_DEPLOYMENT.md** - Original SQLite install guides
-
 ## Building a new server
 
-There is no current fresh-install script for PostgreSQL. `deploy.sh` and the older
-guides create a SQLite installation. If you need to rebuild, restore the latest
+There is no fresh-install script. If you need to rebuild, restore the latest
 Proxmox LXC backup rather than installing from scratch. If a from-scratch install is
 ever required, install PostgreSQL and Redis as described in this runbook, restore a
 confirmed `database.dump` into a new database, and verify health before opening it.

@@ -75,4 +75,7 @@ dashboard/list display defaults on the authenticated `User`, not the household.
 The personal default-account selector uses the existing visibility-aware account
 validation. `/preferences/save` supports lightweight boolean updates; the legacy
 owner-only `/settings/save_preference` endpoint delegates to the same personal
-write path. Theme choice remains browser-local and saves immediately.
+write path. Signed-in appearance is saved on the user through
+`/preferences/appearance`; form changes are previews until saved, while the
+top-bar toggle saves immediately. Only signed-out appearance uses browser-local
+storage. See the [design system](../docs/DESIGN_SYSTEM.md#personal-appearance).

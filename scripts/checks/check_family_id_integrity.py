@@ -10,24 +10,23 @@ from app import create_app
 from extensions import db
 
 
-TENANT_TABLES = (
-    'accounts', 'balances', 'budgets', 'categories', 'children',
-    'child_activity_types', 'daily_childcare_activities',
-    'monthly_childcare_summaries', 'childcare_records', 'credit_cards',
-    'credit_card_promotions', 'credit_card_transactions', 'expenses',
-    'expense_calendar', 'fuel_records', 'income', 'loans', 'loan_payments',
-    'monthly_account_balances', 'mortgage_products', 'mortgages',
-    'mortgage_snapshots', 'mortgage_payments', 'net_worth', 'pensions',
-    'pension_snapshots', 'planned_transactions', 'properties',
-    'recurring_income', 'settings', 'tax_settings', 'transactions', 'trips',
-    'vehicles', 'vendor_types', 'vendors',
-)
+# Tables where a NULL family_id is valid: users and security events can exist
+# outside a household, and NULL tax settings are the shared global defaults.
+NULL_FAMILY_ALLOWED = frozenset({'users', 'security_events', 'tax_settings'})
+
+
+def tenant_tables():
+    import models  # noqa: F401 - register every model on db.metadata
+    return sorted(
+        table.name for table in db.metadata.sorted_tables
+        if 'family_id' in table.c and table.name not in NULL_FAMILY_ALLOWED
+    )
 
 
 def find_missing_family_ids(connection):
     existing_tables = set(inspect(connection).get_table_names())
     missing = {}
-    for table in TENANT_TABLES:
+    for table in tenant_tables():
         if table not in existing_tables:
             continue
         count = connection.execute(text(

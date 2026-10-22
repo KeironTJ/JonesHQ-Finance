@@ -1,4 +1,5 @@
-from flask import current_app, render_template, request, redirect, url_for, flash, jsonify
+from flask import abort, current_app, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import current_user
 from sqlalchemy import func
 from . import income_bp
 from models.income import Income
@@ -547,21 +548,16 @@ def end_job(id):
 def reperiod_transactions():
     """Re-stamp payday_period on all transactions, optionally updating the payday_day setting first."""
     from services.finance.payday_service import PaydayService
-    from models.settings import Settings
+
+    if not current_user.is_household_owner:
+        abort(403)
 
     try:
-        new_payday_day = request.form.get('new_payday_day', '').strip()
-        if new_payday_day:
-            day = int(new_payday_day)
-            if not 0 <= day <= 31:
-                raise ValueError("Payday day must be between 1 and 31 (or 0 for last day of month).")
-            Settings.set_value('payday_day', day, description='Day of month salary is paid', setting_type='int')
-            db.session.commit()
-
-        updated = PaydayService.reperiod_all_transactions()
+        _, new_day = PaydayService.change_payday_and_reperiod(request.form)
+        # The count includes other members' private transactions, so don't show it.
         flash(
-            f"Payday periods updated for {updated} transaction(s)."
-            + (f" Payday day is now the {new_payday_day}." if new_payday_day else ""),
+            "Payday periods recalculated."
+            + (f" Payday day is now the {new_day}." if new_day else ""),
             'success'
         )
 

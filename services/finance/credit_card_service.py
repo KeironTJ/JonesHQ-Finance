@@ -51,7 +51,7 @@ import logging
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
-from models.credit_cards import CreditCard, CreditCardPromotion
+from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
 from models.accounts import Account
 from models.categories import Category
@@ -919,112 +919,6 @@ class CreditCardService:
         return transaction
     
     @staticmethod
-    def generate_future_statements(card_id, start_date, end_date):
-        """
-        Generate Interest transactions for a card across a date range.
-
-        .. deprecated::
-            Superseded by generate_future_monthly_statements(), which also handles
-            linked payments and bank transactions.  Use that method instead.
-
-        Walks month by month from start_date to end_date on the card's statement day,
-        skipping months that already have an Interest transaction.
-
-        Returns:
-            list[CreditCardTransaction] — the Interest transactions created.
-        """
-        card = family_get(CreditCard, card_id)
-        if not card or not card.statement_date:
-            return []
-        
-        transactions = []
-        current_date = start_date.replace(day=card.statement_date)
-        
-        # If we're past the statement date this month, start next month
-        if current_date < start_date:
-            current_date = current_date + relativedelta(months=1)
-        
-        while current_date <= end_date:
-            # Check if transaction already exists
-            existing = family_query(CreditCardTransaction).filter_by(
-                credit_card_id=card.id,
-                date=current_date,
-                transaction_type='Interest'
-            ).first()
-            
-            if not existing:
-                txn = CreditCardService.generate_statement_interest(
-                    card.id, 
-                    current_date, 
-                    commit=False
-                )
-                if txn:
-                    transactions.append(txn)
-            
-            current_date = current_date + relativedelta(months=1)
-        
-        if transactions:
-            db.session.commit()
-            CreditCardTransaction.recalculate_card_balance(card.id)
-        
-        return transactions
-    
-    @staticmethod
-    def generate_future_payments(card_id, start_date, end_date, payment_day_offset=5):
-        """
-        Generate Payment transactions for a card across a date range.
-
-        .. deprecated::
-            Superseded by generate_future_monthly_statements(), which handles
-            interest, payments, and bank transactions together as a linked chain.
-            Use that method instead.
-
-        Payments are scheduled ``payment_day_offset`` days after the statement date.
-        Skips months that already have a Payment transaction on the calculated date.
-
-        Returns:
-            list[CreditCardTransaction] — the Payment transactions created.
-        """
-        card = family_get(CreditCard, card_id)
-        if not card or not card.statement_date:
-            return []
-        
-        transactions = []
-        statement_date = start_date.replace(day=card.statement_date)
-        
-        # If we're past the statement date this month, start next month
-        if statement_date < start_date:
-            statement_date = statement_date + relativedelta(months=1)
-        
-        while statement_date <= end_date:
-            # Payment is X days after statement
-            payment_date = statement_date + timedelta(days=payment_day_offset)
-            
-            # Check if transaction already exists
-            existing = family_query(CreditCardTransaction).filter_by(
-                credit_card_id=card.id,
-                date=payment_date,
-                transaction_type='Payment'
-            ).first()
-            
-            if not existing:
-                txn = CreditCardService.generate_payment_transaction(
-                    card.id, 
-                    payment_date, 
-                    commit=False
-                )
-                if txn:
-                    transactions.append(txn)
-            
-            statement_date = statement_date + relativedelta(months=1)
-        
-        if transactions:
-            db.session.commit()
-            CreditCardTransaction.recalculate_card_balance(card.id)
-        
-        return transactions
-    
-    @staticmethod
     def generate_all_monthly_statements(start_date=None, end_date=None, payment_offset_days=14):
         """
         Generate monthly statements for all active cards with intelligent payment triggering:
@@ -1335,33 +1229,6 @@ class CreditCardService:
         
         return overall_results
     
-    @staticmethod
-    def generate_all_future_transactions(start_date=None, end_date=None):
-        """
-        DEPRECATED: Use generate_all_monthly_statements instead
-        Generate interest and payment transactions for all active cards
-        """
-        if not start_date:
-            start_date = date.today()
-        if not end_date:
-            end_date = start_date + relativedelta(years=10)  # Default 10 years
-        
-        active_cards = family_query(CreditCard).filter_by(is_active=True).all()
-        
-        results = {
-            'statements': 0,
-            'payments': 0
-        }
-        
-        for card in active_cards:
-            statements = CreditCardService.generate_future_statements(card.id, start_date, end_date)
-            payments = CreditCardService.generate_future_payments(card.id, start_date, end_date)
-            
-            results['statements'] += len(statements)
-            results['payments'] += len(payments)
-        
-        return results
-
     @staticmethod
     def sync_bank_transaction_to_payment(bank_txn):
         """

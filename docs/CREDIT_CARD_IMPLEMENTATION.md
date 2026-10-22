@@ -72,10 +72,6 @@ def calculate_actual_payment(self):
     if not self.set_payment:
         return self.calculate_minimum_payment()
     return round(min(float(self.set_payment), abs(float(self.current_balance))), 2)
-
-def generate_payment_transaction(card_id, payment_date):
-    # Service creates a positive card-side payment.
-    # A configured bank account can receive a linked debit transaction.
 ```
 
 **Features:**
@@ -114,7 +110,7 @@ def generate_payment_transaction(card_id, payment_date):
 
 **Relevant files:**
 - `blueprints/transactions/routes.py` - Consolidated route logic
-- `blueprints/transactions/templates/consolidated.html` - UI template
+- `templates/transactions/consolidated.html` - UI template
 - Updated `blueprints/transactions/routes.py` - Added imports and route
 - Updated `templates/base.html` - Navigation link
 
@@ -134,11 +130,10 @@ def generate_payment_transaction(card_id, payment_date):
 - Alert on card detail page when promotional offers active
 
 ### Balance Calculation
-```python
-def recalculate_card_balance(credit_card_id):
-    # Transaction running balances include paid and unpaid transactions.
-    # Card current_balance and available_credit use paid transactions only.
-```
+Transaction running balances include paid and unpaid transactions. Card
+`current_balance` and `available_credit` use paid transactions only. The
+recalculation implementation is in
+[`CreditCardTransaction`](../models/credit_card_transactions.py).
 
 ### Future Transaction Generation
 - Monthly loop using `relativedelta`
@@ -287,7 +282,7 @@ Navigate to: `http://localhost:5000/transactions/consolidated`
 
 ---
 
-## Next Steps
+## Related Workflows
 
 The current payment workflow already creates and links the bank-side
 transaction when a payment account is configured. Loan, vehicle, pension, planned-transaction, and income workflows
@@ -303,9 +298,7 @@ All business logic is isolated in `services/finance/credit_card_service.py`:
 - `calculate_interest()` - Interest calculation with 0% override
 - `generate_statement_interest()` - Create interest transaction
 - `generate_payment_transaction()` - Create payment transaction
-- `generate_future_statements()` - Batch generate interest
-- `generate_future_payments()` - Batch generate payments
-- `generate_all_future_transactions()` - Process all cards
+- `generate_all_monthly_statements()` - Batch generate interest and payments for all cards
 
 **Benefits:**
 - Easy to test
@@ -321,119 +314,13 @@ def get_current_purchase_apr(self, date):
     return self.monthly_apr
 ```
 
-### Payment Calculation
-```python
-def calculate_actual_payment(self):
-    if not self.current_balance or self.current_balance >= 0:
-        return 0.0
-    if not self.set_payment:
-        return self.calculate_minimum_payment()
-    return round(min(float(self.set_payment), abs(float(self.current_balance))), 2)
-```
-
 ### Duplicate Prevention
-```python
-# Check if transaction already exists before creating
-existing = family_query(CreditCardTransaction).filter_by(
-    credit_card_id=card.id,
-    date=current_date,
-    transaction_type='Interest'
-).first()
 
-if not existing:
-    generate_statement_interest(card.id, current_date, commit=False)
-```
-
----
-
-## Success Criteria ✅
-
-The current implementation includes:
-
-1. ✅ **Credit Card Management UI**
-   - Add/edit cards
-   - View all cards with statistics
-   - Individual card details
-   - Promotional period tracking
-
-2. ✅ **Auto-Generate Statement Interest**
-   - Calculates interest: `balance × (monthly_apr / 100)`
-   - Respects 0% promotional periods (interest = £0)
-   - Records APR used
-   - Auto-creates categories
-
-3. ✅ **Auto-Generate Payments**
-   - Payment calculation: capped at the outstanding debt, or the minimum-payment percentage when no fixed amount is configured
-   - Configurable offset from statement
-   - Batch generation to any date
-
-4. **Historical card-data import**
-   - A one-off historical import script remains in `scripts/imports/`
-   - It is not a routine setup step and should be reviewed before reuse
-
-5. ✅ **Consolidated Transaction View**
-   - Combines bank, credit card, loan transactions
-   - Filters by source, category, date
-   - Summary statistics
-   - Export to CSV
-   - Single comprehensive financial view
+Statement generation checks for an existing transaction for the card, date, and
+transaction type within the active household before creating another entry.
 
 ---
 
 The consolidated transaction view brings supported transaction sources into
 one view. Projection results depend on the data and selected forecast period;
 they should not be treated as a guarantee of future balances.
-
----
-
-## Files Modified/Created
-
-### New Files (14)
-1. `blueprints/credit_cards/__init__.py`
-2. `blueprints/credit_cards/routes.py`
-3. `templates/credit_cards/index.html`
-4. `templates/credit_cards/form.html`
-5. `templates/credit_cards/detail.html`
-6. `services/finance/credit_card_service.py`
-7. `blueprints/transactions/routes.py` (consolidated route)
-8. `blueprints/transactions/templates/consolidated.html`
-
-### Modified Files (5)
-1. `models/credit_cards.py` - Added promotional fields and methods
-2. `models/credit_card_transactions.py` - Added APR tracking fields
-3. `models/__init__.py` - Added CreditCardPromotion
-4. `app.py` - Registered credit_cards blueprint
-5. `templates/base.html` - Added Credit Cards and Consolidated links
-6. `blueprints/transactions/routes.py` - Added consolidated route
-7. `blueprints/transactions/templates/transactions.html` - Added consolidated button
-
----
-
-## Database Migration Required
-
-After import, run migration to add new fields:
-
-```bash
-flask db migrate -m "Add credit card promotional tracking"
-flask db upgrade
-```
-
-**New Fields:**
-- `credit_cards.purchase_0_percent_until`
-- `credit_cards.balance_transfer_0_percent_until`
-- `credit_card_transactions.applied_apr`
-- `credit_card_transactions.is_promotional_rate`
-- `credit_card_transactions.bank_transaction_id`
-
-**New Table:**
-- `credit_card_promotions`
-
----
-
-## Project Status
-
-**Complete:** 5/5 Tasks
-**Ready For:** Production testing and data import
-**Next Phase:** Link to bank accounts, import historical transactions, build remaining modules
-
-🎉 **Credit Card System COMPLETE!**

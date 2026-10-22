@@ -25,9 +25,8 @@ Primary entry points
   get_period_for_date()         — map any date → YYYY-MM period label
   get_payday_period()           — start/end/label for a given year+month
   get_recent_periods()          — list of periods for a filter dropdown
-  calculate_period_balances()   — rolling balance and minimum for one period
-  get_payday_summary()          — balance + category breakdown, multiple periods
-  get_payday_summary_for_year() — same, optimised (single DB query for the year)
+  get_payday_summary_for_year() — forecast balances and categories for one year
+  change_payday_and_reperiod()  — validate payday and update stored period labels
 """
 from datetime import date, timedelta
 from decimal import Decimal
@@ -35,7 +34,8 @@ import holidays as holidays_lib
 from models.transactions import Transaction
 from models.settings import Settings
 from extensions import db
-from utils.db_helpers import family_query, family_get, family_get_or_404
+from utils import db_helpers
+from utils.db_helpers import family_query
 
 # Module-level cache: year -> set of bank holiday dates (England & Wales)
 _bank_holiday_cache: dict[int, set] = {}
@@ -52,8 +52,14 @@ class PaydayService:
     
     @staticmethod
     def get_payday_setting():
-        """Get the payday from settings (day of month)"""
-        return Settings.get_value('payday_day', 15)  # Default to 15th
+        """Get the payday from settings (day of month, 1-31)."""
+        day = Settings.get_value('payday_day', 15)
+        # Older versions could save 0 to mean "last day"; 31 is clamped to each month's end.
+        if day == 0:
+            return 31
+        if not 1 <= day <= 31:
+            raise ValueError('Payday must be a day between 1 and 31.')
+        return day
 
     # ------------------------------------------------------------------
     # Bank holiday helpers
@@ -293,261 +299,7 @@ class PaydayService:
         return result
     
     @staticmethod
-    def calculate_period_balances(account_id, start_date, end_date, include_unpaid=True):
-        """
-        Calculate rolling balance, minimum balance, and max extra spend for a payday period.
-        
-        Args:
-            account_id: Bank account ID to track
-            start_date: Period start date
-            end_date: Period end date
-            include_unpaid: Whether to include unpaid transactions (default True for forecasting)
-            
-        Returns:
-            dict with rolling_balance, min_balance, max_extra_spend
-        """
-        # Get opening balance (cumulative balance at start_date - 1)
-        opening_balance = PaydayService.get_balance_at_date(account_id, start_date - timedelta(days=1), include_unpaid=True)
-        
-        # Get all transactions in the period (regardless of paid status - we want to see forecast)
-        query = family_query(Transaction).filter(
-            Transaction.account_id == account_id,
-            Transaction.transaction_date >= start_date,
-            Transaction.transaction_date <= end_date
-        )
-        
-        # Always include unpaid for payday forecasting
-        # (The include_unpaid parameter is kept for consistency but we ignore it for now)
-        
-        transactions = query.order_by(Transaction.transaction_date).all()
-        
-        # Calculate daily balances
-        current_balance = opening_balance
-        min_balance = opening_balance
-        balances = []
-        
-        for txn in transactions:
-            # Income (positive amount) adds to balance, expense (negative) subtracts
-            # Note: In this system, income is stored as positive, expenses as negative
-            if txn.amount > 0:
-                current_balance += Decimal(str(txn.amount))
-            else:  # Expense
-                current_balance -= abs(Decimal(str(txn.amount)))
-            
-            balances.append(current_balance)
-            min_balance = min(min_balance, current_balance)
-        
-        # Ending balance
-        rolling_balance = current_balance if balances else opening_balance
-        
-        # Max extra spend is the difference between ending balance and opening balance
-        max_extra_spend = rolling_balance - opening_balance
-        
-        return {
-            'rolling_balance': float(rolling_balance),
-            'min_balance': float(min_balance),
-            'max_extra_spend': float(max_extra_spend),
-            'opening_balance': float(opening_balance)
-        }
-    
-    @staticmethod
-    def get_balance_at_date(account_id, target_date, include_unpaid=True):
-        """
-        Calculate cumulative account balance at a specific date.
-        Always includes all transactions (paid and unpaid) for forecasting.
-        
-        Args:
-            account_id: Bank account ID
-            target_date: Date to calculate balance for
-            include_unpaid: Whether to include unpaid transactions (kept for compatibility, always True for payday)
-            
-        Returns:
-            Decimal balance
-        """
-        # Get account
-        from models.accounts import Account
-        account = family_get(Account, account_id)
-        if not account:
-            return Decimal('0.00')
-        
-        # Start from zero and calculate cumulative balance
-        balance = Decimal('0.00')
-        
-        # Get all transactions up to target_date (including unpaid for forecasting)
-        query = family_query(Transaction).filter(
-            Transaction.account_id == account_id,
-            Transaction.transaction_date <= target_date
-        )
-        
-        # Always include all transactions for payday forecasting
-        
-        transactions = query.order_by(Transaction.transaction_date).all()
-        
-        # Apply transactions
-        for txn in transactions:
-            # Income (positive amount) adds to balance, expense (negative) subtracts
-            if txn.amount > 0:
-                balance += Decimal(str(txn.amount))
-            else:  # Expense
-                balance -= abs(Decimal(str(txn.amount)))
-        
-        return balance
-    
-    @staticmethod
-    def get_category_breakdown(account_id, start_date, end_date, include_unpaid=True):
-        """
-        Get spending breakdown by category and subcategory for a payday period.
-        Includes both income and expenses.
-        
-        Args:
-            account_id: Bank account ID to track (None for all accounts)
-            start_date: Period start date
-            end_date: Period end date
-            include_unpaid: Whether to include unpaid transactions
-            
-        Returns:
-            Dict with 'income' and 'expenses' lists, each containing category breakdowns
-        """
-        from models.categories import Category
-        from sqlalchemy import func
-        
-        # Load all relevant categories in one query and index by id — eliminates N+1
-        category_map = {c.id: c for c in family_query(Category).all()}
-        
-        # Get all transactions in the period with eager-loaded relationships
-        query = family_query(Transaction).filter(
-            Transaction.transaction_date >= start_date,
-            Transaction.transaction_date <= end_date
-        )
-        
-        # Optionally filter by account
-        if account_id:
-            query = query.filter(Transaction.account_id == account_id)
-        
-        transactions = query.all()
-        
-        # Separate income and expenses
-        income_totals = {}
-        expense_totals = {}
-        uncategorized_income = 0
-        uncategorized_expense = 0
-        
-        for txn in transactions:
-            amount = abs(float(txn.amount))
-            is_income = txn.amount > 0
-            
-            if txn.category_id:
-                category = category_map.get(txn.category_id)  # O(1) dict lookup, no DB hit
-                if category:
-                    head = category.head_budget or 'Uncategorized'
-                    sub = category.sub_budget or 'General'
-                    
-                    # Choose the right totals dict
-                    totals = income_totals if is_income else expense_totals
-                    
-                    if head not in totals:
-                        totals[head] = {
-                            'total': 0,
-                            'subcategories': {}
-                        }
-                    
-                    if sub not in totals[head]['subcategories']:
-                        totals[head]['subcategories'][sub] = 0
-                    
-                    totals[head]['total'] += amount
-                    totals[head]['subcategories'][sub] += amount
-                else:
-                    if is_income:
-                        uncategorized_income += amount
-                    else:
-                        uncategorized_expense += amount
-            else:
-                if is_income:
-                    uncategorized_income += amount
-                else:
-                    uncategorized_expense += amount
-        
-        # Add uncategorized if there are any
-        if uncategorized_income > 0:
-            income_totals['Uncategorized'] = {
-                'total': uncategorized_income,
-                'subcategories': {'No Category': uncategorized_income}
-            }
-        
-        if uncategorized_expense > 0:
-            expense_totals['Uncategorized'] = {
-                'total': uncategorized_expense,
-                'subcategories': {'No Category': uncategorized_expense}
-            }
-        
-        # Convert to sorted lists
-        income_result = []
-        for head, data in sorted(income_totals.items(), key=lambda x: x[1]['total'], reverse=True):
-            subcats = [{'name': sub, 'amount': amt} for sub, amt in sorted(data['subcategories'].items(), key=lambda x: x[1], reverse=True)]
-            income_result.append({
-                'category': head,
-                'total': data['total'],
-                'subcategories': subcats
-            })
-        
-        expense_result = []
-        for head, data in sorted(expense_totals.items(), key=lambda x: x[1]['total'], reverse=True):
-            subcats = [{'name': sub, 'amount': amt} for sub, amt in sorted(data['subcategories'].items(), key=lambda x: x[1], reverse=True)]
-            expense_result.append({
-                'category': head,
-                'total': data['total'],
-                'subcategories': subcats
-            })
-        
-        return {
-            'income': income_result,
-            'expenses': expense_result
-        }
-    
-    @staticmethod
-    def get_payday_summary(account_id, num_periods=12, include_unpaid=True):
-        """
-        Get summary of all payday periods for dashboard display.
-        
-        Args:
-            account_id: Bank account ID to track
-            num_periods: Number of periods to show
-            include_unpaid: Whether to include unpaid transactions
-            
-        Returns:
-            List of dicts with period info and metrics
-        """
-        # Get current date and determine which payday period we're in
-        today = date.today()
-        current_period_label = PaydayService.get_period_for_date(today)
-        
-        # Extract year and month from period label (format: "2026-01")
-        current_year = int(current_period_label.split('-')[0])
-        current_month = int(current_period_label.split('-')[1])
-        
-        # Get payday periods starting from current period
-        periods = PaydayService.get_payday_periods(current_year, current_month, num_periods)
-        
-        results = []
-        for start_date, end_date, period_label in periods:
-            metrics = PaydayService.calculate_period_balances(account_id, start_date, end_date, include_unpaid)
-            category_breakdown = PaydayService.get_category_breakdown(account_id, start_date, end_date, include_unpaid)
-            
-            results.append({
-                'period_label': period_label,
-                'start_date': start_date,
-                'end_date': end_date,
-                'rolling_balance': metrics['rolling_balance'],
-                'min_balance': metrics['min_balance'],
-                'max_extra_spend': metrics['max_extra_spend'],
-                'opening_balance': metrics['opening_balance'],
-                'category_breakdown': category_breakdown
-            })
-        
-        return results
-    
-    @staticmethod
-    def get_payday_summary_for_year(account_id, year, include_unpaid=True):
+    def get_payday_summary_for_year(account_id, year):
         """
         Get summary of all payday periods for a specific year.
         Optimised: loads all transactions once and computes all 12 periods in a single pass
@@ -584,10 +336,7 @@ class PaydayService:
         opening_balance = Decimal('0')
         for txn in all_txns:
             if txn.transaction_date <= history_cutoff:
-                if txn.amount > 0:
-                    opening_balance += Decimal(str(txn.amount))
-                else:
-                    opening_balance -= abs(Decimal(str(txn.amount)))
+                opening_balance += Decimal(str(txn.amount))
 
         # Bucket transactions into periods by date range
         period_txns = [[] for _ in periods]
@@ -611,10 +360,7 @@ class PaydayService:
             current = period_opening
             min_balance = period_opening
             for txn in sorted(txns, key=lambda t: t.transaction_date):
-                if txn.amount > 0:
-                    current += Decimal(str(txn.amount))
-                else:
-                    current -= abs(Decimal(str(txn.amount)))
+                current += Decimal(str(txn.amount))
                 if current < min_balance:
                     min_balance = current
 
@@ -678,14 +424,22 @@ class PaydayService:
         """
         Re-calculate and update payday_period for every transaction in the family.
 
-        Call this after the global payday_day setting has been changed so that all
-        historical and future transactions are re-bucketed into the correct period.
+        Call this after the household payday_day setting has changed. The caller
+        commits the setting and transaction updates together.
+
+        Payday is household-wide, so this deliberately includes transactions on
+        other members' private accounts (scoped by ``family_id`` only, not
+        ``family_query`` visibility). No record data is returned to the caller.
 
         Returns:
             int — number of transaction rows whose payday_period was changed.
         """
-        transactions = family_query(Transaction).filter(
-            Transaction.transaction_date.isnot(None)
+        family_id = db_helpers.get_family_id()
+        if family_id is None:
+            raise ValueError('No household selected.')
+        transactions = Transaction.query.filter(
+            Transaction.family_id == family_id,
+            Transaction.transaction_date.isnot(None),
         ).all()
 
         updated = 0
@@ -695,8 +449,27 @@ class PaydayService:
                 txn.payday_period = new_period
                 updated += 1
 
-        if updated > 0:
-            db.session.commit()
-
         return updated
 
+    @staticmethod
+    def change_payday_and_reperiod(data):
+        """Optionally save a new ``payday_day`` (1-31), then re-period every transaction.
+
+        Day 31 already means "last day of the month": shorter months use their
+        final day. Returns ``(updated_count, new_day_or_None)``.
+        """
+        raw_day = data.get('new_payday_day')
+        raw_day = '' if raw_day is None else str(raw_day).strip()
+        new_day = None
+        if raw_day:
+            try:
+                new_day = int(raw_day)
+            except ValueError:
+                raise ValueError('Payday must be a day between 1 and 31.') from None
+            if not 1 <= new_day <= 31:
+                raise ValueError('Payday must be a day between 1 and 31.')
+            Settings.set_value('payday_day', new_day, description='Day of month salary is paid',
+                               setting_type='int')
+        updated = PaydayService.reperiod_all_transactions()
+        db.session.commit()
+        return updated, new_day

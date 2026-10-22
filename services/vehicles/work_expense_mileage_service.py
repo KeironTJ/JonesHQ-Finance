@@ -38,20 +38,6 @@ class WorkExpenseMileageService:
         return date(start_year, 4, 1), date(end_year, 3, 31)
 
     @staticmethod
-    def available_finance_years() -> list[str]:
-        years = (
-            family_query(Expense)
-            .filter(Expense.covered_miles.isnot(None), Expense.finance_year.isnot(None))
-            .with_entities(Expense.finance_year)
-            .distinct()
-            .all()
-        )
-        values = sorted({y[0] for y in years if y[0]}, reverse=True)
-        if not values:
-            values.append(WorkExpenseMileageService.current_finance_year())
-        return values
-
-    @staticmethod
     def mileage_expenses(finance_year: str, vehicle_registration: str | None = None) -> list[Expense]:
         start_date, end_date = WorkExpenseMileageService.parse_finance_year(finance_year)
         query = family_query(Expense).filter(

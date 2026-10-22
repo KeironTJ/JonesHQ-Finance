@@ -65,8 +65,9 @@ class Transaction(db.Model):
     def recalculate_account_balance(account_id):
         """Recalculate and update account balance from all transactions.
 
-        Scopes to the current family when called within a request context;
-        falls back to unscoped for CLI commands and tests.
+        In a request the account must belong to the current household. Outside a
+        request (CLI maintenance) the account's own household is used. Transactions
+        are always restricted to the account's household.
         """
         from models.accounts import Account
 
@@ -83,9 +84,10 @@ class Transaction(db.Model):
         if not account:
             return
 
-        q = Transaction.query.filter(Transaction.account_id == account_id)
-        if family_id is not None:
-            q = q.filter(Transaction.family_id == family_id)
+        q = Transaction.query.filter(
+            Transaction.account_id == account_id,
+            Transaction.family_id == account.family_id,
+        )
 
         balance = sum((Decimal(str(t.amount)) for t in q.all()), Decimal('0'))
         account.balance = balance

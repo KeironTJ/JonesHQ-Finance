@@ -35,7 +35,7 @@ from models.transactions import Transaction
 from extensions import db
 import calendar
 from utils import db_helpers
-from utils.db_helpers import family_query, family_get, family_get_or_404
+from utils.db_helpers import family_query
 
 
 class MonthlyBalanceService:
@@ -50,12 +50,6 @@ class MonthlyBalanceService:
     def get_year_month_string(year, month):
         """Convert year/month to YYYY-MM string"""
         return f"{year:04d}-{month:02d}"
-    
-    @staticmethod
-    def parse_year_month(year_month_str):
-        """Parse YYYY-MM string to (year, month) tuple"""
-        parts = year_month_str.split('-')
-        return int(parts[0]), int(parts[1])
     
     @staticmethod
     def get_month_end_date(year, month):

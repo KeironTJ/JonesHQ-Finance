@@ -10,15 +10,14 @@ pensions, mortgages, subscriptions, and net worth.
 
 - [Quick Start Guide](docs/QUICKSTART.md) - Get up and running quickly
 - [Database Schema](docs/DATABASE_SCHEMA.md) - Complete database structure
-- [Category Mapping](docs/CATEGORY_MAPPING.md) - Excel to database category mapping
 - [Vendor System](docs/VENDOR_SYSTEM.md) - Vendor tracking and management
 
 ## Features
 
 - **Account Management**: Track multiple bank accounts (Joint, Personal, Savings)
 - **Transaction Tracking**: Record and categorize all financial transactions
-- **✅ Vendor Management**: Standardize merchant names for better analytics (177 vendors imported)
-- **✅ Category Management**: Organize transactions with generic, reusable categories (42 categories imported)
+- **Vendor Management**: Associate transactions with merchant records for analytics
+- **Category Management**: Organize transactions with reusable categories
 - **Credit Card Management**: Monitor credit cards with interest tracking
 - **Loan & Mortgage Tracking**: Track loan payments, interest, and amortization
 - **Budget Planning**: Set and monitor budgets by category
@@ -169,10 +168,11 @@ flask db downgrade
 
 ## Migration from Excel
 
-Import and maintenance scripts are organized under `scripts/imports/` and
-`scripts/maintenance/`. Reuse the existing import workflows where applicable.
-New data imports must preserve household scoping and use the relevant service
-logic rather than inserting finance records without an explicit `family_id`.
+Historical one-off import and repair scripts have been removed. Use the
+application's current forms and services for financial records. Any new import
+workflow must be reviewed and tested separately, preserve household scoping,
+and set `family_id` explicitly. See the [script guide](scripts/README.md) for
+retained diagnostics and supported operational commands.
 
 ## Technologies Used
 

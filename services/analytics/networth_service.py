@@ -40,7 +40,7 @@ from models.networth import NetWorth
 from models.accounts import Account
 from models.loans import Loan
 from models.mortgage import Mortgage, MortgageProduct
-from models.mortgage_payments import MortgagePayment, MortgageSnapshot
+from models.mortgage_payments import MortgageSnapshot
 from models.property import Property
 from models.credit_cards import CreditCard
 from models.credit_card_transactions import CreditCardTransaction
@@ -49,7 +49,7 @@ from models.pensions import Pension
 from extensions import db
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from utils.db_helpers import family_query, family_get, family_get_or_404
+from utils.db_helpers import family_query, family_get_or_404
 
 
 class NetWorthService:
@@ -511,11 +511,6 @@ class NetWorthService:
             current_date = current_date + relativedelta(months=1)
         
         return timeline
-    
-    @staticmethod
-    def get_networth_for_year(year):
-        """Get monthly net worth data for a specific year"""
-        return NetWorthService.get_monthly_timeline(year, 1, 12)
     
     @staticmethod
     def save_networth_snapshot(snapshot_date=None):

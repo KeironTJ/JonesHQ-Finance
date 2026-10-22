@@ -19,9 +19,7 @@ from models.income_change import IncomeChange
 from models.recurring_income import RecurringIncome
 from services.finance import income_schedule, payroll_calculator
 from services.household.member_identity_service import MemberIdentityService, UNSPECIFIED_MEMBER
-from services.planning.retirement_service import (
-    RetirementService, MIN_RETIREMENT_AGE, MAX_RETIREMENT_AGE, DEFAULT_RETIREMENT_AGE,
-)
+from services.planning.retirement_service import RetirementService
 from utils.db_helpers import family_query
 
 MAX_PLAN_YEARS = 50
@@ -91,11 +89,6 @@ def _from_fixed(source):
 
 
 class IncomeProjectionService:
-
-    # Same household settings the pension planner reads.
-    @staticmethod
-    def _retirement_keys(person, member_id=UNSPECIFIED_MEMBER):
-        return RetirementService.keys(person, member_id)
 
     @staticmethod
     def retirement_for(person, member_id=UNSPECIFIED_MEMBER):

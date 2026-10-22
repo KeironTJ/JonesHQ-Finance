@@ -153,9 +153,6 @@ frozen in later years.
 #### `estimate_payslip(gross_annual, tax_code, pay_date, ...)`
 Returns a `PayslipEstimate` (monthly gross, pension, tax, NI, take home, warnings).
 
-#### `calculate_tax_and_ni(gross_annual, tax_code, pension_amount)`
-Back-compat annual helper; `pension_amount` is treated as salary-sacrifice.
-
 #### `create_income_record(...)`
 Creates income record with auto-calculated tax/NI and optional transaction.
 
@@ -258,9 +255,9 @@ summary = IncomeService.get_income_summary(person='Keiron', year=2024)
 
 ## Data Import
 
-No `scripts/imports/import_income_history.py` importer is currently provided.
-Use the income interface for new records; any historical import should be
-implemented as a separately reviewed script under `scripts/imports/`.
+Use the income interface for new records. Historical one-off import scripts
+have been removed; any new bulk import requires a separately reviewed and
+tested workflow using the relevant household-scoped services.
 
 ## Usage Examples
 

@@ -32,9 +32,7 @@ class DashboardService:
 
         selected_account = accounts_by_id.get(selected_account_id)
         payday_data = (
-            PaydayService.get_payday_summary_for_year(
-                selected_account_id, selected_year, include_unpaid=True
-            )
+            PaydayService.get_payday_summary_for_year(selected_account_id, selected_year)
             if selected_account_id and selected_year else []
         )
 

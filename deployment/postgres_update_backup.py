@@ -6,12 +6,18 @@ import shutil
 import subprocess
 import sys
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from deployment.rehearse_update_guard import production_url
+from deployment.check_production_config import load_env_file
+
+
+def production_url(path):
+    env = load_env_file(path)
+    return make_url(env.get('DATABASE_URL') or env.get('SQLALCHEMY_DATABASE_URI') or '')
 
 
 def connection_environment(url):
