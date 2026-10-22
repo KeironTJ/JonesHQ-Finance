@@ -177,6 +177,9 @@ compatibility wrappers that only preserve a retired API.
   so the deletion fixes are also verified on PostgreSQL 17.
 - Credit-card statement-service extraction: **36 focused tests passed** and
   the full local SQLite suite passed (**1,132 passed, 3 skipped**, 15 warnings).
+  Both CI jobs passed for commit `23b5b9c` in
+  [CI run 39767135667](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39767135667):
+  SQLite reported **1,132 passed, 3 skipped** and PostgreSQL 17 reported **170 passed**.
   An AST comparison confirmed the live extracted method bodies match their
   previous implementations; the now-unreferenced monthly helper was removed.
 - Pylance resolved forecast callers across the app CLI, income routes, source
