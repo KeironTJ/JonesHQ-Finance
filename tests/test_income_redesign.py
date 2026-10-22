@@ -16,6 +16,7 @@ from models.users import User
 from services.finance import income_schedule, payroll_calculator
 from services.finance.income_projection_service import IncomeProjectionService
 from services.finance.income_service import IncomeService
+from services.finance.income_forecast_service import IncomeForecastService
 
 
 @pytest.fixture
@@ -148,30 +149,30 @@ def test_new_source_forecasts_five_years_by_default(scoped):
 
 def test_forecast_years_setting_extends_and_shortens(scoped):
     recurring = _source()
-    IncomeService.set_forecast_years(2)
-    IncomeService.refresh_all_forecasts()
+    IncomeForecastService.set_forecast_years(2)
+    IncomeForecastService.refresh_all_forecasts()
     assert _future(recurring)[-1].pay_date <= date.today() + relativedelta(years=2)
 
-    IncomeService.set_forecast_years(8)
-    IncomeService.refresh_all_forecasts()
+    IncomeForecastService.set_forecast_years(8)
+    IncomeForecastService.refresh_all_forecasts()
     assert _future(recurring)[-1].pay_date >= date.today() + relativedelta(years=8, months=-1)
-    assert IncomeService.forecast_years() == 8
+    assert IncomeForecastService.forecast_years() == 8
 
 
 @pytest.mark.parametrize('value', ['0', '11', 'abc', None])
 def test_forecast_years_validation(scoped, value):
     with pytest.raises(ValueError):
-        IncomeService.set_forecast_years(value)
+        IncomeForecastService.set_forecast_years(value)
 
 
 def test_forecast_years_is_per_household(scoped, monkeypatch):
     from models.family import Family
-    IncomeService.set_forecast_years(3)
+    IncomeForecastService.set_forecast_years(3)
     other = Family(name='Other')
     db.session.add(other)
     db.session.commit()
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: other.id)
-    assert IncomeService.forecast_years() == 5
+    assert IncomeForecastService.forecast_years() == 5
 
 
 def test_pay_rise_reprices_unsettled_forecasts_only(scoped):
@@ -350,7 +351,7 @@ def test_plan_counts_paid_history_of_closed_sources_without_projecting(scoped):
         income.is_paid = True
     old.is_active = False
     db.session.commit()
-    IncomeService.refresh_forecasts(old.id)
+    IncomeForecastService.refresh_forecasts(old.id)
 
     plan = IncomeProjectionService.build_plan()
     expected = sum(Decimal(str(i.take_home)) for i in past)
@@ -485,10 +486,10 @@ def test_refresh_all_route(client, scoped):
 def test_refresh_route_saves_forecast_years(client, scoped):
     _source()
     client.post('/income/refresh-forecasts', data={'forecast_years': '7', 'next': 'sources'})
-    assert IncomeService.forecast_years() == 7
+    assert IncomeForecastService.forecast_years() == 7
     response = client.post('/income/refresh-forecasts', data={'forecast_years': '99'}, follow_redirects=True)
     assert 'from 1 to 10 years' in response.get_data(as_text=True)
-    assert IncomeService.forecast_years() == 7
+    assert IncomeForecastService.forecast_years() == 7
 
 
 def test_retirement_route(client, scoped):

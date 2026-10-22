@@ -7,7 +7,11 @@ from models.recurring_income import RecurringIncome
 from models.accounts import Account
 from models.categories import Category
 from models.users import User
-from services.finance.income_service import IncomeService, MAX_FORECAST_YEARS
+from services.finance.income_service import IncomeService
+from services.finance.income_forecast_service import (
+    IncomeForecastService,
+    MAX_FORECAST_YEARS,
+)
 from extensions import db
 from datetime import datetime, date
 from decimal import Decimal
@@ -77,7 +81,7 @@ def index():
     """List all income records — auto-generates missing records on load."""
     # Silently fill forecasts up to the forecast horizon
     try:
-        IncomeService.generate_all_missing_income()
+        IncomeForecastService.generate_all_missing_income()
     except Exception:
         db.session.rollback()
         current_app.logger.exception('Automatic income generation failed')
@@ -131,7 +135,7 @@ def index():
                            current_person=person,
                            current_year=year,
                            today=date.today(),
-                           forecast_years=IncomeService.forecast_years(),
+                           forecast_years=IncomeForecastService.forecast_years(),
                            today_year=datetime.now().year,
                            linked_expenses_by_income=linked_expenses_by_income,
                            folded_recurring_income_ids=folded_recurring_income_ids)
@@ -297,7 +301,7 @@ def recurring():
     people = [p[0] for p in family_query(RecurringIncome).with_entities(RecurringIncome.person).distinct().order_by(RecurringIncome.person).all()]
     return render_template('income/recurring.html', by_person=by_person, people=people,
                            current_person=person, today=date.today(),
-                           forecast_years=IncomeService.forecast_years(),
+                           forecast_years=IncomeForecastService.forecast_years(),
                            max_forecast_years=MAX_FORECAST_YEARS, **_labels())
 
 
@@ -337,7 +341,7 @@ def source(id):
         history=[p for p in payslips if p.pay_date <= today][-12:][::-1],
         upcoming=[p for p in payslips if p.pay_date > today],
         change_types=IncomeChange.CHANGE_TYPE_LABELS,
-        fixed_figures=IncomeService.uses_fixed_figures(recurring),
+        fixed_figures=IncomeForecastService.uses_fixed_figures(recurring),
         fold_group=ExpenseReimbursementGroupService.get_folded_group_for_recurring_income(recurring.id),
         today=today, **_labels(),
     )
@@ -404,8 +408,8 @@ def refresh_all():
     optionally changing how many years ahead are kept first."""
     try:
         if request.form.get('forecast_years'):
-            IncomeService.set_forecast_years(request.form['forecast_years'])
-        result = IncomeService.refresh_all_forecasts()
+            IncomeForecastService.set_forecast_years(request.form['forecast_years'])
+        result = IncomeForecastService.refresh_all_forecasts()
         message = (f"Forecasts refreshed: {result['updated']} updated, {result['added']} added, "
                    f"{result['removed']} removed.")
         if result['failed']:
@@ -467,7 +471,7 @@ def save_retirement():
 def generate_missing():
     """Generate any missing forecast records up to the forecast horizon."""
     try:
-        generated = IncomeService.generate_all_missing_income()
+        generated = IncomeForecastService.generate_all_missing_income()
         if generated:
             flash(f'Checked {len(generated)} income record(s) up to the forecast horizon.', 'success')
         else:
@@ -485,7 +489,7 @@ def trim_forecasts():
             months = int(request.form.get('months_ahead', 24))
         except (TypeError, ValueError):
             raise ValueError('Months ahead must be a whole number.')
-        result = IncomeService.trim_future_forecasts(months_ahead=months)
+        result = IncomeForecastService.trim_future_forecasts(months_ahead=months)
         if result['deleted']:
             flash(
                 f"Trimmed {result['deleted']} future forecast record(s) "
@@ -507,7 +511,7 @@ def regenerate_range(id):
     try:
         start_date = _parse_form_date('start_date', 'Start date')
         end_date = _parse_form_date('end_date', 'End date')
-        result = IncomeService.regenerate_income_range(
+        result = IncomeForecastService.regenerate_income_range(
             recurring.id, start_date, end_date, force=request.form.get('force') == 'on',
         )
         messages = []
@@ -532,7 +536,7 @@ def end_job(id):
     recurring = family_get_or_404(RecurringIncome, id)
     try:
         last_pay_date = _parse_form_date('last_pay_date', 'Last pay date')
-        result = IncomeService.end_job(recurring.id, last_pay_date)
+        result = IncomeForecastService.end_job(recurring.id, last_pay_date)
         msg = f"Income ended on {last_pay_date.strftime('%d/%m/%Y')}. "
         if result['deleted']:
             msg += f"Removed {result['deleted']} future forecast(s) and their transactions. "

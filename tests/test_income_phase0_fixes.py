@@ -13,7 +13,11 @@ from models.income import Income
 from models.recurring_income import RecurringIncome
 from models.transactions import Transaction
 from models.users import User
-from services.finance.income_service import IncomeService, DEFAULT_FORECAST_YEARS
+from services.finance.income_forecast_service import (
+    DEFAULT_FORECAST_YEARS,
+    IncomeForecastService,
+)
+from services.finance.income_service import IncomeService
 
 
 @pytest.fixture
@@ -85,8 +89,8 @@ def test_two_jobs_paid_on_same_day_both_generate(scoped):
     first = _template(source='Day job')
     second = _template(source='Weekend job', gross_annual='8000')
 
-    IncomeService.generate_missing_income(first.id, end_date=date(2026, 1, 1))
-    IncomeService.generate_missing_income(second.id, end_date=date(2026, 1, 1))
+    IncomeForecastService.generate_missing_income(first.id, end_date=date(2026, 1, 1))
+    IncomeForecastService.generate_missing_income(second.id, end_date=date(2026, 1, 1))
 
     rows = Income.query.filter_by(family_id=scoped.id).all()
     assert {r.recurring_income_id for r in rows} == {first.id, second.id}
@@ -94,7 +98,7 @@ def test_two_jobs_paid_on_same_day_both_generate(scoped):
 
 def test_pay_dates_outside_template_dates_are_skipped(scoped):
     recurring = _template(start_date='2026-01-20', end_date='2026-03-10', pay_day='15')
-    generated = IncomeService.generate_missing_income(recurring.id)
+    generated = IncomeForecastService.generate_missing_income(recurring.id)
     assert [i.pay_date.month for i in generated] == [2]
 
 
@@ -105,10 +109,10 @@ def test_delete_range_removes_forecast_transactions(scoped, account):
     recurring = _template(
         start_date=start.isoformat(), deposit_account_id=str(account.id), auto_create_transaction='on',
     )
-    IncomeService.generate_missing_income(recurring.id, end_date=start + relativedelta(months=2))
+    IncomeForecastService.generate_missing_income(recurring.id, end_date=start + relativedelta(months=2))
     assert Transaction.query.filter_by(account_id=account.id).count() == 3
 
-    result = IncomeService.delete_income_range(recurring.id, start, start + relativedelta(months=3))
+    result = IncomeForecastService.delete_income_range(recurring.id, start, start + relativedelta(months=3))
 
     assert result['deleted'] == 3
     assert Transaction.query.filter_by(account_id=account.id).count() == 0
@@ -122,8 +126,8 @@ def test_regenerate_range_does_not_double_count(scoped, account):
         start_date=start.isoformat(), deposit_account_id=str(account.id), auto_create_transaction='on',
     )
     end = start + relativedelta(months=1, days=27)
-    IncomeService.generate_missing_income(recurring.id, end_date=end)
-    IncomeService.regenerate_income_range(recurring.id, start, end)
+    IncomeForecastService.generate_missing_income(recurring.id, end_date=end)
+    IncomeForecastService.regenerate_income_range(recurring.id, start, end)
     assert Transaction.query.filter_by(account_id=account.id).count() == 2
 
 
@@ -134,7 +138,7 @@ def test_delete_recurring_keeps_history_and_clears_forecasts(scoped, account):
         start_date=(date.today() - relativedelta(months=2)).replace(day=1).isoformat(),
         deposit_account_id=str(account.id), auto_create_transaction='on',
     )
-    IncomeService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=3))
+    IncomeForecastService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=3))
     group = ExpenseReimbursementGroup(
         family_id=scoped.id, name='Payslip', mode='folded', recurring_income_id=recurring.id,
     )
@@ -168,7 +172,7 @@ def test_delete_recurring_removes_future_forecasts_flagged_as_override(scoped, a
         start_date=(date.today() - relativedelta(months=2)).replace(day=1).isoformat(),
         deposit_account_id=str(account.id), auto_create_transaction='on',
     )
-    IncomeService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=6))
+    IncomeForecastService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=6))
     _flag_as_legacy_overrides(recurring)
     past_ids = {i.id for i in Income.query.filter(Income.pay_date <= date.today()).all()}
 
@@ -180,10 +184,10 @@ def test_delete_recurring_removes_future_forecasts_flagged_as_override(scoped, a
 
 def test_end_job_removes_future_forecasts_flagged_as_override(scoped):
     recurring = _template(start_date=date.today().replace(day=1).isoformat())
-    IncomeService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=6))
+    IncomeForecastService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=6))
     _flag_as_legacy_overrides(recurring)
 
-    result = IncomeService.end_job(recurring.id, date.today())
+    result = IncomeForecastService.end_job(recurring.id, date.today())
 
     assert result['kept_paid'] == 0
     assert Income.query.filter(Income.pay_date > date.today()).count() == 0
@@ -191,7 +195,7 @@ def test_end_job_removes_future_forecasts_flagged_as_override(scoped):
 
 def test_manual_deduction_templates_generate_forecasts_not_actuals(scoped):
     recurring = _template(use_manual_deductions='on', manual_take_home='2000')
-    generated = IncomeService.generate_missing_income(recurring.id, end_date=date(2026, 3, 31))
+    generated = IncomeForecastService.generate_missing_income(recurring.id, end_date=date(2026, 3, 31))
     assert generated and not any(i.is_manual_override for i in generated)
 
 
@@ -212,11 +216,11 @@ def test_purge_orphaned_forecasts_preview_then_apply(scoped, account):
     db.session.commit()
     orphan_id, txn_id = orphan.id, orphan.transaction_id
 
-    preview = IncomeService.purge_orphaned_forecasts(dry_run=True)
+    preview = IncomeForecastService.purge_orphaned_forecasts(dry_run=True)
     assert [g['count'] for g in preview] == [1]
     assert db.session.get(Income, orphan_id) is not None
 
-    IncomeService.purge_orphaned_forecasts(dry_run=False)
+    IncomeForecastService.purge_orphaned_forecasts(dry_run=False)
     assert db.session.get(Income, orphan_id) is None
     assert db.session.get(Transaction, txn_id) is None
     assert {i.id for i in Income.query.all()} == {paid_orphan.id, one_off.id}
@@ -234,14 +238,37 @@ def test_purge_catches_unflagged_series_but_spares_lone_one_off(scoped):
         person='Household', pay_date=base, gross_annual=30000, source='Bonus', create_transaction=False,
     )
 
-    preview = IncomeService.purge_orphaned_forecasts(dry_run=True)
+    preview = IncomeForecastService.purge_orphaned_forecasts(dry_run=True)
     assert [(g['source'], g['count']) for g in preview] == [('Old job', 4)]
 
-    IncomeService.purge_orphaned_forecasts(dry_run=False, family_id=scoped.id + 999)
+    IncomeForecastService.purge_orphaned_forecasts(dry_run=False, family_id=scoped.id + 999)
     assert Income.query.count() == 5  # other household filter touches nothing
 
-    IncomeService.purge_orphaned_forecasts(dry_run=False, family_id=scoped.id)
+    IncomeForecastService.purge_orphaned_forecasts(dry_run=False, family_id=scoped.id)
     assert [i.id for i in Income.query.all()] == [bonus.id]
+
+
+@pytest.mark.parametrize('options,dry_run,family_id', [
+    ([], True, None),
+    (['--apply', '--family', '42'], False, 42),
+])
+def test_orphan_forecast_cli_dispatches_to_forecast_service(
+    app, monkeypatch, options, dry_run, family_id
+):
+    calls = []
+
+    def purge(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(IncomeForecastService, 'purge_orphaned_forecasts', purge)
+    result = app.test_cli_runner().invoke(
+        args=['maintenance', 'purge-orphan-income-forecasts', *options]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{'dry_run': dry_run, 'family_id': family_id}]
+    assert 'No orphaned income forecasts found.' in result.output
 
 
 def _load_override_migration():
@@ -260,7 +287,7 @@ def test_migration_clears_legacy_flag_only_on_matching_future_forecasts(scoped):
         start_date=(date.today() - relativedelta(months=2)).replace(day=1).isoformat(),
         use_manual_deductions='on', manual_take_home='2000',
     )
-    IncomeService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=4))
+    IncomeForecastService.generate_missing_income(recurring.id, end_date=date.today() + relativedelta(months=4))
     _flag_as_legacy_overrides(recurring)
     future = Income.query.filter(Income.pay_date > date.today()).order_by(Income.pay_date).all()
     real_actual = future[0]
@@ -344,7 +371,7 @@ def test_member_cannot_relabel_shared_income_as_theirs_to_hide_it(scoped, user, 
 
 def test_earner_can_make_income_private_and_it_cascades(scoped, user):
     recurring = _template(person='Admin User')
-    IncomeService.generate_missing_income(recurring.id, end_date=date(2026, 2, 1))
+    IncomeForecastService.generate_missing_income(recurring.id, end_date=date(2026, 2, 1))
 
     IncomeService.update_recurring_income(recurring.id, {
         'person': 'Admin User', 'start_date': '2026-01-01', 'pay_day': '15',
@@ -366,7 +393,7 @@ def test_household_owner_cannot_make_another_members_income_private(scoped, user
 
 def test_generation_never_exceeds_horizon(scoped):
     recurring = _template(start_date=date.today().replace(day=1).isoformat())
-    generated = IncomeService.generate_missing_income(recurring.id, end_date=date(9999, 1, 1))
+    generated = IncomeForecastService.generate_missing_income(recurring.id, end_date=date(9999, 1, 1))
     assert generated[-1].pay_date <= date.today() + relativedelta(years=DEFAULT_FORECAST_YEARS)
     assert generated[-1].pay_date > date.today() + relativedelta(years=DEFAULT_FORECAST_YEARS, months=-1)
 
@@ -392,9 +419,9 @@ def test_invalid_template_input_rejected(scoped, field, value):
 def test_range_operations_validate_dates(scoped):
     recurring = _template()
     with pytest.raises(ValueError):
-        IncomeService.delete_income_range(recurring.id, date(2027, 1, 1), date(2026, 1, 1))
+        IncomeForecastService.delete_income_range(recurring.id, date(2027, 1, 1), date(2026, 1, 1))
     with pytest.raises(ValueError):
-        IncomeService.delete_income_range(recurring.id, date(2026, 1, 1), date(2200, 1, 1))
+        IncomeForecastService.delete_income_range(recurring.id, date(2026, 1, 1), date(2200, 1, 1))
 
 
 def test_add_route_shows_validation_message_not_internals(app, family, user):

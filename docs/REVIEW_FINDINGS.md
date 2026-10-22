@@ -93,20 +93,31 @@ redacted, and remote targets are rejected.
 
 ### F-007: Large financial services have mixed responsibilities
 
-**Priority:** Low (maintainability). **Status:** Open; no behavior defect
-confirmed in this structural review.
+**Priority:** Low (maintainability). **Status:** In progress; forecast
+generation extracted and validated; other service boundaries remain.
 
-`income_service.py` (about 1,600 lines), `credit_card_service.py` (about 1,400)
-and `expense_sync_service.py` (about 1,350) contain multiple workflows. A
-repository-wide reference screen found no uncalled public methods in these
-services, and the reviewed expense purchase-vs-reimbursement paths have distinct
-financial semantics rather than being duplicate implementations. The size alone
-does not justify moving methods: service methods call across these workflows and
-are referenced by routes, jobs and tests.
+`income_service.py` (previously about 1,600 lines), `credit_card_service.py`
+(about 1,400) and `expense_sync_service.py` (about 1,350) contain multiple
+workflows. A repository-wide reference screen found no uncalled public methods
+in these services, and the reviewed expense purchase-vs-reimbursement paths have
+distinct financial semantics rather than being duplicate implementations.
 
-**Suggested follow-up:** map the public call graph and identify a cohesive
-boundary—income forecast generation is a candidate—before extracting a new
-service. Preserve current imports until callers are migrated intentionally.
+Recurring payslip forecast generation and maintenance have moved into
+[IncomeForecastService](../services/finance/income_forecast_service.py). Route,
+projection, source-edit and test callers now use the new service directly; the
+old forecast API was removed rather than retained as forwarding wrappers.
+The focused income/forecast/member-retirement tests pass (**115 passed**), and
+two additional maintenance-CLI dispatch regressions pass in the full local suite
+(**1,123 passed, 3 skipped**). Forecast range
+validation now lives with the forecast service rather than the source-record
+service. Shared income-to-bank-transaction formatting remains in `IncomeService`;
+a new regression reproduced the extraction's missing-helper error before it was
+corrected, and verifies amount/date updates and the caller-owned commit boundary.
+The PostgreSQL CI job now includes the migrated income service/forecast tests.
+
+**Next follow-up:** map the credit-card public call graph and identify an
+independent workflow boundary before extracting a service. Keep each migration
+separate and verify full financial and household behavior before continuing.
 
 **Acceptance:** each extraction has unchanged financial results, household and
 privacy scoping, and regression coverage for all existing callers; do not add
@@ -131,8 +142,16 @@ compatibility wrappers that only preserve a retired API.
   credit-card and loan route modules; service compatibility entry points still
   pass the existing service and model tests.
 - Full local SQLite suite after the balance-service extraction: **1,120 passed,
-  3 skipped**, with 15 warnings. PostgreSQL integration will be rerun by CI for
-  this commit.
+  3 skipped**, with 15 warnings. Both SQLite and PostgreSQL jobs also passed on
+  the pushed commit in [CI run 39758917364](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39758917364).
+- Focused income, forecast, income-route, and member-retirement tests after the
+  forecast-service extraction: **115 passed**, plus two maintenance-CLI
+  dispatch regressions. Full local SQLite suite after the extraction:
+  **1,123 passed, 3 skipped**, with 15 warnings.
+- Pylance resolved forecast callers across the app CLI, income routes, source
+  workflows, projection service and tests. An AST comparison verified that the
+  moved methods differ only in service references and uncommitted balance-service
+  delegation; no forecast APIs remain as forwarding wrappers on `IncomeService`.
 - Bash syntax check passed for `quick_update.sh`; updater control-flow tests
   execute the real script for every failure stage.
 - Relative link targets passed across all 28 Markdown files; no operational

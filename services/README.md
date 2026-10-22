@@ -60,6 +60,10 @@ from services.finance.transaction_service import TransactionService
 recalculation. Routes use it after transaction workflows; legacy model methods
 delegate to the service to preserve existing callers.
 
+`finance/income_forecast_service.py` owns saved recurring-income forecast
+generation and maintenance. `IncomeService` continues to handle source and
+actual payslip records.
+
 `platform/passkey_service.py` owns WebAuthn enrollment, one-time challenges,
 passwordless sign-in, recent identity confirmation, removal and server recovery.
 It uses `UserSessionService` for revocation and passkey-authenticated sessions;

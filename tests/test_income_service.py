@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from extensions import db
@@ -8,6 +8,50 @@ from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
 from services.finance.income_service import IncomeService
+from services.finance.income_forecast_service import IncomeForecastService
+
+
+def test_sync_income_transaction_preserves_shared_transaction_helper(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account = Account(family_id=family.id, name='Salary account', account_type='Joint', balance=0)
+    category = Category(
+        family_id=family.id, name='Salary', head_budget='Income',
+        sub_budget='Salary', category_type='income',
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=Decimal('1000'), transaction_date=date.today(),
+    )
+    db.session.add(transaction)
+    db.session.flush()
+    pay_date = date.today() + timedelta(days=30)
+    income = Income(
+        family_id=family.id, person='Household', pay_date=pay_date,
+        tax_year='2026-2027', gross_annual_income=15600,
+        gross_monthly_income=1300, take_home=Decimal('1200'),
+        expense_reimbursement_total=Decimal('100'), is_paid=False,
+        deposit_account_id=account.id, transaction_id=transaction.id,
+    )
+    db.session.add(income)
+    db.session.commit()
+    commits = []
+    monkeypatch.setattr(db.session, 'commit', lambda: commits.append(True))
+
+    result = IncomeService.sync_income_to_transaction(income)
+
+    assert result is transaction
+    assert transaction.amount == Decimal('1300')
+    assert transaction.transaction_date == pay_date
+    assert transaction.description == 'Household Salary'
+    assert transaction.item == 'Take home: \u00a31,200.00'
+    assert transaction.is_forecasted is True
+    assert transaction.is_paid is False
+    assert account.balance == Decimal('1300')
+    assert commits == []
+    db.session.rollback()
+    assert transaction.amount == Decimal('1000')
 
 
 def test_create_recurring_income_assigns_family_and_persists_overrides(
@@ -187,7 +231,7 @@ def test_recurring_income_privacy_is_inherited_by_generated_records(app, family,
     assert recurring.owner_id == user.id
     assert recurring.is_private is True
 
-    generated = IncomeService.generate_missing_income(
+    generated = IncomeForecastService.generate_missing_income(
         recurring.id, end_date=date(2026, 1, 1)
     )
 

@@ -354,8 +354,10 @@ def register_commands(app):
     @click.option('--family', 'family_id', type=int, help='Limit to one household id.')
     def purge_orphan_income_forecasts(apply, family_id):
         """Remove future income forecasts left behind by deleted templates."""
-        from services.finance.income_service import IncomeService
-        groups = IncomeService.purge_orphaned_forecasts(dry_run=not apply, family_id=family_id)
+        from services.finance.income_forecast_service import IncomeForecastService
+        groups = IncomeForecastService.purge_orphaned_forecasts(
+            dry_run=not apply, family_id=family_id
+        )
         if not groups:
             click.echo('No orphaned income forecasts found.')
             return

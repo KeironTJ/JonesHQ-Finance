@@ -18,6 +18,7 @@ from models.income import Income
 from models.income_change import IncomeChange
 from models.recurring_income import RecurringIncome
 from services.finance import income_schedule, payroll_calculator
+from services.finance.income_forecast_service import IncomeForecastService
 from services.household.member_identity_service import MemberIdentityService, UNSPECIFIED_MEMBER
 from services.planning.retirement_service import RetirementService
 from utils.db_helpers import family_query
@@ -158,8 +159,6 @@ class IncomeProjectionService:
         (pay_date, values, is_saved) for a source between *start* and *end*.
         *saved* rows win for their dates; the rest are projected.
         """
-        from services.finance.income_service import IncomeService
-
         saved = saved or []
         results = [(row.pay_date, _from_row(row), True) for row in saved]
         last_saved = max((row.pay_date for row in saved), default=None)
@@ -168,7 +167,7 @@ class IncomeProjectionService:
         if not dates:
             return results, []
         warnings = set()
-        if IncomeService.uses_fixed_figures(source):
+        if IncomeForecastService.uses_fixed_figures(source):
             fixed = _from_fixed(source)
             results.extend((d, dict(fixed), False) for d in dates)
             return results, ['Fixed payslip figures are used for this source; pay rises are ignored.']
@@ -281,7 +280,7 @@ class IncomeProjectionService:
                         'pension': source.pension, 'years': defaultdict(lambda: ZERO)})
                     pot['years'][year] += values['employee_pension'] + values['employer_pension'] + values['avc']
             source_rows.append({'source': source, 'years': dict(per_year),
-                                'fixed': IncomeService.uses_fixed_figures(source)})
+                                'fixed': IncomeForecastService.uses_fixed_figures(source)})
 
         one_offs = family_query(Income).filter(
             Income.recurring_income_id.is_(None),

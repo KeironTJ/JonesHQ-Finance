@@ -78,4 +78,7 @@ jobs:
           tests/test_payday_service.py
           tests/test_credit_card_service.py
           tests/test_expense_service.py
+          tests/test_income_service.py
+          tests/test_income_phase0_fixes.py
+          tests/test_income_redesign.py
           tests/test_postgres_integration.py

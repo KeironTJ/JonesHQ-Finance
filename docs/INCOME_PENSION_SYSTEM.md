@@ -28,14 +28,16 @@ pension, student loan); `private_pension` (PAYE tax only); `state_pension`,
 other tax codes); `self_employed` (tax + Class 4 NI + student loan on profit, or a
 set-aside %); `rental` (set-aside %).
 
-**Refresh** (`IncomeService.refresh_forecasts(source_id)`): re-prices every
+**Refresh** (`IncomeForecastService.refresh_forecasts(source_id)`): re-prices every
 *unsettled* forecast of the source from its terms, removes forecasts outside its
 dates, and fills up to the horizon. Settled rows (paid, actual payslip entered, or
 paid transaction) are never changed. It runs automatically after saving a source,
 adding/removing a change, and when the Payslips page tops up the horizon.
 **Tools → Forecasts → Save & refresh** (`set_forecast_years` + `refresh_all_forecasts`)
 saves the horizon and re-runs it for every source you can see, e.g. after new tax
-rates are loaded.
+rates are loaded. Forecast generation and maintenance live in
+`IncomeForecastService`; current and actual income records remain in
+`IncomeService`.
 
 **Manual overrides:** edit a payslip (choose manual figures) or **Enter actual**;
 that row is then settled and kept. A source can also keep the legacy fixed
