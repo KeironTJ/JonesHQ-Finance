@@ -168,7 +168,10 @@ database instead of assuming the original pre-recovery database name.
 
 - Private probe readiness: **44 updater/recovery tests passed, 1 skipped**
   locally on Windows; Bash syntax and diff whitespace checks passed. The skip
-  is the real Unix-socket/curl regression, which runs in Linux CI.
+  is the real Unix-socket/curl regression. Both CI jobs passed for `665f176` in
+  [CI run 39772113979](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39772113979).
+  The Linux full suite reported **1,136 passed, 3 skipped**, including the real
+  delayed Unix-socket/curl regression.
 - Full SQLite CI suite after recovery/CI changes: **1,119 passed, 3 skipped**,
   with 15 warnings. PostgreSQL-only integration tests are skipped on SQLite.
 - PostgreSQL 17 CI suite: **56 passed**, including real dump/restore, preserved
