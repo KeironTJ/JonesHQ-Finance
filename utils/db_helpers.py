@@ -220,6 +220,14 @@ def family_query(model):
     return _apply_visibility(model, query)
 
 
+def _record_id(value):
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().isascii() and value.strip().isdigit():
+        return int(value.strip())
+    raise ValueError('Invalid record ID.')
+
+
 def family_get(model, record_id):
     """Fetch a single record by *record_id*, scoped to the current family.
 
@@ -229,7 +237,7 @@ def family_get(model, record_id):
     fid = get_family_id()
     if fid is None:
         return None
-    query = model.query.filter(model.id == record_id, model.family_id == fid)
+    query = model.query.filter(model.id == _record_id(record_id), model.family_id == fid)
     return _apply_visibility(model, query).first()
 
 
@@ -237,6 +245,11 @@ def family_get_or_404(model, record_id):
     """Like ``family_get`` but aborts with 404 if nothing is found."""
     fid = get_family_id()
     if fid is None:
+        from flask import abort
+        abort(404)
+    try:
+        record_id = _record_id(record_id)
+    except ValueError:
         from flask import abort
         abort(404)
     query = model.query.filter(model.id == record_id, model.family_id == fid)

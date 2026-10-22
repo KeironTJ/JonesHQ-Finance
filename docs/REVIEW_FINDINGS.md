@@ -26,28 +26,38 @@ validation requirements prevent a safe fix.
 | F-003: SQLite updater branch | `quick_update.sh` still carried a SQLite backup/rollback path, `backup.sh` and `rehearse_update_guard.py` although production is PostgreSQL-only (owner confirmed). The runbook also claimed failed config checks roll back and keep the site up, which was untrue for PostgreSQL. | Removed the SQLite branch, rollback helpers, `backup.sh` and the guard. `postgres_update_backup.py --check` is now the fail-closed preflight before any code pull, and owns the URL parser. Runbook corrected. [Updater tests](../tests/test_postgres_update.py) cover preflight URL validation and every failure stage of the real script. |
 | Dead service/model code | 17 functions had no callers in Python, templates, JavaScript or tests, several marked deprecated or "kept for scripts" whose scripts were removed (e.g. `generate_all_future_transactions` and its two batch helpers, `calculate_tax_and_ni`, `sync_transaction_to_snapshot`, `get_mortgage_free_projection`, `TaxSettings.get_current`, `User.update_last_login`). | Removed them and the imports they left unused; corrected the [credit-card](CREDIT_CARD_IMPLEMENTATION.md) and [income](INCOME_PENSION_SYSTEM.md) method lists. Routes and WTForms validators (called implicitly) were excluded. Full suite passes. |
 
-## Open Findings
+## Follow-up Findings
 
 ### F-004: PostgreSQL application-level integration coverage
 
-**Priority:** Medium (validation). **Status:** Open.
+**Priority:** Medium (validation). **Status:** Resolved.
 
 The deleted PostgreSQL tests exercised completed migration tooling, not a
 general PostgreSQL-backed Flask application suite. The retained
 [updater tests](../tests/test_postgres_update.py) exercise operational helpers;
 they do not prove backend compatibility for application workflows.
 
-**Required follow-up:** run representative household isolation, financial
-writes, constraints, and migration checks against a fresh disposable
-PostgreSQL database in CI. Never point tests at production or the database
-whose name contains `cutover_rehearsal`.
+The [CI workflow](../.github/workflows/tests.yml) now has a separate PostgreSQL 17
+service and application job. It runs household isolation (including route sweeps),
+credit-card and expense writes, payday and balance calculations, decimal/FK
+checks, the current release migration upgrade/downgrade, and a real dump/restore
+that verifies records, sequences and preservation of the failed database.
+The SQLite job still runs the full suite. The historical migration chain assumes
+a pre-Alembic schema; this does not claim a from-empty replay of every old migration.
 
-**Acceptance:** a dedicated isolated job fails on application/backend
-incompatibilities and tears down only its own disposable database.
+[Test fixtures](../tests/conftest.py) accept only a local `joneshq_ci_*` database,
+create a unique schema and remove only that schema. The recovery regression
+creates/removes only its own uniquely named recovery database. No production
+database or database named `cutover_rehearsal` is used.
+
+This coverage reproduced two PostgreSQL errors hidden by SQLite: request IDs were
+bound as VARCHAR when compared to integer keys. The shared
+[lookup helpers](../utils/db_helpers.py) now normalize valid form/query IDs to
+integers and explicitly reject invalid IDs. Both backends exercise this regression.
 
 ### F-005: Flask-Login uses deprecated UTC date construction
 
-**Priority:** Low (dependency maintenance). **Status:** Open.
+**Priority:** Low (dependency maintenance). **Status:** Accepted/deferred by owner.
 
 The full test run reports `datetime.datetime.utcnow()` deprecation warnings
 from Flask-Login's `login_manager.py` while exercising remember-me cookies.
@@ -57,10 +67,36 @@ This is third-party code, not a reason to patch the virtual environment.
 [pinned dependency](../requirements.txt), and rerun remember-me, passkey,
 two-factor, and session-expiry regressions before changing the pin.
 
+### F-006: Update failures required manual recovery even before public writes
+
+**Priority:** High (operational reliability). **Status:** Resolved.
+
+The owner approved automatic recovery while writers remain stopped, including
+creation of a new recovery database via the local `postgres` administrator.
+[The updater](../deployment/quick_update.sh) snapshots code identity, environment,
+virtual environment and recovery helpers. Before public startup, failures restore
+the old code/dependencies; once migrations start, a confirmed dump is restored
+into a new database without modifying the failed one. A private Unix-socket probe
+tests candidate startup before public traffic can resume.
+
+Automatic restore is deliberately disabled once public startup is attempted:
+writes may have resumed. Failed recovery, interruption that bypasses shell traps,
+or unsupported database configurations retain the manual-recovery marker.
+External writers must be stopped by the operator. See the
+[runbook](../deployment/README.md) for bootstrap, disk-space and recovery requirements.
+
+[Control-flow tests](../tests/test_postgres_update.py) execute the real shell
+script across update and recovery failures; [helper tests](../tests/test_postgres_recovery.py)
+verify that configuration changes only after successful restore, failures are
+redacted, and remote targets are rejected.
+
 ## Validation for This Pass
 
-- Full suite: **1,103 passed**, with 15 warnings (count reflects removed SQLite
-  updater tests and added payday, recalculation and preflight regressions).
+- Full SQLite suite after recovery/CI changes: **1,118 passed, 3 skipped**,
+  with 15 warnings. PostgreSQL-only integration tests are skipped on SQLite.
+- Local PostgreSQL application, constraint and current-migration checks passed.
+  Windows Application Control blocked `psql` in the real recovery integration
+  test; the Linux CI job runs that test without bypassing the local restriction.
 - New regressions were confirmed to fail before their fixes where the bug was
   reproducible (F-002 background recalculation; payday cases noted above).
 - Bash syntax check passed for `quick_update.sh`; updater control-flow tests

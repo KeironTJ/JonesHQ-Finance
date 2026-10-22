@@ -166,6 +166,21 @@ flask db downgrade
 4. Create/update templates in `templates/`
 5. Test thoroughly
 
+### Tests and CI
+
+Install `requirements-dev.txt`, then run the full SQLite suite:
+
+```powershell
+venv\Scripts\python.exe -m pytest -q
+```
+
+[CI](.github/workflows/tests.yml) also runs an isolated PostgreSQL 17 job covering
+household isolation, financial writes, constraints, current-release migrations,
+and a real recovery dump/restore. PostgreSQL fixtures require `TEST_DATABASE_URL`
+to name a local `joneshq_ci_*` database and create/remove only their own unique
+schema. Never use a production database. PostgreSQL-only checks are skipped in
+the SQLite run; restore checks require matching PostgreSQL client tools.
+
 ## Migration from Excel
 
 Historical one-off import and repair scripts have been removed. Use the

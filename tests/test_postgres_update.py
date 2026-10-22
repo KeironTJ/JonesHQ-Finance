@@ -152,7 +152,7 @@ def bash_executable():
     pytest.skip('Bash is required to exercise updater control flow.')
 
 
-def run_updater(tmp_path, failure, timer_active=True):
+def run_updater(tmp_path, failure, timer_active=True, recovery_failure=''):
     executable = bash_executable()
     source = (Path(__file__).resolve().parents[1] / 'deployment' / 'quick_update.sh').read_text()
     # Only paths and the root check change; execute the actual updater control flow.
@@ -165,10 +165,22 @@ def run_updater(tmp_path, failure, timer_active=True):
 set -e
 TEST_ROOT="$(cd "$(dirname "$0")" && pwd)"
 export TEST_ROOT
-mkdir -p "$TEST_ROOT/app/logs"
+mkdir -p "$TEST_ROOT/app/logs" "$TEST_ROOT/app/venv/bin" "$TEST_ROOT/app/deployment"
+for helper in postgres_update_recovery postgres_update_backup check_production_config; do
+    touch "$TEST_ROOT/app/deployment/$helper.py"
+done
+cat > "$TEST_ROOT/app/venv/bin/python" <<'PYTHON'
+#!/bin/bash
+printf 'recover-db\n' >> "$TEST_ROOT/events"
+[ "$RECOVERY_FAILURE" != database ]
+PYTHON
+chmod +x "$TEST_ROOT/app/venv/bin/python"
+printf 'old-dependencies\n' > "$TEST_ROOT/app/venv/packages"
 printf 'test configuration\n' > "$TEST_ROOT/app/.env.production"
 event() { printf '%s\n' "$*" >> "$TEST_ROOT/events"; }
 flock() { :; }
+psql() { :; }
+createdb() { :; }
 sleep() { :; }
 chown() { :; }
 install() { mkdir -p "$BACKUP_DIR"; }
@@ -178,12 +190,25 @@ systemctl() {
         [ "$TIMER_ACTIVE" = yes ]
         return
     fi
-    if [ "$1" = restart ] && [ "$FAILURE" = restart ]; then return 1; fi
+    if [ "$1" = restart ]; then
+        if [ "$RECOVERY_FAILURE" = restart ]; then return 1; fi
+        if [ "$PUBLIC_START_ATTEMPTED" -eq 1 ] && [ "$FAILURE" = restart ]; then return 1; fi
+    fi
     return 0
 }
+systemd-run() { event probe-start; [ "$FAILURE" != probe-start ]; }
 curl() {
+    if [[ "$*" = *--unix-socket* ]]; then
+        event probe-health
+        [ "$FAILURE" != probe ]
+        return
+    fi
     event health
-    if [ "$FAILURE" = health ]; then printf 500; else printf 200; fi
+    if [ "$PUBLIC_START_ATTEMPTED" -eq 1 ] && [ "$FAILURE" = health ]; then
+        printf 500
+    else
+        printf 200
+    fi
 }
 sudo() {
     shift 2
@@ -197,9 +222,21 @@ sudo() {
         *"git status"*) : ;;
         *"git rev-parse"*) printf 'previous-commit\n' ;;
         *"git pull"*) event pull; [ "$FAILURE" != pull ] ;;
-        *"git reset"*) event rollback-code ;;
-        *"pip install"*) event dependencies ;;
-        *check_production_config.py*) event config ;;
+        *"git"*reset*)
+            event rollback-code
+            RECOVERING=yes
+            [ "$RECOVERY_FAILURE" != code ] ;;
+        *"pip install"*)
+            event dependencies
+            printf 'candidate-dependencies\n' > "$APP_DIR/venv/packages"
+            [ "$FAILURE" != dependencies ] ;;
+        *check_production_config.py*)
+            event config
+            if [ "${RECOVERING:-no}" = yes ]; then
+                [ "$RECOVERY_FAILURE" != config ]
+            else
+                [ "$FAILURE" != config ]
+            fi ;;
         *"&& pytest -q"*) event tests; [ "$FAILURE" != tests ] ;;
         *migrate_production.py*) event migration; [ "$FAILURE" != migration ] ;;
         mktemp*) "$@" ;;
@@ -212,6 +249,7 @@ source "$TEST_ROOT/update.sh"
     path.write_text(harness, newline='\n')
     env = os.environ.copy()
     env['FAILURE'] = failure
+    env['RECOVERY_FAILURE'] = recovery_failure
     env['TIMER_ACTIVE'] = 'yes' if timer_active else 'no'
     result = subprocess.run(
         [executable, str(path)], env=env, capture_output=True, text=True,
@@ -222,12 +260,12 @@ source "$TEST_ROOT/update.sh"
 
 
 @pytest.mark.parametrize('failure', [
-    '', 'preflight', 'dump', 'pull', 'tests', 'migration', 'restart', 'health',
+    '', 'preflight', 'dump', 'pull', 'dependencies', 'tests', 'migration',
+    'config', 'probe-start', 'probe', 'restart', 'health',
 ])
-def test_postgres_updater_stops_on_failure_without_automatic_restore(tmp_path, failure):
+def test_postgres_updater_recovers_only_before_public_writes(tmp_path, failure):
     result, events = run_updater(tmp_path, failure)
     assert result.returncode == (1 if failure else 0), result.stdout + result.stderr
-    assert 'rollback-code' not in events
     if failure == 'preflight':
         assert not (tmp_path / 'backups' / 'postgres-update-incomplete').exists()
         assert not any(event.startswith('systemctl stop') for event in events)
@@ -244,13 +282,25 @@ def test_postgres_updater_stops_on_failure_without_automatic_restore(tmp_path, f
         assert not (tmp_path / 'backups' / 'postgres-update-incomplete').exists()
         assert events.index('health') < events.index('systemctl start joneshq-maintenance.timer')
         assert 'Update Complete!' in result.stdout
-    else:
+        assert events.index('probe-health') < events.index('systemctl restart joneshq-finance')
+        assert 'rollback-code' not in events
+    elif failure in ('restart', 'health'):
         assert (tmp_path / 'backups' / 'postgres-update-incomplete').exists()
-        assert events[-1].startswith('systemctl stop joneshq-finance')
+        assert events[-1].startswith('systemctl stop joneshq-update-probe')
         assert 'systemctl start joneshq-maintenance.timer' not in events
-        assert 'No database restore or code rollback was attempted.' in result.stdout
+        assert 'writes may have resumed' in result.stdout
         assert 'Previous commit: previous-commit' in result.stdout
         assert 'Update Complete!' not in result.stdout
+        assert 'recover-db' not in events
+        assert 'rollback-code' not in events
+    else:
+        assert not (tmp_path / 'backups' / 'postgres-update-incomplete').exists()
+        assert 'Automatic recovery completed' in result.stdout
+        assert ('recover-db' in events) == (failure in ('migration', 'probe-start', 'probe'))
+        assert ('rollback-code' in events) == (failure != 'dump')
+        assert 'systemctl start joneshq-maintenance.timer' in events
+        assert 'Update Complete!' not in result.stdout
+        assert (tmp_path / 'app' / 'venv' / 'packages').read_text().strip() == 'old-dependencies'
 
 
 def test_postgres_updater_does_not_enable_previously_inactive_timer(tmp_path):
@@ -260,9 +310,26 @@ def test_postgres_updater_does_not_enable_previously_inactive_timer(tmp_path):
 
 
 def test_failed_postgres_update_blocks_another_attempt(tmp_path):
-    first, events = run_updater(tmp_path, 'dump')
+    first, events = run_updater(tmp_path, 'migration', recovery_failure='database')
     assert first.returncode == 1
     second, later_events = run_updater(tmp_path, '')
     assert second.returncode == 1
     assert 'previous PostgreSQL update requires manual recovery' in second.stdout
     assert later_events == events
+
+
+@pytest.mark.parametrize('recovery_failure', ['database', 'code', 'config', 'restart'])
+def test_failed_automatic_recovery_keeps_writers_stopped(tmp_path, recovery_failure):
+    result, events = run_updater(tmp_path, 'migration', recovery_failure=recovery_failure)
+    assert result.returncode == 1
+    assert (tmp_path / 'backups' / 'postgres-update-incomplete').exists()
+    assert 'Automatic recovery is unsafe or failed' in result.stdout
+    assert events[-1].startswith('systemctl stop joneshq-update-probe')
+    assert 'systemctl start joneshq-maintenance.timer' not in events
+
+
+def test_recovery_does_not_start_previously_inactive_timer(tmp_path):
+    result, events = run_updater(tmp_path, 'migration', timer_active=False)
+    assert result.returncode == 1
+    assert 'Automatic recovery completed' in result.stdout
+    assert 'systemctl start joneshq-maintenance.timer' not in events

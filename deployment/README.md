@@ -40,25 +40,48 @@ bash /home/joneshq/joneshq-finance/deployment/quick_update.sh
 On PostgreSQL the updater:
 
 1. Records the current commit and a private copy of `.env.production` in a new
-   `/home/joneshq/backups/postgres-update-*` recovery directory.
+   `/home/joneshq/backups/postgres-update-*` recovery directory, and copies the
+   current virtual environment so recovery does not depend on downloading packages.
 2. Stops the retention timer/service and the app, then writes a custom-format
    `database.dump` as the app user and verifies its archive listing. A failed
    dump stops the update before any code is pulled.
 3. Pulls code, installs `requirements.txt` and `requirements-postgres.txt`,
    checks production configuration and runs the test suite.
-4. Runs migrations against the database in `.env.production`, restarts the app
-   and checks `/healthz`.
-5. Restarts the retention timer only if it was active beforehand.
+4. Runs migrations against the database in `.env.production`. Starts a temporary
+   Gunicorn probe on a private Unix socket and checks `/healthz` before any public
+   app process is started.
+5. Stops the probe, restarts the public app and checks `/healthz`. Restarts the
+   retention timer only if it was active beforehand.
 
 Stop any other writers you have added before running it. Requirements: the
 `joneshq` user can reach PostgreSQL by peer authentication, and `pg_dump` /
-`pg_restore` matching the server version are installed. The helpers parse
+`pg_restore`, `psql` and `createdb` matching the server version are installed.
+The root updater uses the local `postgres` OS account to create recovery databases;
+restore runs as `joneshq`. Automatic database recovery requires a local Unix-socket
+URL and a database owned by `joneshq`. The helpers parse
 `.env.production` literally; do not `source` it in your own scripts.
 
-**If an update fails after maintenance begins, the app and retention jobs are
-left stopped. There is no automatic restore or code rollback.** A marker at
-`/home/joneshq/backups/postgres-update-incomplete` blocks further updater runs
-until you resolve it; follow [Recovering from a failed update](#recovering-from-a-failed-update).
+**Failures before public startup are recovered automatically when safe.**
+Before migrations, recovery restores the previous code, saved environment and
+virtual environment without restoring the database. After migrations begin,
+it first restores the confirmed dump into a **new** database, atomically points
+the saved configuration at that database, then restores code and dependencies.
+The failed database is never overwritten or deleted. Recovery checks configuration
+and `/healthz`, and restores the prior retention-timer state. The update command
+still exits non-zero so monitoring reports the failed update.
+
+**Once public startup is attempted, automatic rollback is disabled:** requests
+may already have written data. A recovery failure also leaves the app and retention
+jobs stopped, retaining `/home/joneshq/backups/postgres-update-incomplete` to block
+another update. Follow [Recovering from a failed update](#recovering-from-a-failed-update).
+Stop any external writers before updating; the script controls only the supplied
+app, probe and retention units. SIGKILL, host failure and power loss cannot trigger
+the shell's recovery trap; the marker requires manual recovery in these cases.
+
+Allow disk space for the full virtual environment copy as well as the database dump.
+When first deploying this updater, the already-running old script does not acquire
+new recovery behavior merely because it pulls the new code. Subsequent invocations
+of the installed script use the new recovery path.
 
 ## Backups
 
@@ -88,9 +111,14 @@ Recovery directories (`/home/joneshq/backups/postgres-update-*`,
 `/home/joneshq/postgres-rehearsal/cutover-*`) contain credentials and personal
 data. They are never pruned automatically. Set a retention period, and delete
 only specific, reviewed directories once they are no longer needed.
+Automatically created `joneshq_recovery_*` databases also need operator-reviewed
+retention. They may be the active database: inspect `.env.production` first.
 
 ## Recovering from a failed update
 
+- Check the deploy log: if automatic recovery completed, the previous app is
+  already serving and the marker is removed. Do not restore its database again.
+  If recovery did not complete, use the following manual steps.
 - Keep the app, retention jobs and any other writers stopped. Preserve logs and
   the failed database for diagnosis; do not delete it or blindly reset code.
 - Decide whether a forward fix is safer. Dependency/test failures before
@@ -185,8 +213,8 @@ bash deployment/quick_update.sh     # deploys the update as normal
 - makes the app service start after Redis. It does not restart the app.
 
 `quick_update.sh` runs `deployment/check_production_config.py` before migrating or
-restarting. If settings or Redis are not ready it stops, leaving the app stopped and
-the recovery marker in place; follow
+restarting. If settings or Redis are not ready it attempts safe recovery to the
+previous version. If recovery fails, the app stays stopped and the marker remains; follow
 [Recovering from a failed update](#recovering-from-a-failed-update).
 You can run the check yourself at any time:
 
@@ -493,6 +521,7 @@ Current:
 
 - **quick_update.sh** - Backs up (PostgreSQL dump), pulls, tests, migrates and restarts production
 - **postgres_update_backup.py** - PostgreSQL preflight (`--check`, run first by `quick_update.sh`) and dump/verify helper
+- **postgres_update_recovery.py** - Creates a new local recovery database and switches the saved environment only after restore succeeds
 - **check_production_config.py** - Verifies `.env.production` and Redis before restarts
 - **joneshq-finance.service** - App systemd unit
 - **joneshq-maintenance.service / .timer** - Daily security-log/session retention job
