@@ -15,12 +15,13 @@ and the original SQLite install guides have been removed (see Git history).
 | Retention job | `joneshq-maintenance.timer` → `joneshq-maintenance.service` |
 | Rate-limit store | Redis on localhost (`redis-server`) |
 | Database | PostgreSQL 17, local peer authentication as `joneshq`, UTF8, `postgresql+psycopg` driver |
-| Database name | `joneshq_finance_cutover_rehearsal` |
+| Active database | Selected by `.env.production`; automatic recovery may switch it to a `joneshq_recovery_*` database |
 | Configuration | `/home/joneshq/joneshq-finance/.env.production` (private; never print or commit) |
 
-> **The database named `joneshq_finance_cutover_rehearsal` is PRODUCTION.**
-> The name is left over from the October 2026 SQLite → PostgreSQL cutover. Never
-> drop, clear, restore over or run tests against it.
+> **Treat `joneshq_finance_cutover_rehearsal` and the recovery databases as production data.**
+> The original name is left over from the October 2026 SQLite → PostgreSQL cutover.
+> Never drop, clear, restore over or run tests against them. Check the private
+> `.env.production` to identify the active database; do not assume its name.
 
 **SQLite is no longer used in production.** The file
 `instance/joneshq_finance.db` on the server is the obsolete pre-cutover copy and
@@ -49,7 +50,11 @@ On PostgreSQL the updater:
    checks production configuration and runs the test suite.
 4. Runs migrations against the database in `.env.production`. Starts a temporary
    Gunicorn probe on a private Unix socket and checks `/healthz` before any public
-   app process is started.
+   app process is started. Readiness allows 30 attempts, each limited to two
+   seconds, with a one-second gap; a socket that has not appeared yet is retried.
+   Probe stdout/stderr is saved privately to `probe.log` in the recovery directory,
+   with the final failed curl diagnostic in `probe-health-error.log`. These logs
+   remain available even when the transient unit or its journal entries are gone.
 5. Stops the probe, restarts the public app and checks `/healthz`. Restarts the
    retention timer only if it was active beforehand.
 
@@ -83,6 +88,26 @@ When first deploying this updater, the already-running old script does not acqui
 new recovery behavior merely because it pulls the new code. Subsequent invocations
 of the installed script use the new recovery path.
 
+### Installing a fix to the updater itself
+
+If the installed updater repeatedly fails and rolls code back, merely rerunning
+it will also rerun its old logic. Fetch the corrected updater into a private file
+outside the working tree, then run that file as root:
+
+```bash
+sudo -u joneshq git -C /home/joneshq/joneshq-finance fetch origin main &&
+update_script=$(mktemp /root/joneshq-quick-update.XXXXXXXX.sh) &&
+sudo -u joneshq git -C /home/joneshq/joneshq-finance show origin/main:deployment/quick_update.sh > "$update_script" &&
+bash "$update_script"
+```
+
+`fetch` does not change the checked-out code, so the fixed updater still records
+the currently serving commit for rollback. Do **not** run a manual `git pull`
+first: that would make the updater record the candidate commit as its previous
+version. If an incomplete-recovery marker exists, resolve it using the recovery
+procedure before attempting another update. A reported successful automatic
+recovery is not a reason to restore the database again.
+
 ## Backups
 
 - **Primary:** Proxmox LXC backups (vzdump) of the whole container, including
@@ -98,12 +123,14 @@ ad-hoc dump (for example before risky manual work), as root:
 
 ```bash
 install -d -o joneshq -g joneshq -m 700 /home/joneshq/backups/manual-$(date +%Y%m%d-%H%M%S)
-sudo -u joneshq bash -c 'umask 077; PGCLIENTENCODING=UTF8 pg_dump --format=custom --file=/home/joneshq/backups/manual-YYYYMMDD-HHMMSS/database.dump joneshq_finance_cutover_rehearsal'
+sudo -u joneshq /home/joneshq/joneshq-finance/venv/bin/python /home/joneshq/joneshq-finance/deployment/postgres_update_backup.py --output /home/joneshq/backups/manual-YYYYMMDD-HHMMSS/database.dump
 sudo -u joneshq pg_restore --list /home/joneshq/backups/manual-YYYYMMDD-HHMMSS/database.dump > /dev/null && echo "archive readable"
 ```
 
 Replace `manual-YYYYMMDD-HHMMSS` with the directory actually created. A
-readable archive listing is not a restore test.
+readable archive listing is not a restore test. The helper reads the current
+database from `.env.production`, including after an automatic recovery switches
+the active database.
 
 ### Recovery artifacts
 

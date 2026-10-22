@@ -138,8 +138,37 @@ distinct purchase-vs-reimbursement semantics.
 privacy scoping, and regression coverage for all existing callers; do not add
 compatibility wrappers that only preserve a retired API.
 
+### F-008: Private startup probe raced Unix-socket creation
+
+**Priority:** High (update reliability). **Status:** Resolved in code; awaiting
+the operator's next production update.
+
+Three production updates passed tests and migrations but immediately failed the
+private probe with curl exit 7. Automatic recovery restored the previous code
+and a new database each time; the operator confirmed the recovered app was
+active and returned HTTP 200 from `/healthz`. No candidate-startup journal
+entries were available.
+
+`systemd-run` returns before Gunicorn creates its Unix socket. Curl's
+`--retry-connrefused` does not reliably retry a missing socket, so an expected
+startup delay triggered recovery. The updater now polls health explicitly for
+at most 30 attempts, with a two-second limit per request and one-second gaps.
+Startup output is written to a private recovery-directory log rather than
+depending on transient-unit journal retention.
+
+Delayed-socket regressions reproduced the immediate rollback before the fix.
+They now verify successful startup without recovery, bounded failure, retained
+diagnostics and unchanged safe recovery. A Linux-only test exercises real curl
+against a delayed Unix listener. See the [runbook](../deployment/README.md#installing-a-fix-to-the-updater-itself)
+for adopting the fixed script without losing the currently serving rollback
+commit. The runbook's ad-hoc backup command now reads the configured active
+database instead of assuming the original pre-recovery database name.
+
 ## Validation for This Pass
 
+- Private probe readiness: **44 updater/recovery tests passed, 1 skipped**
+  locally on Windows; Bash syntax and diff whitespace checks passed. The skip
+  is the real Unix-socket/curl regression, which runs in Linux CI.
 - Full SQLite CI suite after recovery/CI changes: **1,119 passed, 3 skipped**,
   with 15 warnings. PostgreSQL-only integration tests are skipped on SQLite.
 - PostgreSQL 17 CI suite: **56 passed**, including real dump/restore, preserved

@@ -152,7 +152,10 @@ def bash_executable():
     pytest.skip('Bash is required to exercise updater control flow.')
 
 
-def run_updater(tmp_path, failure, timer_active=True, recovery_failure='', maintenance_installed=True):
+def run_updater(
+    tmp_path, failure, timer_active=True, recovery_failure='',
+    maintenance_installed=True, probe_failures=0,
+):
     executable = bash_executable()
     source = (Path(__file__).resolve().parents[1] / 'deployment' / 'quick_update.sh').read_text()
     # Only paths and the root check change; execute the actual updater control flow.
@@ -200,11 +203,20 @@ systemctl() {
     fi
     return 0
 }
-systemd-run() { event probe-start; [ "$FAILURE" != probe-start ]; }
+systemd-run() {
+    event probe-start
+    printf '%s\n' "$@" > "$TEST_ROOT/probe-options"
+    [ "$FAILURE" != probe-start ]
+}
+PROBE_ATTEMPTS=0
 curl() {
     if [[ "$*" = *--unix-socket* ]]; then
         event probe-health
-        [ "$FAILURE" != probe ]
+        PROBE_ATTEMPTS=$((PROBE_ATTEMPTS + 1))
+        if [ "$FAILURE" = probe ] || [ "$PROBE_ATTEMPTS" -le "$PROBE_FAILURES" ]; then
+            printf 'curl: (7) Unix socket is not ready\n' >&2
+            return 7
+        fi
         return
     fi
     event health
@@ -256,12 +268,90 @@ source "$TEST_ROOT/update.sh"
     env['RECOVERY_FAILURE'] = recovery_failure
     env['MAINTENANCE_INSTALLED'] = 'yes' if maintenance_installed else 'no'
     env['TIMER_ACTIVE'] = 'yes' if timer_active else 'no'
+    env['PROBE_FAILURES'] = str(probe_failures)
     result = subprocess.run(
         [executable, str(path)], env=env, capture_output=True, text=True,
     )
     events = (tmp_path / 'events').read_text().splitlines()
     assert 'UNEXPECTED' not in '\n'.join(events), result.stdout + result.stderr
     return result, events
+
+
+@pytest.mark.parametrize('probe_failures', [1, 3])
+def test_probe_waits_for_delayed_unix_socket(tmp_path, probe_failures):
+    result, events = run_updater(tmp_path, '', probe_failures=probe_failures)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert events.count('probe-health') == probe_failures + 1
+    assert events.index('probe-health') < events.index('systemctl restart joneshq-finance')
+    assert 'recover-db' not in events
+    assert 'rollback-code' not in events
+    options = (tmp_path / 'probe-options').read_text()
+    assert '--property=StandardOutput=append:' in options
+    assert '/probe.log' in options
+    assert '--property=StandardError=inherit' in options
+
+
+def test_probe_exhaustion_is_bounded_and_reports_private_diagnostics(tmp_path):
+    result, events = run_updater(tmp_path, 'probe')
+
+    assert result.returncode == 1
+    assert events.count('probe-health') == 30
+    assert 'Candidate did not become healthy after 30 attempts' in result.stdout
+    recovery = next((tmp_path / 'backups').glob('postgres-update-*'))
+    assert str(recovery.name) + '/probe.log' in result.stdout
+    assert 'Unix socket is not ready' in (recovery / 'probe-health-error.log').read_text()
+    assert 'Automatic recovery completed' in result.stdout
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Real curl Unix sockets require Linux CI.')
+def test_probe_readiness_with_real_curl_and_delayed_unix_listener():
+    from http.server import BaseHTTPRequestHandler
+    from socketserver import UnixStreamServer
+    from tempfile import TemporaryDirectory
+    from threading import Thread
+    from time import sleep
+
+    if not shutil.which('curl'):
+        pytest.skip('curl is required for the real Unix-socket readiness test.')
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            assert self.path == '/healthz'
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+
+        def log_message(self, *_args):
+            pass
+
+    source = (Path(__file__).resolve().parents[1] / 'deployment' / 'quick_update.sh').read_text()
+    prefix = source.split('recover_update() {', 1)[0]
+    # Keep the socket path short enough for AF_UNIX's platform length limit.
+    with TemporaryDirectory(prefix='joneshq-probe-') as directory:
+        socket_path = Path(directory) / 'probe.sock'
+        with UnixStreamServer(str(socket_path), Handler, bind_and_activate=False) as server:
+            server.timeout = 5
+
+            def start_delayed_listener():
+                sleep(0.5)
+                server.server_bind()
+                server.server_activate()
+                server.handle_request()
+
+            listener = Thread(target=start_delayed_listener)
+            listener.start()
+            try:
+                env = os.environ.copy()
+                env['PROBE_TEST_ROOT'] = directory
+                result = subprocess.run(
+                    [bash_executable(), '-c', prefix + '\nRECOVERY_DIR="$PROBE_TEST_ROOT"\nwait_for_probe\n'],
+                    env=env, capture_output=True, text=True, timeout=15,
+                )
+                assert result.returncode == 0, result.stdout + result.stderr
+            finally:
+                listener.join(timeout=10)
+            assert not listener.is_alive()
 
 
 @pytest.mark.parametrize('failure', [

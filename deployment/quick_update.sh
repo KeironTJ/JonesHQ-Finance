@@ -33,6 +33,24 @@ PUBLIC_START_ATTEMPTED=0
 BACKUP_CONFIRMED=0
 PROBE_STARTED=0
 
+wait_for_probe() {
+    local attempt
+    for attempt in {1..30}; do
+        if curl --fail --silent --show-error --max-time 2 \
+            --unix-socket "$RECOVERY_DIR/probe.sock" http://localhost/healthz \
+            >/dev/null 2>"$RECOVERY_DIR/probe-health-error.log"; then
+            return 0
+        fi
+        if [ "$attempt" -lt 30 ]; then
+            sleep 1
+        fi
+    done
+    echo "ERROR: Candidate did not become healthy after 30 attempts."
+    echo "Private startup log: $RECOVERY_DIR/probe.log"
+    cat "$RECOVERY_DIR/probe-health-error.log" >&2
+    return 1
+}
+
 recover_update() {
     if [ "$PROBE_STARTED" -eq 1 ]; then
         if ! systemctl stop "$PROBE_UNIT"; then
@@ -214,10 +232,11 @@ systemd-run --unit="$PROBE_UNIT" --collect \
     --property="User=$APP_USER" --property="Group=$APP_USER" \
     --property="WorkingDirectory=$APP_DIR" \
     --property="EnvironmentFile=$APP_DIR/.env.production" \
+    --property="StandardOutput=append:$RECOVERY_DIR/probe.log" \
+    --property="StandardError=inherit" \
     "$APP_DIR/venv/bin/gunicorn" --workers 1 --timeout 60 \
     --bind "unix:$RECOVERY_DIR/probe.sock" 'app:create_app()'
-curl --fail --silent --show-error --retry 15 --retry-connrefused --retry-delay 1 \
-    --max-time 10 --unix-socket "$RECOVERY_DIR/probe.sock" http://localhost/healthz >/dev/null
+wait_for_probe
 systemctl stop "$PROBE_UNIT"
 
 echo "Step 7: Reloading systemd and restarting the public service..."
