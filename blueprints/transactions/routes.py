@@ -32,6 +32,7 @@ from models.users import User
 from models.plans import Plan, PlanItem
 from models.subscriptions import Subscription, SubscriptionPriceChange
 from services.finance.payday_service import PaydayService
+from services.finance.balance_service import BalanceService
 from services.finance.subscription_service import SubscriptionService
 from services.finance.transaction_service import TransactionService
 from services.planning.plan_link_service import PlanLinkService
@@ -542,9 +543,7 @@ def create():
             transactions_created = len(transactions)
             PlanLinkService.sync(transactions[0], request.form)
             
-            # Recalculate account balance
-            Transaction.recalculate_account_balance(transactions[0].account_id)
-            db.session.commit()
+            BalanceService.recalculate(account_ids=[transactions[0].account_id])
             
             if is_recurring:
                 flash(f'{transactions_created} transactions created successfully! Account balance updated.', 'success')
@@ -610,20 +609,8 @@ def edit(id):
                 if loan_payment:
                     loan_payment.is_paid = transaction.is_paid
             
-            # Recalculate balances for affected accounts
-            if old_account_id and old_account_id != transaction.account_id:
-                # Account changed - update both old and new
-                Transaction.recalculate_account_balance(old_account_id)
-                Transaction.recalculate_account_balance(transaction.account_id)
-            else:
-                # Same account - just update it
-                Transaction.recalculate_account_balance(transaction.account_id)
-            
-            # Also recalculate linked transaction's account if it exists
-            if linked_account_id:
-                Transaction.recalculate_account_balance(linked_account_id)
-            
-            db.session.commit()
+            account_ids = {old_account_id, transaction.account_id, linked_account_id}
+            BalanceService.recalculate(account_ids=account_ids)
             
             flash('Transaction updated successfully! Account balances updated.', 'success')
             # Use return_url from form, then referrer, then default
@@ -668,20 +655,10 @@ def delete(id):
             TransactionService.delete_transaction(id)
         )
         
-        # Recalculate credit card balance if payment was deleted
-        if linked_card_id:
-            from models.credit_card_transactions import CreditCardTransaction
-            CreditCardTransaction.recalculate_card_balance(linked_card_id)
-        
-        # Recalculate balance for the account
-        if account_id:
-            Transaction.recalculate_account_balance(account_id)
-        
-        # Recalculate balance for linked transfer account
-        if linked_transfer_account_id:
-            Transaction.recalculate_account_balance(linked_transfer_account_id)
-        
-        db.session.commit()
+        BalanceService.recalculate(
+            account_ids={account_id, linked_transfer_account_id},
+            credit_card_ids={linked_card_id},
+        )
         
         flash(f'Transaction deleted successfully! {account_name} balance updated.', 'success')
     except Exception as e:
@@ -753,10 +730,7 @@ def bulk_edit():
         update_count, affected_accounts = TransactionService.bulk_edit(
             transaction_ids, request.form
         )
-        for account_id in affected_accounts:
-            if account_id:
-                Transaction.recalculate_account_balance(account_id)
-        db.session.commit()
+        BalanceService.recalculate(account_ids=affected_accounts)
         flash(f'{update_count} transactions updated successfully! All linked records have been synced. Account balances recalculated.', 'success')
         return redirect(request.form.get('return_url') or url_for('transactions.index'))
         
@@ -786,12 +760,10 @@ def bulk_delete():
         deleted_count, accounts_to_recalc, cards_to_recalc = TransactionService.bulk_delete(
             transaction_ids
         )
-        for account_id in accounts_to_recalc:
-            if account_id:
-                Transaction.recalculate_account_balance(account_id)
-        for card_id in cards_to_recalc:
-            CreditCardTransaction.recalculate_card_balance(card_id)
-        db.session.commit()
+        BalanceService.recalculate(
+            account_ids=accounts_to_recalc,
+            credit_card_ids=cards_to_recalc,
+        )
         remaining_ids = [
             transaction.id for transaction in family_query(Transaction).filter(
                 Transaction.id.in_(transaction_ids)
@@ -891,9 +863,9 @@ def create_transfer():
             transactions, from_account, to_account = TransactionService.create_transfer(
                 request.form
             )
-            Transaction.recalculate_account_balance(from_account_id)
-            Transaction.recalculate_account_balance(to_account_id)
-            db.session.commit()
+            BalanceService.recalculate(
+                account_ids={from_account_id, to_account_id},
+            )
             transfers_created = len(transactions) // 2
             if is_recurring:
                 flash(f'{transfers_created} transfers created: £{amount:.2f} {frequency} from {from_account.name} to {to_account.name}. Both account balances updated.', 'success')

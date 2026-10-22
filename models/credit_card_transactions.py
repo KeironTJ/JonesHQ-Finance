@@ -70,75 +70,12 @@ class CreditCardTransaction(db.Model):
     
     @staticmethod
     def recalculate_card_balance(credit_card_id, commit=True):
-        """Recalculate balance for a credit card based on PAID transactions only.
-
-        In a request the card must belong to the current household; outside a
-        request the card's own household is used. Transactions are always
-        restricted to the card's household.
-        """
-        from models.credit_cards import CreditCard
-
-        try:
-            from utils.db_helpers import get_family_id
-            family_id = get_family_id()
-        except RuntimeError:
-            family_id = None
-
-        card_query = CreditCard.query.filter_by(id=credit_card_id)
-        if family_id is not None:
-            card_query = card_query.filter_by(family_id=family_id)
-        card = card_query.first()
-        if not card:
-            return
-
-        # Get all transactions ordered by date (then by ID for stability)
-        transactions = CreditCardTransaction.query.filter_by(
-            credit_card_id=credit_card_id, family_id=card.family_id
-        ).order_by(
-            CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()
-        ).all()
-        
-        running_balance = 0.0
-        for txn in transactions:
-            # CREDIT CARD CONVENTION:
-            # Negative amounts (purchases, interest) INCREASE debt (make balance more negative)
-            # Positive amounts (payments, rewards) DECREASE debt (make balance less negative)
-            # 
-            # Calculate projected balance (including all transactions)
-            running_balance += float(txn.amount)
-            new_balance = round(running_balance, 2)
-            new_available = round(float(card.credit_limit) - abs(running_balance), 2)
-            
-            # Update and mark as modified
-            if txn.balance != new_balance or txn.credit_available != new_available:
-                txn.balance = new_balance
-                txn.credit_available = new_available
-                db.session.add(txn)  # Explicitly mark for update
-        
-        # Update card's current balance using ONLY PAID transactions
-        paid_balance = 0.0
-        paid_transactions = CreditCardTransaction.query.filter_by(
-            credit_card_id=credit_card_id,
-            family_id=card.family_id,
-            is_paid=True
-        ).order_by(
-            CreditCardTransaction.date.asc(), CreditCardTransaction.id.asc()
-        ).all()
-        
-        for txn in paid_transactions:
-            paid_balance += float(txn.amount)
-        
-        # Card's current balance should reflect only PAID transactions
-        new_current_balance = round(paid_balance, 2)
-        new_available_credit = round(float(card.credit_limit) - abs(paid_balance), 2)
-        
-        if card.current_balance != new_current_balance or card.available_credit != new_available_credit:
-            card.current_balance = new_current_balance
-            card.available_credit = new_available_credit
-            db.session.add(card)  # Explicitly mark for update
-        
-        if commit:
-            db.session.commit()
+        """Compatibility wrapper for the finance balance service."""
+        from services.finance.balance_service import BalanceService
+        BalanceService.recalculate(
+            credit_card_ids=[credit_card_id],
+            commit=commit,
+        )
     
     def __repr__(self):
         return f'<CreditCardTransaction {self.date}: {self.item} - £{self.amount}>'

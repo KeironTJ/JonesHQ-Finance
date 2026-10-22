@@ -10,6 +10,7 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.credit_cards import CreditCard
 from models.family import Family
 from models.transactions import Transaction
+from services.finance.balance_service import BalanceService
 
 
 def _category(family_id):
@@ -81,3 +82,26 @@ def test_recalculation_rejects_foreign_household_ids(households, monkeypatch):
 
     assert db.session.get(Account, account.id).balance == Decimal('0')
     assert db.session.get(CreditCard, card.id).current_balance == Decimal('0')
+
+
+def test_balance_service_deduplicates_and_commits_related_balances_once(
+    households, monkeypatch
+):
+    family, _, account, card = households
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    commits = []
+    commit = db.session.commit
+
+    def record_commit():
+        commits.append(True)
+        commit()
+
+    monkeypatch.setattr(db.session, 'commit', record_commit)
+    BalanceService.recalculate(
+        account_ids=[account.id, account.id],
+        credit_card_ids=[card.id, card.id],
+    )
+
+    assert len(commits) == 1
+    assert db.session.get(Account, account.id).balance == Decimal('-10')
+    assert db.session.get(CreditCard, card.id).current_balance == Decimal('-20')

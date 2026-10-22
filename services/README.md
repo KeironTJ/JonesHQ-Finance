@@ -56,6 +56,10 @@ Import from the domain package, for example:
 from services.finance.transaction_service import TransactionService
 ```
 
+`finance/balance_service.py` owns account and credit-card balance
+recalculation. Routes use it after transaction workflows; legacy model methods
+delegate to the service to preserve existing callers.
+
 `platform/passkey_service.py` owns WebAuthn enrollment, one-time challenges,
 passwordless sign-in, recent identity confirmation, removal and server recovery.
 It uses `UserSessionService` for revocation and passkey-authenticated sessions;

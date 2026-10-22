@@ -23,6 +23,7 @@ validation requirements prevent a safe fix.
 | Dead payday API | Unused calculation implementations duplicated the yearly summary and exposed an ignored `include_unpaid` argument. | Removed the unused methods and ignored argument; updated the dashboard caller. Reference/signature checks cover remaining callers. Forecasting still intentionally includes paid and unpaid transactions, with balance/category regression coverage. |
 | F-001: private payday labels | Owner payday changes used `family_query`, so transactions on other members' private accounts kept stale period labels. | [Re-perioding](../services/finance/payday_service.py) is now scoped by `family_id` only (payday is household-wide), raises when no household is selected, and the income route no longer reports a count that would include private records. `family_query` visibility is unchanged. A [regression test](../tests/test_payday_service.py) covers another member's private account and an untouched second household. |
 | F-002: balance recalculation scope | [Account](../models/transactions.py) and [card](../models/credit_card_transactions.py) recalculators filtered child rows by household only when request identity existed, so CLI/background calls summed rows from any household referencing that parent. | Child rows are now always restricted to the parent's own `family_id`; in a request the parent must also belong to the current household. The only identity-less caller (`flask maintenance purge-orphan-income-forecasts`) keeps working. [Tests](../tests/test_balance_recalculation.py) cover request and background execution with corrupt cross-household rows and foreign-household IDs; the background case failed before the fix. |
+| Route balance orchestration | Transaction, credit-card and loan routes directly invoked model-level recalculation, with repeated loops, conditionals, and separate commits. | Centralized account/card calculations and combined commits in [BalanceService](../services/finance/balance_service.py). The three routes now pass affected IDs to the service; model methods remain compatibility wrappers for existing service callers. Regression tests verify deduplication, household scope and a single combined commit. |
 | F-003: SQLite updater branch | `quick_update.sh` still carried a SQLite backup/rollback path, `backup.sh` and `rehearse_update_guard.py` although production is PostgreSQL-only (owner confirmed). The runbook also claimed failed config checks roll back and keep the site up, which was untrue for PostgreSQL. | Removed the SQLite branch, rollback helpers, `backup.sh` and the guard. `postgres_update_backup.py --check` is now the fail-closed preflight before any code pull, and owns the URL parser. Runbook corrected. [Updater tests](../tests/test_postgres_update.py) cover preflight URL validation and every failure stage of the real script. |
 | Dead service/model code | 17 functions had no callers in Python, templates, JavaScript or tests, several marked deprecated or "kept for scripts" whose scripts were removed (e.g. `generate_all_future_transactions` and its two batch helpers, `calculate_tax_and_ni`, `sync_transaction_to_snapshot`, `get_mortgage_free_projection`, `TaxSettings.get_current`, `User.update_last_login`). | Removed them and the imports they left unused; corrected the [credit-card](CREDIT_CARD_IMPLEMENTATION.md) and [income](INCOME_PENSION_SYSTEM.md) method lists. Routes and WTForms validators (called implicitly) were excluded. Full suite passes. |
 
@@ -90,6 +91,27 @@ script across update and recovery failures; [helper tests](../tests/test_postgre
 verify that configuration changes only after successful restore, failures are
 redacted, and remote targets are rejected.
 
+### F-007: Large financial services have mixed responsibilities
+
+**Priority:** Low (maintainability). **Status:** Open; no behavior defect
+confirmed in this structural review.
+
+`income_service.py` (about 1,600 lines), `credit_card_service.py` (about 1,400)
+and `expense_sync_service.py` (about 1,350) contain multiple workflows. A
+repository-wide reference screen found no uncalled public methods in these
+services, and the reviewed expense purchase-vs-reimbursement paths have distinct
+financial semantics rather than being duplicate implementations. The size alone
+does not justify moving methods: service methods call across these workflows and
+are referenced by routes, jobs and tests.
+
+**Suggested follow-up:** map the public call graph and identify a cohesive
+boundary—income forecast generation is a candidate—before extracting a new
+service. Preserve current imports until callers are migrated intentionally.
+
+**Acceptance:** each extraction has unchanged financial results, household and
+privacy scoping, and regression coverage for all existing callers; do not add
+compatibility wrappers that only preserve a retired API.
+
 ## Validation for This Pass
 
 - Full SQLite CI suite after recovery/CI changes: **1,119 passed, 3 skipped**,
@@ -103,6 +125,14 @@ redacted, and remote targets are rejected.
   in Linux CI without bypassing that restriction.
 - New regressions were confirmed to fail before their fixes where the bug was
   reproducible (F-002 background recalculation; payday cases noted above).
+- The balance-service extraction passed **74 focused tests** across recalculation,
+  transaction, credit-card, loan and household-isolation workflows.
+- All balance recalculation calls were removed from the transaction,
+  credit-card and loan route modules; service compatibility entry points still
+  pass the existing service and model tests.
+- Full local SQLite suite after the balance-service extraction: **1,120 passed,
+  3 skipped**, with 15 warnings. PostgreSQL integration will be rerun by CI for
+  this commit.
 - Bash syntax check passed for `quick_update.sh`; updater control-flow tests
   execute the real script for every failure stage.
 - Relative link targets passed across all 28 Markdown files; no operational

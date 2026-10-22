@@ -7,6 +7,7 @@ from models.accounts import Account
 from models.transactions import Transaction
 from extensions import db
 from services.planning.loan_service import LoanService
+from services.finance.balance_service import BalanceService
 from datetime import datetime, date, timezone
 from dateutil.relativedelta import relativedelta
 from utils.db_helpers import family_query, family_get, family_get_or_404, get_family_id, get_current_user_id
@@ -294,8 +295,7 @@ def toggle_payment_paid(id, payment_id):
         return jsonify({'success': False, 'error': 'Payment not found.'}), 404
     try:
         payment, account_id = LoanService.toggle_payment_paid(payment_id)
-        if account_id:
-            Transaction.recalculate_account_balance(account_id)
+        BalanceService.recalculate(account_ids={account_id})
         
         status = 'paid' if payment.is_paid else 'unpaid'
         return jsonify({'success': True, 'is_paid': payment.is_paid, 'status': status})
@@ -323,8 +323,7 @@ def edit_payment(id, payment_id):
             return redirect(url_for('loans.detail', id=id))
         
         payment, account_id = LoanService.update_payment(payment_id, request.form)
-        if account_id:
-            Transaction.recalculate_account_balance(account_id)
+        BalanceService.recalculate(account_ids={account_id})
         
         flash('Payment updated successfully!', 'success')
         return redirect(url_for('loans.detail', id=id))
@@ -352,8 +351,7 @@ def delete_payment(id, payment_id):
             return redirect(url_for('loans.detail', id=id))
         
         account_id = LoanService.delete_payment(payment_id)
-        if account_id:
-            Transaction.recalculate_account_balance(account_id)
+        BalanceService.recalculate(account_ids={account_id})
         
         flash('Payment deleted successfully!', 'success')
         return redirect(url_for('loans.detail', id=id))
@@ -380,9 +378,7 @@ def bulk_delete_payments(id):
         deleted_count, accounts_to_recalc = LoanService.bulk_delete_payments(
             loan.id, payment_ids
         )
-        for account_id in accounts_to_recalc:
-            if account_id:
-                Transaction.recalculate_account_balance(account_id)
+        BalanceService.recalculate(account_ids=accounts_to_recalc)
         
         flash(f'Deleted {deleted_count} payment(s) successfully!', 'success')
         return redirect(url_for('loans.detail', id=id))

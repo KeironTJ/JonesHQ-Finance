@@ -1,4 +1,3 @@
-from decimal import Decimal
 from datetime import datetime, timezone
 from extensions import db
 
@@ -63,32 +62,6 @@ class Transaction(db.Model):
     
     @staticmethod
     def recalculate_account_balance(account_id):
-        """Recalculate and update account balance from all transactions.
-
-        In a request the account must belong to the current household. Outside a
-        request (CLI maintenance) the account's own household is used. Transactions
-        are always restricted to the account's household.
-        """
-        from models.accounts import Account
-
-        try:
-            from utils.db_helpers import get_family_id
-            family_id = get_family_id()
-        except RuntimeError:
-            family_id = None
-
-        account_query = Account.query.filter_by(id=account_id)
-        if family_id is not None:
-            account_query = account_query.filter_by(family_id=family_id)
-        account = account_query.first()
-        if not account:
-            return
-
-        q = Transaction.query.filter(
-            Transaction.account_id == account_id,
-            Transaction.family_id == account.family_id,
-        )
-
-        balance = sum((Decimal(str(t.amount)) for t in q.all()), Decimal('0'))
-        account.balance = balance
-        account.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        """Compatibility wrapper for the finance balance service."""
+        from services.finance.balance_service import BalanceService
+        BalanceService.recalculate_account_balance(account_id)

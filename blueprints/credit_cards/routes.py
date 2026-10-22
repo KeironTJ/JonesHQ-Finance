@@ -12,6 +12,7 @@ from models.vendors import Vendor
 from models.settings import Settings
 from models.plans import PlanItem
 from services.finance.credit_card_service import CreditCardService
+from services.finance.balance_service import BalanceService
 from services.finance.payday_service import PaydayService
 from services.planning.plan_link_service import PlanLinkService
 from extensions import db
@@ -416,8 +417,7 @@ def edit_transaction(id, txn_id):
         if txn.bank_transaction_id:
             CreditCardService.sync_payment_to_bank_transaction(txn)
         
-        # Recalculate balance (commits internally)
-        CreditCardTransaction.recalculate_card_balance(card.id, commit=True)
+        BalanceService.recalculate(credit_card_ids=[card.id])
         
         flash(f'Transaction updated successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
@@ -463,8 +463,7 @@ def delete_transaction(id, txn_id):
             return redirect(url_for('credit_cards.detail', id=id))
         
         deleted_card_id, account_id = CreditCardService.delete_transaction(txn_id)
-        if account_id:
-            Transaction.recalculate_account_balance(account_id)
+        BalanceService.recalculate(account_ids={account_id})
         
         flash('Transaction deleted successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
@@ -502,11 +501,10 @@ def edit_payment(id, txn_id):
             txn_id, request.form
         )
         payment_amount = float(txn.amount)
-        CreditCardTransaction.recalculate_card_balance(card.id, commit=True)
-        
-        # Recalculate bank account balance if linked
-        if account_id:
-            Transaction.recalculate_account_balance(account_id)
+        BalanceService.recalculate(
+            account_ids={account_id},
+            credit_card_ids={card.id},
+        )
         
         flash(f'Payment updated to £{payment_amount:.2f} and locked successfully!', 'success')
         return redirect(url_for('credit_cards.detail', id=id))
