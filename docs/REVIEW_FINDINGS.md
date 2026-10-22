@@ -175,6 +175,11 @@ database instead of assuming the original pre-recovery database name.
   [CI run 39772113979](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39772113979).
   The Linux full suite reported **1,136 passed, 3 skipped**, including the real
   delayed Unix-socket/curl regression.
+- Loopback proxy-guard probe: focused local updater/recovery/proxy suite
+  **53 passed**; both CI jobs passed for `3c259f5` in
+  [CI run 39773858676](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/39773858676).
+  The SQLite job reported **1,136 passed, 3 skipped**; the PostgreSQL 17
+  application and migration regression job also passed.
 - Full SQLite CI suite after recovery/CI changes: **1,119 passed, 3 skipped**,
   with 15 warnings. PostgreSQL-only integration tests are skipped on SQLite.
 - PostgreSQL 17 CI suite: **56 passed**, including real dump/restore, preserved
