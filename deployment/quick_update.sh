@@ -41,7 +41,12 @@ recover_update() {
             fi
         fi
     fi
-    systemctl stop "$SERVICE_NAME" joneshq-maintenance.timer joneshq-maintenance.service || return 1
+    systemctl stop "$SERVICE_NAME" || return 1
+    for unit in joneshq-maintenance.timer joneshq-maintenance.service; do
+        if systemctl cat "$unit" >/dev/null 2>&1; then
+            systemctl stop "$unit" || return 1
+        fi
+    done
     if [ "$PUBLIC_START_ATTEMPTED" -eq 1 ]; then
         echo "Public startup was attempted; writes may have resumed. Automatic restore is disabled."
         return 1

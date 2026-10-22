@@ -152,7 +152,7 @@ def bash_executable():
     pytest.skip('Bash is required to exercise updater control flow.')
 
 
-def run_updater(tmp_path, failure, timer_active=True, recovery_failure=''):
+def run_updater(tmp_path, failure, timer_active=True, recovery_failure='', maintenance_installed=True):
     executable = bash_executable()
     source = (Path(__file__).resolve().parents[1] / 'deployment' / 'quick_update.sh').read_text()
     # Only paths and the root check change; execute the actual updater control flow.
@@ -186,6 +186,10 @@ chown() { :; }
 install() { mkdir -p "$BACKUP_DIR"; }
 systemctl() {
     event "systemctl $*"
+    if [ "$1" = cat ] && [[ "$*" = *joneshq-maintenance* ]]; then
+        [ "$MAINTENANCE_INSTALLED" = yes ]
+        return
+    fi
     if [ "$1" = is-active ] && [ "${@: -1}" = joneshq-maintenance.timer ]; then
         [ "$TIMER_ACTIVE" = yes ]
         return
@@ -250,6 +254,7 @@ source "$TEST_ROOT/update.sh"
     env = os.environ.copy()
     env['FAILURE'] = failure
     env['RECOVERY_FAILURE'] = recovery_failure
+    env['MAINTENANCE_INSTALLED'] = 'yes' if maintenance_installed else 'no'
     env['TIMER_ACTIVE'] = 'yes' if timer_active else 'no'
     result = subprocess.run(
         [executable, str(path)], env=env, capture_output=True, text=True,
@@ -333,3 +338,11 @@ def test_recovery_does_not_start_previously_inactive_timer(tmp_path):
     assert result.returncode == 1
     assert 'Automatic recovery completed' in result.stdout
     assert 'systemctl start joneshq-maintenance.timer' not in events
+
+
+def test_recovery_supports_installations_without_retention_units(tmp_path):
+    result, events = run_updater(tmp_path, 'migration', timer_active=False, maintenance_installed=False)
+    assert result.returncode == 1
+    assert 'Automatic recovery completed' in result.stdout
+    assert 'systemctl stop joneshq-maintenance.timer' not in events
+    assert 'systemctl stop joneshq-maintenance.service' not in events

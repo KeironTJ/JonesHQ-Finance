@@ -103,7 +103,7 @@ def test_actual_dump_restore_preserves_failed_database(app, tmp_path, monkeypatc
         command = ['--host=127.0.0.1' if part == '--host=/var/run/postgresql' else part
                    for part in command]
         kwargs['env'] = {**kwargs['env'], 'PGHOST': '127.0.0.1',
-                         'PGPASSWORD': url.password or ''}
+                         'PGUSER': url.username, 'PGPASSWORD': url.password or ''}
         return real_run(command, **kwargs)
 
     monkeypatch.setattr(recovery.subprocess, 'run', run)
