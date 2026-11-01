@@ -200,6 +200,9 @@ summary = IncomeService.get_income_summary(person='Keiron', year=2024)
   years; the plan projects further in memory); a source and its timeline may span
   at most 60 years; delete/regenerate ranges are capped at 50 years. Saving a new
   horizon refreshes every source, which also removes unsettled forecasts beyond it.
+  The horizon is an exact date, not the end of its month. Explicit monthly
+  generation requests include the requested month only up to that horizon.
+  A horizon month whose payday is not yet included remains open for later generation.
 - A record is **settled** if it is paid, has an actual payslip entered, or its
   transaction is paid. Deleting or regenerating a range removes unsettled forecasts
   *and their forecast transactions*; settled records (including future months you

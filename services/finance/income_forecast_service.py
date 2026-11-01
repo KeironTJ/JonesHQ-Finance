@@ -174,15 +174,20 @@ class IncomeForecastService:
     def _generation_limit(recurring, end_date=None):
         limit = IncomeForecastService.forecast_horizon()
         if end_date is not None:
+            if income_schedule.frequency_of(recurring) == 'monthly':
+                end_date = end_date.replace(day=calendar.monthrange(end_date.year, end_date.month)[1])
             limit = min(limit, end_date)
-        if income_schedule.frequency_of(recurring) == 'monthly':
-            limit = limit.replace(day=calendar.monthrange(limit.year, limit.month)[1])
         return limit
 
     @staticmethod
     def _generated_marker(recurring, limit):
         if income_schedule.frequency_of(recurring) == 'monthly':
-            return limit.replace(day=1)
+            month = limit.replace(day=1)
+            # A horizon before this month's payday must leave that month open
+            # so generation can include it when the rolling horizon advances.
+            if income_schedule.monthly_pay_date(recurring.pay_day, limit.year, limit.month) > limit:
+                return month - relativedelta(months=1)
+            return month
         return limit
 
     @staticmethod

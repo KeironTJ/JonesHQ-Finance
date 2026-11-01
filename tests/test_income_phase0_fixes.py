@@ -398,6 +398,33 @@ def test_generation_never_exceeds_horizon(scoped):
     assert generated[-1].pay_date > date.today() + relativedelta(years=DEFAULT_FORECAST_YEARS, months=-1)
 
 
+def test_monthly_generation_keeps_horizon_month_open_until_payday(scoped, monkeypatch):
+    horizon = date(2031, 11, 1)
+    monkeypatch.setattr(
+        IncomeForecastService, 'forecast_horizon', staticmethod(lambda: horizon),
+    )
+    recurring = _template(start_date='2031-10-01')
+    rows = IncomeForecastService.generate_missing_income(recurring.id, end_date=date(9999, 1, 1))
+    assert [row.pay_date for row in rows] == [date(2031, 10, 15)]
+    assert recurring.last_generated_date == date(2031, 10, 1)
+
+    horizon = date(2031, 11, 14)  # November 15 is a Saturday, paid on Friday.
+    rows = IncomeForecastService.generate_missing_income(recurring.id)
+    assert [row.pay_date for row in rows] == [horizon]
+    assert recurring.last_generated_date == date(2031, 11, 1)
+    assert IncomeForecastService.generate_missing_income(recurring.id) == []
+
+
+def test_explicit_monthly_end_date_still_includes_the_requested_month(scoped, monkeypatch):
+    monkeypatch.setattr(
+        IncomeForecastService, 'forecast_horizon', staticmethod(lambda: date(2031, 11, 1)),
+    )
+    recurring = _template(start_date='2031-09-01')
+    rows = IncomeForecastService.generate_missing_income(recurring.id, end_date=date(2031, 10, 1))
+    assert [row.pay_date for row in rows] == [date(2031, 9, 15), date(2031, 10, 15)]
+    assert IncomeForecastService._generation_limit(recurring, date(2031, 11, 1)) == date(2031, 11, 1)
+
+
 @pytest.mark.parametrize('field,value', [
     ('gross_annual', 'NaN'),
     ('gross_annual', 'Infinity'),
