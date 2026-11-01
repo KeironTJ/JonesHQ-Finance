@@ -143,7 +143,7 @@
         {% if fuel_records %}
         {% set total_cost  = fuel_records|sum(attribute='cost') %}
         {% set total_miles = fuel_records|sum(attribute='actual_miles') %}
-        {% set avg_mpg_all = (fuel_records|selectattr('mpg')|list|sum(attribute='mpg') / (fuel_records|selectattr('mpg')|list|length)) if fuel_records|selectattr('mpg')|list else 0 %}
+        {% set avg_mpg_all = (fuel_mpg_by_id.values()|sum / fuel_mpg_by_id|length) if fuel_mpg_by_id else 0 %}
         <div class="row g-2 mb-3 text-center">
             <div class="col-4 col-md-2">
                 <div class="p-2 jhq-metric-tile text-center">
@@ -206,6 +206,7 @@
                 </thead>
                 <tbody>
                     {% for fuel in fuel_records %}
+                    {% set fuel_mpg = fuel_mpg_by_id.get(fuel.id) %}
                     {% set _days_since = (fuel.date - fuel.last_fill_date).days if fuel.last_fill_date else none %}
                     <tr class="{% if fuel.linked_transaction_id %}table-success {% endif %}fuel-mobile-card">
                         <td data-label="Date" class="text-nowrap fuel-card-date">
@@ -230,8 +231,8 @@
                             {% endif %}
                             <span class="fw-bold text-danger">£{{ "%.2f"|format(fuel.cost) }}</span>
                             <span class="fuel-card-inline-gallons">{{ "%.2f"|format(fuel.gallons) }} gal</span>
-                            {% if fuel.mpg and fuel.mpg > 0 %}
-                            <span class="fuel-card-inline-mpg">{{ "%.1f"|format(fuel.mpg) }} mpg</span>
+                            {% if fuel_mpg %}
+                            <span class="fuel-card-inline-mpg">{{ "%.1f"|format(fuel_mpg) }} mpg</span>
                             {% else %}
                             <span class="fuel-card-inline-mpg">— mpg</span>
                             {% endif %}
@@ -240,8 +241,8 @@
                         <td data-label="Miles Since" class="fuel-card-detail">{{ fuel.actual_miles or 0 }}</td>
                         <td data-label="Cum. Miles" class="fuel-card-detail">{{ "{:,}".format(fuel.actual_cumulative_miles or 0) }}</td>
                         <td data-label="MPG" class="fuel-card-detail">
-                            {% if fuel.mpg and fuel.mpg > 0 %}
-                                {% set mpg_val = fuel.mpg|float %}
+                            {% if fuel_mpg %}
+                                {% set mpg_val = fuel_mpg|float %}
                                 {% set mpg_cls = 'bg-success' if mpg_val >= 40 else ('bg-warning text-dark' if mpg_val >= 30 else 'bg-danger') %}
                                 <span class="badge {{ mpg_cls }}">{{ "%.1f"|format(mpg_val) }}</span>
                             {% else %}

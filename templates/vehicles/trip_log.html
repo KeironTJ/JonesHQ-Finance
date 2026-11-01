@@ -379,8 +379,9 @@
                                         <span class="text-muted small">{{ "%.1f"|format(event.trip.approx_mpg) }} mpg</span>
                                         {% endif %}
                                     {% elif event.type == 'fuel' %}
-                                        {% if event.fill.mpg %}
-                                        <span class="text-muted small">{{ "%.1f"|format(event.fill.mpg) }} mpg</span>
+                                        {% set fuel_mpg = fuel_mpg_by_id.get(event.fill.id) %}
+                                        {% if fuel_mpg %}
+                                        <span class="text-muted small">{{ "%.1f"|format(fuel_mpg) }} mpg</span>
                                         {% endif %}
                                     {% endif %}
                                 </td>

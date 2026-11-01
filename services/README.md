@@ -69,6 +69,41 @@ statement/payment generation, and future-chain regeneration.
 `CreditCardService` handles card records, transactions, and payment/bank sync.
 The shared vendor lookup helpers live in `finance/credit_card_helpers.py`.
 
+### Fuel forecasting
+
+`vehicles/fuel_forecasting_service.py` assesses each positive-mile trip in date/ID
+order. A trip that would leave the tank at or below the configured threshold
+triggers a top-up **before that trip, dated on the trip's day**; there is no
+earlier-trip look-ahead scheduling. The percentage still means fuel consumed:
+95% means refill at 5% remaining. A full tank never produces a zero-gallon top-up.
+Trips exceeding a tank's usable range receive additional same-day top-ups at the
+threshold during the journey. Same-day refill costs are summed into one unpaid
+forecast bank transaction.
+
+Actual fills precede trips on the same day, ordered by record ID. Full fills
+reset the tank to capacity; partial fills add purchased fuel, capped at capacity.
+Only trips after the latest actual fill receive forecasts, including missed past
+trips. Earlier history establishes the tank using **actual fills only**; omitted
+hypothetical fills cannot inflate the level after a partial fill. The trip-log
+tank column uses this same simulation. Current tank status uses actual fills and
+trips through today only; its rolling-mileage "Fill In" estimate is separate from
+the scheduled-trip forecast.
+
+`VehicleService` derives MPG from completed full-to-full odometer intervals,
+including intervening partial-fill gallons. Partial fills have no standalone MPG.
+Forecasts use the latest ten positive intervals and the latest five positive
+fuel prices (pence/litre, with a 150p fallback). Costs convert UK gallons using
+4.54609 litres/gallon. Read calculations and fill-log MPG displays derive these
+intervals rather than trusting legacy stored MPG; fuel creates, edits and deletes
+also recalculate stored metrics in chronological order.
+
+Trip add/edit/delete, bulk trip add/delete, fuel changes, vehicle-setting changes
+and manual refresh rebuild saved forecasts. Registration changes also clear the
+old registration's forecasts. Actual bank transactions are preserved, and monthly
+balance caches refresh from the earliest removed or added forecast per affected
+account. Existing saved forecasts are corrected on the next such action or with
+**Refresh forecasts**; deploying this change does not rewrite household data.
+
 `platform/passkey_service.py` owns WebAuthn enrollment, one-time challenges,
 passwordless sign-in, recent identity confirmation, removal and server recovery.
 It uses `UserSessionService` for revocation and passkey-authenticated sessions;

@@ -5,9 +5,9 @@ Fuel metrics, trip cost estimation, and bank-transaction creation for vehicle re
 
 Fuel metrics
 ------------
-All MPG and per-mile cost calculations are derived by comparing consecutive FuelRecord
-rows (current mileage minus previous fill mileage).  The first fill for a vehicle has
-no previous record, so actual_miles=0 and MPG=0 for that entry.
+MPG is derived from completed full-to-full intervals, including all intervening
+partial-fill gallons. Partial fills have no standalone MPG. Miles and purchase
+cost per mile compare consecutive records. Fuel edits rebuild subsequent metrics.
 
 Primary entry points
 --------------------
@@ -47,8 +47,16 @@ class VehicleService:
         return account_id
 
     @staticmethod
+    def _validate_fuel_settings(data):
+        if data.get('tank_size') and Decimal(data['tank_size']) <= 0:
+            raise ValueError('Tank size must be greater than zero')
+        if data.get('refuel_threshold_pct') and not 50 <= Decimal(data['refuel_threshold_pct']) <= 100:
+            raise ValueError('Refuel forecast threshold must be between 50 and 100 percent')
+
+    @staticmethod
     def create_vehicle(data):
         fuel_account_id = VehicleService._get_fuel_account_id(data)
+        VehicleService._validate_fuel_settings(data)
         vehicle = Vehicle(
             family_id=db_helpers.get_family_id(),
             name=data.get('name'),
@@ -79,6 +87,7 @@ class VehicleService:
     def update_vehicle(vehicle_id, data):
         vehicle = family_get_or_404(Vehicle, vehicle_id)
         fuel_account_id = VehicleService._get_fuel_account_id(data)
+        VehicleService._validate_fuel_settings(data)
         vehicle.name = data.get('name', vehicle.name)
         vehicle.make = data.get('make', vehicle.make)
         vehicle.model = data.get('model', vehicle.model)
@@ -114,9 +123,7 @@ class VehicleService:
         mileage = int(data['mileage'])
         cost = Decimal(data['cost'])
         gallons = Decimal(data['gallons'])
-        metrics = VehicleService.calculate_fuel_metrics(
-            vehicle_id, mileage, gallons, cost, fuel_date
-        )
+        family_get_or_404(Vehicle, vehicle_id)
         fuel_record = FuelRecord(
             family_id=db_helpers.get_family_id(),
             vehicle_id=vehicle_id,
@@ -125,14 +132,11 @@ class VehicleService:
             mileage=mileage,
             cost=cost,
             gallons=gallons,
-            actual_miles=metrics[0],
-            mpg=metrics[1],
-            price_per_mile=metrics[2],
-            last_fill_date=metrics[3],
-            actual_cumulative_miles=metrics[4],
             is_partial_fill=data.get('is_partial_fill') == '1',
         )
         db.session.add(fuel_record)
+        db.session.flush()
+        VehicleService._recalculate_fuel_metrics(vehicle_id)
         db.session.commit()
         return fuel_record
 
@@ -145,18 +149,7 @@ class VehicleService:
         fuel_record.cost = Decimal(data['cost'])
         fuel_record.gallons = Decimal(data['gallons'])
         fuel_record.is_partial_fill = data.get('is_partial_fill') == '1'
-        metrics = VehicleService.calculate_fuel_metrics(
-            fuel_record.vehicle_id,
-            fuel_record.mileage,
-            fuel_record.gallons,
-            fuel_record.cost,
-            fuel_record.date,
-        )
-        fuel_record.actual_miles = metrics[0]
-        fuel_record.mpg = metrics[1]
-        fuel_record.price_per_mile = metrics[2]
-        fuel_record.last_fill_date = metrics[3]
-        fuel_record.actual_cumulative_miles = metrics[4]
+        VehicleService._recalculate_fuel_metrics(fuel_record.vehicle_id)
         db.session.commit()
         return fuel_record
 
@@ -165,6 +158,8 @@ class VehicleService:
         fuel_record = family_get_or_404(FuelRecord, fuel_id)
         vehicle_id = fuel_record.vehicle_id
         db.session.delete(fuel_record)
+        db.session.flush()
+        VehicleService._recalculate_fuel_metrics(vehicle_id)
         db.session.commit()
         return vehicle_id
 
@@ -282,42 +277,77 @@ class VehicleService:
         return created
 
     @staticmethod
-    def calculate_fuel_metrics(vehicle_id, current_mileage, gallons, cost, fuel_date):
-        """
-        Derive fuel metrics for a new fill-up by comparing to the previous record.
-
-        Args:
-            vehicle_id:       ID of the Vehicle.
-            current_mileage:  Odometer reading at this fill-up.
-            gallons:          Gallons added.
-            cost:             Total cost in £ (Decimal).
-            fuel_date:        Date of this fill-up (used to find the previous fill).
-
-        Returns:
-            (actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles)
-            All zero/None for the first fill (no prior record to compare against).
-        """
-        # Get the most recent fuel record before this one
-        previous_fill = family_query(FuelRecord).filter(
-            FuelRecord.vehicle_id == vehicle_id,
-            FuelRecord.date < fuel_date
-        ).order_by(FuelRecord.date.desc()).first()
-        
-        if previous_fill:
-            actual_miles = current_mileage - previous_fill.mileage
-            mpg = Decimal(actual_miles) / gallons if gallons > 0 else Decimal('0')
-            price_per_mile = cost / Decimal(actual_miles) if actual_miles > 0 else Decimal('0')
-            last_fill_date = previous_fill.date
-            cumulative_miles = (previous_fill.actual_cumulative_miles or 0) + actual_miles
-        else:
-            # First fill for this vehicle
-            actual_miles = 0
+    def _metrics_for_fills(fills):
+        """Yield each chronological fill and its derived metrics."""
+        previous_fill = None
+        full_anchor = None
+        interval_gallons = Decimal('0')
+        cumulative_miles = 0
+        for fill in fills:
+            actual_miles = fill.mileage - previous_fill.mileage if previous_fill else 0
+            cumulative_miles += actual_miles
+            price_per_mile = Decimal(str(fill.cost)) / Decimal(actual_miles) if actual_miles > 0 else Decimal('0')
             mpg = Decimal('0')
-            price_per_mile = Decimal('0')
-            last_fill_date = None
-            cumulative_miles = 0
-        
-        return actual_miles, mpg, price_per_mile, last_fill_date, cumulative_miles
+            if full_anchor is not None:
+                interval_gallons += Decimal(str(fill.gallons))
+                interval_miles = fill.mileage - full_anchor.mileage
+                if not fill.is_partial_fill and interval_gallons > 0 and interval_miles > 0:
+                    mpg = Decimal(interval_miles) / interval_gallons
+            if not fill.is_partial_fill:
+                full_anchor = fill
+                interval_gallons = Decimal('0')
+            yield fill, (
+                actual_miles, mpg, price_per_mile,
+                previous_fill.date if previous_fill else None, cumulative_miles,
+            )
+            previous_fill = fill
+
+    @staticmethod
+    def _recalculate_fuel_metrics(vehicle_id):
+        fills = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id).order_by(
+            FuelRecord.date.asc(), FuelRecord.id.asc(),
+        ).all()
+        for fill, metrics in VehicleService._metrics_for_fills(fills):
+            (
+                fill.actual_miles, fill.mpg, fill.price_per_mile,
+                fill.last_fill_date, fill.actual_cumulative_miles,
+            ) = metrics
+
+    @staticmethod
+    def get_fuel_efficiency_samples(vehicle_id, end_date=None):
+        """Return (full fill, MPG) samples without trusting legacy stored MPG."""
+        query = family_query(FuelRecord).filter_by(vehicle_id=vehicle_id)
+        if end_date is not None:
+            query = query.filter(FuelRecord.date <= end_date)
+        fills = query.order_by(FuelRecord.date.asc(), FuelRecord.id.asc()).all()
+        return [
+            (fill, metrics[1])
+            for fill, metrics in VehicleService._metrics_for_fills(fills)
+            if metrics[1] > 0
+        ]
+
+    @staticmethod
+    def get_fuel_mpg_for_records(records):
+        """Return derived MPG for displayed records, excluding partial intervals."""
+        record_ids = {fill.id for fill in records}
+        return {
+            fill.id: mpg
+            for vehicle_id in {fill.vehicle_id for fill in records}
+            for fill, mpg in VehicleService.get_fuel_efficiency_samples(vehicle_id)
+            if fill.id in record_ids
+        }
+
+    @staticmethod
+    def calculate_fuel_metrics(vehicle_id, current_mileage, gallons, cost, fuel_date):
+        """Calculate metrics for a proposed full fill after earlier dated records."""
+        fills = family_query(FuelRecord).filter(
+            FuelRecord.vehicle_id == vehicle_id, FuelRecord.date < fuel_date,
+        ).order_by(FuelRecord.date.asc(), FuelRecord.id.asc()).all()
+        fills.append(FuelRecord(
+            date=fuel_date, mileage=current_mileage, gallons=gallons,
+            cost=cost, is_partial_fill=False,
+        ))
+        return list(VehicleService._metrics_for_fills(fills))[-1][1]
     
     @staticmethod
     def get_latest_fuel_record(vehicle_id):
@@ -374,8 +404,7 @@ class VehicleService:
         total_gallons = sum([f.gallons for f in fuel_records])
         total_miles = max([f.actual_cumulative_miles or 0 for f in fuel_records])
         
-        # Calculate average MPG from records that have MPG
-        mpg_records = [f.mpg for f in fuel_records if f.mpg and f.mpg > 0]
+        mpg_records = [mpg for _fill, mpg in VehicleService.get_fuel_efficiency_samples(vehicle_id)]
         avg_mpg = sum(mpg_records) / len(mpg_records) if mpg_records else Decimal('0')
         
         avg_price_per_gallon = total_cost / total_gallons if total_gallons > 0 else Decimal('0')
@@ -391,29 +420,24 @@ class VehicleService:
     @staticmethod
     def calculate_trip_cost(vehicle_id, miles, trip_date):
         """Calculate estimated cost for a trip based on recent MPG and fuel prices"""
-        # Get average MPG from last 10 fuel records before the trip date
-        recent_fuels = family_query(FuelRecord).filter(
-            FuelRecord.vehicle_id == vehicle_id,
-            FuelRecord.date <= trip_date,
-            FuelRecord.mpg.isnot(None),
-            FuelRecord.mpg > 0
-        ).order_by(FuelRecord.date.desc()).limit(10).all()
+        recent_samples = VehicleService.get_fuel_efficiency_samples(vehicle_id, trip_date)[-10:]
         
-        if not recent_fuels:
-            # Try to get any fuel record for this vehicle
-            latest_fuel = VehicleService.get_latest_fuel_record(vehicle_id)
-            if not latest_fuel or not latest_fuel.mpg or latest_fuel.mpg == 0:
+        if not recent_samples:
+            all_samples = VehicleService.get_fuel_efficiency_samples(vehicle_id)
+            if not all_samples:
                 return Decimal('0'), Decimal('0'), Decimal('0')
-            avg_mpg = latest_fuel.mpg
-            price_per_gallon = latest_fuel.cost / latest_fuel.gallons if latest_fuel.gallons > 0 else Decimal('0')
+            latest_fuel, avg_mpg = all_samples[-1]
+            price_per_gallon = (
+                Decimal(str(latest_fuel.cost)) / Decimal(str(latest_fuel.gallons))
+                if latest_fuel.gallons > 0 else Decimal('0')
+            )
         else:
-            # Calculate average MPG from recent fills
-            avg_mpg = sum([f.mpg for f in recent_fuels]) / Decimal(len(recent_fuels))
+            avg_mpg = sum(mpg for _fill, mpg in recent_samples) / Decimal(len(recent_samples))
             
             # Get average price per gallon from recent fills (last 3)
-            recent_price_records = recent_fuels[:3]
+            recent_price_records = [fill for fill, _mpg in recent_samples[-3:]]
             avg_price_per_gallon = sum([
-                f.cost / f.gallons if f.gallons > 0 else Decimal('0') 
+                Decimal(str(f.cost)) / Decimal(str(f.gallons)) if f.gallons > 0 else Decimal('0')
                 for f in recent_price_records
             ]) / Decimal(len(recent_price_records))
             price_per_gallon = avg_price_per_gallon

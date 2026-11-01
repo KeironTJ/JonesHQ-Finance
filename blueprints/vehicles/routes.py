@@ -139,6 +139,7 @@ def fuel():
     return render_template(
         'vehicles/fuel_log.html',
         fuel_records=fuel_records,
+        fuel_mpg_by_id=VehicleService.get_fuel_mpg_for_records(fuel_records),
         vehicles=vehicles,
         accounts=accounts,
         payday_periods=payday_periods,
@@ -365,6 +366,7 @@ def trips():
     return render_template(
         'vehicles/trip_log.html',
         events=events,
+        fuel_mpg_by_id=VehicleService.get_fuel_mpg_for_records(fills_for_timeline),
         trips=trips,
         vehicles=vehicles,
         payday_periods=payday_periods,
@@ -402,7 +404,11 @@ def add_vehicle():
 def update_vehicle(vehicle_id):
     """Update vehicle details"""
     try:
+        previous_registration = family_get_or_404(Vehicle, vehicle_id).registration
         vehicle = VehicleService.update_vehicle(vehicle_id, request.form)
+        FuelForecastingService.sync_forecasted_transactions(
+            vehicle_id, previous_registration=previous_registration,
+        )
         flash(f'Vehicle {vehicle.name} updated successfully', 'success')
     except Exception as e:
         db.session.rollback()
@@ -417,15 +423,6 @@ def refresh_forecasts(vehicle_id):
     try:
         vehicle = family_get_or_404(Vehicle, vehicle_id)
         FuelForecastingService.sync_forecasted_transactions(vehicle_id)
-        
-        # Update monthly balance cache for fuel account
-        from services.finance.monthly_balance_service import MonthlyBalanceService
-        from datetime import date
-        if vehicle.fuel_account_id:
-            MonthlyBalanceService.handle_transaction_change(
-                vehicle.fuel_account_id,
-                date.today()
-            )
         
         flash(f'Forecasted fuel transactions refreshed for {vehicle.name}', 'success')
     except Exception as e:
@@ -483,7 +480,6 @@ def add_fuel():
     """Add a fuel record"""
     try:
         fuel_record = VehicleService.create_fuel_record(request.form)
-        vehicle_id = fuel_record.vehicle_id
         
         # Link to transaction (replaces forecasted or creates new)
         FuelForecastingService.link_fuel_record_to_transaction(fuel_record.id)
@@ -498,12 +494,12 @@ def add_fuel():
             if txn and txn.account_id:
                 MonthlyBalanceService.handle_transaction_change(txn.account_id, txn.transaction_date)
         
-        # Regenerate future fuel forecasts
-        FuelForecastingService.sync_forecasted_transactions(vehicle_id)
-        
+        mpg_label = (
+            f'{fuel_record.mpg:.1f} MPG'
+            if fuel_record.mpg and fuel_record.mpg > 0 else 'MPG pending a full-to-full interval'
+        )
         flash(
-            f'Fuel record added: £{fuel_record.cost:.2f}, '
-            f'{fuel_record.mpg:.1f} MPG',
+            f'Fuel record added: £{fuel_record.cost:.2f}, {mpg_label}',
             'success',
         )
     except Exception as e:
@@ -588,7 +584,8 @@ def update_trip(trip_id):
 def delete_trip(trip_id):
     """Delete a trip record"""
     try:
-        VehicleService.delete_trip(trip_id)
+        vehicle_id = VehicleService.delete_trip(trip_id)
+        FuelForecastingService.sync_forecasted_transactions(vehicle_id)
         
         flash('Trip deleted successfully', 'success')
     except Exception as e:
@@ -612,13 +609,17 @@ def bulk_delete_trips():
         
         # Delete all selected trips
         deleted_count = 0
+        vehicle_ids = set()
         for trip_id in trip_ids:
             trip = family_get(Trip, int(trip_id))
             if trip:
+                vehicle_ids.add(trip.vehicle_id)
                 db.session.delete(trip)
                 deleted_count += 1
         
         db.session.commit()
+        for vehicle_id in sorted(vehicle_ids):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
         flash(f'Successfully deleted {deleted_count} trip(s)', 'success')
     except Exception as e:
         db.session.rollback()
@@ -636,6 +637,7 @@ def bulk_add_trips():
             return redirect(request.referrer or url_for('vehicles.trips'))
         created = VehicleService.bulk_create_trips(request.form)
         created_count = len(created)
+        FuelForecastingService.sync_forecasted_transactions(int(request.form['vehicle_id']))
         flash(f'Successfully created {created_count} trip(s)', 'success')
     except ValueError as ve:
         db.session.rollback()
