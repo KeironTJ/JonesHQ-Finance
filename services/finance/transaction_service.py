@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
@@ -149,12 +149,6 @@ class TransactionService:
                 raise ValueError(f'Invalid {label} selected')
 
     @staticmethod
-    def _adjust_working_day(transaction_date, direction):
-        while transaction_date.weekday() >= 5:
-            transaction_date += timedelta(days=1 if direction == 'next' else -1)
-        return transaction_date
-
-    @staticmethod
     def create_transactions(data):
         account_id = TransactionService._int_value(data, 'account_id')
         category_id = TransactionService._int_value(data, 'category_id')
@@ -171,8 +165,13 @@ class TransactionService:
             raise ValueError('Number of occurrences must be at least 1')
 
         frequency = data.get('frequency', 'monthly')
-        adjust_working_days = data.get('adjust_working_days') == 'on'
-        weekend_adjustment = data.get('weekend_adjustment', 'previous')
+        # Retain support for callers using the former checkbox API.
+        default_adjustment = (
+            'previous' if data.get('adjust_working_days') == 'on' else 'none'
+        )
+        weekend_adjustment = PaydayService.validate_weekend_adjustment(
+            data.get('weekend_adjustment', default_adjustment)
+        )
         transactions = []
         amount = float(data['amount'])
 
@@ -187,19 +186,20 @@ class TransactionService:
                     'yearly': {'years': occurrence},
                 }
                 current_date += relativedelta(**offsets.get(frequency, {}))
-            if adjust_working_days:
-                current_date = TransactionService._adjust_working_day(
-                    current_date, weekend_adjustment
-                )
+            current_date = PaydayService.adjust_transaction_date(
+                current_date, weekend_adjustment
+            )
 
             year_month = current_date.strftime('%Y-%m')
             week_year = f'{current_date.isocalendar()[1]:02d}-{current_date.year}'
             day_name = current_date.strftime('%a')
             payday_period = PaydayService.get_period_for_date(current_date)
             if occurrence == 0:
-                year_month = data.get('year_month', '').strip() or year_month
-                week_year = data.get('week_year', '').strip() or week_year
-                day_name = data.get('day_name', '').strip() or day_name
+                # The form auto-fills these from the unadjusted date.
+                if current_date == transaction_date:
+                    year_month = data.get('year_month', '').strip() or year_month
+                    week_year = data.get('week_year', '').strip() or week_year
+                    day_name = data.get('day_name', '').strip() or day_name
                 payday_period = (
                     data.get('payday_period_override', '').strip()
                     or payday_period

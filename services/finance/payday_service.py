@@ -114,6 +114,21 @@ class PaydayService:
         while PaydayService.is_non_working_day(date_obj):
             date_obj = date_obj + timedelta(days=1)
         return date_obj
+
+    @staticmethod
+    def validate_weekend_adjustment(adjustment: str) -> str:
+        if adjustment not in ('none', 'next', 'previous'):
+            raise ValueError('Select a valid weekend and bank holiday adjustment')
+        return adjustment
+
+    @staticmethod
+    def adjust_transaction_date(date_obj: date, adjustment: str) -> date:
+        PaydayService.validate_weekend_adjustment(adjustment)
+        if adjustment == 'previous':
+            return PaydayService.get_previous_working_day(date_obj)
+        if adjustment == 'next':
+            return PaydayService.get_next_working_day(date_obj)
+        return date_obj
     
     @staticmethod
     def get_payday_for_month(year, month):

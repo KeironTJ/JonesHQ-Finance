@@ -25,6 +25,9 @@ class Subscription(db.Model):
     name = db.Column(db.String(255), nullable=False)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     frequency = db.Column(db.String(20), nullable=False, default='monthly')
+    weekend_adjustment = db.Column(
+        db.String(10), nullable=False, default='none', server_default='none'
+    )
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=True)
     horizon_years = db.Column(db.Integer, nullable=False, default=1)

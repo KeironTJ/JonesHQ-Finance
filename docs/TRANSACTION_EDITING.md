@@ -26,6 +26,19 @@ blueprint; reusable transaction operations live in
 The subscription-management routes are also part of the transactions blueprint;
 see [Subscriptions](SUBSCRIPTIONS.md).
 
+## Weekend and bank holiday handling
+
+When creating a single transaction or a recurring batch, choose Keep scheduled
+date (default), Move to next working day, or Move to previous working day.
+Working days exclude weekends and England & Wales bank holidays. Each batch
+occurrence is calculated from the original date, then adjusted independently;
+moving a charge across a month or year boundary does not shift the recurrence.
+Calendar fields are recalculated from the adjusted date when it moves, even if
+the form auto-filled them from the original date. A manual payday-period override
+is still respected. This is a creation-time option, not a stored rule for
+individual transactions; existing transactions are not moved automatically.
+Subscriptions save the option for future generation and editing.
+
 ## Balance and Linked Records
 
 The account balance helper recalculates an account from its transaction

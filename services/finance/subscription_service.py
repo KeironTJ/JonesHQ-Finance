@@ -203,7 +203,9 @@ class SubscriptionService:
             if not transaction.is_paid and not transaction.is_fixed
         }
         if subscription.is_active:
-            eligible_dates = set(SubscriptionService._scheduled_dates(subscription, today))
+            eligible_dates = set(SubscriptionService._scheduled_dates(
+                subscription, today, paid_or_fixed_dates
+            ))
         else:
             eligible_dates = set(pending_by_date)
         change_start_date = min(
@@ -300,6 +302,9 @@ class SubscriptionService:
         frequency = data.get('frequency')
         if frequency not in SubscriptionService.FREQUENCIES:
             raise ValueError('Select a valid subscription frequency')
+        weekend_adjustment = PaydayService.validate_weekend_adjustment(
+            data.get('weekend_adjustment', 'none')
+        )
 
         try:
             start_date = date.fromisoformat(data.get('start_date', ''))
@@ -348,6 +353,7 @@ class SubscriptionService:
             'name': name,
             'amount': -amount,
             'frequency': frequency,
+            'weekend_adjustment': weekend_adjustment,
             'start_date': start_date,
             'end_date': end_date,
             'horizon_years': horizon_years,
@@ -365,6 +371,7 @@ class SubscriptionService:
             name=values['name'],
             amount=values['amount'],
             frequency=values['frequency'],
+            weekend_adjustment=values['weekend_adjustment'],
             start_date=values['start_date'],
             end_date=values['end_date'],
             horizon_years=values['horizon_years'],
@@ -393,6 +400,7 @@ class SubscriptionService:
         subscription.name = values['name']
         subscription.amount = values['amount']
         subscription.frequency = values['frequency']
+        subscription.weekend_adjustment = values['weekend_adjustment']
         subscription.start_date = values['start_date']
         subscription.end_date = values['end_date']
         subscription.horizon_years = values['horizon_years']
@@ -406,7 +414,7 @@ class SubscriptionService:
         return subscription
 
     @staticmethod
-    def _scheduled_dates(subscription, today):
+    def _scheduled_dates(subscription, today, protected_dates=()):
         horizon_end = today + relativedelta(years=subscription.horizon_years)
         last_date = min(
             (d for d in (horizon_end, subscription.end_date) if d is not None),
@@ -418,8 +426,17 @@ class SubscriptionService:
             planned_date = subscription.start_date + occurrence * interval
             if planned_date > last_date:
                 break
-            if planned_date >= today:
-                yield planned_date
+            adjusted_date = PaydayService.adjust_transaction_date(
+                planned_date, subscription.weekend_adjustment or 'none'
+            )
+            # A paid/fixed occurrence stays protected even after changing policy.
+            protected = protected_dates and any(
+                PaydayService.adjust_transaction_date(planned_date, policy)
+                in protected_dates
+                for policy in ('none', 'next', 'previous')
+            )
+            if adjusted_date >= today and not protected:
+                yield adjusted_date
             occurrence += 1
 
     @staticmethod
@@ -432,8 +449,6 @@ class SubscriptionService:
             'vendor': subscription.vendor,
             'amount': subscription.amount,
         }
-        dates = set(SubscriptionService._scheduled_dates(subscription, today))
-
         if subscription.account_id:
             transactions = family_query(Transaction).filter_by(
                 subscription_id=subscription.id,
@@ -443,7 +458,6 @@ class SubscriptionService:
             SubscriptionService._sync_bank_transactions(
                 subscription,
                 transactions,
-                dates,
                 values,
                 today,
                 create_missing=subscription.is_active,
@@ -458,7 +472,6 @@ class SubscriptionService:
             SubscriptionService._sync_card_transactions(
                 subscription,
                 transactions,
-                dates,
                 values,
                 today,
                 create_missing=subscription.is_active,
@@ -469,7 +482,7 @@ class SubscriptionService:
 
     @staticmethod
     def _sync_bank_transactions(
-        subscription, transactions, dates, values, today, create_missing
+        subscription, transactions, values, today, create_missing
     ):
         paid_dates = {
             transaction.transaction_date
@@ -480,6 +493,9 @@ class SubscriptionService:
                 db.or_(Transaction.is_paid.is_(True), Transaction.is_fixed.is_(True))
             ).all()
         }
+        dates = set(SubscriptionService._scheduled_dates(
+            subscription, today, paid_dates
+        ))
         pending_by_date = {}
         for transaction in transactions:
             if transaction.transaction_date < today:
@@ -542,7 +558,7 @@ class SubscriptionService:
 
     @staticmethod
     def _sync_card_transactions(
-        subscription, transactions, dates, values, today, create_missing
+        subscription, transactions, values, today, create_missing
     ):
         paid_dates = {
             transaction.date
@@ -556,6 +572,9 @@ class SubscriptionService:
                 )
             ).all()
         }
+        dates = set(SubscriptionService._scheduled_dates(
+            subscription, today, paid_dates
+        ))
         pending_by_date = {}
         for transaction in transactions:
             if transaction.date < today:

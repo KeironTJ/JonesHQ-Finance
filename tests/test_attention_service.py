@@ -174,6 +174,23 @@ def test_attention_includes_next_active_subscription_charge(app, family, user, m
     )
 
 
+def test_attention_uses_adjusted_subscription_charge_date(app, family, user, monkeypatch):
+    _scope(monkeypatch, family, user)
+    account, _, _, _, _, _ = _records(family.id, 'Subscription target')
+    db.session.add(Subscription(
+        family_id=family.id, name='Weekend subscription', amount=-10,
+        frequency='monthly', start_date=date(2026, 10, 31),
+        weekend_adjustment='next', horizon_years=1,
+        account_id=account.id, is_active=True,
+    ))
+    db.session.commit()
+    item = next(
+        item for item in AttentionService.get_data(TODAY)['items']
+        if item['kind'] == 'subscription'
+    )
+    assert item['due_date'] == date(2026, 11, 2)
+
+
 @pytest.mark.parametrize('change', ['paid', 'today', 'future', 'inactive_account'])
 def test_attention_only_flags_past_pending_entries_on_active_accounts(
     app, family, user, monkeypatch, change,

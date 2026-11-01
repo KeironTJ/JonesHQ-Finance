@@ -17,6 +17,18 @@ years. An optional end date can shorten that horizon. The application
 maintains pending transactions only through the earlier of the selected
 horizon or end date; it does not generate an unlimited series.
 
+**Weekend & bank holiday handling** offers Keep scheduled date (the default),
+Move to next working day, or Move to previous working day. Working days exclude
+weekends and England & Wales bank holidays, using the same calendar as income
+and loans. Each occurrence is calculated from the original first charge date
+before adjustment, so moving one charge does not shift later charges.
+The horizon and end date bound the original scheduled dates; an adjusted charge
+may cross a month, year, or end-date boundary. Only adjusted dates today or later
+are generated. Dated price changes apply to the adjusted transaction date.
+Changing this option refreshes future unpaid, unfixed charges without recreating
+occurrences already paid or manually fixed under another adjustment option.
+Existing subscriptions retain their scheduled dates until the option is changed.
+
 ## Updating and cancelling
 
 Editing a rule refreshes its future pending entries to match the updated

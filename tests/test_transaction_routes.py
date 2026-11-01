@@ -141,6 +141,31 @@ def test_transfer_form_renders_after_missing_required_input(app, family, user, d
     assert date.today().isoformat().encode() in response.data
 
 
+def test_create_transaction_route_applies_weekend_choice(app, family, user):
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    category = Category(family_id=family.id, name='Bills', category_type='expense')
+    db.session.add_all([account, category])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.get('/transactions/create')
+    assert b'name="weekend_adjustment"' in response.data
+    assert b'value="none" selected' in response.data
+    response = client.post('/transactions/create', data={
+        'account_id': str(account.id), 'category_id': str(category.id),
+        'amount': '-10', 'transaction_date': '2026-12-25',
+        'weekend_adjustment': 'next',
+        'year_month': '2026-12', 'day_name': 'Fri',
+    })
+    assert response.status_code == 302
+    transaction = Transaction.query.one()
+    assert transaction.transaction_date == date(2026, 12, 29)
+    assert transaction.day_name == 'Tue'
+
+
 def test_transaction_routes_create_edit_delete(app, family, user):
     family_id = family.id
     user_id = user.id

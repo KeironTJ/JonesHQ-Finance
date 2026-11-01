@@ -117,6 +117,16 @@
                            value="{{ request.form.get('end_date', subscription.end_date.isoformat() if subscription and subscription.end_date else '') }}">
                 </div>
                 <div class="col-md-6">
+                    <label for="weekend_adjustment" class="form-label">Weekend &amp; bank holiday handling</label>
+                    {% set selected_adjustment = request.form.get('weekend_adjustment', subscription.weekend_adjustment if subscription else 'none') %}
+                    <select id="weekend_adjustment" name="weekend_adjustment" class="form-select">
+                        {% for value, label in [('none', 'Keep scheduled date'), ('next', 'Move to next working day'), ('previous', 'Move to previous working day')] %}
+                        <option value="{{ value }}" {% if selected_adjustment == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Working days exclude weekends and England &amp; Wales bank holidays. Charges may move across month/end-date boundaries; recurrence stays anchored to the first charge date. Paid and manually fixed entries are preserved.</div>
+                </div>
+                <div class="col-md-6">
                     <label for="horizon_years" class="form-label">Planning horizon</label>
                     {% set selected_horizon = request.form.get('horizon_years', subscription.horizon_years|string if subscription else '1') %}
                     <select id="horizon_years" name="horizon_years" class="form-select" required>

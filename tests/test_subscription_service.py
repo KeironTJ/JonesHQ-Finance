@@ -1,9 +1,13 @@
 from tests.auth_helpers import login_client
 from datetime import date
 from decimal import Decimal
+from importlib import import_module
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from dateutil.relativedelta import relativedelta
+from sqlalchemy import create_engine, inspect, text
 from werkzeug.datastructures import MultiDict
 
 from extensions import db
@@ -52,6 +56,219 @@ def _bank_form(account, category, *, amount='12.99', end_date='', horizon='1'):
         'end_date': end_date,
         'horizon_years': horizon,
     })
+
+
+@pytest.fixture
+def fixed_subscription_today(monkeypatch):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 1, 1)
+
+    monkeypatch.setattr('services.finance.subscription_service.date', FixedDate)
+    return FixedDate.today()
+
+
+@pytest.mark.parametrize('target_type', ['bank', 'credit_card'])
+@pytest.mark.parametrize('policy, expected', [
+    ('none', [date(2026, 1, 31), date(2026, 2, 28), date(2026, 3, 31)]),
+    ('next', [date(2026, 2, 2), date(2026, 3, 2), date(2026, 3, 31)]),
+    ('previous', [date(2026, 1, 30), date(2026, 2, 27), date(2026, 3, 31)]),
+])
+def test_subscription_adjusted_dates_and_metadata(
+    app, family, monkeypatch, fixed_subscription_today, target_type, policy, expected
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr(
+        'services.finance.subscription_service.PaydayService.get_period_for_date',
+        lambda value: value.strftime('%Y-%m'),
+    )
+    account, category = _add_bank_target(family)
+    card = CreditCard(
+        family_id=family.id, card_name='Card', annual_apr=Decimal('24'),
+        monthly_apr=Decimal('2'), credit_limit=Decimal('5000'),
+        current_balance=0, is_active=True,
+    )
+    db.session.add(card)
+    db.session.commit()
+    form = _bank_form(account, category, end_date='2026-03-31')
+    for key, value in {
+        'start_date': '2026-01-31', 'weekend_adjustment': policy,
+        'target_type': target_type, 'credit_card_id': str(card.id),
+    }.items():
+        form[key] = value
+    subscription = SubscriptionService.create(form)
+    db.session.commit()
+    assert subscription.weekend_adjustment == policy
+    model = Transaction if target_type == 'bank' else CreditCardTransaction
+    date_attr = 'transaction_date' if target_type == 'bank' else 'date'
+    entries = model.query.filter_by(subscription_id=subscription.id).order_by(
+        getattr(model, date_attr)
+    ).all()
+    assert [getattr(entry, date_attr) for entry in entries] == expected
+    for entry, expected_date in zip(entries, expected):
+        if target_type == 'bank':
+            assert entry.year_month == expected_date.strftime('%Y-%m')
+            assert entry.day_name == expected_date.strftime('%a')
+            assert entry.payday_period == expected_date.strftime('%Y-%m')
+        else:
+            assert entry.month == expected_date.strftime('%Y-%m')
+            assert entry.day_name == expected_date.strftime('%A')
+    SubscriptionService.sync_pending(subscription, today=fixed_subscription_today)
+    db.session.flush()
+    assert model.query.filter_by(subscription_id=subscription.id).count() == 3
+    preview = SubscriptionService.apply_price_change(subscription.id, {
+        'amount': '20', 'effective_date': '2026-02-01', 'note': 'Upgrade',
+    }, today=fixed_subscription_today)
+    assert [change['date'] for change in preview['changes']] == [
+        charge_date for charge_date in expected if charge_date >= date(2026, 2, 1)
+    ]
+    db.session.flush()
+    for entry in entries:
+        expected_amount = (
+            Decimal('-20') if getattr(entry, date_attr) >= date(2026, 2, 1)
+            else Decimal('-12.99')
+        )
+        assert entry.amount == expected_amount
+
+
+@pytest.mark.parametrize('target_type', ['bank', 'credit_card'])
+def test_changing_subscription_policy_preserves_paid_fixed_occurrences(
+    app, family, monkeypatch, fixed_subscription_today, target_type
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account, category = _add_bank_target(family)
+    card = CreditCard(
+        family_id=family.id, card_name='Card', annual_apr=Decimal('24'),
+        monthly_apr=Decimal('2'), credit_limit=Decimal('5000'),
+        current_balance=0, is_active=True,
+    )
+    db.session.add(card)
+    db.session.commit()
+    form = _bank_form(account, category, end_date='2026-05-31')
+    for key, value in {
+        'start_date': '2026-01-31', 'weekend_adjustment': 'previous',
+        'target_type': target_type, 'credit_card_id': str(card.id),
+    }.items():
+        form[key] = value
+    subscription = SubscriptionService.create(form)
+    db.session.flush()
+    model = Transaction if target_type == 'bank' else CreditCardTransaction
+    date_attr = 'transaction_date' if target_type == 'bank' else 'date'
+    entries = model.query.filter_by(subscription_id=subscription.id).order_by(
+        getattr(model, date_attr)
+    ).all()
+    entries[0].is_paid = True
+    entries[1].is_fixed = True
+    protected_ids = [entries[0].id, entries[1].id]
+    db.session.commit()
+    form['weekend_adjustment'] = 'next'
+    SubscriptionService.update(subscription.id, form)
+    db.session.commit()
+    for _ in range(2):
+        SubscriptionService.sync_pending(subscription, today=fixed_subscription_today)
+        db.session.flush()
+    updated = model.query.filter_by(subscription_id=subscription.id).order_by(
+        getattr(model, date_attr)
+    ).all()
+    assert [getattr(entry, date_attr) for entry in updated] == [
+        date(2026, 1, 30), date(2026, 2, 27), date(2026, 3, 31),
+        date(2026, 4, 30), date(2026, 6, 1),
+    ]
+    assert [updated[0].id, updated[1].id] == protected_ids
+    assert updated[0].is_paid and updated[1].is_fixed
+    preview = SubscriptionService.preview_price_change(subscription.id, {
+        'amount': '20', 'effective_date': '2026-01-31', 'note': 'Upgrade',
+    }, today=fixed_subscription_today)
+    assert [change['date'] for change in preview['changes']] == [
+        date(2026, 3, 31), date(2026, 4, 30), date(2026, 6, 1),
+    ]
+    assert preview['new_count'] == 0
+
+
+@pytest.mark.parametrize('policy, today, expected', [
+    ('next', date(2026, 12, 28), [date(2026, 12, 29)]),
+    ('previous', date(2026, 12, 25), []),
+    ('previous', date(2026, 12, 24), [date(2026, 12, 24)]),
+    ('none', date(2026, 12, 25), [date(2026, 12, 25)]),
+])
+def test_subscription_holiday_and_today_boundaries(app, policy, today, expected):
+    subscription = Subscription(
+        name='Holiday charge', amount=-10, frequency='monthly',
+        start_date=date(2026, 12, 25), end_date=date(2026, 12, 25),
+        horizon_years=1, weekend_adjustment=policy,
+    )
+    assert list(SubscriptionService._scheduled_dates(subscription, today)) == expected
+
+
+def test_subscription_invalid_policy_preserves_form_selection(
+    app, family, user, monkeypatch
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account, category = _add_bank_target(family)
+    client = app.test_client()
+    login_client(client, user.id)
+    form = _bank_form(account, category)
+    form['weekend_adjustment'] = 'invalid'
+    response = client.post('/transactions/subscriptions/create', data=form)
+    assert response.status_code == 200
+    assert b'Select a valid weekend' in response.data
+    assert Subscription.query.count() == 0
+    form['weekend_adjustment'] = 'next'
+    form['name'] = ''
+    response = client.post('/transactions/subscriptions/create', data=form)
+    assert b'value="next" selected' in response.data
+
+
+def test_subscription_adjustment_migration_preserves_existing_rules(monkeypatch):
+    migration = import_module(
+        'migrations.versions.d8e2f4a6b0c9_add_subscription_weekend_adjustment'
+    )
+    engine = create_engine('sqlite://')
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(
+                'CREATE TABLE subscriptions (id INTEGER PRIMARY KEY, name TEXT NOT NULL)'
+            ))
+            connection.execute(text(
+                "INSERT INTO subscriptions (id, name) VALUES (1, 'Existing rule')"
+            ))
+            monkeypatch.setattr(
+                migration, 'op', Operations(MigrationContext.configure(connection))
+            )
+            migration.upgrade()
+            assert connection.execute(text(
+                'SELECT name, weekend_adjustment FROM subscriptions'
+            )).one() == ('Existing rule', 'none')
+            migration.downgrade()
+            assert 'weekend_adjustment' not in {
+                column['name'] for column in inspect(connection).get_columns('subscriptions')
+            }
+            assert connection.execute(text(
+                'SELECT name FROM subscriptions'
+            )).scalar_one() == 'Existing rule'
+    finally:
+        engine.dispose()
+
+
+def test_subscription_form_saves_and_restores_adjustment(app, family, user, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account, category = _add_bank_target(family)
+    client = app.test_client()
+    login_client(client, user.id)
+    form = _bank_form(account, category)
+    form['weekend_adjustment'] = 'next'
+    response = client.post('/transactions/subscriptions/create', data=form)
+    assert response.status_code == 302
+    subscription = Subscription.query.one()
+    response = client.get(f'/transactions/subscriptions/{subscription.id}/edit')
+    assert b'value="next" selected' in response.data
+    form['weekend_adjustment'] = 'previous'
+    response = client.post(
+        f'/transactions/subscriptions/{subscription.id}/edit', data=form
+    )
+    assert response.status_code == 302
+    assert subscription.weekend_adjustment == 'previous'
 
 
 def test_subscription_updates_and_cancellation_leave_paid_bank_entries_untouched(

@@ -1,12 +1,97 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from extensions import db
 from models.accounts import Account
 from models.categories import Category
 from models.transactions import Transaction
 from models.expenses import Expense
 from services.finance.transaction_service import TransactionService
+
+
+@pytest.mark.parametrize('policy, expected', [
+    ('none', [date(2026, 1, 31), date(2026, 2, 28), date(2026, 3, 31)]),
+    ('next', [date(2026, 2, 2), date(2026, 3, 2), date(2026, 3, 31)]),
+    ('previous', [date(2026, 1, 30), date(2026, 2, 27), date(2026, 3, 31)]),
+])
+@pytest.mark.parametrize('recurring', [False, True])
+def test_weekend_handling_for_single_and_batch_transactions(
+    app, family, monkeypatch, policy, expected, recurring
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    seen_dates = []
+
+    def payday(value):
+        seen_dates.append(value)
+        return value.strftime('%Y-%m')
+
+    monkeypatch.setattr(
+        'services.finance.transaction_service.PaydayService.get_period_for_date',
+        payday,
+    )
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint', balance=0,
+    )
+    category = Category(family_id=family.id, name='Bills', category_type='expense')
+    db.session.add_all([account, category])
+    db.session.commit()
+    transactions = TransactionService.create_transactions({
+        'account_id': str(account.id),
+        'category_id': str(category.id),
+        'amount': '-10',
+        'transaction_date': '2026-01-31',
+        'is_recurring': 'on' if recurring else '',
+        'occurrences': '3',
+        'frequency': 'monthly',
+        'weekend_adjustment': policy,
+        'year_month': '2026-01',
+        'day_name': 'Sat',
+        'week_year': '05-2026',
+    })
+    dates = expected if recurring else expected[:1]
+    assert [txn.transaction_date for txn in transactions] == dates
+    assert seen_dates == dates
+    assert all(txn.year_month == txn.transaction_date.strftime('%Y-%m')
+               for txn in transactions)
+    assert all(txn.day_name == txn.transaction_date.strftime('%a')
+               for txn in transactions)
+
+
+@pytest.mark.parametrize('policy, expected', [
+    ('none', date(2026, 12, 25)),
+    ('next', date(2026, 12, 29)),
+    ('previous', date(2026, 12, 24)),
+])
+def test_transaction_handling_excludes_bank_holidays(
+    app, family, monkeypatch, policy, expected
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint', balance=0,
+    )
+    category = Category(family_id=family.id, name='Bills', category_type='expense')
+    db.session.add_all([account, category])
+    db.session.commit()
+    transaction = TransactionService.create_transactions({
+        'account_id': str(account.id), 'amount': '-10',
+        'category_id': str(category.id),
+        'transaction_date': '2026-12-25', 'weekend_adjustment': policy,
+    })[0]
+    assert transaction.transaction_date == expected
+
+
+def test_invalid_weekend_handling_rejects_transaction_without_writing(
+    app, family, monkeypatch
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    with pytest.raises(ValueError, match='valid weekend'):
+        TransactionService.create_transactions({
+            'amount': '-10', 'transaction_date': '2026-12-25',
+            'weekend_adjustment': 'invalid',
+        })
+    assert Transaction.query.count() == 0
 
 
 def test_create_recurring_transactions_assigns_family_and_derives_fields(

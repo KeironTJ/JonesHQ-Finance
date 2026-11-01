@@ -22,7 +22,7 @@ EXPORTS = {
     ),
     'transactions': (
         (Transaction, 'id account_id category_id vendor_id amount transaction_date description item assigned_to payment_type running_balance is_paid is_fixed credit_card_id loan_id linked_transaction_id subscription_id year_month week_year day_name payday_period is_forecasted claim_group reimbursement_group_id'),
-        (Subscription, 'id name amount frequency start_date end_date horizon_years account_id credit_card_id category_id vendor_id is_active'),
+        (Subscription, 'id name amount frequency weekend_adjustment start_date end_date horizon_years account_id credit_card_id category_id vendor_id is_active'),
         (SubscriptionPriceChange, 'id subscription_id amount effective_date note'),
         (PlannedTransaction, 'id category_id amount planned_date description is_recurring frequency'),
     ),
