@@ -59,11 +59,17 @@ def test_postgres_current_release_migration_round_trip(app):
     stamp(directory=directory, revision=head)
     try:
         downgrade(directory=directory, revision=previous)
-        assert 'subscription_price_changes' not in inspect(db.engine).get_table_names()
+        assert 'weekend_adjustment' not in {
+            column['name'] for column in inspect(db.engine).get_columns('subscriptions')
+        }
         upgrade(directory=directory)
         assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == head
-        constraints = inspect(db.engine).get_check_constraints('subscription_price_changes')
-        assert any(c['name'] == 'ck_subscription_price_changes_expense_amount' for c in constraints)
+        adjustment = next(
+            column for column in inspect(db.engine).get_columns('subscriptions')
+            if column['name'] == 'weekend_adjustment'
+        )
+        assert adjustment['nullable'] is False
+        assert 'none' in adjustment['default']
     finally:
         upgrade(directory=directory)
         db.session.execute(text('DROP TABLE alembic_version'))
