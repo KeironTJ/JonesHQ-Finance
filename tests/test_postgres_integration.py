@@ -62,7 +62,18 @@ def test_postgres_current_release_migration_round_trip(app):
     def trip_columns():
         return {column['name']: column for column in inspect(db.engine).get_columns('trips')}
 
+    def assert_schedule_foreign_key():
+        foreign_keys = [
+            foreign_key for foreign_key in inspect(db.engine).get_foreign_keys('trips')
+            if foreign_key['constrained_columns'] == ['schedule_id']
+        ]
+        assert len(foreign_keys) == 1
+        assert foreign_keys[0]['name'] == 'fk_trips_schedule_id_trip_schedules'
+        assert foreign_keys[0]['referred_table'] == 'trip_schedules'
+        assert foreign_keys[0]['options']['ondelete'] == 'SET NULL'
+
     try:
+        assert_schedule_foreign_key()
         downgrade(directory=directory, revision=release_base)
         tables = set(inspect(db.engine).get_table_names())
         assert not {'trip_templates', 'trip_schedules'} & tables
@@ -74,6 +85,7 @@ def test_postgres_current_release_migration_round_trip(app):
         for name, default in (('trip_status', 'actual'), ('is_modified', 'false')):
             assert columns[name]['nullable'] is False
             assert default in str(columns[name]['default']).lower()
+        assert_schedule_foreign_key()
     finally:
         upgrade(directory=directory)
         db.session.execute(text('DROP TABLE alembic_version'))

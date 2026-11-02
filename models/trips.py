@@ -14,7 +14,11 @@ class Trip(db.Model):
     vehicle_id= db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
     schedule_id = db.Column(
         db.Integer,
-        db.ForeignKey('trip_schedules.id', ondelete='SET NULL'),
+        db.ForeignKey(
+            'trip_schedules.id',
+            name='fk_trips_schedule_id_trip_schedules',
+            ondelete='SET NULL',
+        ),
         nullable=True,
         index=True,
     )
