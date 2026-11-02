@@ -8,7 +8,7 @@ from models import (
     PensionSnapshot, Plan, PlanItem, PlannedTransaction, Property,
     PropertyValuationSnapshot, RecurringIncome, Subscription,
     SubscriptionPriceChange, Transaction,
-    Trip, Vehicle, Vendor, VendorType, FuelRecord,
+    Trip, TripSchedule, Vehicle, Vendor, VendorType, FuelRecord,
 )
 from models.childcare import Child, ChildActivityType, ChildcareRecord, DailyChildcareActivity
 from utils.db_helpers import family_query, get_family_id, get_current_user_id
@@ -64,7 +64,8 @@ EXPORTS = {
     'vehicles': (
         (Vehicle, 'id name make model year registration tank_size fuel_type refuel_threshold_pct starting_mileage fuel_account_id purchase_date purchase_price owner_id is_active'),
         (FuelRecord, 'id vehicle_id date price_per_litre mileage cost gallons actual_miles actual_cumulative_miles mpg price_per_mile last_fill_date is_partial_fill linked_transaction_id'),
-        (Trip, 'id vehicle_id date month week day_name personal_miles business_miles total_miles cumulative_total_miles journey_description school_holidays approx_mpg gallons_used cumulative_gallons trip_cost fuel_cost fuel_log_entry_id vehicle_last_fill'),
+        (Trip, 'id vehicle_id schedule_id scheduled_date trip_status is_modified date month week day_name personal_miles business_miles total_miles cumulative_total_miles journey_description school_holidays approx_mpg gallons_used cumulative_gallons trip_cost fuel_cost fuel_log_entry_id vehicle_last_fill'),
+        (TripSchedule, 'id vehicle_id name trip_type miles journey_description weekdays frequency start_date end_date is_active'),
     ),
     'expenses': (
         (Expense, 'id date month week day_name finance_year description expense_type credit_card_id account_id credit_card_transaction_id bank_transaction_id covered_miles rate_per_mile days cumulative_miles_ytd vehicle_registration cost total_cost claim_group reimbursement_group_id payday_period income_id paid_for submitted reimbursed owner_id'),

@@ -13,7 +13,7 @@ from models import (
     Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, IncomeChange, Loan,
     LoanPayment, LoanTermChange, MonthlyAccountBalance, Pension, PensionSnapshot,
     Plan, PlanItem, RecurringIncome, SecurityEvent, Subscription, Transaction, Trip,
-    User, UserRecoveryCode, UserSession, Vehicle,
+    TripSchedule, TripTemplate, User, UserRecoveryCode, UserSession, Vehicle,
 )
 from models.expense_calendar import ExpenseCalendarEntry
 from services.platform.account_deletion_service import AccountDeletionService, OWNED_MODELS
@@ -77,6 +77,9 @@ def make_domains(owner, family_id, prefix):
                          date=TODAY, amount=-10, transaction_type='Purchase')
     fuel = add(FuelRecord, family_id=family_id, vehicle_id=vehicle.id, date=TODAY,
                mileage=100, cost=10, gallons=2)
+    add(TripTemplate, family_id=family_id, vehicle_id=vehicle.id, name=prefix, miles=10)
+    schedule = add(TripSchedule, family_id=family_id, vehicle_id=vehicle.id, name=prefix,
+                   miles=10, weekdays='0', start_date=TODAY)
     for model, values in (
         (Balance, dict(account_id=account.id, balance=100, balance_date=TODAY)),
         (MonthlyAccountBalance, dict(account_id=account.id, year_month='2026-10')),
@@ -88,7 +91,8 @@ def make_domains(owner, family_id, prefix):
         (IncomeChange, dict(recurring_income_id=recurring.id, effective_date=TODAY,
                             change_type='percent_rise', percent=3)),
         (PensionSnapshot, dict(pension_id=pension.id, review_date=TODAY, value=100)),
-        (Trip, dict(vehicle_id=vehicle.id, date=TODAY, total_miles=10, fuel_log_entry_id=fuel.id)),
+        (Trip, dict(vehicle_id=vehicle.id, date=TODAY, total_miles=10, fuel_log_entry_id=fuel.id,
+                    schedule_id=schedule.id, scheduled_date=TODAY)),
         (PlanItem, dict(plan_id=plan.id, title=prefix, transaction_id=transaction.id)),
         (ExpenseCalendarEntry, dict(expense_id=expense.id, date=TODAY, description=prefix)),
         (Subscription, dict(account_id=account.id, name=prefix, amount=-10, start_date=TODAY)),

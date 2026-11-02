@@ -241,6 +241,7 @@ From your FUEL LOG HEADER sheet
 - One-to-many with `FuelRecord`
 - One-to-many with `Trip`
 - One-to-many with `TripTemplate`
+- One-to-many with `TripSchedule`
 
 ### 11. **FuelRecord** (fuel.py)
 From your FUEL LOG Table
@@ -266,6 +267,9 @@ From your FUEL LOG Table
 ### 12. **Trip** (trips.py)
 From your CAR FUEL TRIPS sheet
 - `vehicle_id`: Which vehicle
+- `trip_status`: `actual`, `planned`, or `skipped`
+- `schedule_id`, `scheduled_date`: Recurring routine and occurrence identity, when applicable
+- `is_modified`: Routine occurrence changed for that day only; routine edits leave it untouched until reset
 - `date`: Trip date
 - `personal_miles`: Personal mileage
 - `business_miles`: Business mileage
@@ -279,6 +283,7 @@ From your CAR FUEL TRIPS sheet
 **Relationships:**
 - Many-to-one with `Vehicle`
 - Many-to-one with `FuelRecord` (optional)
+- Many-to-one with `TripSchedule` (optional)
 
 ### **TripTemplate** (trip_template.py)
 Reusable journey details for quickly logging individual trips or generating trips across a selected date range.
@@ -289,6 +294,17 @@ Reusable journey details for quickly logging individual trips or generating trip
 
 **Relationships:**
 - Many-to-one with `Vehicle`
+
+### **TripSchedule** (trip_schedule.py)
+Persistent weekly or fortnightly routine. The trip log materializes planned occurrences for the next 90 days; completed trips remain actual records and skipped occurrences remain excluded from mileage and fuel forecasts.
+- `family_id`, `vehicle_id`: Household boundary and vehicle visibility
+- `name`, `trip_type`, `miles`, `journey_description`: Journey defaults
+- `weekdays`, `frequency`: Selected days and weekly/fortnightly cadence
+- `start_date`, `end_date`, `is_active`: Schedule bounds and pause/resume state
+
+**Relationships:**
+- Many-to-one with `Vehicle`
+- One-to-many with `Trip`
 
 ## Expense & Income Models
 

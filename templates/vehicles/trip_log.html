@@ -69,6 +69,12 @@
     --bs-table-hover-bg: var(--trip-forecast-bg-hover);
     border-left: 4px dashed var(--trip-forecast-border);
 }
+.event-planned {
+    --bs-table-bg:       var(--trip-forecast-bg);
+    --bs-table-hover-bg: var(--trip-forecast-bg-hover);
+    border-left: 4px dashed var(--trip-forecast-border);
+}
+.event-skipped { opacity: 0.48; }
 
 /* Today highlight sits on top via outline — doesn't clobber row colour */
 .event-today {
@@ -186,6 +192,18 @@
                         <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#bulkAddTripModal">
                             <i class="bi bi-calendar-plus"></i> <span>Bulk Add</span>
                         </button>
+                        {% if due_trip_count %}
+                        <form method="POST" action="{{ url_for('vehicles.confirm_due_trips') }}"
+                              onsubmit="return confirm('Confirm {{ due_trip_count }} planned trip(s) dated today or earlier as completed?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="btn btn-success btn-sm" title="Planned routine trips dated today or earlier">
+                                <i class="bi bi-check2-all"></i> <span>Confirm due ({{ due_trip_count }})</span>
+                            </button>
+                        </form>
+                        {% endif %}
+                        <a class="btn btn-outline-light btn-sm" href="{{ url_for('vehicles.routines') }}">
+                            <i class="bi bi-arrow-repeat"></i> <span>Routines</span>
+                        </a>
                         <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#tripTemplatesModal">
                             <i class="bi bi-bookmark-star"></i> <span>Saved Journeys</span>
                         </button>
@@ -222,6 +240,13 @@
                                     <button class="btn btn-outline-primary" type="button" onclick="jumpToCurrentPeriod('payday_period_trip')" title="Current period"><i class="bi bi-calendar-check"></i></button>
                                 </div>
                             </div>
+                            <div class="col-sm-auto">
+                                <div class="form-check form-switch mb-1">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="show_skipped" value="1"
+                                           id="show_skipped_trips" {% if show_skipped %}checked{% endif %} onchange="this.form.submit()">
+                                    <label class="form-check-label small" for="show_skipped_trips">Show skipped</label>
+                                </div>
+                            </div>
                         </div>
                     </form>
 
@@ -238,6 +263,9 @@
                                 <span><span class="badge bg-success"><i class="bi bi-fuel-pump"></i></span> Actual fill + txn</span>
                                 <span><span class="badge bg-info text-dark"><i class="bi bi-fuel-pump"></i></span> Actual fill</span>
                                 <span><span class="badge bg-warning text-dark"><i class="bi bi-calendar-event"></i></span> Forecasted fill</span>
+                                <span><span class="badge bg-warning text-dark">Planned</span> Routine trip, confirmed when you log fuel or press Confirm due</span>
+                                <span><span class="badge bg-light text-dark border">Edited</span> Changed for that day only</span>
+                                <span><span class="badge bg-secondary">Skipped</span> Excluded from mileage and forecasts</span>
                                 <span><strong>Tank:</strong>
                                     <span class="badge bg-success">&nbsp;</span>&gt;50%
                                     <span class="badge bg-warning text-dark">&nbsp;</span>25–50%
@@ -269,8 +297,9 @@
                             {% for event in events %}
                             {% set _date_cls = 'event-today' if event.date == today else ('event-past' if event.date < today else '') %}
                             {% set _type_cls = 'event-' ~ event.type %}
+                            {% set _status_cls = 'event-' ~ event.trip.trip_status if event.get('trip') and event.trip.trip_status in ('planned', 'skipped') else '' %}
                             {% set _cont_cls = 'event-continuation' if event.is_continuation else '' %}
-                            {% set _row_cls  = [_type_cls, _date_cls, _cont_cls] | join(' ') | trim %}
+                            {% set _row_cls  = [_type_cls, _status_cls, _date_cls, _cont_cls] | join(' ') | trim %}
 
                             {% if event.get('trip') %}
                             <tr id="trip-{{ event.trip.id }}" class="{{ _row_cls }}">
@@ -280,7 +309,7 @@
 
                                 {# Checkbox #}
                                 <td class="mobile-table-select-cell">
-                                    {% if event.show_checkbox %}
+                                    {% if event.show_checkbox and event.trip.trip_status != 'skipped' %}
                                     <input type="checkbox" class="trip-checkbox" value="{{ event.trip.id }}"
                                            aria-label="Select trip {{ event.trip.id }}"
                                            onchange="updateBulkDeleteButton()">
@@ -337,6 +366,14 @@
                                     {% elif event.type == 'forecasted' %}
                                         <span class="badge bg-warning text-dark"><i class="bi bi-calendar-event-fill"></i> Forecast</span>
                                     {% endif %}
+                                    {% if event.get('trip') and event.trip.trip_status == 'planned' %}
+                                        <span class="badge bg-warning text-dark">Planned</span>
+                                    {% elif event.get('trip') and event.trip.trip_status == 'skipped' %}
+                                        <span class="badge bg-secondary">Skipped</span>
+                                    {% endif %}
+                                    {% if event.get('trip') and event.trip.is_modified and not event.is_continuation %}
+                                        <span class="badge bg-light text-dark border" title="Changed for this day only">Edited</span>
+                                    {% endif %}
                                 </td>
 
                                 {# Description #}
@@ -364,9 +401,13 @@
                                 {# Miles / Cost #}
                                 <td data-label="Miles / Cost" class="text-end text-nowrap" style="min-width:80px;">
                                     {% if event.type in ('personal', 'business') %}
+                                        {% if event.trip.trip_status == 'skipped' %}
+                                        <span class="text-muted">Skipped</span>
+                                        {% else %}
                                         <span class="fw-bold">{{ event.miles }} mi</span>
                                         {% if not event.is_continuation and event.trip.trip_cost %}
                                         <br><span class="text-danger small">£{{ "%.2f"|format(event.trip.trip_cost) }}</span>
+                                        {% endif %}
                                         {% endif %}
                                     {% elif event.type == 'fuel' %}
                                         <span class="fw-bold text-danger">£{{ "%.2f"|format(event.fill.cost) }}</span>
@@ -417,6 +458,49 @@
                                 <td data-label="Actions" class="jhq-row-actions pe-3">
                                     <div class="d-flex align-items-center gap-1">
                                     {% if event.type in ('personal', 'business') and not event.is_continuation %}
+                                        {% if event.trip.trip_status == 'planned' %}
+                                        <form method="POST" action="{{ url_for('vehicles.confirm_scheduled_trip', trip_id=event.trip.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-success btn-sm" title="Confirm completed">
+                                                <i class="bi bi-check-lg" aria-hidden="true"></i><span class="visually-hidden">Confirm completed</span>
+                                            </button>
+                                        </form>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm edit-trip-btn"
+                                                title="Change this day only"
+                                                aria-label="Change this planned trip"
+                                                data-update-url="{{ url_for('vehicles.update_trip', trip_id=event.trip.id) }}"
+                                                data-date="{{ event.trip.date.isoformat() }}"
+                                                data-vehicle-id="{{ event.trip.vehicle_id }}"
+                                                data-type="{{ event.type }}"
+                                                data-personal-miles="{{ event.trip.personal_miles }}"
+                                                data-business-miles="{{ event.trip.business_miles }}"
+                                                data-journey-description="{{ event.trip.journey_description or '' }}"
+                                                data-school-holidays="{{ event.trip.school_holidays or '' }}"
+                                                data-scheduled="1">
+                                            <i class="bi bi-pencil" aria-hidden="true"></i>
+                                        </button>
+                                        {% if event.trip.is_modified %}
+                                        <form method="POST" action="{{ url_for('vehicles.reset_scheduled_trip', trip_id=event.trip.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm" title="Reset to routine details">
+                                                <i class="bi bi-arrow-repeat" aria-hidden="true"></i><span class="visually-hidden">Reset to routine details</span>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        <form method="POST" action="{{ url_for('vehicles.skip_scheduled_trip', trip_id=event.trip.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-outline-warning btn-sm" title="Skip this occurrence">
+                                                <i class="bi bi-skip-forward" aria-hidden="true"></i><span class="visually-hidden">Skip this occurrence</span>
+                                            </button>
+                                        </form>
+                                        {% elif event.trip.trip_status == 'skipped' %}
+                                        <form method="POST" action="{{ url_for('vehicles.restore_scheduled_trip', trip_id=event.trip.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-outline-primary btn-sm" title="Restore planned trip">
+                                                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="visually-hidden">Restore planned trip</span>
+                                            </button>
+                                        </form>
+                                        {% else %}
                                         {% if event.fuel_expense %}
                                         <a href="{{ url_for('expenses.index') }}?id={{ event.fuel_expense.id }}"
                                            class="btn btn-sm btn-outline-info py-0"
@@ -439,15 +523,16 @@
                                                 <i class="bi bi-pencil" aria-hidden="true"></i>
                                             </button>
                                             <button type="button" class="btn btn-outline-danger"
-                                                    title="Delete"
-                                                    aria-label="Delete trip"
-                                                    onclick="if(confirm('Delete this trip?')){this.closest('tr').querySelector('form.del-form').submit()}">
+                                                    title="{{ 'Skip occurrence' if event.trip.schedule_id else 'Delete' }}"
+                                                    aria-label="{{ 'Skip scheduled occurrence' if event.trip.schedule_id else 'Delete trip' }}"
+                                                    onclick="if(confirm('{{ 'Skip this scheduled occurrence?' if event.trip.schedule_id else 'Delete this trip?' }}')){this.closest('tr').querySelector('form.del-form').submit()}">
                                                 <i class="bi bi-trash" aria-hidden="true"></i>
                                             </button>
                                         </div>
                                         <form class="del-form d-none" method="POST" action="{{ url_for('vehicles.delete_trip', trip_id=event.trip.id) }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         </form>
+                                        {% endif %}
                                     {% elif event.type == 'fuel' %}
                                         {% if event.fill.linked_transaction_id %}
                                         <a href="{{ url_for('transactions.index') }}?id={{ event.fill.linked_transaction_id }}"
@@ -569,6 +654,10 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div id="editTripScheduledNote" class="alert alert-info py-2 small d-none">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Changes apply to this day only. The routine and its other trips stay the same.
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Vehicle</label>
                         <select name="vehicle_id" id="edit_trip_vehicle_id" class="form-select" required>
@@ -847,6 +936,7 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 warning.classList.add('d-none');
             }
+            document.getElementById('editTripScheduledNote').classList.toggle('d-none', this.dataset.scheduled !== '1');
 
             bootstrap.Modal.getOrCreateInstance(document.getElementById('editTripModal')).show();
         });
@@ -1060,7 +1150,7 @@ function updateBulkDeleteButton() {
 function bulkDeleteTrips() {
     const ids = Array.from(document.querySelectorAll('.trip-checkbox:checked')).map(cb => cb.value);
     if (!ids.length) { alert('Please select at least one trip to delete.'); return; }
-    if (!confirm(`Delete ${ids.length} selected trip(s)? This action cannot be undone.`)) return;
+    if (!confirm(`Remove ${ids.length} selected trip(s) from active mileage? Scheduled occurrences will be marked skipped.`)) return;
 
     const form = document.createElement('form');
     form.method = 'POST';

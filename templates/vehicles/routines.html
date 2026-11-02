@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block title %}Trip Routines{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/vehicle-tables.css') }}">
+<style>
+.routine-row-selected { outline: 2px solid var(--bs-success); outline-offset: -2px; }
+.routine-actions { display: flex; gap: .25rem; flex-wrap: wrap; justify-content: flex-end; }
+.routine-actions form { display: inline; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set weekday_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}
+<div class="container-fluid mt-4">
+    <h1 class="mb-4"><i class="bi bi-car-front"></i> My Garage</h1>
+
+    <nav class="vehicle-section-navigation" aria-label="Vehicle pages">
+    <ul class="nav vehicle-page-nav mb-4">
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('vehicles.index') }}">
+                <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Overview</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
+                <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active" href="{{ url_for('vehicles.trips') }}" aria-current="page">
+                <i class="bi bi-map" aria-hidden="true"></i><span>Trip Log</span>
+            </a>
+        </li>
+    </ul>
+    </nav>
+
+    <div class="card shadow mb-4">
+        <div class="card-header bg-success d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="bi bi-arrow-repeat me-2"></i>Trip Routines</h5>
+            <div class="d-flex gap-2 flex-wrap">
+                {% if due_trip_count %}
+                <form method="POST" action="{{ url_for('vehicles.confirm_due_trips') }}"
+                      onsubmit="return confirm('Confirm {{ due_trip_count }} planned trip(s) dated today or earlier as completed?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-light btn-sm">
+                        <i class="bi bi-check2-all"></i> Confirm due ({{ due_trip_count }})
+                    </button>
+                </form>
+                {% endif %}
+                <button type="button" class="btn btn-light btn-sm" id="newRoutineBtn" {% if not vehicles %}disabled{% endif %}>
+                    <i class="bi bi-plus-circle"></i> New routine
+                </button>
+                <a class="btn btn-outline-light btn-sm" href="{{ url_for('vehicles.trips') }}">
+                    <i class="bi bi-arrow-left"></i> Trip Log
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                Routines plan trips {{ planning_days }} days ahead so fuel forecasts stay accurate.
+                Planned trips are confirmed automatically when you log fuel for that vehicle, so you only need to
+                skip the days that didn't happen or change a day that went differently.
+            </p>
+            {% if overview %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Routine</th>
+                            <th>Pattern</th>
+                            <th class="text-end">Miles</th>
+                            <th>Next trip</th>
+                            <th class="text-center">Upcoming</th>
+                            <th class="text-center">Awaiting confirmation</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in overview %}
+                        {% set schedule = item.schedule %}
+                        <tr class="{% if selected_schedule and selected_schedule.id == schedule.id %}routine-row-selected{% endif %} {% if not schedule.is_active %}text-muted{% endif %}">
+                            <td>
+                                <strong>{{ schedule.name }}</strong>
+                                <div class="small text-muted">{{ schedule.vehicle.name }}{% if schedule.journey_description %} · {{ schedule.journey_description }}{% endif %}</div>
+                            </td>
+                            <td>
+                                {{ 'Every other week' if schedule.frequency == 'fortnightly' else 'Weekly' }}: {{ schedule.weekday_names }}
+                                <div class="small text-muted">
+                                    From {{ schedule.start_date.strftime('%d %b %Y') }}{% if schedule.end_date %} to {{ schedule.end_date.strftime('%d %b %Y') }}{% endif %}
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                {{ schedule.miles }}
+                                <div class="small text-muted text-capitalize">{{ schedule.trip_type }}</div>
+                            </td>
+                            <td>
+                                {% if item.next_trip %}{{ item.next_trip.date.strftime('%a %d %b') }}{% else %}<span class="text-muted">-</span>{% endif %}
+                                {% if item.last_completed %}<div class="small text-muted">Last done {{ item.last_completed.strftime('%d %b') }}</div>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                {{ item.upcoming_count }}
+                                {% if item.skipped_count %}<div class="small text-muted">{{ item.skipped_count }} skipped</div>{% endif %}
+                                {% if item.modified_count %}<div class="small text-muted">{{ item.modified_count }} edited</div>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if item.due_count %}<span class="badge bg-warning text-dark">{{ item.due_count }}</span>{% else %}<span class="text-muted">0</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if schedule.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Paused</span>{% endif %}
+                            </td>
+                            <td>
+                                <div class="routine-actions">
+                                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('vehicles.routines', schedule_id=schedule.id) }}#occurrences" title="View trips">
+                                        <i class="bi bi-list-ul" aria-hidden="true"></i><span class="visually-hidden">View trips</span>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary edit-routine-btn" title="Edit routine"
+                                            data-update-url="{{ url_for('vehicles.update_trip_schedule', schedule_id=schedule.id) }}"
+                                            data-name="{{ schedule.name }}"
+                                            data-vehicle-id="{{ schedule.vehicle_id }}"
+                                            data-trip-type="{{ schedule.trip_type }}"
+                                            data-miles="{{ schedule.miles }}"
+                                            data-journey-description="{{ schedule.journey_description or '' }}"
+                                            data-days="{{ schedule.weekdays }}"
+                                            data-frequency="{{ schedule.frequency }}"
+                                            data-start-date="{{ schedule.start_date.isoformat() }}"
+                                            data-end-date="{{ schedule.end_date.isoformat() if schedule.end_date else '' }}">
+                                        <i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit routine</span>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('vehicles.toggle_trip_schedule', schedule_id=schedule.id) }}"
+                                          {% if schedule.is_active %}onsubmit="return confirm('Pause this routine? All future planned trips, including ones edited for a single day, will be removed.');"{% endif %}>
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <input type="hidden" name="is_active" value="{{ '0' if schedule.is_active else '1' }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="{{ 'Pause' if schedule.is_active else 'Resume' }}">
+                                            <i class="bi bi-{{ 'pause' if schedule.is_active else 'play' }}-fill" aria-hidden="true"></i>
+                                            <span class="visually-hidden">{{ 'Pause' if schedule.is_active else 'Resume' }}</span>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('vehicles.delete_trip_schedule', schedule_id=schedule.id) }}"
+                                          onsubmit="return confirm('Delete this routine? Completed trips are kept; planned and skipped trips are removed.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete routine">
+                                            <i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete routine</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-arrow-repeat fs-1 d-block mb-2"></i>
+                No routines yet. Add one for trips you make regularly, like the school run or commute.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if selected_schedule %}
+    <div class="card shadow mb-4" id="occurrences">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0">{{ selected_schedule.name }}: trips</h5>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vehicles.routines') }}">Close</a>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small">
+                Last 60 days and the next {{ planning_days }} days. Changing one day doesn't change the routine,
+                and later routine changes won't overwrite it.
+            </p>
+            {% if occurrences %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th class="text-end">Miles</th>
+                            <th>Description</th>
+                            <th>Vehicle</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trip in occurrences %}
+                        {% set trip_type = 'business' if trip.business_miles and not trip.personal_miles else 'personal' %}
+                        <tr class="{% if trip.trip_status == 'skipped' %}text-muted{% endif %}">
+                            <td>
+                                {{ trip.date.strftime('%a %d %b %Y') }}
+                                {% if trip.scheduled_date and trip.date != trip.scheduled_date %}
+                                <div class="small text-muted">Moved from {{ trip.scheduled_date.strftime('%a %d %b') }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if trip.trip_status == 'actual' %}<span class="badge bg-success">Completed</span>
+                                {% elif trip.trip_status == 'skipped' %}<span class="badge bg-secondary">Skipped</span>
+                                {% elif trip.date <= today %}<span class="badge bg-warning text-dark">Awaiting confirmation</span>
+                                {% else %}<span class="badge bg-warning text-dark">Planned</span>{% endif %}
+                                {% if trip.is_modified %}<span class="badge bg-light text-dark border" title="Changed for this day only">Edited</span>{% endif %}
+                            </td>
+                            <td class="text-end">{{ trip.total_miles }}</td>
+                            <td>{{ trip.journey_description or '' }}</td>
+                            <td>{{ trip.vehicle.name if trip.vehicle else '' }}</td>
+                            <td>
+                                <div class="routine-actions">
+                                    {% if trip.trip_status != 'actual' %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary edit-occurrence-btn" title="Change this day only"
+                                            data-update-url="{{ url_for('vehicles.update_trip', trip_id=trip.id) }}"
+                                            data-date="{{ trip.date.isoformat() }}"
+                                            data-vehicle-id="{{ trip.vehicle_id }}"
+                                            data-type="{{ trip_type }}"
+                                            data-miles="{{ trip.business_miles if trip_type == 'business' else trip.personal_miles }}"
+                                            data-journey-description="{{ trip.journey_description or '' }}"
+                                            data-school-holidays="{{ trip.school_holidays or '' }}">
+                                        <i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Change this day only</span>
+                                    </button>
+                                    {% endif %}
+                                    {% if trip.trip_status == 'planned' %}
+                                    <form method="POST" action="{{ url_for('vehicles.confirm_scheduled_trip', trip_id=trip.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-success" title="Confirm completed">
+                                            <i class="bi bi-check-lg" aria-hidden="true"></i><span class="visually-hidden">Confirm completed</span>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('vehicles.skip_scheduled_trip', trip_id=trip.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Skip this day">
+                                            <i class="bi bi-skip-forward" aria-hidden="true"></i><span class="visually-hidden">Skip this day</span>
+                                        </button>
+                                    </form>
+                                    {% elif trip.trip_status == 'skipped' %}
+                                    <form method="POST" action="{{ url_for('vehicles.restore_scheduled_trip', trip_id=trip.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary" title="Restore">
+                                            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="visually-hidden">Restore</span>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    {% if trip.is_modified and trip.trip_status != 'actual' %}
+                                    <form method="POST" action="{{ url_for('vehicles.reset_scheduled_trip', trip_id=trip.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Reset to routine details">
+                                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i><span class="visually-hidden">Reset to routine details</span>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No trips in this window. Paused or ended routines don't plan new trips.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Routine create / edit modal -->
+<div class="modal fade" id="routineModal" tabindex="-1" aria-labelledby="routineModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" id="routineForm" action="{{ url_for('vehicles.add_trip_schedule') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="routineModalTitle">New routine</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        {% if trip_templates %}
+                        <div class="col-12" id="routineTemplateGroup">
+                            <label class="form-label" for="routine_template">Start from a saved journey (optional)</label>
+                            <select class="form-select" id="routine_template">
+                                <option value="">-</option>
+                                {% for template in trip_templates %}
+                                <option value="{{ template.id }}"
+                                        data-name="{{ template.name }}"
+                                        data-vehicle-id="{{ template.vehicle_id }}"
+                                        data-trip-type="{{ template.trip_type }}"
+                                        data-miles="{{ template.miles }}"
+                                        data-journey-description="{{ template.journey_description or '' }}">{{ template.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        <div class="col-md-6">
+                            <label class="form-label" for="routine_name">Name</label>
+                            <input type="text" class="form-control" name="name" id="routine_name" maxlength="100" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="routine_vehicle_id">Vehicle</label>
+                            <select class="form-select" name="vehicle_id" id="routine_vehicle_id" required>
+                                {% for vehicle in vehicles %}
+                                <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="routine_trip_type">Type</label>
+                            <select class="form-select" name="trip_type" id="routine_trip_type">
+                                <option value="personal">Personal</option>
+                                <option value="business">Business</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="routine_miles">Miles per trip</label>
+                            <input type="number" class="form-control" name="miles" id="routine_miles" min="0" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="routine_frequency">Repeats</label>
+                            <select class="form-select" name="frequency" id="routine_frequency">
+                                <option value="weekly">Every week</option>
+                                <option value="fortnightly">Every other week</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <span class="form-label d-block">Days</span>
+                            {% for label in weekday_labels %}
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input routine-day" type="checkbox" name="days" value="{{ loop.index0 }}" id="routine_day_{{ loop.index0 }}">
+                                <label class="form-check-label" for="routine_day_{{ loop.index0 }}">{{ label }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="routine_start_date">Start date</label>
+                            <input type="date" class="form-control" name="start_date" id="routine_start_date" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="routine_end_date">End date (optional)</label>
+                            <input type="date" class="form-control" name="end_date" id="routine_end_date">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="routine_journey_description">Trip description</label>
+                            <input type="text" class="form-control" name="journey_description" id="routine_journey_description" maxlength="255">
+                        </div>
+                    </div>
+                    <div class="alert alert-info small mt-3 mb-0 d-none" id="routineEditNote">
+                        Saving updates future planned and skipped trips. Completed trips and days you changed individually are kept.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="routineSubmit">Start routine</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Single occurrence edit modal -->
+<div class="modal fade" id="occurrenceModal" tabindex="-1" aria-labelledby="occurrenceModalTitle" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="occurrenceForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="school_holidays" id="occurrence_school_holidays">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="occurrenceModalTitle">Change this day</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 small">
+                        Changes apply to this day only. The routine and its other trips stay the same.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="occurrence_vehicle_id">Vehicle</label>
+                        <select class="form-select" name="vehicle_id" id="occurrence_vehicle_id">
+                            {% for vehicle in vehicles %}
+                            <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="occurrence_date">Date</label>
+                        <input type="date" class="form-control" name="date" id="occurrence_date" required>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label" for="occurrence_trip_type">Type</label>
+                            <select class="form-select" name="trip_type" id="occurrence_trip_type">
+                                <option value="personal">Personal</option>
+                                <option value="business">Business</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="occurrence_miles">Miles</label>
+                            <input type="number" class="form-control" name="miles" id="occurrence_miles" min="0" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label" for="occurrence_journey_description">Description</label>
+                        <input type="text" class="form-control" name="journey_description" id="occurrence_journey_description" maxlength="255">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save this day</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const routineModalEl = document.getElementById('routineModal');
+    const routineForm = document.getElementById('routineForm');
+    const addRoutineUrl = routineForm.action;
+    const templateGroup = document.getElementById('routineTemplateGroup');
+    const templateSelect = document.getElementById('routine_template');
+    const field = id => document.getElementById(id);
+
+    function fillRoutine(values) {
+        field('routine_name').value = values.name || '';
+        if (values.vehicleId) field('routine_vehicle_id').value = values.vehicleId;
+        field('routine_trip_type').value = values.tripType || 'personal';
+        field('routine_miles').value = values.miles || '';
+        field('routine_journey_description').value = values.journeyDescription || '';
+        field('routine_frequency').value = values.frequency || 'weekly';
+        field('routine_start_date').value = values.startDate || '{{ today.isoformat() }}';
+        field('routine_end_date').value = values.endDate || '';
+        const days = (values.days || '').split(',');
+        document.querySelectorAll('.routine-day').forEach(box => { box.checked = days.includes(box.value); });
+    }
+
+    document.getElementById('newRoutineBtn').addEventListener('click', function () {
+        routineForm.action = addRoutineUrl;
+        fillRoutine({});
+        if (templateSelect) templateSelect.value = '';
+        if (templateGroup) templateGroup.classList.remove('d-none');
+        field('routineModalTitle').textContent = 'New routine';
+        field('routineSubmit').textContent = 'Start routine';
+        field('routineEditNote').classList.add('d-none');
+        bootstrap.Modal.getOrCreateInstance(routineModalEl).show();
+    });
+
+    document.querySelectorAll('.edit-routine-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            routineForm.action = this.dataset.updateUrl;
+            fillRoutine(this.dataset);
+            if (templateGroup) templateGroup.classList.add('d-none');
+            field('routineModalTitle').textContent = 'Edit routine';
+            field('routineSubmit').textContent = 'Save routine';
+            field('routineEditNote').classList.remove('d-none');
+            bootstrap.Modal.getOrCreateInstance(routineModalEl).show();
+        });
+    });
+
+    if (templateSelect) {
+        templateSelect.addEventListener('change', function () {
+            const option = this.selectedOptions[0];
+            if (!option || !option.value) return;
+            field('routine_name').value = option.dataset.name;
+            field('routine_vehicle_id').value = option.dataset.vehicleId;
+            field('routine_trip_type').value = option.dataset.tripType;
+            field('routine_miles').value = option.dataset.miles;
+            field('routine_journey_description').value = option.dataset.journeyDescription;
+        });
+    }
+
+    routineForm.addEventListener('submit', function (event) {
+        if (!document.querySelector('.routine-day:checked')) {
+            event.preventDefault();
+            alert('Select at least one day.');
+        }
+    });
+
+    document.querySelectorAll('.edit-occurrence-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            document.getElementById('occurrenceForm').action = this.dataset.updateUrl;
+            field('occurrence_vehicle_id').value = this.dataset.vehicleId;
+            field('occurrence_date').value = this.dataset.date;
+            field('occurrence_trip_type').value = this.dataset.type;
+            field('occurrence_miles').value = this.dataset.miles;
+            field('occurrence_journey_description').value = this.dataset.journeyDescription;
+            field('occurrence_school_holidays').value = this.dataset.schoolHolidays;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('occurrenceModal')).show();
+        });
+    });
+});
+</script>
+{% endblock %}

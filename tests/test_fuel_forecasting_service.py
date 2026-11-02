@@ -197,6 +197,34 @@ def test_current_status_ignores_future_fills_and_trips(forecast_vehicle):
     assert status['gallons_remaining'] == 2.0
 
 
+def test_fuel_forecasts_count_planned_trips_but_ignore_skipped(forecast_vehicle):
+    vehicle = forecast_vehicle
+    today = date.today()
+    add_fill(vehicle, today - timedelta(days=3))
+
+    def routine_trip(day, miles, status):
+        return Trip(
+            family_id=vehicle.family_id, vehicle_id=vehicle.id, date=day,
+            total_miles=miles, personal_miles=miles, trip_status=status,
+        )
+
+    # Unconfirmed past routine trips still burn fuel until a fill confirms them.
+    overdue_plan = routine_trip(today - timedelta(days=1), 2, 'planned')
+    skipped_past = routine_trip(today - timedelta(days=2), 30, 'skipped')
+    planned_future = routine_trip(today + timedelta(days=1), 96, 'planned')
+    skipped_future = routine_trip(today + timedelta(days=2), 96, 'skipped')
+    db.session.add_all([overdue_plan, skipped_past, planned_future, skipped_future])
+    db.session.commit()
+
+    predictions = FuelForecastingService.predict_refills(vehicle.id)
+    status = FuelForecastingService.get_tank_status(vehicle.id)
+
+    assert predictions
+    assert {p['trigger_trip_id'] for p in predictions} == {planned_future.id}
+    assert status['gallons_remaining'] == 9.8
+    assert status['miles_since_fill'] == 2
+
+
 def test_current_status_keeps_exact_threshold_distance(forecast_vehicle):
     today = date.today()
     add_fill(forecast_vehicle, today - timedelta(days=2))

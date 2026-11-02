@@ -1,15 +1,17 @@
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from extensions import db
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
+from models.trip_schedule import TripSchedule
 from models.trip_template import TripTemplate
 from models.accounts import Account
 from models.family import Family
 from services.vehicles.vehicle_service import VehicleService
+from services.vehicles.trip_schedule_service import TripScheduleService
 from services.vehicles.fuel_forecasting_service import FuelForecastingService
 from werkzeug.datastructures import MultiDict
 from werkzeug.exceptions import NotFound
@@ -148,7 +150,6 @@ def test_fuel_crud_assigns_family_and_recalculates_metrics(app, family, monkeypa
 
 def test_trip_crud_assigns_family_and_tracks_cumulative_miles(app, family, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
-    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     vehicle = VehicleService.create_vehicle({
         'name': 'Trip Car', 'make': 'Test', 'model': 'Trip',
         'registration': 'TR12 IPS', 'tank_size': '12', 'fuel_type': 'Petrol',
@@ -162,6 +163,14 @@ def test_trip_crud_assigns_family_and_tracks_cumulative_miles(app, family, monke
         'journey_description': 'Client visit',
         'school_holidays': '',
     })
+    second = VehicleService.create_trip({
+        'vehicle_id': str(vehicle.id),
+        'date': '2026-01-03',
+        'trip_type': 'personal',
+        'miles': '10',
+        'journey_description': 'Errand',
+        'school_holidays': '',
+    })
     updated = VehicleService.update_trip(first.id, {
         'date': '2026-01-02',
         'trip_type': 'personal',
@@ -169,15 +178,16 @@ def test_trip_crud_assigns_family_and_tracks_cumulative_miles(app, family, monke
         'journey_description': 'Personal trip',
         'school_holidays': '',
     })
-    deleted_vehicle_id = VehicleService.delete_trip(first.id)
-
     assert first.family_id == family.id
-    assert first.cumulative_total_miles == 20
+    assert first.cumulative_total_miles == 25
     assert updated.total_miles == 25
     assert updated.personal_miles == 25
     assert updated.business_miles == 0
+    assert second.cumulative_total_miles == 35
+    deleted_vehicle_id = VehicleService.delete_trip(first.id)
     assert deleted_vehicle_id == vehicle.id
     assert db.session.get(Trip, first.id) is None
+    assert second.cumulative_total_miles == 10
 
 
 def test_bulk_create_trips_expands_selected_weekdays(app, family, monkeypatch):
@@ -280,6 +290,222 @@ def test_trip_template_rejects_vehicle_from_another_family(app, family, monkeypa
             'trip_type': 'personal',
             'miles': '5',
         })
+
+
+def test_trip_schedule_plans_idempotently_and_tracks_exceptions(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    vehicle = VehicleService.create_vehicle({
+        'name': 'Routine Car', 'make': 'Test', 'model': 'Routine',
+        'registration': 'RT12 CAR', 'fuel_type': 'Petrol',
+    })
+    today = date.today()
+    weekday = today.weekday()
+    schedule, generated_vehicles = TripScheduleService.create_schedule(MultiDict([
+        ('vehicle_id', str(vehicle.id)),
+        ('name', 'Fortnightly commute'),
+        ('trip_type', 'business'),
+        ('miles', '22'),
+        ('journey_description', 'Office'),
+        ('frequency', 'fortnightly'),
+        ('start_date', today.isoformat()),
+        ('end_date', ''),
+        ('days', str(weekday)),
+    ]))
+
+    planned = Trip.query.filter_by(schedule_id=schedule.id).order_by(
+        Trip.scheduled_date,
+    ).all()
+    assert generated_vehicles == {vehicle.id}
+    assert len(planned) == 7
+    assert all(trip.trip_status == 'planned' for trip in planned)
+    assert all(trip.business_miles == 22 for trip in planned)
+    assert all(
+        (planned[index + 1].scheduled_date - planned[index].scheduled_date).days == 14
+        for index in range(len(planned) - 1)
+    )
+    assert TripScheduleService.ensure_upcoming_trips(today=today) == set()
+
+    TripScheduleService.set_occurrence_status(planned[0].id, 'skipped')
+    TripScheduleService.set_occurrence_status(planned[1].id, 'actual')
+    assert planned[1].cumulative_total_miles == 22
+    assert TripScheduleService.ensure_upcoming_trips(today=today) == set()
+    assert Trip.query.filter_by(schedule_id=schedule.id).count() == 7
+
+    TripScheduleService.set_schedule_active(schedule.id, False)
+    assert not schedule.is_active
+    assert Trip.query.filter_by(
+        schedule_id=schedule.id, trip_status='planned',
+    ).count() == 0
+
+    TripScheduleService.set_schedule_active(schedule.id, True)
+    assert schedule.is_active
+    assert Trip.query.filter_by(schedule_id=schedule.id).count() == 7
+
+    replacement_vehicle = VehicleService.create_vehicle({
+        'name': 'Replacement Routine Car', 'make': 'Test', 'model': 'Routine',
+        'registration': 'RT13 CAR', 'fuel_type': 'Petrol',
+    })
+    schedule, affected_vehicle_ids = TripScheduleService.update_schedule(
+        schedule.id,
+        MultiDict([
+            ('vehicle_id', str(replacement_vehicle.id)),
+            ('name', 'Weekly commute'),
+            ('trip_type', 'business'),
+            ('miles', '24'),
+            ('journey_description', 'Office'),
+            ('frequency', 'weekly'),
+            ('start_date', today.isoformat()),
+            ('end_date', (today + timedelta(days=21)).isoformat()),
+            ('days', str(weekday)),
+        ]),
+    )
+    assert affected_vehicle_ids == {vehicle.id, replacement_vehicle.id}
+    assert schedule.frequency == 'weekly'
+    assert Trip.query.filter_by(schedule_id=schedule.id).count() == 4
+    skipped = Trip.query.filter_by(
+        schedule_id=schedule.id, trip_status='skipped',
+    ).one()
+    assert skipped.vehicle_id == replacement_vehicle.id
+    assert skipped.total_miles == 24
+
+    TripScheduleService.delete_schedule(schedule.id)
+    remaining = Trip.query.all()
+    assert len(remaining) == 1
+    assert remaining[0].trip_status == 'actual'
+    assert remaining[0].schedule_id is None
+
+
+def _routine_vehicle_and_schedule(family, monkeypatch, start, days=7):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    vehicle = VehicleService.create_vehicle({
+        'name': 'Daily Car', 'make': 'Test', 'model': 'Routine',
+        'registration': 'DY12 CAR', 'fuel_type': 'Petrol',
+    })
+    schedule, _ = TripScheduleService.create_schedule(MultiDict([
+        ('vehicle_id', str(vehicle.id)),
+        ('name', 'Commute'),
+        ('trip_type', 'personal'),
+        ('miles', '10'),
+        ('journey_description', 'Office'),
+        ('frequency', 'weekly'),
+        ('start_date', start.isoformat()),
+        ('end_date', (start + timedelta(days=days - 1)).isoformat()),
+        *[('days', str(day)) for day in range(7)],
+    ]))
+    trips = Trip.query.filter_by(schedule_id=schedule.id).order_by(Trip.date).all()
+    return vehicle, schedule, trips
+
+
+def test_fuel_record_confirms_planned_trips_up_to_fill_date(app, family, monkeypatch):
+    start = date.today() - timedelta(days=3)
+    vehicle, _, trips = _routine_vehicle_and_schedule(family, monkeypatch, start)
+    other = VehicleService.create_vehicle({
+        'name': 'Other Car', 'make': 'Test', 'model': 'Other',
+        'registration': 'OT34 CAR', 'fuel_type': 'Petrol',
+    })
+    other_trip = Trip(
+        family_id=family.id, vehicle_id=other.id, date=start,
+        total_miles=5, personal_miles=5, trip_status='planned',
+    )
+    db.session.add(other_trip)
+    db.session.commit()
+    TripScheduleService.ensure_upcoming_trips(today=start)
+    trips = Trip.query.filter_by(vehicle_id=vehicle.id).order_by(Trip.date).all()
+    assert len(trips) == 7
+    assert all(trip.trip_status == 'planned' for trip in trips)
+
+    fill = VehicleService.create_fuel_record({
+        'vehicle_id': str(vehicle.id), 'date': (start + timedelta(days=1)).isoformat(),
+        'price_per_litre': '150', 'mileage': '1000', 'cost': '30', 'gallons': '10',
+    })
+
+    assert fill.confirmed_trip_count == 2
+    assert [trip.trip_status for trip in trips[:3]] == ['actual', 'actual', 'planned']
+    assert trips[1].cumulative_total_miles == 20
+    assert other_trip.trip_status == 'planned'
+
+    count, vehicle_ids = VehicleService.confirm_due_trips(vehicle.id)
+    assert count == 2
+    assert vehicle_ids == {vehicle.id}
+    assert [trip.trip_status for trip in trips[:5]] == ['actual'] * 4 + ['planned']
+    assert other_trip.trip_status == 'planned'
+
+
+def test_editing_one_occurrence_survives_routine_changes_until_reset(
+    app, family, monkeypatch,
+):
+    start = date.today() + timedelta(days=1)
+    vehicle, schedule, trips = _routine_vehicle_and_schedule(family, monkeypatch, start)
+    other = VehicleService.create_vehicle({
+        'name': 'Borrowed Car', 'make': 'Test', 'model': 'Other',
+        'registration': 'BR12 CAR', 'fuel_type': 'Petrol',
+    })
+    edited = trips[2]
+
+    updated = VehicleService.update_trip(edited.id, {
+        'vehicle_id': str(other.id),
+        'date': edited.date.isoformat(),
+        'trip_type': 'personal',
+        'miles': '35',
+        'journey_description': 'Detour via shops',
+        'school_holidays': '',
+    })
+    assert updated.trip_status == 'planned'
+    assert updated.is_modified is True
+    assert updated.vehicle_id == other.id
+    assert updated.previous_vehicle_id == vehicle.id
+
+    TripScheduleService.update_schedule(schedule.id, MultiDict([
+        ('vehicle_id', str(vehicle.id)),
+        ('name', 'Commute'),
+        ('trip_type', 'personal'),
+        ('miles', '12'),
+        ('journey_description', 'New office'),
+        ('frequency', 'weekly'),
+        ('start_date', start.isoformat()),
+        ('end_date', (start + timedelta(days=6)).isoformat()),
+        *[('days', str(day)) for day in range(7)],
+    ]))
+    edited = db.session.get(Trip, edited.id)
+    assert edited.total_miles == 35
+    assert edited.journey_description == 'Detour via shops'
+    assert Trip.query.filter_by(schedule_id=schedule.id).count() == 7
+    assert Trip.query.filter_by(schedule_id=schedule.id, total_miles=12).count() == 6
+
+    overview = {item['schedule'].id: item for item in TripScheduleService.get_overview()}
+    assert overview[schedule.id]['modified_count'] == 1
+    assert overview[schedule.id]['upcoming_count'] == 7
+
+    assert TripScheduleService.reset_occurrence(edited.id) == {other.id, vehicle.id}
+    assert edited.is_modified is False
+    assert edited.vehicle_id == vehicle.id
+    assert edited.total_miles == 12
+    assert edited.journey_description == 'New office'
+    assert edited.trip_status == 'planned'
+
+    _, occurrences = TripScheduleService.get_occurrences(schedule.id)
+    assert [trip.scheduled_date for trip in occurrences] == [
+        start + timedelta(days=offset) for offset in range(7)
+    ]
+
+
+def test_fortnightly_trip_schedule_uses_calendar_weeks(app):
+    schedule = TripSchedule(
+        start_date=date(2026, 1, 7),
+        end_date=date(2026, 2, 6),
+        weekdays='0,4',
+        frequency='fortnightly',
+    )
+
+    occurrences = TripScheduleService._occurrence_dates(schedule, date(2026, 1, 7))
+
+    assert occurrences == [
+        date(2026, 1, 9),
+        date(2026, 1, 19),
+        date(2026, 1, 23),
+        date(2026, 2, 2),
+        date(2026, 2, 6),
+    ]
 
 
 def test_forecasts_historical_refills_only_since_latest_fill(app, family, monkeypatch):

@@ -138,6 +138,9 @@ class VehicleService:
         db.session.add(fuel_record)
         db.session.flush()
         VehicleService._recalculate_fuel_metrics(vehicle_id)
+        fuel_record.confirmed_trip_count = len(VehicleService._confirm_planned_trips(
+            fuel_date, vehicle_id,
+        ))
         db.session.commit()
         return fuel_record
 
@@ -151,6 +154,9 @@ class VehicleService:
         fuel_record.gallons = Decimal(data['gallons'])
         fuel_record.is_partial_fill = data.get('is_partial_fill') == '1'
         VehicleService._recalculate_fuel_metrics(fuel_record.vehicle_id)
+        fuel_record.confirmed_trip_count = len(VehicleService._confirm_planned_trips(
+            fuel_record.date, fuel_record.vehicle_id,
+        ))
         db.session.commit()
         return fuel_record
 
@@ -179,17 +185,6 @@ class VehicleService:
             vehicle_id, miles, trip_date
         )
         latest_fuel = VehicleService.get_latest_fuel_record(vehicle_id)
-        previous_trip = family_query(Trip).filter(
-            Trip.vehicle_id == vehicle_id, Trip.date < trip_date
-        ).order_by(Trip.date.desc()).first()
-        cumulative_miles = (
-            (previous_trip.cumulative_total_miles or 0) + miles
-            if previous_trip else miles
-        )
-        cumulative_gallons = (
-            (previous_trip.cumulative_gallons or Decimal('0')) + gallons_used
-            if previous_trip else gallons_used
-        )
         trip = Trip(
             family_id=db_helpers.get_family_id(),
             vehicle_id=vehicle_id,
@@ -200,24 +195,30 @@ class VehicleService:
             personal_miles=miles if trip_type == 'personal' else 0,
             business_miles=miles if trip_type == 'business' else 0,
             total_miles=miles,
-            cumulative_total_miles=cumulative_miles,
             journey_description=data.get('journey_description', ''),
             school_holidays=data.get('school_holidays', ''),
             approx_mpg=approx_mpg,
             gallons_used=gallons_used,
-            cumulative_gallons=cumulative_gallons,
             trip_cost=trip_cost,
             fuel_cost=Decimal('0'),
             vehicle_last_fill=latest_fuel.date if latest_fuel else None,
         )
         db.session.add(trip)
+        db.session.flush()
+        VehicleService._recalculate_trip_cumulative_values(vehicle_id)
         db.session.commit()
         return trip
 
     @staticmethod
     def update_trip(trip_id, data):
         trip = family_get_or_404(Trip, trip_id)
+        previous_vehicle_id = trip.vehicle_id
+        if data.get('vehicle_id'):
+            trip.vehicle_id = family_get_or_404(Vehicle, int(data['vehicle_id'])).id
         trip.date = date.fromisoformat(data['date'])
+        trip.month = trip.date.strftime('%Y-%m')
+        trip.week = f'{trip.date.isocalendar()[1]:02d}-{trip.date.year}'
+        trip.day_name = trip.date.strftime('%A')
         trip_type = data.get('trip_type', 'personal')
         miles = int(data.get('miles') or 0)
         if miles < 0:
@@ -227,19 +228,70 @@ class VehicleService:
         trip.personal_miles = miles if trip_type == 'personal' else 0
         trip.business_miles = miles if trip_type == 'business' else 0
         trip.total_miles = miles
+        if trip.schedule_id:
+            trip.is_modified = True
         trip.journey_description = data.get('journey_description', '')
         trip.school_holidays = data.get('school_holidays', '')
         trip.trip_cost, trip.gallons_used, trip.approx_mpg = VehicleService.calculate_trip_cost(
             trip.vehicle_id, miles, trip.date
         )
+        VehicleService._recalculate_trip_cumulative_values(trip.vehicle_id)
+        if previous_vehicle_id != trip.vehicle_id:
+            VehicleService._recalculate_trip_cumulative_values(previous_vehicle_id)
+        trip.previous_vehicle_id = previous_vehicle_id
         db.session.commit()
         return trip
+
+    @staticmethod
+    def _confirm_planned_trips(through_date, vehicle_id=None):
+        """Mark planned trips on or before ``through_date`` as completed."""
+        query = family_query(Trip).filter(
+            Trip.trip_status == 'planned',
+            Trip.date <= through_date,
+        )
+        if vehicle_id is not None:
+            query = query.filter(Trip.vehicle_id == vehicle_id)
+        trips = query.all()
+        for trip in trips:
+            trip.trip_status = 'actual'
+        db.session.flush()
+        for affected_vehicle_id in {trip.vehicle_id for trip in trips}:
+            VehicleService._recalculate_trip_cumulative_values(affected_vehicle_id)
+        return trips
+
+    @staticmethod
+    def confirm_due_trips(vehicle_id=None, today=None):
+        """Confirm every planned trip dated today or earlier; return (count, vehicle IDs)."""
+        if vehicle_id is not None:
+            family_get_or_404(Vehicle, vehicle_id)
+        trips = VehicleService._confirm_planned_trips(today or date.today(), vehicle_id)
+        db.session.commit()
+        return len(trips), {trip.vehicle_id for trip in trips}
+
+    @staticmethod
+    def _recalculate_trip_cumulative_values(vehicle_id):
+        cumulative_miles = 0
+        cumulative_gallons = Decimal('0')
+        trips = family_query(Trip).filter(
+            Trip.vehicle_id == vehicle_id,
+            Trip.trip_status == 'actual',
+        ).order_by(Trip.date, Trip.id).all()
+        for trip in trips:
+            cumulative_miles += trip.total_miles or 0
+            cumulative_gallons += trip.gallons_used or Decimal('0')
+            trip.cumulative_total_miles = cumulative_miles
+            trip.cumulative_gallons = cumulative_gallons
 
     @staticmethod
     def delete_trip(trip_id):
         trip = family_get_or_404(Trip, trip_id)
         vehicle_id = trip.vehicle_id
-        db.session.delete(trip)
+        if trip.schedule_id:
+            trip.trip_status = 'skipped'
+        else:
+            db.session.delete(trip)
+        db.session.flush()
+        VehicleService._recalculate_trip_cumulative_values(vehicle_id)
         db.session.commit()
         return vehicle_id
 
@@ -295,6 +347,8 @@ class VehicleService:
                 db.session.add(trip)
                 created.append(trip)
             current_date += timedelta(days=1)
+        db.session.flush()
+        VehicleService._recalculate_trip_cumulative_values(vehicle_id)
         db.session.commit()
         return created
 

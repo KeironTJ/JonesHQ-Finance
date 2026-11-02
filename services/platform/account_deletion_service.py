@@ -9,8 +9,8 @@ from models import (
     Account, Balance, CreditCard, CreditCardPromotion, CreditCardTransaction,
     Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, IncomeChange, Loan,
     LoanPayment, LoanTermChange, MonthlyAccountBalance, Pension, PensionSnapshot,
-    Plan, PlanItem, RecurringIncome, Subscription, Transaction, Trip, User,
-    UserRecoveryCode, UserSession, Vehicle,
+    Plan, PlanItem, RecurringIncome, Subscription, Transaction, Trip, TripSchedule, TripTemplate,
+    User, UserRecoveryCode, UserSession, Vehicle,
 )
 from models.expense_calendar import ExpenseCalendarEntry
 from models.passkeys import PasskeyChallenge, UserPasskey
@@ -35,10 +35,12 @@ DOMAIN_CHILDREN = (
     (PlanItem, Plan, 'plan_id'),
     (FuelRecord, Vehicle, 'vehicle_id'),
     (Trip, Vehicle, 'vehicle_id'),
+    (TripSchedule, Vehicle, 'vehicle_id'),
+    (TripTemplate, Vehicle, 'vehicle_id'),
     (ExpenseCalendarEntry, Expense, 'expense_id'),
 )
 DELETE_ORDER = (
-    ExpenseCalendarEntry, PlanItem, Trip, FuelRecord, LoanTermChange, LoanPayment,
+    ExpenseCalendarEntry, PlanItem, Trip, TripSchedule, TripTemplate, FuelRecord, LoanTermChange, LoanPayment,
     PensionSnapshot, CreditCardPromotion, Expense, Income, IncomeChange, CreditCardTransaction, Balance,
     MonthlyAccountBalance, Transaction, Subscription,
     RecurringIncome, Plan, Vehicle, Pension, Loan, CreditCard, Account,

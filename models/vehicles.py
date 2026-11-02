@@ -31,6 +31,9 @@ class Vehicle(db.Model):
     trip_templates = db.relationship(
         'TripTemplate', back_populates='vehicle', cascade='all, delete-orphan',
     )
+    trip_schedules = db.relationship(
+        'TripSchedule', back_populates='vehicle', cascade='all, delete-orphan',
+    )
     owner = db.relationship('User', foreign_keys=[owner_id])
 
     @property

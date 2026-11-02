@@ -35,6 +35,7 @@ from models.subscriptions import Subscription, SubscriptionPriceChange
 from models.tax_settings import TaxSettings
 from models.transactions import Transaction
 from models.trips import Trip
+from models.trip_schedule import TripSchedule
 from models.trip_template import TripTemplate
 from models.users import SecurityEvent, User, UserRecoveryCode, UserSession
 from models.passkeys import PasskeyChallenge, UserPasskey
@@ -82,6 +83,7 @@ __all__ = [
     'TaxSettings',
     'Transaction',
     'Trip',
+    'TripSchedule',
     'TripTemplate',
     'User',
     'Vehicle',

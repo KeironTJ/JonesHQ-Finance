@@ -1,13 +1,33 @@
 from extensions import db
 from datetime import datetime, timezone
+from sqlalchemy import UniqueConstraint
 
 
 class Trip(db.Model):
     __tablename__ = 'trips'
+    __table_args__ = (
+        UniqueConstraint('schedule_id', 'scheduled_date', name='uq_trips_schedule_scheduled_date'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     family_id = db.Column(db.Integer, db.ForeignKey('families.id'), nullable=True, index=True)
     vehicle_id= db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
+    schedule_id = db.Column(
+        db.Integer,
+        db.ForeignKey('trip_schedules.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    scheduled_date = db.Column(db.Date)
+    trip_status = db.Column(
+        db.String(20),
+        nullable=False,
+        default='actual',
+        server_default='actual',
+        index=True,
+    )
+    # A routine occurrence edited for one day; routine changes leave it untouched.
+    is_modified = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     
     date = db.Column(db.Date, nullable=False)
     month = db.Column(db.String(7))  # 2025-11
@@ -38,6 +58,7 @@ class Trip(db.Model):
     
     # Relationships
     fuel_record = db.relationship('FuelRecord', foreign_keys=[fuel_log_entry_id], back_populates='trips')
+    schedule = db.relationship('TripSchedule', back_populates='trips')
     
     def __repr__(self):
         return f'<Trip {self.date}: {self.vehicle.registration} - {self.total_miles}mi>'

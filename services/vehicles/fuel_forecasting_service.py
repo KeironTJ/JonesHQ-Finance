@@ -35,7 +35,7 @@ Primary entry points
   sync_forecasted_transactions()      â€” delete stale forecasts and recreate from predictions
   link_fuel_record_to_transaction()   â€” convert a forecasted transaction to actual on fill
 """
-from datetime import timedelta
+from datetime import date as date_type, timedelta
 from decimal import Decimal
 from extensions import db
 from models.vehicles import Vehicle
@@ -166,6 +166,7 @@ class FuelForecastingService:
         trips = (
             family_query(Trip)
             .filter_by(vehicle_id=vehicle_id)
+            .filter(Trip.trip_status.in_(('actual', 'planned')))
             .all()
         )
         fuel_records = (
@@ -260,7 +261,6 @@ class FuelForecastingService:
 
         Returns None if there is insufficient data to compute a level.
         """
-        from datetime import date as date_type
         vehicle = family_get(Vehicle, vehicle_id)
         if not vehicle or not vehicle.tank_size:
             return None
@@ -281,16 +281,18 @@ class FuelForecastingService:
             .order_by(FuelRecord.date.asc(), FuelRecord.id.asc())
             .all()
         )
+        today = date_type.today()
         all_trips = (
             family_query(Trip)
             .filter_by(vehicle_id=vehicle_id)
+            # Unconfirmed routine trips count until a fill confirms or a skip removes them.
+            .filter(Trip.trip_status.in_(('actual', 'planned')))
             .filter(Trip.total_miles > 0)
             .order_by(Trip.date.asc())
             .all()
         )
 
         last_fill = all_fills[-1] if all_fills else None
-        today = date_type.today()
 
         events = FuelForecastingService._build_merged_timeline(all_trips, all_fills)
 

@@ -71,6 +71,7 @@ def _inherited_visibility_models():
         from models.credit_cards import CreditCard
         from models.fuel import FuelRecord
         from models.trips import Trip
+        from models.trip_schedule import TripSchedule
         from models.trip_template import TripTemplate
         from models.vehicles import Vehicle
         from models.balances import Balance
@@ -85,6 +86,7 @@ def _inherited_visibility_models():
             CreditCardTransaction: ('credit_card_id', CreditCard),
             FuelRecord: ('vehicle_id', Vehicle),
             Trip: ('vehicle_id', Vehicle),
+            TripSchedule: ('vehicle_id', Vehicle),
             TripTemplate: ('vehicle_id', Vehicle),
             Balance: ('account_id', Account),
             PlanItem: ('plan_id', Plan),

@@ -71,8 +71,9 @@ The shared vendor lookup helpers live in `finance/credit_card_helpers.py`.
 
 ### Fuel forecasting
 
-`vehicles/fuel_forecasting_service.py` assesses each positive-mile trip in date/ID
-order. A trip that would leave the tank at or below the configured threshold
+`vehicles/fuel_forecasting_service.py` assesses each positive-mile actual trip and
+upcoming planned trip in date/ID order. Skipped trips and overdue unconfirmed
+plans do not affect mileage or fuel forecasts. A trip that would leave the tank at or below the configured threshold
 triggers a top-up **before that trip, dated on the trip's day**; there is no
 earlier-trip look-ahead scheduling. The percentage still means fuel consumed:
 95% means refill at 5% remaining. A full tank never produces a zero-gallon top-up.
@@ -97,9 +98,19 @@ fuel prices (pence/litre, with a 150p fallback). Costs convert UK gallons using
 intervals rather than trusting legacy stored MPG; fuel creates, edits and deletes
 also recalculate stored metrics in chronological order.
 
-Trip add/edit/delete, bulk trip add/delete, fuel changes, vehicle-setting changes
-and manual refresh rebuild saved forecasts. Registration changes also clear the
-old registration's forecasts. Actual bank transactions are preserved, and monthly
+`vehicles/trip_schedule_service.py` expands active weekly/fortnightly routines into
+an idempotent 90-day window of planned trips. Confirming an occurrence makes it
+actual; skipping it excludes that date without ending the routine. Logging or
+editing a fuel fill confirms that vehicle's planned trips dated on or before the
+fill (`VehicleService._confirm_planned_trips`), and **Confirm due** confirms every
+planned trip up to today. Until confirmed, past planned trips still count towards
+tank status and forecasts. Editing one occurrence keeps its status and sets
+`Trip.is_modified`, so later routine edits leave it alone until it is reset. The
+Routines page (`/vehicles/routines`) manages routines and their occurrences.
+
+Trip add/edit/delete, routine changes, occurrence confirmation/skips, bulk trip
+add/delete, fuel changes, vehicle-setting changes and manual refresh rebuild saved
+forecasts. Registration changes also clear the old registration's forecasts. Actual bank transactions are preserved, and monthly
 balance caches refresh from the earliest removed or added forecast per affected
 account. Existing saved forecasts are corrected on the next such action or with
 **Refresh forecasts**; deploying this change does not rewrite household data.

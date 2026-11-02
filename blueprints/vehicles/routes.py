@@ -8,6 +8,7 @@ from models.trip_template import TripTemplate
 from models.accounts import Account
 from services.vehicles.vehicle_service import VehicleService
 from services.vehicles.fuel_forecasting_service import FuelForecastingService
+from services.vehicles.trip_schedule_service import TripScheduleService
 from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -150,10 +151,30 @@ def fuel():
     )
 
 
+def _refresh_routine_trips():
+    """Top up each active routine's rolling window, refreshing affected forecasts."""
+    try:
+        for vehicle_id in sorted(TripScheduleService.ensure_upcoming_trips()):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to refresh recurring trip occurrences')
+        flash(f'Upcoming routine trips could not be fully refreshed: {error}', 'danger')
+
+
+def _due_trip_count():
+    return family_query(Trip).filter(
+        Trip.trip_status == 'planned',
+        Trip.date <= date.today(),
+    ).count()
+
+
 @vehicles_bp.route('/vehicles/trips')
 def trips():
     """Trip log page (standalone)"""
     vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all()
+    _refresh_routine_trips()
+    show_skipped = request.args.get('show_skipped') == '1'
 
     # Trip-specific payday filter
     selected_payday_period_trip = request.args.get('payday_period_trip')
@@ -188,11 +209,15 @@ def trips():
     trip_start_date = None
     trip_end_date = None
     trip_query = family_query(Trip).options(joinedload(Trip.fuel_record))
+    if not show_skipped:
+        trip_query = trip_query.filter(Trip.trip_status != 'skipped')
     if selected_payday_period_trip:
         try:
             year, month = map(int, selected_payday_period_trip.split('-'))
             trip_start_date, trip_end_date, _ = PaydayService.get_payday_period(year, month)
-            trip_query = trip_query.filter(Trip.date >= trip_start_date, Trip.date <= trip_end_date)
+            trip_query = trip_query.filter(
+                Trip.date >= trip_start_date, Trip.date <= trip_end_date,
+            )
         except Exception:
             pass
     if selected_vehicle_id_trip:
@@ -371,6 +396,8 @@ def trips():
         trips=trips,
         vehicles=vehicles,
         trip_templates=family_query(TripTemplate).order_by(TripTemplate.name).all(),
+        due_trip_count=_due_trip_count(),
+        show_skipped=show_skipped,
         payday_periods=payday_periods,
         selected_payday_period_trip=selected_payday_period_trip,
         selected_vehicle_id_trip=selected_vehicle_id_trip,
@@ -477,6 +504,13 @@ def delete_vehicle(vehicle_id):
 
 # ===== FUEL LOG =====
 
+def _confirmed_trips_suffix(fuel_record):
+    count = getattr(fuel_record, 'confirmed_trip_count', 0)
+    if not count:
+        return ''
+    return f'; {count} planned routine trip{"s" if count != 1 else ""} confirmed'
+
+
 @vehicles_bp.route('/vehicles/fuel/add', methods=['POST'])
 def add_fuel():
     """Add a fuel record"""
@@ -501,7 +535,8 @@ def add_fuel():
             if fuel_record.mpg and fuel_record.mpg > 0 else 'MPG pending a full-to-full interval'
         )
         flash(
-            f'Fuel record added: £{fuel_record.cost:.2f}, {mpg_label}',
+            f'Fuel record added: £{fuel_record.cost:.2f}, {mpg_label}'
+            + _confirmed_trips_suffix(fuel_record),
             'success',
         )
     except Exception as e:
@@ -520,7 +555,7 @@ def update_fuel(fuel_id):
         # Regenerate future fuel forecasts
         FuelForecastingService.sync_forecasted_transactions(fuel_record.vehicle_id)
         
-        flash('Fuel record updated successfully', 'success')
+        flash('Fuel record updated successfully' + _confirmed_trips_suffix(fuel_record), 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error updating fuel record: {str(e)}', 'danger')
@@ -571,8 +606,9 @@ def update_trip(trip_id):
     try:
         trip = VehicleService.update_trip(trip_id, request.form)
         
-        # Trigger fuel forecasting for this vehicle
-        FuelForecastingService.sync_forecasted_transactions(trip.vehicle_id)
+        # Trigger fuel forecasting for every vehicle the trip touched
+        for vehicle_id in sorted({trip.vehicle_id, trip.previous_vehicle_id}):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
         
         flash('Trip updated successfully', 'success')
     except Exception as e:
@@ -586,10 +622,14 @@ def update_trip(trip_id):
 def delete_trip(trip_id):
     """Delete a trip record"""
     try:
+        trip = family_get_or_404(Trip, trip_id)
+        is_scheduled = bool(trip.schedule_id)
         vehicle_id = VehicleService.delete_trip(trip_id)
         FuelForecastingService.sync_forecasted_transactions(vehicle_id)
-        
-        flash('Trip deleted successfully', 'success')
+        flash(
+            'Scheduled occurrence skipped' if is_scheduled else 'Trip deleted successfully',
+            'success',
+        )
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting trip: {str(e)}', 'danger')
@@ -616,13 +656,19 @@ def bulk_delete_trips():
             trip = family_get(Trip, int(trip_id))
             if trip:
                 vehicle_ids.add(trip.vehicle_id)
-                db.session.delete(trip)
+                if trip.schedule_id:
+                    trip.trip_status = 'skipped'
+                else:
+                    db.session.delete(trip)
                 deleted_count += 1
         
+        db.session.flush()
+        for vehicle_id in vehicle_ids:
+            VehicleService._recalculate_trip_cumulative_values(vehicle_id)
         db.session.commit()
         for vehicle_id in sorted(vehicle_ids):
             FuelForecastingService.sync_forecasted_transactions(vehicle_id)
-        flash(f'Successfully deleted {deleted_count} trip(s)', 'success')
+        flash(f'Removed {deleted_count} selected trip(s) from active mileage', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting trips: {str(e)}', 'danger')
@@ -688,3 +734,152 @@ def delete_trip_template(template_id):
         db.session.rollback()
         flash(f'Error deleting journey: {str(error)}', 'danger')
     return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/trip-schedules/add', methods=['POST'])
+def add_trip_schedule():
+    try:
+        schedule, vehicle_ids = TripScheduleService.create_schedule(request.form)
+        for vehicle_id in sorted(vehicle_ids):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        flash(f'Started routine "{schedule.name}"', 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to create recurring trip routine')
+        flash(f'Error creating routine: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.routines'))
+
+
+@vehicles_bp.route('/vehicles/trip-schedules/update/<int:schedule_id>', methods=['POST'])
+def update_trip_schedule(schedule_id):
+    try:
+        schedule, vehicle_ids = TripScheduleService.update_schedule(schedule_id, request.form)
+        for vehicle_id in sorted(vehicle_ids):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        flash(f'Updated routine "{schedule.name}"', 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to update recurring trip routine %s', schedule_id)
+        flash(f'Error updating routine: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.routines'))
+
+
+@vehicles_bp.route('/vehicles/trip-schedules/toggle/<int:schedule_id>', methods=['POST'])
+def toggle_trip_schedule(schedule_id):
+    try:
+        is_active = request.form.get('is_active') == '1'
+        vehicle_ids = TripScheduleService.set_schedule_active(schedule_id, is_active)
+        for vehicle_id in sorted(vehicle_ids):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        flash('Routine resumed' if is_active else 'Routine paused', 'success')
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to change recurring trip routine %s', schedule_id)
+        flash(f'Error changing routine: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.routines'))
+
+
+@vehicles_bp.route('/vehicles/trip-schedules/delete/<int:schedule_id>', methods=['POST'])
+def delete_trip_schedule(schedule_id):
+    try:
+        vehicle_id = TripScheduleService.delete_schedule(schedule_id)
+        FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        flash('Routine deleted; completed trips were kept', 'success')
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to delete recurring trip routine %s', schedule_id)
+        flash(f'Error deleting routine: {str(error)}', 'danger')
+    return redirect(url_for('vehicles.routines'))
+
+
+def _update_scheduled_trip_status(trip_id, status, message):
+    try:
+        vehicle_id = TripScheduleService.set_occurrence_status(trip_id, status)
+        FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        flash(message, 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to update scheduled trip %s', trip_id)
+        flash(f'Error updating scheduled trip: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/trips/<int:trip_id>/confirm', methods=['POST'])
+def confirm_scheduled_trip(trip_id):
+    return _update_scheduled_trip_status(trip_id, 'actual', 'Trip confirmed as completed')
+
+
+@vehicles_bp.route('/vehicles/trips/<int:trip_id>/skip', methods=['POST'])
+def skip_scheduled_trip(trip_id):
+    return _update_scheduled_trip_status(trip_id, 'skipped', 'Scheduled trip skipped')
+
+
+@vehicles_bp.route('/vehicles/trips/<int:trip_id>/restore', methods=['POST'])
+def restore_scheduled_trip(trip_id):
+    return _update_scheduled_trip_status(trip_id, 'planned', 'Scheduled trip restored')
+
+
+@vehicles_bp.route('/vehicles/trips/<int:trip_id>/reset', methods=['POST'])
+def reset_scheduled_trip(trip_id):
+    try:
+        for vehicle_id in sorted(TripScheduleService.reset_occurrence(trip_id)):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        flash('Trip reset to the routine details', 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to reset scheduled trip %s', trip_id)
+        flash(f'Error resetting trip: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.routines'))
+
+
+@vehicles_bp.route('/vehicles/trips/confirm-due', methods=['POST'])
+def confirm_due_trips():
+    try:
+        vehicle_id = request.form.get('vehicle_id', type=int)
+        count, vehicle_ids = VehicleService.confirm_due_trips(vehicle_id)
+        for affected_vehicle_id in sorted(vehicle_ids):
+            FuelForecastingService.sync_forecasted_transactions(affected_vehicle_id)
+        flash(
+            f'Confirmed {count} planned trip{"s" if count != 1 else ""}'
+            if count else 'No planned trips are waiting for confirmation',
+            'success' if count else 'info',
+        )
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to confirm due trips')
+        flash(f'Error confirming trips: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/routines')
+def routines():
+    """Manage recurring trip routines and their individual occurrences."""
+    _refresh_routine_trips()
+    selected_schedule = None
+    occurrences = []
+    schedule_id = request.args.get('schedule_id', type=int)
+    if schedule_id:
+        selected_schedule, occurrences = TripScheduleService.get_occurrences(schedule_id)
+    return render_template(
+        'vehicles/routines.html',
+        overview=TripScheduleService.get_overview(),
+        selected_schedule=selected_schedule,
+        occurrences=occurrences,
+        vehicles=family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all(),
+        trip_templates=family_query(TripTemplate).order_by(TripTemplate.name).all(),
+        due_trip_count=_due_trip_count(),
+        planning_days=TripScheduleService.PLANNING_DAYS,
+        today=date.today(),
+    )

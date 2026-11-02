@@ -64,6 +64,7 @@ SQLAlchemy database models
 - `planned.py` - Planned transactions
 - `transactions.py` - Bank transaction model
 - `trips.py` - Trip tracking
+- `trip_schedule.py` - Recurring trip routines
 - `trip_template.py` - Saved reusable trip details
 - `vehicles.py` - Vehicle model
 - `vendors.py` - Vendor model
