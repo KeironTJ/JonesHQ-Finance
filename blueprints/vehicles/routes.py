@@ -186,24 +186,25 @@ def trips():
     elif selected_payday_period_trip == 'all' or selected_payday_period_trip == '':
         selected_payday_period_trip = ''
 
-    # Get date range of trip records to determine relevant periods
-    min_date_result = family_query(Trip).with_entities(db.func.min(Trip.date)).scalar()
-    max_date_result = family_query(Trip).with_entities(db.func.max(Trip.date)).scalar()
-    
-    if min_date_result and max_date_result:
-        # Calculate number of months between min and max dates
-        months_diff = (max_date_result.year - min_date_result.year) * 12 + (max_date_result.month - min_date_result.month) + 2
-        payday_periods = PaydayService.get_recent_periods(
-            num_periods=months_diff,
-            include_future=False,
-            start_year=min_date_result.year,
-            start_month=min_date_result.month
-        )
-    else:
-        payday_periods = []
-
     # Trip vehicle filter
     selected_vehicle_id_trip = request.args.get('vehicle_id_trip')
+    try:
+        period_vehicle_id = int(selected_vehicle_id_trip) if selected_vehicle_id_trip else None
+    except ValueError:
+        period_vehicle_id = None
+
+    # Only offer periods with entries. An empty selection (e.g. the current period
+    # before any trips) falls back to the nearest earlier period that has entries.
+    payday_periods = VehicleService.get_trip_log_periods(
+        vehicle_id=period_vehicle_id,
+        include_skipped=show_skipped,
+    )
+    period_labels = [period['label'] for period in payday_periods]
+    if selected_payday_period_trip and selected_payday_period_trip not in period_labels:
+        earlier = [label for label in period_labels if label < selected_payday_period_trip]
+        selected_payday_period_trip = (
+            earlier[-1] if earlier else (period_labels[0] if period_labels else '')
+        )
 
     # Get trip records
     trip_start_date = None
@@ -401,7 +402,8 @@ def trips():
         payday_periods=payday_periods,
         selected_payday_period_trip=selected_payday_period_trip,
         selected_vehicle_id_trip=selected_vehicle_id_trip,
-        today=date.today()
+        today=date.today(),
+        tomorrow=date.today() + timedelta(days=1),
     )
 
 
@@ -708,7 +710,7 @@ def add_trip_template():
     except Exception as error:
         db.session.rollback()
         flash(f'Error saving journey: {str(error)}', 'danger')
-    return redirect(request.referrer or url_for('vehicles.trips'))
+    return redirect(request.referrer or url_for('vehicles.journeys'))
 
 
 @vehicles_bp.route('/vehicles/trip-templates/update/<int:template_id>', methods=['POST'])
@@ -722,7 +724,7 @@ def update_trip_template(template_id):
     except Exception as error:
         db.session.rollback()
         flash(f'Error updating journey: {str(error)}', 'danger')
-    return redirect(request.referrer or url_for('vehicles.trips'))
+    return redirect(request.referrer or url_for('vehicles.journeys'))
 
 
 @vehicles_bp.route('/vehicles/trip-templates/delete/<int:template_id>', methods=['POST'])
@@ -733,7 +735,7 @@ def delete_trip_template(template_id):
     except Exception as error:
         db.session.rollback()
         flash(f'Error deleting journey: {str(error)}', 'danger')
-    return redirect(request.referrer or url_for('vehicles.trips'))
+    return redirect(request.referrer or url_for('vehicles.journeys'))
 
 
 @vehicles_bp.route('/vehicles/trip-schedules/add', methods=['POST'])
@@ -861,6 +863,44 @@ def confirm_due_trips():
         log.exception('Failed to confirm due trips')
         flash(f'Error confirming trips: {str(error)}', 'danger')
     return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/trips/clear-future', methods=['POST'])
+def clear_future_trips():
+    try:
+        from_date = date.fromisoformat(request.form.get('from_date') or '')
+        summary, vehicle_ids = TripScheduleService.clear_future_trips(
+            from_date,
+            vehicle_id=request.form.get('vehicle_id', type=int),
+            routine_mode=request.form.get('routine_mode', 'keep'),
+        )
+        for vehicle_id in sorted(vehicle_ids):
+            FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+        parts = [f'{summary["deleted"]} trip(s) removed']
+        if summary['skipped']:
+            parts.append(f'{summary["skipped"]} routine trip(s) skipped')
+        if summary['routines_ended']:
+            parts.append(f'{summary["routines_ended"]} routine(s) ended')
+        flash(f'Cleared trips from {from_date.strftime("%d %b %Y")}: ' + ', '.join(parts), 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error) or 'Choose a valid date', 'danger')
+    except Exception as error:
+        db.session.rollback()
+        log.exception('Failed to clear future trips')
+        flash(f'Error clearing trips: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/journeys')
+def journeys():
+    """Manage saved journeys used to pre-fill trips and routines."""
+    return render_template(
+        'vehicles/journeys.html',
+        trip_templates=family_query(TripTemplate).order_by(TripTemplate.name).all(),
+        vehicles=family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all(),
+        due_trip_count=_due_trip_count(),
+    )
 
 
 @vehicles_bp.route('/vehicles/routines')

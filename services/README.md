@@ -106,7 +106,16 @@ fill (`VehicleService._confirm_planned_trips`), and **Confirm due** confirms eve
 planned trip up to today. Until confirmed, past planned trips still count towards
 tank status and forecasts. Editing one occurrence keeps its status and sets
 `Trip.is_modified`, so later routine edits leave it alone until it is reset. The
-Routines page (`/vehicles/routines`) manages routines and their occurrences.
+Routines page (`/vehicles/routines`) manages routines and their occurrences, and
+the Saved Journeys page (`/vehicles/journeys`) manages `TripTemplate`s; both sit
+under the Trip Log sub-navigation (`templates/vehicles/_trip_nav.html`).
+`VehicleService.get_trip_log_periods` limits the Trip Log pay-period filter to
+periods containing trips or fuel fills; an empty selected period falls back to
+the nearest earlier period with entries.
+`TripScheduleService.clear_future_trips` backs the Trip Log's **Clear Future**
+action. It deletes manually added trips from a chosen date, optionally for one
+vehicle, and either keeps routine trips, marks them skipped, or ends their routines
+the day before.
 
 Trip add/edit/delete, routine changes, occurrence confirmation/skips, bulk trip
 add/delete, fuel changes, vehicle-setting changes and manual refresh rebuild saved

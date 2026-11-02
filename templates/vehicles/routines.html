@@ -6,6 +6,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/vehicle-tables.css') }}">
 <style>
 .routine-row-selected { outline: 2px solid var(--bs-success); outline-offset: -2px; }
+.routine-row { cursor: pointer; }
+.routine-row:focus-visible { outline: 2px solid var(--bs-primary); outline-offset: -2px; }
 .routine-actions { display: flex; gap: .25rem; flex-wrap: wrap; justify-content: flex-end; }
 .routine-actions form { display: inline; }
 </style>
@@ -16,25 +18,8 @@
 <div class="container-fluid mt-4">
     <h1 class="mb-4"><i class="bi bi-car-front"></i> My Garage</h1>
 
-    <nav class="vehicle-section-navigation" aria-label="Vehicle pages">
-    <ul class="nav vehicle-page-nav mb-4">
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('vehicles.index') }}">
-                <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Overview</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
-                <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link active" href="{{ url_for('vehicles.trips') }}" aria-current="page">
-                <i class="bi bi-map" aria-hidden="true"></i><span>Trip Log</span>
-            </a>
-        </li>
-    </ul>
-    </nav>
+{% set trip_section = 'routines' %}
+{% include "vehicles/_trip_nav.html" %}
 
     <div class="card shadow mb-4">
         <div class="card-header bg-success d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -52,9 +37,6 @@
                 <button type="button" class="btn btn-light btn-sm" id="newRoutineBtn" {% if not vehicles %}disabled{% endif %}>
                     <i class="bi bi-plus-circle"></i> New routine
                 </button>
-                <a class="btn btn-outline-light btn-sm" href="{{ url_for('vehicles.trips') }}">
-                    <i class="bi bi-arrow-left"></i> Trip Log
-                </a>
             </div>
         </div>
         <div class="card-body">
@@ -81,7 +63,11 @@
                     <tbody>
                         {% for item in overview %}
                         {% set schedule = item.schedule %}
-                        <tr class="{% if selected_schedule and selected_schedule.id == schedule.id %}routine-row-selected{% endif %} {% if not schedule.is_active %}text-muted{% endif %}">
+                        {% set is_selected = selected_schedule and selected_schedule.id == schedule.id %}
+                        <tr class="routine-row {% if is_selected %}routine-row-selected{% endif %} {% if not schedule.is_active %}text-muted{% endif %}"
+                            data-href="{{ url_for('vehicles.routines') if is_selected else url_for('vehicles.routines', schedule_id=schedule.id) ~ '#occurrences' }}"
+                            tabindex="0" title="{{ 'Hide trips' if is_selected else 'Show trips for this routine' }}"
+                            {% if is_selected %}aria-current="true"{% endif %}>
                             <td>
                                 <strong>{{ schedule.name }}</strong>
                                 <div class="small text-muted">{{ schedule.vehicle.name }}{% if schedule.journey_description %} · {{ schedule.journey_description }}{% endif %}</div>
@@ -207,7 +193,6 @@
                             <td>{{ trip.vehicle.name if trip.vehicle else '' }}</td>
                             <td>
                                 <div class="routine-actions">
-                                    {% if trip.trip_status != 'actual' %}
                                     <button type="button" class="btn btn-sm btn-outline-secondary edit-occurrence-btn" title="Change this day only"
                                             data-update-url="{{ url_for('vehicles.update_trip', trip_id=trip.id) }}"
                                             data-date="{{ trip.date.isoformat() }}"
@@ -218,7 +203,6 @@
                                             data-school-holidays="{{ trip.school_holidays or '' }}">
                                         <i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Change this day only</span>
                                     </button>
-                                    {% endif %}
                                     {% if trip.trip_status == 'planned' %}
                                     <form method="POST" action="{{ url_for('vehicles.confirm_scheduled_trip', trip_id=trip.id) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -237,6 +221,14 @@
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <button type="submit" class="btn btn-sm btn-outline-primary" title="Restore">
                                             <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="visually-hidden">Restore</span>
+                                        </button>
+                                    </form>
+                                    {% elif trip.trip_status == 'actual' %}
+                                    <form method="POST" action="{{ url_for('vehicles.skip_scheduled_trip', trip_id=trip.id) }}"
+                                          onsubmit="return confirm('Mark this completed trip as not taken? Mileage and fuel forecasts will be recalculated.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Didn't happen">
+                                            <i class="bi bi-skip-forward" aria-hidden="true"></i><span class="visually-hidden">Didn't happen</span>
                                         </button>
                                     </form>
                                     {% endif %}
@@ -414,6 +406,19 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.routine-row').forEach(row => {
+        row.addEventListener('click', function (event) {
+            if (event.target.closest('a, button, form, input, select, label')) return;
+            if (window.getSelection().toString()) return;
+            window.location.href = this.dataset.href;
+        });
+        row.addEventListener('keydown', function (event) {
+            if (event.target !== this || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            window.location.href = this.dataset.href;
+        });
+    });
+
     const routineModalEl = document.getElementById('routineModal');
     const routineForm = document.getElementById('routineForm');
     const addRoutineUrl = routineForm.action;

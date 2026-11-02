@@ -140,25 +140,8 @@
         <div class="col-12">
             <h1 class="mb-4"><i class="bi bi-car-front"></i> My Garage</h1>
 
-            <nav class="vehicle-section-navigation" aria-label="Vehicle pages">
-            <ul class="nav vehicle-page-nav mb-4">
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('vehicles.index') }}">
-                        <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Overview</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
-                        <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link active" href="{{ url_for('vehicles.trips') }}" aria-current="page">
-                        <i class="bi bi-map" aria-hidden="true"></i><span>Trip Log</span>
-                    </a>
-                </li>
-            </ul>
-            </nav>
+{% set trip_section = 'log' %}
+{% include "vehicles/_trip_nav.html" %}
 
             <div id="trip-log-panel">
             <div class="card shadow">
@@ -201,11 +184,8 @@
                             </button>
                         </form>
                         {% endif %}
-                        <a class="btn btn-outline-light btn-sm" href="{{ url_for('vehicles.routines') }}">
-                            <i class="bi bi-arrow-repeat"></i> <span>Routines</span>
-                        </a>
-                        <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#tripTemplatesModal">
-                            <i class="bi bi-bookmark-star"></i> <span>Saved Journeys</span>
+                        <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#clearFutureTripsModal">
+                            <i class="bi bi-calendar-x"></i> <span>Clear Future</span>
                         </button>
                         <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addTripModal">
                             <i class="bi bi-plus-circle"></i> <span>Add Trip</span>
@@ -809,88 +789,62 @@
     </div>
 </div>
 
-<!-- Saved Journey Management Modal -->
-<div class="modal fade" id="tripTemplatesModal" tabindex="-1" aria-labelledby="tripTemplatesModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+<!-- Clear Future Trips Modal -->
+<div class="modal fade" id="clearFutureTripsModal" tabindex="-1" aria-labelledby="clearFutureTripsTitle" aria-hidden="true">
+    <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="tripTemplatesModalLabel">Saved Journeys</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted small">Save common trips to reuse their vehicle, mileage and trip type. Each logged trip remains a separate, editable record.</p>
-                {% if trip_templates %}
-                <div class="list-group mb-4">
-                    {% for template in trip_templates %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center gap-2">
-                        <div>
-                            <strong>{{ template.name }}</strong>
-                            <div class="small text-muted">
-                                {{ template.vehicle.name }} · {{ template.miles }} miles · {{ template.trip_type|title }}
-                                {% if template.journey_description %} · {{ template.journey_description }}{% endif %}
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2 flex-shrink-0">
-                            <button type="button" class="btn btn-outline-primary btn-sm edit-trip-template"
-                                    data-update-url="{{ url_for('vehicles.update_trip_template', template_id=template.id) }}"
-                                    data-name="{{ template.name }}"
-                                    data-vehicle-id="{{ template.vehicle_id }}"
-                                    data-trip-type="{{ template.trip_type }}"
-                                    data-miles="{{ template.miles }}"
-                                    data-description="{{ template.journey_description or '' }}">
-                                Edit
-                            </button>
-                            <form method="POST" action="{{ url_for('vehicles.delete_trip_template', template_id=template.id) }}"
-                                  onsubmit="return confirm('Delete this saved journey?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
-                            </form>
-                        </div>
-                    </div>
-                    {% endfor %}
+            <form method="POST" action="{{ url_for('vehicles.clear_future_trips') }}"
+                  onsubmit="return confirm('Clear the selected future trips? Manually added trips from this date are permanently deleted.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="clearFutureTripsTitle"><i class="bi bi-calendar-x me-2"></i>Clear future trips</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                {% endif %}
-                <form method="POST" action="{{ url_for('vehicles.add_trip_template') }}" id="tripTemplateForm">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <h6 id="tripTemplateFormTitle">Add a saved journey</h6>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label" for="trip_template_name">Journey name</label>
-                            <input type="text" name="name" id="trip_template_name" class="form-control" maxlength="100" required>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="clear_from_date">From</label>
+                            <input type="date" class="form-control" name="from_date" id="clear_from_date" required
+                                   min="{{ tomorrow.isoformat() }}" value="{{ tomorrow.isoformat() }}">
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label" for="trip_template_vehicle">Vehicle</label>
-                            <select name="vehicle_id" id="trip_template_vehicle" class="form-select" required>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="clear_vehicle_id">Vehicle</label>
+                            <select class="form-select" name="vehicle_id" id="clear_vehicle_id">
+                                <option value="">All vehicles</option>
                                 {% for vehicle in vehicles %}
-                                <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                                <option value="{{ vehicle.id }}" {% if selected_vehicle_id_trip and selected_vehicle_id_trip|string == vehicle.id|string %}selected{% endif %}>{{ vehicle.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
                     </div>
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label" for="trip_template_miles">Miles per trip</label>
-                            <input type="number" name="miles" id="trip_template_miles" class="form-control" min="0" required>
-                            <div class="form-text">For return journeys, enter the combined distance.</div>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">Trip type</label>
-                            <select name="trip_type" id="trip_template_type" class="form-select">
-                                <option value="personal">Personal</option>
-                                <option value="business">Business</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label" for="trip_template_description">Trip description</label>
-                            <input type="text" name="journey_description" id="trip_template_description" class="form-control" maxlength="255">
-                        </div>
+                    <p class="small text-muted mt-3 mb-2">Manually added and bulk-added trips from this date are deleted. For routine trips:</p>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="routine_mode" value="keep" id="clear_mode_keep" checked>
+                        <label class="form-check-label" for="clear_mode_keep">
+                            Keep them
+                            <div class="small text-muted">Routines carry on as normal.</div>
+                        </label>
                     </div>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary" id="tripTemplateSubmit">Save Journey</button>
-                        <button type="button" class="btn btn-outline-secondary d-none" id="tripTemplateCancelEdit">Cancel edit</button>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="radio" name="routine_mode" value="skip" id="clear_mode_skip">
+                        <label class="form-check-label" for="clear_mode_skip">
+                            Skip the days already planned
+                            <div class="small text-muted">Routines stay active and keep adding new days beyond the current 90-day window. Skipped days can be restored.</div>
+                        </label>
                     </div>
-                </form>
-            </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="radio" name="routine_mode" value="end" id="clear_mode_end">
+                        <label class="form-check-label" for="clear_mode_end">
+                            End the routines
+                            <div class="small text-muted">Routines finish the day before, and their trips from this date are removed. Routines that haven't started yet are paused.</div>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Clear trips</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -976,32 +930,6 @@ document.addEventListener('DOMContentLoaded', function () {
             applyTemplate(this, document.getElementById('bulkAddTripModal'));
         });
     }
-
-    const templateForm = document.getElementById('tripTemplateForm');
-    const templateAddUrl = templateForm.action;
-    function resetTemplateForm() {
-        templateForm.reset();
-        templateForm.action = templateAddUrl;
-        document.getElementById('tripTemplateFormTitle').textContent = 'Add a saved journey';
-        document.getElementById('tripTemplateSubmit').textContent = 'Save Journey';
-        document.getElementById('tripTemplateCancelEdit').classList.add('d-none');
-    }
-    document.querySelectorAll('.edit-trip-template').forEach(button => {
-        button.addEventListener('click', function () {
-            templateForm.action = this.dataset.updateUrl;
-            document.getElementById('trip_template_name').value = this.dataset.name;
-            document.getElementById('trip_template_vehicle').value = this.dataset.vehicleId;
-            document.getElementById('trip_template_type').value = this.dataset.tripType;
-            document.getElementById('trip_template_miles').value = this.dataset.miles;
-            document.getElementById('trip_template_description').value = this.dataset.description;
-            document.getElementById('tripTemplateFormTitle').textContent = 'Edit saved journey';
-            document.getElementById('tripTemplateSubmit').textContent = 'Update Journey';
-            document.getElementById('tripTemplateCancelEdit').classList.remove('d-none');
-            document.getElementById('trip_template_name').focus();
-        });
-    });
-    document.getElementById('tripTemplateCancelEdit').addEventListener('click', resetTemplateForm);
-    document.getElementById('tripTemplatesModal').addEventListener('hidden.bs.modal', resetTemplateForm);
 
     // ── Bulk-add preview ─────────────────────────────────────────────────────
     const bulkModal = document.getElementById('bulkAddTripModal');

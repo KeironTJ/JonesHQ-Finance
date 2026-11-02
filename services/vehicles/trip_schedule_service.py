@@ -1,6 +1,8 @@
 """Manage recurring journey schedules and their planned trip occurrences."""
 from datetime import date, timedelta
 
+from sqlalchemy import or_
+
 from extensions import db
 from models.trip_schedule import TripSchedule
 from models.trips import Trip
@@ -217,6 +219,76 @@ class TripScheduleService:
             affected_vehicle_ids = {schedule.vehicle_id}
         db.session.commit()
         return affected_vehicle_ids
+
+    CLEAR_ROUTINE_MODES = ('keep', 'skip', 'end')
+
+    @staticmethod
+    def clear_future_trips(from_date, vehicle_id=None, routine_mode='keep', today=None):
+        """Remove trips dated on or after ``from_date``.
+
+        Manual trips are deleted. Routine trips are left alone (``keep``), marked
+        skipped while the routine carries on (``skip``), or removed with the routine
+        ended the day before (``end``). Returns (summary dict, affected vehicle IDs).
+        """
+        today = today or date.today()
+        if from_date <= today:
+            raise ValueError('Choose a date after today')
+        if routine_mode not in TripScheduleService.CLEAR_ROUTINE_MODES:
+            raise ValueError('Choose what to do with routine trips')
+        if vehicle_id is not None:
+            family_get_or_404(Vehicle, vehicle_id)
+
+        def scoped(query, model):
+            return query.filter(model.vehicle_id == vehicle_id) if vehicle_id is not None else query
+
+        vehicle_ids = set()
+        summary = {'deleted': 0, 'skipped': 0, 'routines_ended': 0}
+        for trip in scoped(family_query(Trip), Trip).filter(
+            Trip.schedule_id.is_(None), Trip.date >= from_date,
+        ).all():
+            vehicle_ids.add(trip.vehicle_id)
+            db.session.delete(trip)
+            summary['deleted'] += 1
+
+        if routine_mode == 'skip':
+            for trip in scoped(family_query(Trip), Trip).filter(
+                Trip.schedule_id.isnot(None),
+                Trip.trip_status != 'skipped',
+                Trip.date >= from_date,
+            ).all():
+                vehicle_ids.add(trip.vehicle_id)
+                trip.trip_status = 'skipped'
+                summary['skipped'] += 1
+        elif routine_mode == 'end':
+            schedules = scoped(family_query(TripSchedule), TripSchedule).filter(
+                TripSchedule.is_active.is_(True),
+                or_(TripSchedule.end_date.is_(None), TripSchedule.end_date >= from_date),
+            ).all()
+            for schedule in schedules:
+                if schedule.start_date < from_date:
+                    schedule.end_date = from_date - timedelta(days=1)
+                else:
+                    schedule.is_active = False
+                summary['routines_ended'] += 1
+            for trip in family_query(Trip).filter(
+                Trip.schedule_id.in_([schedule.id for schedule in schedules] or [-1]),
+                Trip.date >= from_date,
+            ).all():
+                vehicle_ids.add(trip.vehicle_id)
+                if trip.scheduled_date and trip.scheduled_date < from_date:
+                    # Moved past the cut-off: keep the row so the date isn't regenerated.
+                    trip.trip_status = 'skipped'
+                    summary['skipped'] += 1
+                else:
+                    db.session.delete(trip)
+                    summary['deleted'] += 1
+            vehicle_ids.update(schedule.vehicle_id for schedule in schedules)
+
+        db.session.flush()
+        for affected_vehicle_id in vehicle_ids:
+            VehicleService._recalculate_trip_cumulative_values(affected_vehicle_id)
+        db.session.commit()
+        return summary, vehicle_ids
 
     @staticmethod
     def delete_schedule(schedule_id):

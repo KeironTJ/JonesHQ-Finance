@@ -88,7 +88,9 @@ def test_trip_schedule_route_creates_and_pauses_planned_trips(app, family, user)
     page = client.get('/vehicles/routines')
     assert page.status_code == 200
     assert 'School run routine' in page.get_data(as_text=True)
+    assert f'data-href="/vehicles/routines?schedule_id={schedule.id}#occurrences"' in page.get_data(as_text=True)
     page = client.get(f'/vehicles/routines?schedule_id={schedule.id}')
+    assert 'data-href="/vehicles/routines"' in page.get_data(as_text=True)
     assert start_date.strftime('%a %d %b %Y') in page.get_data(as_text=True)
 
     response = client.post(
@@ -99,6 +101,48 @@ def test_trip_schedule_route_creates_and_pauses_planned_trips(app, family, user)
     assert response.status_code == 302
     assert schedule.is_active is False
     assert Trip.query.filter_by(schedule_id=schedule.id, trip_status='planned').count() == 0
+
+
+def test_completed_routine_occurrence_can_be_edited_or_skipped(app, family, user):
+    vehicle = Vehicle(
+        family_id=family.id,
+        name='Completed Routine Car',
+        make='Test',
+        model='Trip',
+        registration='CR12 CAR',
+        is_active=True,
+    )
+    db.session.add(vehicle)
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+    today = date.today()
+
+    client.post('/vehicles/trip-schedules/add', data={
+        'vehicle_id': str(vehicle.id),
+        'name': 'Completed commute',
+        'trip_type': 'personal',
+        'miles': '10',
+        'journey_description': 'Office',
+        'frequency': 'weekly',
+        'start_date': today.isoformat(),
+        'end_date': today.isoformat(),
+        'days': str(today.weekday()),
+    })
+    schedule = TripSchedule.query.filter_by(family_id=family.id).one()
+    trip = Trip.query.filter_by(schedule_id=schedule.id).one()
+    client.post(f'/vehicles/trips/{trip.id}/confirm')
+
+    page = client.get(f'/vehicles/routines?schedule_id={schedule.id}')
+    html = page.get_data(as_text=True)
+    assert 'Completed' in html
+    assert f'data-update-url="/vehicles/trip/update/{trip.id}"' in html
+    assert f'action="/vehicles/trips/{trip.id}/skip"' in html
+    assert 'Didn&#39;t happen' in html or "Didn't happen" in html
+
+    response = client.post(f'/vehicles/trips/{trip.id}/skip')
+    assert response.status_code == 302
+    assert trip.trip_status == 'skipped'
 
 
 def test_trip_page_renders_saved_journeys_and_bulk_preview(app, family, user):
@@ -213,3 +257,96 @@ def test_confirm_due_route_confirms_past_planned_trips(app, family, user):
     assert response.status_code == 302
     assert past.trip_status == 'actual'
     assert future.trip_status == 'planned'
+
+
+def test_clear_future_route_removes_manual_trips(app, family, user):
+    vehicle = Vehicle(
+        family_id=family.id, name='Clear Car', make='Test', model='Trip',
+        registration='CL12 CAR', is_active=True,
+    )
+    db.session.add(vehicle)
+    db.session.flush()
+    future = Trip(
+        family_id=family.id, vehicle_id=vehicle.id,
+        date=date.today() + timedelta(days=3), total_miles=5, personal_miles=5,
+    )
+    db.session.add(future)
+    db.session.commit()
+    future_id = future.id
+    client = app.test_client()
+    login_client(client, user.id)
+
+    assert 'clearFutureTripsModal' in client.get('/vehicles/trips').get_data(as_text=True)
+    response = client.post('/vehicles/trips/clear-future', data={
+        'from_date': (date.today() + timedelta(days=1)).isoformat(),
+        'vehicle_id': str(vehicle.id),
+        'routine_mode': 'keep',
+    })
+
+    assert response.status_code == 302
+    assert db.session.get(Trip, future_id) is None
+
+
+def test_journeys_page_and_trip_subnav(app, family, user):
+    vehicle = Vehicle(
+        family_id=family.id, name='Journey Page Car', make='Test', model='Trip',
+        registration='JP12 CAR', is_active=True,
+    )
+    db.session.add(vehicle)
+    db.session.flush()
+    db.session.add(TripTemplate(
+        family_id=family.id, vehicle_id=vehicle.id, name='Gym run',
+        trip_type='personal', miles=6,
+    ))
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+
+    response = client.get('/vehicles/journeys')
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'Gym run' in html
+    assert 'tripTemplateForm' in html
+
+    for path in ('/vehicles/trips', '/vehicles/routines', '/vehicles/journeys'):
+        page = client.get(path).get_data(as_text=True)
+        assert 'vehicle-subnav' in page
+        assert 'href="/vehicles/routines"' in page
+        assert 'href="/vehicles/journeys"' in page
+    trip_html = client.get('/vehicles/trips').get_data(as_text=True)
+    assert 'tripTemplatesModal' not in trip_html
+    assert 'Gym run' in trip_html  # still offered in the Add Trip journey picker
+
+    response = client.post('/vehicles/trip-templates/add', data={
+        'vehicle_id': str(vehicle.id), 'name': 'Shop', 'trip_type': 'personal', 'miles': '3',
+    })
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/vehicles/journeys')
+
+
+def test_trip_log_period_dropdown_omits_empty_periods(app, family, user):
+    from services.finance.payday_service import PaydayService
+
+    vehicle = Vehicle(
+        family_id=family.id, name='Sparse Car', make='Test', model='Trip',
+        registration='SP12 CAR', is_active=True,
+    )
+    db.session.add(vehicle)
+    db.session.flush()
+    old_day = date.today() - timedelta(days=200)
+    db.session.add(Trip(
+        family_id=family.id, vehicle_id=vehicle.id, date=old_day,
+        total_miles=5, personal_miles=5, journey_description='Old trip',
+    ))
+    db.session.commit()
+    old_label = PaydayService.get_period_for_date(old_day)
+    current_label = PaydayService.get_period_for_date(date.today())
+    client = app.test_client()
+    login_client(client, user.id)
+
+    html = client.get('/vehicles/trips').get_data(as_text=True)
+
+    assert f'value="{old_label}" selected' in html
+    assert f'value="{current_label}"' not in html
+    assert html.count('<option value="20') == 1
+    assert 'Old trip' in html

@@ -46,6 +46,39 @@
 
 .vehicle-page-nav .nav-link i { font-size: 1rem; }
 
+/* Trip Log section sub-links (Trip Log / Routines / Saved Journeys) */
+.vehicle-subnav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin: 0.5rem 0 0 1.25rem;
+    padding-left: 0.85rem;
+    border-left: 2px solid var(--border-color);
+    list-style: none;
+}
+
+.vehicle-subnav .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.75rem;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.vehicle-subnav .nav-link:hover { color: var(--text-primary); }
+
+.vehicle-subnav .nav-link.active {
+    color: var(--brand);
+    border-bottom-color: var(--brand);
+}
+
+.vehicle-subnav .badge { font-size: 0.7rem; }
+
 .vehicle-card-mobile-reg,
 .vehicle-card-mobile-meta,
 .vehicle-card-toggle { display: none; }
@@ -79,6 +112,13 @@
         padding: 0.45rem 0.35rem;
         font-size: 0.78rem;
     }
+    .vehicle-subnav {
+        margin: 0.35rem 0 0;
+        padding-left: 0;
+        border-left: 0;
+        justify-content: space-around;
+    }
+    .vehicle-subnav .nav-link { padding: 0.3rem 0.4rem; font-size: 0.78rem; }
     .fuel-log-sticky-header {
         top: calc(56px + 3.4rem);
     }

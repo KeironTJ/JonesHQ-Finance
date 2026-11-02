@@ -1,0 +1,38 @@
+{# Vehicle navigation for the Trip Log section. Set `trip_section` to 'log', 'routines' or 'journeys'. #}
+<nav class="vehicle-section-navigation mb-4" aria-label="Vehicle pages">
+    <ul class="nav vehicle-page-nav">
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('vehicles.index') }}">
+                <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Overview</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
+                <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active" href="{{ url_for('vehicles.trips') }}" {% if trip_section == 'log' %}aria-current="page"{% endif %}>
+                <i class="bi bi-map" aria-hidden="true"></i><span>Trip Log</span>
+            </a>
+        </li>
+    </ul>
+    <ul class="vehicle-subnav" aria-label="Trip Log sections">
+        <li>
+            <a class="nav-link {% if trip_section == 'log' %}active{% endif %}" href="{{ url_for('vehicles.trips') }}" {% if trip_section == 'log' %}aria-current="page"{% endif %}>
+                <i class="bi bi-list-ul" aria-hidden="true"></i>Trips
+            </a>
+        </li>
+        <li>
+            <a class="nav-link {% if trip_section == 'routines' %}active{% endif %}" href="{{ url_for('vehicles.routines') }}" {% if trip_section == 'routines' %}aria-current="page"{% endif %}>
+                <i class="bi bi-arrow-repeat" aria-hidden="true"></i>Routines
+                {% if due_trip_count %}<span class="badge bg-warning text-dark" title="Planned trips awaiting confirmation">{{ due_trip_count }}</span>{% endif %}
+            </a>
+        </li>
+        <li>
+            <a class="nav-link {% if trip_section == 'journeys' %}active{% endif %}" href="{{ url_for('vehicles.journeys') }}" {% if trip_section == 'journeys' %}aria-current="page"{% endif %}>
+                <i class="bi bi-bookmark-star" aria-hidden="true"></i>Saved Journeys
+            </a>
+        </li>
+    </ul>
+</nav>

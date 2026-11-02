@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Saved Journeys{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/vehicle-tables.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1 class="mb-4"><i class="bi bi-car-front"></i> My Garage</h1>
+
+{% set trip_section = 'journeys' %}
+{% include "vehicles/_trip_nav.html" %}
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card shadow h-100">
+                <div class="card-header bg-success d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-bookmark-star me-2"></i>Saved Journeys</h5>
+                    <span class="badge bg-light text-dark">{{ trip_templates|length }}</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Save common trips to reuse their vehicle, mileage and trip type when adding trips, bulk-adding or
+                        setting up a routine. Each logged trip remains a separate, editable record, so changing a journey
+                        here never alters trips already logged.
+                    </p>
+                    {% if trip_templates %}
+                    <div class="list-group">
+                        {% for template in trip_templates %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                            <div>
+                                <strong>{{ template.name }}</strong>
+                                <div class="small text-muted">
+                                    {{ template.vehicle.name }} · {{ template.miles }} miles · {{ template.trip_type|title }}
+                                    {% if template.journey_description %} · {{ template.journey_description }}{% endif %}
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2 flex-shrink-0">
+                                <button type="button" class="btn btn-outline-primary btn-sm edit-trip-template"
+                                        data-update-url="{{ url_for('vehicles.update_trip_template', template_id=template.id) }}"
+                                        data-name="{{ template.name }}"
+                                        data-vehicle-id="{{ template.vehicle_id }}"
+                                        data-trip-type="{{ template.trip_type }}"
+                                        data-miles="{{ template.miles }}"
+                                        data-description="{{ template.journey_description or '' }}">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
+                                <form method="POST" action="{{ url_for('vehicles.delete_trip_template', template_id=template.id) }}"
+                                      onsubmit="return confirm('Delete this saved journey? Logged trips are not affected.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Delete</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-bookmark fs-2 d-block mb-2"></i>
+                        No saved journeys yet. Add one to speed up logging trips you make often.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0" id="tripTemplateFormTitle">Add a saved journey</h5>
+                </div>
+                <div class="card-body">
+                    {% if vehicles %}
+                    <form method="POST" action="{{ url_for('vehicles.add_trip_template') }}" id="tripTemplateForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="mb-3">
+                            <label class="form-label" for="trip_template_name">Journey name</label>
+                            <input type="text" name="name" id="trip_template_name" class="form-control" maxlength="100" placeholder="e.g. School run" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="trip_template_vehicle">Vehicle</label>
+                            <select name="vehicle_id" id="trip_template_vehicle" class="form-select" required>
+                                {% for vehicle in vehicles %}
+                                <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-6 mb-3">
+                                <label class="form-label" for="trip_template_miles">Miles per trip</label>
+                                <input type="number" name="miles" id="trip_template_miles" class="form-control" min="0" required>
+                                <div class="form-text">For return journeys, enter the combined distance.</div>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <label class="form-label" for="trip_template_type">Trip type</label>
+                                <select name="trip_type" id="trip_template_type" class="form-select">
+                                    <option value="personal">Personal</option>
+                                    <option value="business">Business</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="trip_template_description">Trip description</label>
+                            <input type="text" name="journey_description" id="trip_template_description" class="form-control" maxlength="255">
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" id="tripTemplateSubmit">Save Journey</button>
+                            <button type="button" class="btn btn-outline-secondary d-none" id="tripTemplateCancelEdit">Cancel edit</button>
+                        </div>
+                    </form>
+                    {% else %}
+                    <p class="text-muted mb-0">Add an active vehicle before saving journeys.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const templateForm = document.getElementById('tripTemplateForm');
+    if (!templateForm) return;
+    const templateAddUrl = templateForm.action;
+    const title = document.getElementById('tripTemplateFormTitle');
+    const submit = document.getElementById('tripTemplateSubmit');
+    const cancel = document.getElementById('tripTemplateCancelEdit');
+
+    function resetTemplateForm() {
+        templateForm.reset();
+        templateForm.action = templateAddUrl;
+        title.textContent = 'Add a saved journey';
+        submit.textContent = 'Save Journey';
+        cancel.classList.add('d-none');
+    }
+
+    document.querySelectorAll('.edit-trip-template').forEach(button => {
+        button.addEventListener('click', function () {
+            templateForm.action = this.dataset.updateUrl;
+            document.getElementById('trip_template_name').value = this.dataset.name;
+            document.getElementById('trip_template_vehicle').value = this.dataset.vehicleId;
+            document.getElementById('trip_template_type').value = this.dataset.tripType;
+            document.getElementById('trip_template_miles').value = this.dataset.miles;
+            document.getElementById('trip_template_description').value = this.dataset.description;
+            title.textContent = 'Edit saved journey';
+            submit.textContent = 'Update Journey';
+            cancel.classList.remove('d-none');
+            templateForm.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+            document.getElementById('trip_template_name').focus();
+        });
+    });
+    cancel.addEventListener('click', resetTemplateForm);
+});
+</script>
+{% endblock %}

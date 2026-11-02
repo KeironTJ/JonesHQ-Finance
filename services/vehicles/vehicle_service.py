@@ -243,6 +243,37 @@ class VehicleService:
         return trip
 
     @staticmethod
+    def get_trip_log_periods(vehicle_id=None, include_skipped=False):
+        """Pay periods containing at least one trip or fuel fill, oldest first."""
+        from bisect import bisect_left
+        from services.finance.payday_service import PaydayService
+
+        trip_query = family_query(Trip).with_entities(Trip.date).distinct()
+        fuel_query = family_query(FuelRecord).with_entities(FuelRecord.date).distinct()
+        if not include_skipped:
+            trip_query = trip_query.filter(Trip.trip_status != 'skipped')
+        if vehicle_id is not None:
+            trip_query = trip_query.filter(Trip.vehicle_id == vehicle_id)
+            fuel_query = fuel_query.filter(FuelRecord.vehicle_id == vehicle_id)
+        dates = sorted({row[0] for row in trip_query.all()} | {row[0] for row in fuel_query.all()})
+        if not dates:
+            return []
+        first, last = dates[0], dates[-1]
+        # A date before payday belongs to the previous month's period.
+        first = (first.replace(day=1) - timedelta(days=1)).replace(day=1)
+        months = (last.year - first.year) * 12 + (last.month - first.month) + 2
+        periods = PaydayService.get_recent_periods(
+            num_periods=months, start_year=first.year, start_month=first.month,
+        )
+        result = []
+        for period in periods:
+            index = bisect_left(dates, period['start_date'])
+            has_entries = index < len(dates) and dates[index] <= period['end_date']
+            if has_entries:
+                result.append(period)
+        return result
+
+    @staticmethod
     def _confirm_planned_trips(through_date, vehicle_id=None):
         """Mark planned trips on or before ``through_date`` as completed."""
         query = family_query(Trip).filter(

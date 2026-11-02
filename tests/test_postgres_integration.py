@@ -55,21 +55,25 @@ def test_postgres_current_release_migration_round_trip(app):
     # Exercise the current release's upgrade/downgrade against its predecessor.
     scripts = ScriptDirectory(directory)
     head = scripts.get_current_head()
-    previous = scripts.get_revision(head).down_revision
+    # Trip templates, routines and edited-occurrence flags shipped together.
+    release_base = scripts.get_revision('91d2a4f6c8e0').down_revision
     stamp(directory=directory, revision=head)
+
+    def trip_columns():
+        return {column['name']: column for column in inspect(db.engine).get_columns('trips')}
+
     try:
-        downgrade(directory=directory, revision=previous)
-        assert 'weekend_adjustment' not in {
-            column['name'] for column in inspect(db.engine).get_columns('subscriptions')
-        }
+        downgrade(directory=directory, revision=release_base)
+        tables = set(inspect(db.engine).get_table_names())
+        assert not {'trip_templates', 'trip_schedules'} & tables
+        assert not {'schedule_id', 'scheduled_date', 'trip_status', 'is_modified'} & set(trip_columns())
         upgrade(directory=directory)
         assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == head
-        adjustment = next(
-            column for column in inspect(db.engine).get_columns('subscriptions')
-            if column['name'] == 'weekend_adjustment'
-        )
-        assert adjustment['nullable'] is False
-        assert 'none' in adjustment['default']
+        assert {'trip_templates', 'trip_schedules'} <= set(inspect(db.engine).get_table_names())
+        columns = trip_columns()
+        for name, default in (('trip_status', 'actual'), ('is_modified', 'false')):
+            assert columns[name]['nullable'] is False
+            assert default in str(columns[name]['default']).lower()
     finally:
         upgrade(directory=directory)
         db.session.execute(text('DROP TABLE alembic_version'))

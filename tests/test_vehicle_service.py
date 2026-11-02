@@ -489,6 +489,84 @@ def test_editing_one_occurrence_survives_routine_changes_until_reset(
     ]
 
 
+def _manual_trip(vehicle, day, miles=5):
+    trip = Trip(
+        family_id=vehicle.family_id, vehicle_id=vehicle.id, date=day,
+        total_miles=miles, personal_miles=miles,
+    )
+    db.session.add(trip)
+    db.session.commit()
+    return trip
+
+
+@pytest.mark.parametrize('mode', ['keep', 'skip', 'end'])
+def test_clear_future_trips_modes(app, family, monkeypatch, mode):
+    today = date.today()
+    start = today + timedelta(days=1)
+    vehicle, schedule, _ = _routine_vehicle_and_schedule(family, monkeypatch, start, days=10)
+    other = VehicleService.create_vehicle({
+        'name': 'Untouched Car', 'make': 'Test', 'model': 'Other',
+        'registration': 'UT12 CAR', 'fuel_type': 'Petrol',
+    })
+    cutoff = today + timedelta(days=5)
+    before = _manual_trip(vehicle, today + timedelta(days=2))
+    after = _manual_trip(vehicle, today + timedelta(days=6))
+    other_after = _manual_trip(other, today + timedelta(days=6))
+    after_id = after.id
+
+    summary, vehicle_ids = TripScheduleService.clear_future_trips(
+        cutoff, vehicle_id=vehicle.id, routine_mode=mode,
+    )
+
+    assert vehicle_ids == {vehicle.id}
+    assert db.session.get(Trip, after_id) is None
+    assert db.session.get(Trip, before.id) is not None
+    assert db.session.get(Trip, other_after.id) is not None
+    routine_before = Trip.query.filter(
+        Trip.schedule_id == schedule.id, Trip.date < cutoff,
+    ).all()
+    assert len(routine_before) == 4
+    assert all(trip.trip_status == 'planned' for trip in routine_before)
+    routine_after = Trip.query.filter(
+        Trip.schedule_id == schedule.id, Trip.date >= cutoff,
+    ).all()
+    if mode == 'keep':
+        assert summary == {'deleted': 1, 'skipped': 0, 'routines_ended': 0}
+        assert {trip.trip_status for trip in routine_after} == {'planned'}
+        assert len(routine_after) == 6
+    elif mode == 'skip':
+        assert summary == {'deleted': 1, 'skipped': 6, 'routines_ended': 0}
+        assert {trip.trip_status for trip in routine_after} == {'skipped'}
+        assert schedule.is_active
+    else:
+        assert summary == {'deleted': 7, 'skipped': 0, 'routines_ended': 1}
+        assert routine_after == []
+        assert schedule.end_date == cutoff - timedelta(days=1)
+        assert TripScheduleService.ensure_upcoming_trips() == set()
+        assert Trip.query.filter_by(schedule_id=schedule.id).count() == 4
+
+
+def test_clear_future_trips_rejects_past_dates_and_pauses_unstarted_routines(
+    app, family, monkeypatch,
+):
+    today = date.today()
+    _, schedule, _ = _routine_vehicle_and_schedule(
+        family, monkeypatch, today + timedelta(days=10), days=3,
+    )
+    with pytest.raises(ValueError, match='after today'):
+        TripScheduleService.clear_future_trips(today)
+    with pytest.raises(ValueError, match='routine trips'):
+        TripScheduleService.clear_future_trips(today + timedelta(days=1), routine_mode='nuke')
+
+    summary, _ = TripScheduleService.clear_future_trips(
+        today + timedelta(days=2), routine_mode='end',
+    )
+
+    assert summary['routines_ended'] == 1
+    assert schedule.is_active is False
+    assert Trip.query.filter_by(schedule_id=schedule.id).count() == 0
+
+
 def test_fortnightly_trip_schedule_uses_calendar_weeks(app):
     schedule = TripSchedule(
         start_date=date(2026, 1, 7),
@@ -601,3 +679,46 @@ def test_private_vehicle_and_records_hidden_but_shared_fuel_txn_stays_visible(
     assert fuel_record not in family_query(FuelRecord).all()
     # ...but the fuel purchase transaction remains visible in the shared account.
     assert bank_transaction in family_query(Transaction).all()
+
+
+def test_trip_log_periods_only_include_periods_with_entries(app, family, monkeypatch):
+    from services.finance.payday_service import PaydayService
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    vehicle = Vehicle(family_id=family.id, name='Period A', make='T', model='T', registration='PA1', is_active=True)
+    other = Vehicle(family_id=family.id, name='Period B', make='T', model='T', registration='PB1', is_active=True)
+    db.session.add_all([vehicle, other])
+    db.session.flush()
+
+    def add_trip(vehicle_id, day, status='actual'):
+        db.session.add(Trip(
+            family_id=family.id, vehicle_id=vehicle_id, date=day,
+            total_miles=5, personal_miles=5, trip_status=status,
+        ))
+
+    jan = date(2024, 1, 20)
+    apr = date(2024, 4, 20)
+    jul = date(2024, 7, 20)
+    add_trip(vehicle.id, jan)
+    add_trip(vehicle.id, apr, status='skipped')
+    add_trip(other.id, jul)
+    db.session.commit()
+    jan_label = PaydayService.get_period_for_date(jan)
+    apr_label = PaydayService.get_period_for_date(apr)
+    jul_label = PaydayService.get_period_for_date(jul)
+
+    labels = [p['label'] for p in VehicleService.get_trip_log_periods()]
+    assert labels == [jan_label, jul_label]
+
+    labels = [p['label'] for p in VehicleService.get_trip_log_periods(include_skipped=True)]
+    assert labels == [jan_label, apr_label, jul_label]
+
+    labels = [p['label'] for p in VehicleService.get_trip_log_periods(vehicle_id=other.id)]
+    assert labels == [jul_label]
+
+    # An early-month date before payday belongs to the previous month's period.
+    early = date(2023, 6, 1)
+    add_trip(other.id, early)
+    db.session.commit()
+    labels = [p['label'] for p in VehicleService.get_trip_log_periods(vehicle_id=other.id)]
+    assert labels[0] == PaydayService.get_period_for_date(early)
