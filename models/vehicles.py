@@ -28,6 +28,9 @@ class Vehicle(db.Model):
     # Relationships
     fuel_records = db.relationship('FuelRecord', backref='vehicle', lazy=True)
     trips = db.relationship('Trip', backref='vehicle', lazy=True)
+    trip_templates = db.relationship(
+        'TripTemplate', back_populates='vehicle', cascade='all, delete-orphan',
+    )
     owner = db.relationship('User', foreign_keys=[owner_id])
 
     @property

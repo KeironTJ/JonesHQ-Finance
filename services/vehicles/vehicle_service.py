@@ -20,6 +20,7 @@ Primary entry points
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
+from models.trip_template import TripTemplate
 from models.transactions import Transaction
 from models.categories import Category
 from models.accounts import Account
@@ -166,9 +167,14 @@ class VehicleService:
     @staticmethod
     def create_trip(data):
         vehicle_id = int(data['vehicle_id'])
+        family_get_or_404(Vehicle, vehicle_id)
         trip_date = date.fromisoformat(data['date'])
         trip_type = data.get('trip_type', 'personal')
         miles = int(data.get('miles') or 0)
+        if miles < 0:
+            raise ValueError('Miles cannot be negative')
+        if trip_type not in ('personal', 'business'):
+            raise ValueError('Trip type must be personal or business')
         trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(
             vehicle_id, miles, trip_date
         )
@@ -214,6 +220,10 @@ class VehicleService:
         trip.date = date.fromisoformat(data['date'])
         trip_type = data.get('trip_type', 'personal')
         miles = int(data.get('miles') or 0)
+        if miles < 0:
+            raise ValueError('Miles cannot be negative')
+        if trip_type not in ('personal', 'business'):
+            raise ValueError('Trip type must be personal or business')
         trip.personal_miles = miles if trip_type == 'personal' else 0
         trip.business_miles = miles if trip_type == 'business' else 0
         trip.total_miles = miles
@@ -236,17 +246,27 @@ class VehicleService:
     @staticmethod
     def bulk_create_trips(data):
         vehicle_id = int(data['vehicle_id'])
+        family_get_or_404(Vehicle, vehicle_id)
         start_date = date.fromisoformat(data['start_date'])
         end_date = date.fromisoformat(data['end_date'])
         if start_date > end_date:
             raise ValueError('Start date must be before or equal to end date')
+        if (end_date - start_date).days > 365:
+            raise ValueError('Date range cannot be longer than 366 days')
         selected_days = {int(day) for day in data.getlist('days')}
+        if any(day < 0 or day > 6 for day in selected_days):
+            raise ValueError('Selected days are invalid')
         if not selected_days:
             raise ValueError('At least one day must be selected')
 
-        miles = Decimal(data.get('miles') or 0)
-        miles_int = int(miles)
+        miles_int = int(data.get('miles') or 0)
+        if miles_int < 0:
+            raise ValueError('Miles cannot be negative')
+        miles = Decimal(miles_int)
         trip_type = data.get('trip_type', 'personal')
+        if trip_type not in ('personal', 'business'):
+            raise ValueError('Trip type must be personal or business')
+        latest_fuel = VehicleService.get_latest_fuel_record(vehicle_id)
         created = []
         current_date = start_date
         while current_date <= end_date:
@@ -265,16 +285,65 @@ class VehicleService:
                     business_miles=miles_int if trip_type == 'business' else 0,
                     total_miles=miles_int,
                     journey_description=data.get('journey_description', ''),
+                    school_holidays=data.get('school_holidays', ''),
                     approx_mpg=approx_mpg,
                     gallons_used=gallons_used,
                     trip_cost=trip_cost,
                     fuel_cost=Decimal('0'),
+                    vehicle_last_fill=latest_fuel.date if latest_fuel else None,
                 )
                 db.session.add(trip)
                 created.append(trip)
             current_date += timedelta(days=1)
         db.session.commit()
         return created
+
+    @staticmethod
+    def _validated_trip_template_data(data):
+        vehicle_id = int(data['vehicle_id'])
+        family_get_or_404(Vehicle, vehicle_id)
+        name = (data.get('name') or '').strip()
+        if not name:
+            raise ValueError('Journey name is required')
+        miles = int(data.get('miles') or 0)
+        if miles < 0:
+            raise ValueError('Miles cannot be negative')
+        trip_type = data.get('trip_type', 'personal')
+        if trip_type not in ('personal', 'business'):
+            raise ValueError('Trip type must be personal or business')
+        return {
+            'vehicle_id': vehicle_id,
+            'name': name,
+            'trip_type': trip_type,
+            'miles': miles,
+            'journey_description': (data.get('journey_description') or '').strip(),
+        }
+
+    @staticmethod
+    def create_trip_template(data):
+        template_data = VehicleService._validated_trip_template_data(data)
+        template = TripTemplate(
+            family_id=db_helpers.get_family_id(),
+            **template_data,
+        )
+        db.session.add(template)
+        db.session.commit()
+        return template
+
+    @staticmethod
+    def update_trip_template(template_id, data):
+        template = family_get_or_404(TripTemplate, template_id)
+        template_data = VehicleService._validated_trip_template_data(data)
+        for field, value in template_data.items():
+            setattr(template, field, value)
+        db.session.commit()
+        return template
+
+    @staticmethod
+    def delete_trip_template(template_id):
+        template = family_get_or_404(TripTemplate, template_id)
+        db.session.delete(template)
+        db.session.commit()
 
     @staticmethod
     def _metrics_for_fills(fills):

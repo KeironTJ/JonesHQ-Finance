@@ -6,11 +6,13 @@ from extensions import db
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
+from models.trip_template import TripTemplate
 from models.accounts import Account
 from models.family import Family
 from services.vehicles.vehicle_service import VehicleService
 from services.vehicles.fuel_forecasting_service import FuelForecastingService
 from werkzeug.datastructures import MultiDict
+from werkzeug.exceptions import NotFound
 
 
 def test_vehicle_crud_assigns_family_and_normalizes_values(app, family, monkeypatch):
@@ -194,12 +196,90 @@ def test_bulk_create_trips_expands_selected_weekdays(app, family, monkeypatch):
         ('trip_type', 'business'),
         ('miles', '20'),
         ('journey_description', 'Regular route'),
+        ('school_holidays', 'Christmas'),
     ]))
 
     assert len(created) == 2
     assert [trip.date.isoformat() for trip in created] == ['2026-01-05', '2026-01-07']
     assert all(trip.family_id == family.id for trip in created)
     assert all(trip.business_miles == 20 for trip in created)
+    assert all(trip.school_holidays == 'Christmas' for trip in created)
+
+
+def test_bulk_create_trips_rejects_ranges_over_one_year(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    vehicle = VehicleService.create_vehicle({
+        'name': 'Long Range Car', 'make': 'Test', 'model': 'Bulk',
+        'registration': 'LR12 CAR', 'fuel_type': 'Petrol',
+    })
+
+    with pytest.raises(ValueError, match='366 days'):
+        VehicleService.bulk_create_trips(MultiDict([
+            ('vehicle_id', str(vehicle.id)),
+            ('start_date', '2026-01-01'),
+            ('end_date', '2027-01-02'),
+            ('days', '0'),
+            ('trip_type', 'personal'),
+            ('miles', '20'),
+        ]))
+
+
+def test_trip_template_crud_preserves_family_and_vehicle(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    vehicle = VehicleService.create_vehicle({
+        'name': 'Saved Journey Car', 'make': 'Test', 'model': 'Saved',
+        'registration': 'SJ12 CAR', 'fuel_type': 'Petrol',
+    })
+
+    template = VehicleService.create_trip_template({
+        'vehicle_id': str(vehicle.id),
+        'name': 'Work commute',
+        'trip_type': 'business',
+        'miles': '24',
+        'journey_description': 'Office',
+    })
+    updated = VehicleService.update_trip_template(template.id, {
+        'vehicle_id': str(vehicle.id),
+        'name': 'Updated commute',
+        'trip_type': 'personal',
+        'miles': '18',
+        'journey_description': 'Office and errands',
+    })
+
+    assert template.family_id == family.id
+    assert template.vehicle_id == vehicle.id
+    assert updated.name == 'Updated commute'
+    assert updated.trip_type == 'personal'
+    assert updated.miles == 18
+    assert updated.journey_description == 'Office and errands'
+
+    VehicleService.delete_trip_template(template.id)
+    assert db.session.get(TripTemplate, template.id) is None
+
+
+def test_trip_template_rejects_vehicle_from_another_family(app, family, monkeypatch):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    other_family = Family(name='Other Family')
+    db.session.add(other_family)
+    db.session.flush()
+    vehicle = Vehicle(
+        family_id=other_family.id,
+        name='Other car',
+        make='Test',
+        model='Other',
+        registration='OT12 CAR',
+        is_active=True,
+    )
+    db.session.add(vehicle)
+    db.session.commit()
+
+    with pytest.raises(NotFound):
+        VehicleService.create_trip_template({
+            'vehicle_id': str(vehicle.id),
+            'name': 'Cross-family journey',
+            'trip_type': 'personal',
+            'miles': '5',
+        })
 
 
 def test_forecasts_historical_refills_only_since_latest_fill(app, family, monkeypatch):

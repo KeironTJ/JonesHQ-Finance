@@ -4,6 +4,7 @@ from . import vehicles_bp
 from models.vehicles import Vehicle
 from models.fuel import FuelRecord
 from models.trips import Trip
+from models.trip_template import TripTemplate
 from models.accounts import Account
 from services.vehicles.vehicle_service import VehicleService
 from services.vehicles.fuel_forecasting_service import FuelForecastingService
@@ -369,6 +370,7 @@ def trips():
         fuel_mpg_by_id=VehicleService.get_fuel_mpg_for_records(fills_for_timeline),
         trips=trips,
         vehicles=vehicles,
+        trip_templates=family_query(TripTemplate).order_by(TripTemplate.name).all(),
         payday_periods=payday_periods,
         selected_payday_period_trip=selected_payday_period_trip,
         selected_vehicle_id_trip=selected_vehicle_id_trip,
@@ -646,4 +648,43 @@ def bulk_add_trips():
         db.session.rollback()
         flash(f'Error creating trips: {str(e)}', 'danger')
     
+    return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/trip-templates/add', methods=['POST'])
+def add_trip_template():
+    try:
+        template = VehicleService.create_trip_template(request.form)
+        flash(f'Saved journey "{template.name}"', 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+    except Exception as error:
+        db.session.rollback()
+        flash(f'Error saving journey: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/trip-templates/update/<int:template_id>', methods=['POST'])
+def update_trip_template(template_id):
+    try:
+        template = VehicleService.update_trip_template(template_id, request.form)
+        flash(f'Updated saved journey "{template.name}"', 'success')
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+    except Exception as error:
+        db.session.rollback()
+        flash(f'Error updating journey: {str(error)}', 'danger')
+    return redirect(request.referrer or url_for('vehicles.trips'))
+
+
+@vehicles_bp.route('/vehicles/trip-templates/delete/<int:template_id>', methods=['POST'])
+def delete_trip_template(template_id):
+    try:
+        VehicleService.delete_trip_template(template_id)
+        flash('Saved journey deleted', 'success')
+    except Exception as error:
+        db.session.rollback()
+        flash(f'Error deleting journey: {str(error)}', 'danger')
     return redirect(request.referrer or url_for('vehicles.trips'))

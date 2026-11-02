@@ -186,6 +186,9 @@
                         <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#bulkAddTripModal">
                             <i class="bi bi-calendar-plus"></i> <span>Bulk Add</span>
                         </button>
+                        <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#tripTemplatesModal">
+                            <i class="bi bi-bookmark-star"></i> <span>Saved Journeys</span>
+                        </button>
                         <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addTripModal">
                             <i class="bi bi-plus-circle"></i> <span>Add Trip</span>
                         </button>
@@ -494,6 +497,23 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    {% if trip_templates %}
+                    <div class="mb-3">
+                        <label class="form-label">Use a saved journey</label>
+                        <select id="addTripTemplateSelect" class="form-select">
+                            <option value="">Choose a saved journey...</option>
+                            {% for template in trip_templates %}
+                            <option value="{{ template.id }}"
+                                    data-vehicle-id="{{ template.vehicle_id }}"
+                                    data-trip-type="{{ template.trip_type }}"
+                                    data-miles="{{ template.miles }}"
+                                    data-description="{{ template.journey_description or '' }}">
+                                {{ template.name }} · {{ template.miles }} miles
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                     <div class="mb-3">
                         <label class="form-label">Vehicle</label>
                         <select name="vehicle_id" class="form-select" required>
@@ -516,7 +536,8 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Miles</label>
+                        <label class="form-label">Miles for this trip</label>
+                        <div class="form-text">For a return journey, enter the combined outbound and return distance.</div>
                         <input type="number" name="miles" class="form-control" value="" min="0" required placeholder="0">
                     </div>
                     <div class="mb-3">
@@ -606,6 +627,23 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    {% if trip_templates %}
+                    <div class="mb-3">
+                        <label class="form-label">Use a saved journey</label>
+                        <select id="bulkTripTemplateSelect" class="form-select">
+                            <option value="">Choose a saved journey...</option>
+                            {% for template in trip_templates %}
+                            <option value="{{ template.id }}"
+                                    data-vehicle-id="{{ template.vehicle_id }}"
+                                    data-trip-type="{{ template.trip_type }}"
+                                    data-miles="{{ template.miles }}"
+                                    data-description="{{ template.journey_description or '' }}">
+                                {{ template.name }} · {{ template.miles }} miles
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Vehicle</label>
@@ -631,7 +669,7 @@
                             </div>
                         </div>
                         <div class="col-md-3 mb-3">
-                            <label class="form-label">Miles</label>
+                            <label class="form-label">Miles per trip</label>
                             <input type="number" name="miles" class="form-control" value="0" min="0">
                         </div>
                         <div class="col-md-3 mb-3">
@@ -651,6 +689,11 @@
                             <input type="date" name="end_date" class="form-control" required>
                         </div>
                     </div>
+                    <div class="d-flex flex-wrap gap-2 mb-3" aria-label="Set a common date range">
+                        <button type="button" class="btn btn-outline-secondary btn-sm bulk-date-range" data-range="this-week">This week</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm bulk-date-range" data-range="next-week">Next week</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm bulk-date-range" data-range="this-month">This month</button>
+                    </div>
                     <hr>
                     <h6>Select Days of Week</h6>
                     <div class="d-flex flex-wrap gap-3">
@@ -664,12 +707,101 @@
                     <div class="alert alert-info mt-3 mb-0">
                         <small><i class="bi bi-info-circle"></i> Trips will be created for each selected day of the week between the start and end dates.</small>
                     </div>
+                    <div id="bulkTripPreview" class="alert alert-secondary mt-2 mb-0" aria-live="polite">
+                        Select a date range and at least one weekday to preview trips.
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="bulkAddSubmitBtn">Create Trips</button>
+                    <button type="submit" class="btn btn-primary" id="bulkAddSubmitBtn" disabled>Create Trips</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Saved Journey Management Modal -->
+<div class="modal fade" id="tripTemplatesModal" tabindex="-1" aria-labelledby="tripTemplatesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tripTemplatesModalLabel">Saved Journeys</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Save common trips to reuse their vehicle, mileage and trip type. Each logged trip remains a separate, editable record.</p>
+                {% if trip_templates %}
+                <div class="list-group mb-4">
+                    {% for template in trip_templates %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center gap-2">
+                        <div>
+                            <strong>{{ template.name }}</strong>
+                            <div class="small text-muted">
+                                {{ template.vehicle.name }} · {{ template.miles }} miles · {{ template.trip_type|title }}
+                                {% if template.journey_description %} · {{ template.journey_description }}{% endif %}
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-shrink-0">
+                            <button type="button" class="btn btn-outline-primary btn-sm edit-trip-template"
+                                    data-update-url="{{ url_for('vehicles.update_trip_template', template_id=template.id) }}"
+                                    data-name="{{ template.name }}"
+                                    data-vehicle-id="{{ template.vehicle_id }}"
+                                    data-trip-type="{{ template.trip_type }}"
+                                    data-miles="{{ template.miles }}"
+                                    data-description="{{ template.journey_description or '' }}">
+                                Edit
+                            </button>
+                            <form method="POST" action="{{ url_for('vehicles.delete_trip_template', template_id=template.id) }}"
+                                  onsubmit="return confirm('Delete this saved journey?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <form method="POST" action="{{ url_for('vehicles.add_trip_template') }}" id="tripTemplateForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <h6 id="tripTemplateFormTitle">Add a saved journey</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="trip_template_name">Journey name</label>
+                            <input type="text" name="name" id="trip_template_name" class="form-control" maxlength="100" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="trip_template_vehicle">Vehicle</label>
+                            <select name="vehicle_id" id="trip_template_vehicle" class="form-select" required>
+                                {% for vehicle in vehicles %}
+                                <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.registration }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label" for="trip_template_miles">Miles per trip</label>
+                            <input type="number" name="miles" id="trip_template_miles" class="form-control" min="0" required>
+                            <div class="form-text">For return journeys, enter the combined distance.</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Trip type</label>
+                            <select name="trip_type" id="trip_template_type" class="form-select">
+                                <option value="personal">Personal</option>
+                                <option value="business">Business</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label" for="trip_template_description">Trip description</label>
+                            <input type="text" name="journey_description" id="trip_template_description" class="form-control" maxlength="255">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="tripTemplateSubmit">Save Journey</button>
+                        <button type="button" class="btn btn-outline-secondary d-none" id="tripTemplateCancelEdit">Cancel edit</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
@@ -724,28 +856,176 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('addTripModal').addEventListener('hidden.bs.modal', function () {
         const form = document.getElementById('addTripForm');
         form.reset();
-        // Re-apply today's date after reset (reset clears it to empty)
         const dateInput = form.querySelector('[name="date"]');
-        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
-        // Default back to Personal
+        if (dateInput) dateInput.value = dateInput.defaultValue;
         document.getElementById('add_type_personal').checked = true;
     });
 
-    // ── Bulk Add: guard that at least one day is checked ─────────────────────
+    // ── Saved journeys ───────────────────────────────────────────────────────
+    function applyTemplate(select, form) {
+        const option = select && select.selectedOptions[0];
+        if (!option || !option.value) return;
+        form.querySelector('[name="vehicle_id"]').value = option.dataset.vehicleId;
+        form.querySelector('[name="miles"]').value = option.dataset.miles;
+        form.querySelector('[name="journey_description"]').value = option.dataset.description;
+        const tripType = option.dataset.tripType;
+        const radio = form.querySelector(`[name="trip_type"][value="${tripType}"]`);
+        if (radio) radio.checked = true;
+        if (window.updateBulkTripPreview) window.updateBulkTripPreview();
+    }
+
+    const addTemplateSelect = document.getElementById('addTripTemplateSelect');
+    if (addTemplateSelect) {
+        addTemplateSelect.addEventListener('change', function () {
+            applyTemplate(this, document.getElementById('addTripForm'));
+        });
+    }
+    const bulkTemplateSelect = document.getElementById('bulkTripTemplateSelect');
+    if (bulkTemplateSelect) {
+        bulkTemplateSelect.addEventListener('change', function () {
+            applyTemplate(this, document.getElementById('bulkAddTripModal'));
+        });
+    }
+
+    const templateForm = document.getElementById('tripTemplateForm');
+    const templateAddUrl = templateForm.action;
+    function resetTemplateForm() {
+        templateForm.reset();
+        templateForm.action = templateAddUrl;
+        document.getElementById('tripTemplateFormTitle').textContent = 'Add a saved journey';
+        document.getElementById('tripTemplateSubmit').textContent = 'Save Journey';
+        document.getElementById('tripTemplateCancelEdit').classList.add('d-none');
+    }
+    document.querySelectorAll('.edit-trip-template').forEach(button => {
+        button.addEventListener('click', function () {
+            templateForm.action = this.dataset.updateUrl;
+            document.getElementById('trip_template_name').value = this.dataset.name;
+            document.getElementById('trip_template_vehicle').value = this.dataset.vehicleId;
+            document.getElementById('trip_template_type').value = this.dataset.tripType;
+            document.getElementById('trip_template_miles').value = this.dataset.miles;
+            document.getElementById('trip_template_description').value = this.dataset.description;
+            document.getElementById('tripTemplateFormTitle').textContent = 'Edit saved journey';
+            document.getElementById('tripTemplateSubmit').textContent = 'Update Journey';
+            document.getElementById('tripTemplateCancelEdit').classList.remove('d-none');
+            document.getElementById('trip_template_name').focus();
+        });
+    });
+    document.getElementById('tripTemplateCancelEdit').addEventListener('click', resetTemplateForm);
+    document.getElementById('tripTemplatesModal').addEventListener('hidden.bs.modal', resetTemplateForm);
+
+    // ── Bulk-add preview ─────────────────────────────────────────────────────
     const bulkModal = document.getElementById('bulkAddTripModal');
     if (bulkModal) {
-        bulkModal.addEventListener('submit', function (e) {
-            const checked = this.querySelectorAll('input[name="days"]:checked');
-            if (checked.length === 0) {
-                e.preventDefault();
-                const alertEl = this.querySelector('.alert-info');
-                if (alertEl) {
-                    const err = document.createElement('div');
-                    err.className = 'alert alert-danger mt-2 mb-0 py-2 small bulk-day-error';
-                    err.textContent = 'Please select at least one day of the week.';
-                    this.querySelectorAll('.bulk-day-error').forEach(el => el.remove());
-                    alertEl.after(err);
+        const bulkForm = bulkModal.querySelector('form');
+        const startInput = bulkForm.querySelector('[name="start_date"]');
+        const endInput = bulkForm.querySelector('[name="end_date"]');
+        const milesInput = bulkForm.querySelector('[name="miles"]');
+        const preview = document.getElementById('bulkTripPreview');
+        const submitButton = document.getElementById('bulkAddSubmitBtn');
+
+        function formatDate(value) {
+            const [year, month, day] = value.split('-').map(Number);
+            return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+                weekday: 'short', month: 'short', day: 'numeric',
+            });
+        }
+
+        window.updateBulkTripPreview = function () {
+            const start = startInput.value;
+            const end = endInput.value;
+            const days = new Set(
+                Array.from(bulkForm.querySelectorAll('[name="days"]:checked'), input => Number(input.value))
+            );
+            const miles = Number(milesInput.value || 0);
+            if (!Number.isInteger(miles) || miles < 0) {
+                preview.textContent = 'Miles must be a whole number of zero or more.';
+                submitButton.disabled = true;
+                submitButton.textContent = 'Create Trips';
+                return 0;
+            }
+            const dates = [];
+            if (start && end && start <= end && days.size) {
+                const [startYear, startMonth, startDay] = start.split('-').map(Number);
+                const [endYear, endMonth, endDay] = end.split('-').map(Number);
+                const current = new Date(startYear, startMonth - 1, startDay);
+                const last = new Date(endYear, endMonth - 1, endDay);
+                const rangeDays = (Date.UTC(endYear, endMonth - 1, endDay)
+                    - Date.UTC(startYear, startMonth - 1, startDay)) / 86400000 + 1;
+                if (rangeDays > 366) {
+                    preview.textContent = 'Date range cannot be longer than 366 days.';
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Create Trips';
+                    return 0;
                 }
+                while (current <= last) {
+                    if (days.has((current.getDay() + 6) % 7)) {
+                        dates.push(`${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`);
+                    }
+                    current.setDate(current.getDate() + 1);
+                }
+            }
+
+            if (!start || !end || start > end || !days.size || !dates.length) {
+                preview.textContent = start && end && start > end
+                    ? 'End date must be on or after the start date.'
+                    : 'Select a valid date range and at least one weekday to preview trips.';
+                submitButton.disabled = true;
+                submitButton.textContent = 'Create Trips';
+                return dates.length;
+            }
+
+            preview.replaceChildren();
+            const summary = document.createElement('div');
+            summary.textContent = `${dates.length} trip${dates.length === 1 ? '' : 's'} · ${dates.length * miles} total miles`;
+            preview.appendChild(summary);
+            const details = document.createElement('details');
+            details.className = 'mt-1';
+            const summaryLabel = document.createElement('summary');
+            summaryLabel.textContent = 'Review dates';
+            details.appendChild(summaryLabel);
+            const dateList = document.createElement('ul');
+            dateList.className = 'mb-0 mt-1';
+            dates.forEach(value => {
+                const item = document.createElement('li');
+                item.textContent = formatDate(value);
+                dateList.appendChild(item);
+            });
+            details.appendChild(dateList);
+            preview.appendChild(details);
+            submitButton.disabled = false;
+            submitButton.textContent = `Create ${dates.length} Trip${dates.length === 1 ? '' : 's'}`;
+            return dates.length;
+        };
+
+        bulkForm.addEventListener('input', window.updateBulkTripPreview);
+        bulkForm.addEventListener('change', window.updateBulkTripPreview);
+
+        document.querySelectorAll('.bulk-date-range').forEach(button => {
+            button.addEventListener('click', function () {
+                const today = new Date();
+                const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+                let start;
+                let end;
+                if (this.dataset.range === 'this-month') {
+                    start = new Date(today.getFullYear(), today.getMonth(), 1);
+                    end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                } else {
+                    start = new Date(monday);
+                    if (this.dataset.range === 'next-week') start.setDate(start.getDate() + 7);
+                    end = new Date(start);
+                    end.setDate(end.getDate() + 6);
+                }
+                const toInputDate = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+                startInput.value = toInputDate(start);
+                endInput.value = toInputDate(end);
+                window.updateBulkTripPreview();
+            });
+        });
+
+        bulkModal.addEventListener('submit', function (e) {
+            if (!window.updateBulkTripPreview()) {
+                e.preventDefault();
             }
         });
     }

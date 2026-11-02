@@ -240,6 +240,7 @@ From your FUEL LOG HEADER sheet
 **Relationships:**
 - One-to-many with `FuelRecord`
 - One-to-many with `Trip`
+- One-to-many with `TripTemplate`
 
 ### 11. **FuelRecord** (fuel.py)
 From your FUEL LOG Table
@@ -278,6 +279,16 @@ From your CAR FUEL TRIPS sheet
 **Relationships:**
 - Many-to-one with `Vehicle`
 - Many-to-one with `FuelRecord` (optional)
+
+### **TripTemplate** (trip_template.py)
+Reusable journey details for quickly logging individual trips or generating trips across a selected date range.
+- `family_id`: Household security boundary
+- `vehicle_id`: Vehicle used by the journey; visibility follows the vehicle
+- `name`: Name shown when choosing a saved journey
+- `trip_type`, `miles`, `journey_description`: Defaults copied into each newly logged trip
+
+**Relationships:**
+- Many-to-one with `Vehicle`
 
 ## Expense & Income Models
 
