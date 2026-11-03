@@ -12,6 +12,7 @@ from models.subscriptions import Subscription, SubscriptionPriceChange
 from models.transactions import Transaction
 from models.vendors import Vendor
 from services.finance.payday_service import PaydayService
+from services.finance.credit_card_statement_service import CreditCardStatementService
 from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
 
@@ -476,9 +477,7 @@ class SubscriptionService:
                 today,
                 create_missing=subscription.is_active,
             )
-            CreditCardTransaction.recalculate_card_balance(
-                subscription.credit_card_id, commit=False
-            )
+            CreditCardStatementService.refresh_after_changes([subscription.credit_card_id])
 
     @staticmethod
     def _sync_bank_transactions(
@@ -673,7 +672,7 @@ class SubscriptionService:
                 Transaction.recalculate_account_balance(account_id)
         for card_id in card_ids:
             if card_id:
-                CreditCardTransaction.recalculate_card_balance(card_id, commit=False)
+                CreditCardStatementService.refresh_after_changes([card_id])
 
     @staticmethod
     def cancel(subscription_id):

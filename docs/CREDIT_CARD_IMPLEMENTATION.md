@@ -136,11 +136,25 @@ recalculation implementation is in
 [`CreditCardTransaction`](../models/credit_card_transactions.py).
 
 ### Future Transaction Generation
+- Future statements and payments refresh automatically after card transactions
+  are added, edited, deleted, locked/unlocked or marked paid/unpaid. Recurring
+  additions refresh once for the batch; balance transfers refresh both cards.
+- Linked bank-payment edits, expense purchases/reimbursement payments and
+  card-funded subscriptions also refresh the affected cards.
+- Automatic refresh uses `default_generation_years` (10 years by default) and
+  a 14-day payment offset, starting today. It requires an active card with a
+  statement day. Cards without a statement day can still record transactions.
+- Refresh runs within the caller's transaction, without intermediate commits.
+  Generation failures propagate so callers can roll back and show an error.
+- Manual **Generate Future** actions remain available, including custom end dates
+  and payment-offset overrides submitted to the existing endpoints.
 - Monthly loop using `relativedelta`
 - Checks for existing transactions (prevents duplicates)
 - Uses each card's statement date
 - Uses the configured payment offset (the current route defaults to 14 days)
-- Generates through the end date selected by the user
+- Generates through the configured or manually selected end date, continuing
+  past a payoff if later spending exists in that window
+- Statement days 29-31 clamp to month-end and return to the chosen day next month
 
 ### Transaction Types
 - **Purchase, Interest, Fee** - Negative amounts increase debt
@@ -161,16 +175,15 @@ recalculation implementation is in
 
 ### Locked Statement Payment Generation
 When regenerating transactions:
-1. **Non-fixed transactions** (is_fixed=False) are deleted and regenerated
-2. **Fixed/locked transactions** (is_fixed=True) are preserved
-3. **Locked statement check**: For each locked Interest transaction:
-   - Calculates historical balance at statement date
-   - If debt exists (balance < 0) and no payment exists for payment date
-   - Generates missing payment transaction
-   - Uses absolute value of balance for payment amount
+1. Only unpaid, unlocked future statement chains are replaced. Purchases, fees,
+   rewards, transfers and standalone manual payments are not deleted.
+2. A paid/locked statement, its payment, or its linked bank debit protects the
+   entire chain, even if the statement itself is unlocked.
+3. Protected statement months are left unchanged; later months are recalculated.
 4. **Credit card balance convention**: Negative balance = debt owed
 
-**Example:** If a locked statement has an outstanding debt and its payment is missing, regeneration can create the payment for the configured payment date.
+**Example:** Editing a generated bank payment locks its linked card payment.
+Later refreshes retain that statement and payment and adjust subsequent payments.
 
 ---
 
@@ -248,7 +261,8 @@ You'll see:
 - Active status
 
 ### 2. Generate Future Transactions
-Click "Generate Future Transactions" button
+Statements and payments now refresh automatically when card transactions change.
+Use **Generate Future Transactions** for a manual refresh or a custom end date.
 
 **Options:**
 - Select an end date

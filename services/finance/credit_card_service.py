@@ -14,6 +14,8 @@ from models.categories import Category
 from models.transactions import Transaction
 from models.vendors import Vendor
 from services.finance.payday_service import PaydayService
+from services.finance.credit_card_statement_service import CreditCardStatementService
+from services.finance.balance_service import BalanceService
 from services.finance.credit_card_helpers import (
     get_or_create_card_vendor,
     get_or_create_payment_vendor,
@@ -87,6 +89,8 @@ class CreditCardService:
             setattr(card, field, value)
         card.available_credit = float(card.credit_limit) - float(card.current_balance)
         card.updated_at = datetime.now()
+        if family_query(CreditCardTransaction).filter_by(credit_card_id=card_id).first():
+            CreditCardStatementService.refresh_after_changes([card_id])
         db.session.commit()
         return card
 
@@ -102,6 +106,9 @@ class CreditCardService:
     def toggle_transaction_fixed(transaction_id):
         transaction = family_get_or_404(CreditCardTransaction, transaction_id)
         transaction.is_fixed = not transaction.is_fixed
+        CreditCardStatementService.refresh_after_changes(
+            [transaction.credit_card_id], preserve_ids=[transaction.id],
+        )
         db.session.commit()
         return transaction
 
@@ -139,10 +146,9 @@ class CreditCardService:
                 db.session.delete(linked_txn)
 
         db.session.delete(transaction)
+        CreditCardStatementService.refresh_after_changes([card_id, linked_card_id])
+        BalanceService.recalculate(account_ids=[account_id], commit=False)
         db.session.commit()
-        CreditCardTransaction.recalculate_card_balance(card_id, commit=True)
-        if linked_card_id and linked_card_id != card_id:
-            CreditCardTransaction.recalculate_card_balance(linked_card_id, commit=True)
         return card_id, account_id
 
     @staticmethod
@@ -217,10 +223,8 @@ class CreditCardService:
         db.session.flush()
 
         from_txn.linked_cc_transaction_id = to_txn.id
+        CreditCardStatementService.refresh_after_changes([from_card_id, to_card_id])
         db.session.commit()
-
-        CreditCardTransaction.recalculate_card_balance(from_card_id, commit=True)
-        CreditCardTransaction.recalculate_card_balance(to_card_id, commit=True)
 
         return {
             'from_txn': from_txn,
@@ -245,6 +249,13 @@ class CreditCardService:
         ).first()
         if expense:
             expense.paid_for = transaction.is_paid
+        CreditCardStatementService.refresh_after_changes(
+            [transaction.credit_card_id], preserve_ids=[transaction.id],
+        )
+        if transaction.bank_transaction_id:
+            BalanceService.recalculate(
+                account_ids=[transaction.bank_transaction.account_id], commit=False,
+            )
         db.session.commit()
         return transaction
 
@@ -268,6 +279,11 @@ class CreditCardService:
         transaction.vendor_id = family_get(Vendor, vendor_id).id if vendor_id else None
         transaction.is_fixed = data.get('txn_fixed') == '1'
         transaction.is_paid = data.get('txn_paid') == '1'
+        if transaction.bank_transaction_id:
+            CreditCardService.sync_payment_to_bank_transaction(transaction)
+        CreditCardStatementService.refresh_after_changes(
+            [transaction.credit_card_id], preserve_ids=[transaction.id],
+        )
         db.session.commit()
         return transaction
 
@@ -334,6 +350,12 @@ class CreditCardService:
                 db.session.add(bank_transaction)
                 db.session.flush()
                 transaction.bank_transaction_id = bank_transaction.id
+        CreditCardStatementService.refresh_after_changes(
+            [transaction.credit_card_id], preserve_ids=[transaction.id],
+        )
+        BalanceService.recalculate(
+            account_ids=[int(account_id) if account_id else None], commit=False,
+        )
         db.session.commit()
         return transaction, int(account_id) if account_id else None
 
@@ -416,8 +438,11 @@ class CreditCardService:
                 transaction.bank_transaction_id = bank_transaction.id
             transactions.append(transaction)
 
+        CreditCardStatementService.refresh_after_changes(
+            [card_id], preserve_ids=[transaction.id for transaction in transactions],
+        )
+        BalanceService.recalculate(account_ids=[account_id], commit=False)
         db.session.commit()
-        CreditCardTransaction.recalculate_card_balance(card_id, commit=True)
         return transactions
 
     
@@ -455,7 +480,7 @@ class CreditCardService:
             CreditCardTransaction — the updated payment, or None if no action taken.
 
         Side effects:
-            Flushes the session.  Calls recalculate_card_balance() on the CC.
+            Flushes the session and refreshes the card's future statements/payments.
             Does NOT commit — the caller's transaction boundary handles that.
         """
         if not bank_txn.credit_card_id:
@@ -498,7 +523,9 @@ class CreditCardService:
         db.session.flush()
         
         # Recalculate credit card balance
-        CreditCardTransaction.recalculate_card_balance(cc_payment.credit_card_id)
+        CreditCardStatementService.refresh_after_changes(
+            [cc_payment.credit_card_id], preserve_ids=[cc_payment.id],
+        )
         
         return cc_payment
 
@@ -554,8 +581,8 @@ class CreditCardService:
             bank_txn.day_name = cc_payment.date.strftime('%a')
         
         # Sync amount (credit card payment = bank expense)
-        if abs(float(cc_payment.amount)) != bank_txn.amount:
-            bank_txn.amount = abs(float(cc_payment.amount))
+        if -abs(float(cc_payment.amount)) != bank_txn.amount:
+            bank_txn.amount = -abs(float(cc_payment.amount))
         
         # Sync paid status
         bank_txn.is_paid = cc_payment.is_paid
@@ -566,6 +593,6 @@ class CreditCardService:
         
         # Recalculate bank account balance
         if bank_txn.account_id:
-            Transaction.recalculate_account_balance(bank_txn.account_id)
+            BalanceService.recalculate(account_ids=[bank_txn.account_id], commit=False)
         
         return bank_txn

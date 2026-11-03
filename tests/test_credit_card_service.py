@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from werkzeug.datastructures import MultiDict
 
 from extensions import db
 from models.credit_cards import CreditCard
@@ -20,8 +21,10 @@ from models.accounts import Account
 from models.transactions import Transaction
 from models.expenses import Expense
 from models.family import Family
+from models.settings import Settings
 from services.finance.credit_card_service import CreditCardService
 from services.finance.credit_card_statement_service import CreditCardStatementService
+from services.finance import credit_card_statement_service
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +254,289 @@ def test_regenerate_all_future_transactions_aggregates_active_cards(
     assert result['total_statements'] == 1
     assert result['total_payments'] == 1
     assert result['total_deleted'] == 0
+
+
+@pytest.fixture
+def auto_forecast_card(card, family_id, patch_family, monkeypatch):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 1, 1)
+
+    monkeypatch.setattr('services.finance.credit_card_statement_service.date', FixedDate)
+    monkeypatch.setattr(
+        'services.finance.credit_card_statement_service.PaydayService.get_period_for_date',
+        lambda value: value.strftime('%Y-%m'),
+    )
+    account = Account(
+        family_id=family_id, name='Forecast account', account_type='Current', balance=0,
+    )
+    db.session.add(account)
+    db.session.flush()
+    card.default_payment_account_id = account.id
+    card.monthly_apr = 0
+    card.annual_apr = 0
+    card.set_payment = 100
+    Settings.set_value('default_generation_years', 1, setting_type='int')
+    db.session.commit()
+    return card
+
+
+def _create_forecast_purchase(card, amount='-250', txn_date='2026-01-02'):
+    return CreditCardService.create_transactions(card.id, {
+        'txn_date': txn_date, 'txn_type': 'Purchase',
+        'txn_item': 'Forecast purchase', 'txn_amount': amount,
+    })[0]
+
+
+def _forecast_payments(card):
+    return CreditCardTransaction.query.filter_by(
+        credit_card_id=card.id, transaction_type='Payment',
+    ).order_by(CreditCardTransaction.date, CreditCardTransaction.id).all()
+
+
+def test_add_edit_delete_automatically_rebuilds_statement_and_bank_forecasts(auto_forecast_card):
+    card = auto_forecast_card
+    purchase = _create_forecast_purchase(card)
+    assert [payment.amount for payment in _forecast_payments(card)] == [100, 100, 50]
+    account = db.session.get(Account, card.default_payment_account_id)
+    assert account.balance == Decimal('-250')
+    assert card.current_balance == 0
+
+    CreditCardService.update_transaction(purchase.id, {
+        'txn_date': '2026-01-03', 'txn_type': 'Purchase',
+        'txn_item': 'Larger purchase', 'txn_amount': '-350',
+    })
+    payments = _forecast_payments(card)
+    assert [payment.amount for payment in payments] == [100, 100, 100, 50]
+    assert account.balance == Decimal('-350')
+    assert all(payment.statement_id and payment.bank_transaction_id for payment in payments)
+    assert all(payment.bank_transaction.amount == -payment.amount for payment in payments)
+
+    CreditCardService.delete_transaction(purchase.id)
+    assert _forecast_payments(card) == []
+    assert CreditCardTransaction.query.filter_by(credit_card_id=card.id).count() == 0
+    assert Transaction.query.filter_by(credit_card_id=card.id).count() == 0
+    assert account.balance == 0
+
+
+@pytest.mark.parametrize(('target', 'flag'), [
+    ('statement', 'is_fixed'), ('statement', 'is_paid'),
+    ('payment', 'is_fixed'), ('payment', 'is_paid'),
+    ('bank', 'is_fixed'), ('bank', 'is_paid'),
+])
+def test_auto_and_manual_refresh_preserve_protected_statement_chains(
+    auto_forecast_card, target, flag,
+):
+    card = auto_forecast_card
+    _create_forecast_purchase(card)
+    payment = _forecast_payments(card)[0]
+    statement = db.session.get(CreditCardTransaction, payment.statement_id)
+    bank = payment.bank_transaction
+    setattr({'statement': statement, 'payment': payment, 'bank': bank}[target], flag, True)
+    ids = statement.id, payment.id, bank.id
+    amounts = statement.amount, payment.amount, bank.amount
+    db.session.commit()
+
+    _create_forecast_purchase(card, '-75')
+    CreditCardStatementService.regenerate_future_transactions(
+        card.id, start_date=date(2026, 1, 1), end_date=date(2027, 1, 1),
+    )
+    assert db.session.get(CreditCardTransaction, ids[0]) is statement
+    assert db.session.get(CreditCardTransaction, ids[1]) is payment
+    assert db.session.get(Transaction, ids[2]) is bank
+    assert (statement.amount, payment.amount, bank.amount) == amounts
+    assert len({payment.date for payment in _forecast_payments(card)}) == len(_forecast_payments(card))
+
+
+def test_auto_refresh_continues_after_payoff_for_later_spending(auto_forecast_card):
+    card = auto_forecast_card
+    _create_forecast_purchase(card, '-50')
+    _create_forecast_purchase(card, '-75', '2026-04-02')
+    payments = _forecast_payments(card)
+    assert [(payment.date, payment.amount) for payment in payments] == [
+        (date(2026, 1, 29), Decimal('50')),
+        (date(2026, 4, 29), Decimal('75')),
+    ]
+
+
+def test_spending_on_statement_day_has_a_reusable_statement_chain(auto_forecast_card):
+    card = auto_forecast_card
+    _create_forecast_purchase(card, '-50', '2026-01-15')
+    payment = _forecast_payments(card)[0]
+    assert payment.statement_id is not None
+    assert payment.date == date(2026, 1, 29)
+    CreditCardStatementService.refresh_after_changes([card.id])
+    db.session.commit()
+    assert len(_forecast_payments(card)) == 1
+    assert _forecast_payments(card)[0].amount == 50
+
+
+def test_changed_statement_day_does_not_duplicate_a_protected_month(auto_forecast_card):
+    card = auto_forecast_card
+    _create_forecast_purchase(card)
+    payment = _forecast_payments(card)[0]
+    payment.is_fixed = True
+    card.statement_date = 20
+    CreditCardStatementService.refresh_after_changes([card.id])
+    db.session.commit()
+    january_statements = CreditCardTransaction.query.filter_by(
+        credit_card_id=card.id, transaction_type='Interest', month='2026-01',
+    ).all()
+    assert len(january_statements) == 1
+    assert january_statements[0].id == payment.statement_id
+    assert [payment.amount for payment in _forecast_payments(card)] == [100, 100, 50]
+
+
+def test_recurring_add_refreshes_once_and_manual_generation_remains_idempotent(
+    auto_forecast_card, monkeypatch,
+):
+    card = auto_forecast_card
+    original = CreditCardStatementService.regenerate_future_transactions
+    calls = []
+
+    def regenerate(*args, **kwargs):
+        calls.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(CreditCardStatementService, 'regenerate_future_transactions', regenerate)
+    CreditCardService.create_transactions(card.id, {
+        'txn_date': '2026-01-02', 'txn_type': 'Purchase', 'txn_item': 'Recurring',
+        'txn_amount': '-50', 'is_recurring': 'on', 'occurrences': '3',
+        'frequency': 'monthly',
+    })
+    assert calls == [card.id]
+    expected = [(payment.date, payment.amount) for payment in _forecast_payments(card)]
+    CreditCardStatementService.regenerate_future_transactions(card.id)
+    assert [(payment.date, payment.amount) for payment in _forecast_payments(card)] == expected
+
+
+def test_generation_failure_rolls_back_purchase_and_generated_rows(auto_forecast_card, monkeypatch):
+    card = auto_forecast_card
+    original = CreditCardStatementService.generate_monthly_statement
+
+    def fail_after_generating(*args, **kwargs):
+        original(*args, **kwargs)
+        raise ValueError('Forecast failed')
+
+    monkeypatch.setattr(CreditCardStatementService, 'generate_monthly_statement', fail_after_generating)
+    with pytest.raises(ValueError, match='Forecast failed'):
+        _create_forecast_purchase(card)
+    db.session.rollback()
+    assert CreditCardTransaction.query.filter_by(credit_card_id=card.id).count() == 0
+    assert Transaction.query.filter_by(credit_card_id=card.id).count() == 0
+
+
+def test_month_end_statement_day_is_clamped_without_drifting(auto_forecast_card):
+    card = auto_forecast_card
+    card.statement_date = 31
+    db.session.commit()
+    _create_forecast_purchase(card)
+    statements = CreditCardTransaction.query.filter_by(
+        credit_card_id=card.id, transaction_type='Interest',
+    ).order_by(CreditCardTransaction.date).all()
+    assert [statement.date for statement in statements] == [
+        date(2026, 1, 31), date(2026, 2, 28), date(2026, 3, 31),
+    ]
+
+
+@pytest.mark.parametrize('disabled', ['inactive', 'no_statement_day'])
+def test_automatic_generation_requires_active_card_and_statement_day(auto_forecast_card, disabled):
+    card = auto_forecast_card
+    if disabled == 'inactive':
+        card.is_active = False
+    else:
+        card.statement_date = None
+    db.session.commit()
+    purchase = _create_forecast_purchase(card)
+    assert _forecast_payments(card) == []
+    assert purchase.balance == Decimal('-250')
+
+
+def test_editing_bank_payment_refreshes_later_payments_without_replacing_override(auto_forecast_card):
+    from services.finance.transaction_service import TransactionService
+
+    card = auto_forecast_card
+    _create_forecast_purchase(card)
+    payment = _forecast_payments(card)[0]
+    bank = payment.bank_transaction
+    bank.amount = Decimal('-40')
+    CreditCardService.sync_bank_transaction_to_payment(bank)
+    db.session.commit()
+    assert payment.is_fixed is True
+    assert payment.amount == 40
+    assert [payment.amount for payment in _forecast_payments(card)] == [40, 100, 100, 10]
+    assert db.session.get(Account, bank.account_id).balance == Decimal('-250')
+    TransactionService.toggle_paid(bank.id)
+    assert payment.is_paid is True
+    assert payment.is_fixed is True
+    assert card.current_balance == 40
+
+
+def test_expense_purchase_changes_refresh_forecasts(auto_forecast_card, family_id):
+    from services.finance.expense_sync_service import ExpenseSyncService
+
+    card = auto_forecast_card
+    expense = Expense(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 2),
+        description='Work purchase', expense_type='Travel',
+        cost=Decimal('250'), total_cost=Decimal('250'),
+    )
+    db.session.add(expense)
+    db.session.commit()
+    ExpenseSyncService.reconcile(expense.id)
+    assert [payment.amount for payment in _forecast_payments(card)] == [100, 100, 50]
+    expense.total_cost = Decimal('75')
+    db.session.commit()
+    ExpenseSyncService.reconcile(expense.id)
+    assert [payment.amount for payment in _forecast_payments(card)] == [75]
+    ExpenseSyncService.bulk_delete_linked_transactions([expense.id])
+    assert _forecast_payments(card) == []
+
+
+def test_card_subscription_updates_and_cancellation_refresh_payments(auto_forecast_card, monkeypatch):
+    from services.finance.subscription_service import SubscriptionService
+
+    card = auto_forecast_card
+    monkeypatch.setattr(
+        'services.finance.subscription_service.date',
+        credit_card_statement_service.date,
+    )
+    subscription = SubscriptionService.create(MultiDict({
+        'name': 'Streaming', 'amount': '50', 'target_type': 'credit_card',
+        'credit_card_id': str(card.id), 'frequency': 'monthly',
+        'start_date': '2026-01-02', 'end_date': '2026-03-02', 'horizon_years': '1',
+    }))
+    db.session.commit()
+    assert [payment.amount for payment in _forecast_payments(card)] == [50, 50, 50]
+    subscription.amount = Decimal('-75')
+    SubscriptionService.sync_pending(subscription)
+    db.session.commit()
+    assert [payment.amount for payment in _forecast_payments(card)] == [75, 75, 75]
+    SubscriptionService.cancel(subscription.id)
+    db.session.commit()
+    assert _forecast_payments(card) == []
+
+
+def test_balance_transfer_refreshes_both_cards(auto_forecast_card, family_id):
+    card = auto_forecast_card
+    _create_forecast_purchase(card)
+    destination = CreditCard(
+        family_id=family_id, card_name='Destination', annual_apr=0, monthly_apr=0,
+        credit_limit=5000, min_payment_percent=2, set_payment=100,
+        statement_date=15, is_active=True,
+    )
+    db.session.add(destination)
+    db.session.commit()
+    transfer = CreditCardService.create_balance_transfer({
+        'from_card_id': str(card.id), 'to_card_id': str(destination.id),
+        'amount': '150', 'fee_percent': '0', 'transfer_date': '2026-01-03',
+    })
+    assert [payment.amount for payment in _forecast_payments(card)] == [100]
+    assert [payment.amount for payment in _forecast_payments(destination)] == [100, 50]
+    CreditCardService.delete_transaction(transfer['from_txn'].id)
+    assert [payment.amount for payment in _forecast_payments(card)] == [100, 100, 50]
+    assert _forecast_payments(destination) == []
 
 
 def test_toggle_transaction_fixed_updates_service_owned_state(

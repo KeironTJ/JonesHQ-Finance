@@ -414,10 +414,6 @@ def edit_transaction(id, txn_id):
         txn = CreditCardService.update_transaction(txn_id, request.form)
         PlanLinkService.sync_credit_card(txn, request.form)
         
-        # Sync changes to linked bank transaction if exists
-        if txn.bank_transaction_id:
-            CreditCardService.sync_payment_to_bank_transaction(txn)
-        
         BalanceService.recalculate(credit_card_ids=[card.id])
         
         flash(f'Transaction updated successfully!', 'success')
@@ -568,6 +564,7 @@ def generate_future(id):
         )
         
     except Exception as e:
+        db.session.rollback()
         flash(f'Error generating transactions: {str(e)}', 'danger')
     
     return redirect(url_for('credit_cards.detail', id=id))
@@ -601,6 +598,7 @@ def generate_all_future():
         )
         
     except Exception as e:
+        db.session.rollback()
         flash(f'Error generating transactions: {str(e)}', 'danger')
     
     return redirect(url_for('credit_cards.index'))

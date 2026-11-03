@@ -595,11 +595,6 @@ def edit(id):
             )
             PlanLinkService.sync(transaction, request.form)
             
-            # Sync changes to linked credit card payment if exists
-            if transaction.credit_card_id:
-                from services.finance.credit_card_service import CreditCardService
-                CreditCardService.sync_bank_transaction_to_payment(transaction)
-            
             # Sync changes to linked loan payment if exists
             if transaction.loan_id:
                 from models.loan_payments import LoanPayment

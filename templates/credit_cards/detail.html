@@ -295,7 +295,9 @@
             <form method="POST" action="{{ url_for('credit_cards.generate_future', id=card.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
-                    <p>Generate interest and payment transactions for <strong>{{ card.card_name }}</strong>.</p>
+                    <p>Future statements and payments refresh automatically when card transactions change.
+                        Use this to regenerate <strong>{{ card.card_name }}</strong> manually or choose a different end date.
+                        Paid and locked statement/payment chains are kept.</p>
                     <div class="mb-3">
                         <label for="end_date" class="form-label">Generate Until</label>
                         <input type="date" class="form-control" id="end_date" name="end_date">

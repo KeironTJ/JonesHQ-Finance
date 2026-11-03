@@ -14,6 +14,7 @@ from models.vendors import Vendor
 from models.credit_cards import CreditCard
 from models.loans import Loan
 from services.finance.payday_service import PaydayService
+from services.finance.credit_card_statement_service import CreditCardStatementService
 from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
 
@@ -281,6 +282,9 @@ class TransactionService:
                 )
                 linked_transaction.updated_at = datetime.now()
 
+        if transaction.credit_card_id:
+            from services.finance.credit_card_service import CreditCardService
+            CreditCardService.sync_bank_transaction_to_payment(transaction)
         db.session.commit()
         return transaction, old_account_id, linked_account_id
 
@@ -352,6 +356,7 @@ class TransactionService:
         db.session.flush()
         for transaction in rows.values():
             db.session.delete(transaction)
+        CreditCardStatementService.refresh_after_changes(card_ids)
         return list(rows.values()), card_ids
 
     @staticmethod
@@ -387,6 +392,11 @@ class TransactionService:
             ).first()
             if card_payment:
                 card_payment.is_paid = transaction.is_paid
+                if card_payment.is_paid:
+                    card_payment.is_fixed = True
+                CreditCardStatementService.refresh_after_changes(
+                    [card_payment.credit_card_id], preserve_ids=[card_payment.id],
+                )
 
         if transaction.linked_transaction_id:
             linked_transaction = family_get(Transaction, transaction.linked_transaction_id)
@@ -506,6 +516,8 @@ class TransactionService:
         if operation and data.get('bulk_amount_value'):
             operation_value = Decimal(str(data['bulk_amount_value']))
         affected_accounts = set()
+        affected_cards = set()
+        preserved_payments = set()
         updated = 0
 
         for transaction_id in transaction_ids:
@@ -549,17 +561,6 @@ class TransactionService:
                             linked.amount = Decimal(str(linked.amount)) + operation_value
                         affected_accounts.add(linked.account_id)
 
-                if transaction.credit_card_id:
-                    card_payment = family_query(CreditCardTransaction).filter_by(
-                        bank_transaction_id=transaction.id
-                    ).first()
-                    if card_payment:
-                        if operation == 'set':
-                            card_payment.amount = operation_value
-                        elif operation == 'multiply':
-                            card_payment.amount = Decimal(str(card_payment.amount)) * operation_value / Decimal('100')
-                        elif operation == 'add':
-                            card_payment.amount = Decimal(str(card_payment.amount)) + operation_value
                 if transaction.loan_id:
                     loan_payment = family_query(LoanPayment).filter_by(
                         bank_transaction_id=transaction.id
@@ -571,9 +572,22 @@ class TransactionService:
                             loan_payment.amount = Decimal(str(loan_payment.amount)) * operation_value / Decimal('100')
                         elif operation == 'add':
                             loan_payment.amount = Decimal(str(loan_payment.amount)) + operation_value
+            if transaction.credit_card_id:
+                card_payment = family_query(CreditCardTransaction).filter_by(
+                    bank_transaction_id=transaction.id,
+                ).first()
+                if card_payment and not card_payment.is_paid:
+                    card_payment.amount = abs(Decimal(str(transaction.amount)))
+                    card_payment.is_paid = transaction.is_paid
+                    card_payment.is_fixed = True
+                    affected_cards.add(card_payment.credit_card_id)
+                    preserved_payments.add(card_payment.id)
             transaction.updated_at = datetime.now()
             updated += 1
 
+        CreditCardStatementService.refresh_after_changes(
+            affected_cards, preserve_ids=preserved_payments,
+        )
         db.session.commit()
         return updated, affected_accounts
 

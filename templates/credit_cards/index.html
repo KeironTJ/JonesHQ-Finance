@@ -225,7 +225,9 @@
             <form method="POST" action="{{ url_for('credit_cards.generate_all_future') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
-                    <p>Generate monthly statements with intelligent payment triggering for all active credit cards.</p>
+                    <p>Future statements and payments refresh automatically when card transactions change.
+                        Use this to regenerate all active cards manually or choose a different end date.
+                        Paid and locked statement/payment chains are kept.</p>
                     
                     <div class="mb-3">
                         <label for="end_date" class="form-label">Generate Until</label>

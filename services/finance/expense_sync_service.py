@@ -67,6 +67,7 @@ from models.vehicles import Vehicle
 from models.settings import Settings
 from models.income import Income
 from services.finance.payday_service import PaydayService
+from services.finance.credit_card_statement_service import CreditCardStatementService
 from flask import current_app
 from sqlalchemy import func
 from utils import db_helpers
@@ -128,6 +129,7 @@ class ExpenseSyncService:
             else:
                 ExpenseSyncService._ensure_bank_payment(exp)
 
+            CreditCardStatementService.refresh_after_changes([exp.credit_card_id])
             db.session.commit()
         except Exception:
             db.session.rollback()
@@ -342,6 +344,7 @@ class ExpenseSyncService:
                             if changed:
                                 results[card_id] = payment_txn_id
 
+            CreditCardStatementService.refresh_after_changes(results)
             db.session.commit()
             current_app.logger.info(f'reconcile_credit_card_payments: done  results={results}')
             return results
@@ -430,6 +433,7 @@ class ExpenseSyncService:
             family_query(Transaction).filter(Transaction.id.in_(list(bank_txn_ids))).delete(synchronize_session=False)
             summary['deleted_bank_txns'] = len(bank_txn_ids)
 
+        CreditCardStatementService.refresh_after_changes(cards_to_recalc)
         db.session.commit()
 
         # Recalculate balances
@@ -665,8 +669,7 @@ class ExpenseSyncService:
             exp.credit_card_transaction_id = cc_txn.id
             db.session.add(exp)
             
-            # Recalculate card balance
-            CreditCardTransaction.recalculate_card_balance(cc.id)
+            CreditCardTransaction.recalculate_card_balance(cc.id, commit=False)
     
     @staticmethod
     def _ensure_bank_payment(exp: Expense):
@@ -1265,7 +1268,7 @@ class ExpenseSyncService:
         )
         db.session.add(payment_txn)
         db.session.flush()
-        CreditCardTransaction.recalculate_card_balance(card_id)
+        CreditCardTransaction.recalculate_card_balance(card_id, commit=False)
         return payment_txn.id, True
 
     @staticmethod

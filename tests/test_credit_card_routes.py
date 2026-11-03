@@ -18,6 +18,46 @@ def _login(client, user_id):
     login_client(client, user_id)
 
 
+def test_purchase_route_refreshes_forecasts_and_manual_options_still_work(
+    app, family, user,
+):
+    today = date.today()
+    account = Account(
+        family_id=family.id, name='Forecast bank', account_type='Current', balance=0,
+    )
+    db.session.add(account)
+    db.session.flush()
+    card = CreditCard(
+        family_id=family.id, card_name='Automatic card', annual_apr=0, monthly_apr=0,
+        min_payment_percent=2, set_payment=100, credit_limit=5000, current_balance=0,
+        statement_date=today.day, default_payment_account_id=account.id, is_active=True,
+    )
+    db.session.add(card)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post(f'/credit-cards/{card.id}/transaction/add', data={
+        'txn_date': today.isoformat(), 'txn_type': 'Purchase',
+        'txn_item': 'Automatic forecast', 'txn_amount': '-50',
+    })
+    assert response.status_code == 302
+    payment = CreditCardTransaction.query.filter_by(
+        credit_card_id=card.id, transaction_type='Payment',
+    ).one()
+    assert payment.amount == Decimal('50')
+    assert payment.bank_transaction.amount == Decimal('-50')
+
+    for path in (f'/credit-cards/{card.id}/generate-future', '/credit-cards/generate-all-future'):
+        response = client.post(path, follow_redirects=True)
+        assert response.status_code == 200
+        assert b'Error generating' not in response.data
+        assert b'refresh automatically' in response.data
+        assert CreditCardTransaction.query.filter_by(
+            credit_card_id=card.id, transaction_type='Payment',
+        ).count() == 1
+        assert Transaction.query.filter_by(credit_card_id=card.id).count() == 1
+
+
 def test_credit_card_payment_route_creates_linked_bank_transaction(
     app, family, user
 ):
@@ -268,4 +308,3 @@ def test_deleting_credit_card_transaction_clears_plan_link(app, family, user):
 
     assert response.status_code == 302
     assert item.credit_card_transaction_id is None
-
