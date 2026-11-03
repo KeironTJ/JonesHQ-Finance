@@ -198,11 +198,12 @@ def _apply_visibility(model, query):
     return query
 
 
-def family_query(model):
+def family_query(model, *, include_private=False):
     """Return a SQLAlchemy query pre-filtered to the current family.
 
     Also excludes records that are private to another family member (see
-    ``_apply_visibility``).
+    ``_apply_visibility``). ``include_private`` is only for household-wide
+    internal quotas, never for returning another member's private records.
 
     Examples::
 
@@ -221,7 +222,7 @@ def family_query(model):
         # Return a query that always yields zero rows rather than leaking data
         return model.query.filter(model.id == -1)
     query = model.query.filter_by(family_id=fid)
-    return _apply_visibility(model, query)
+    return query if include_private else _apply_visibility(model, query)
 
 
 def _record_id(value):

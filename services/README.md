@@ -99,7 +99,18 @@ intervals rather than trusting legacy stored MPG; fuel creates, edits and delete
 also recalculate stored metrics in chronological order.
 
 `vehicles/trip_schedule_service.py` expands active weekly/fortnightly routines into
-an idempotent 90-day window of planned trips. Confirming an occurrence makes it
+planned trips through the chosen end date (inclusive), or a rolling 90-day window
+when no end date is set. Refreshing existing routines fills any missing upcoming
+occurrences through that end date without duplicating trips.
+Site Admin **Service settings → Trip routine limits** caps planning days ahead
+(default 1,800) and active routines per household (default 25). Creation, edits,
+resuming and automatic generation enforce these limits before generating trips;
+the open-ended window also respects the horizon. Household quota checks include
+private vehicles, exclude paused/expired routines, and serialize against a
+household write lock. Lowering limits does not delete trips: refresh reports an
+actionable warning and waits for routines to be adjusted or paused.
+Apply migration `d7a2c5e8f103` with `flask db upgrade` before deploying this code.
+Confirming an occurrence makes it
 actual; skipping it excludes that date without ending the routine. Logging or
 editing a fuel fill confirms that vehicle's planned trips dated on or before the
 fill (`VehicleService._confirm_planned_trips`), and **Confirm due** confirms every

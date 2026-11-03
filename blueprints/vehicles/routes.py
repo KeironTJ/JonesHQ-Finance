@@ -8,7 +8,8 @@ from models.trip_template import TripTemplate
 from models.accounts import Account
 from services.vehicles.vehicle_service import VehicleService
 from services.vehicles.fuel_forecasting_service import FuelForecastingService
-from services.vehicles.trip_schedule_service import TripScheduleService
+from services.vehicles.trip_schedule_service import TripRoutineLimitError, TripScheduleService
+from services.platform.site_settings_service import SiteSettingsService
 from extensions import db
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -152,10 +153,13 @@ def fuel():
 
 
 def _refresh_routine_trips():
-    """Top up each active routine's rolling window, refreshing affected forecasts."""
+    """Fill active routines' planned trips, refreshing affected forecasts."""
     try:
         for vehicle_id in sorted(TripScheduleService.ensure_upcoming_trips()):
             FuelForecastingService.sync_forecasted_transactions(vehicle_id)
+    except TripRoutineLimitError as error:
+        db.session.rollback()
+        flash(f'New routine trips are paused: {error} Existing trips have been kept.', 'warning')
     except Exception as error:
         db.session.rollback()
         log.exception('Failed to refresh recurring trip occurrences')
@@ -912,6 +916,7 @@ def routines():
     schedule_id = request.args.get('schedule_id', type=int)
     if schedule_id:
         selected_schedule, occurrences = TripScheduleService.get_occurrences(schedule_id)
+    limits = SiteSettingsService.get()
     return render_template(
         'vehicles/routines.html',
         overview=TripScheduleService.get_overview(),
@@ -921,5 +926,9 @@ def routines():
         trip_templates=family_query(TripTemplate).order_by(TripTemplate.name).all(),
         due_trip_count=_due_trip_count(),
         planning_days=TripScheduleService.PLANNING_DAYS,
+        routine_max_days=limits.trip_planning_max_days,
+        routine_limit=limits.trip_active_routine_limit,
+        active_routine_count=TripScheduleService.active_routine_count(),
+        routine_latest_date=date.today() + timedelta(days=limits.trip_planning_max_days),
         today=date.today(),
     )

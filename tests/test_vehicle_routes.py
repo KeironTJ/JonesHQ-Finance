@@ -6,6 +6,7 @@ from models.trip_schedule import TripSchedule
 from models.trips import Trip
 from models.users import User
 from models.vehicles import Vehicle
+from services.platform.site_settings_service import SiteSettingsService
 from tests.auth_helpers import login_client
 
 
@@ -101,6 +102,47 @@ def test_trip_schedule_route_creates_and_pauses_planned_trips(app, family, user)
     assert response.status_code == 302
     assert schedule.is_active is False
     assert Trip.query.filter_by(schedule_id=schedule.id, trip_status='planned').count() == 0
+
+
+def test_routine_page_shows_limits_and_preserves_trips_after_limit_reduction(app, family, user):
+    vehicle = Vehicle(
+        family_id=family.id, name='Limits car', make='Test', model='Routine',
+        registration='LIMIT ROUTE',
+    )
+    db.session.add(vehicle)
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+    today = date.today()
+    data = {
+        'vehicle_id': str(vehicle.id), 'name': 'Bounded routine', 'miles': '10',
+        'frequency': 'weekly', 'start_date': today.isoformat(),
+        'end_date': (today + timedelta(days=1801)).isoformat(),
+        'days': str(today.weekday()),
+    }
+
+    response = client.post('/vehicles/trip-schedules/add', data=data, follow_redirects=True)
+    html = response.get_data(as_text=True)
+    assert '1,800 days ahead' in html
+    assert TripSchedule.query.count() == 0
+    assert '0 / 25 active routines' in html
+    latest = (today + timedelta(days=1800)).isoformat()
+    assert f'max="{latest}"' in html
+
+    data['end_date'] = (today + timedelta(days=14)).isoformat()
+    assert client.post('/vehicles/trip-schedules/add', data=data).status_code == 302
+    trip_ids = {trip.id for trip in Trip.query.all()}
+    assert len(trip_ids) == 3
+    SiteSettingsService.update({'trip_planning_max_days': '7'})
+
+    response = client.get('/vehicles/routines')
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'New routine trips are paused' in html
+    assert 'Existing trips have been kept' in html
+    assert 'Needs adjustment' in html
+    assert '7 days ahead' in html
+    assert {trip.id for trip in Trip.query.all()} == trip_ids
 
 
 def test_completed_routine_occurrence_can_be_edited_or_skipped(app, family, user):

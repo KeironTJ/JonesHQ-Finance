@@ -41,9 +41,15 @@
         </div>
         <div class="card-body">
             <p class="text-muted small mb-3">
-                Routines plan trips {{ planning_days }} days ahead so fuel forecasts stay accurate.
+                Routines plan trips through their end date, or {{ planning_days }} days ahead if no end date is set,
+                so fuel forecasts stay accurate.
                 Planned trips are confirmed automatically when you log fuel for that vehicle, so you only need to
                 skip the days that didn't happen or change a day that went differently.
+            </p>
+            <p class="text-muted small">
+                Household allowance: {{ active_routine_count }} / {{ routine_limit }} active routines.
+                Routine dates can be up to {{ "{:,}".format(routine_max_days) }} days ahead
+                ({{ routine_latest_date.strftime('%d %b %Y') }}). Pause an unused routine to free a slot.
             </p>
             {% if overview %}
             <div class="table-responsive">
@@ -70,6 +76,12 @@
                             {% if is_selected %}aria-current="true"{% endif %}>
                             <td>
                                 <strong>{{ schedule.name }}</strong>
+                                {% if item.limit_warning %}
+                                <div class="small text-warning">
+                                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                                    Needs adjustment: {{ item.limit_warning }}
+                                </div>
+                                {% endif %}
                                 <div class="small text-muted">{{ schedule.vehicle.name }}{% if schedule.journey_description %} · {{ schedule.journey_description }}{% endif %}</div>
                             </td>
                             <td>
@@ -155,7 +167,7 @@
         </div>
         <div class="card-body">
             <p class="text-muted small">
-                Last 60 days and the next {{ planning_days }} days. Changing one day doesn't change the routine,
+                Last 60 days and all upcoming planned trips. Changing one day doesn't change the routine,
                 and later routine changes won't overwrite it.
             </p>
             {% if occurrences %}
@@ -324,11 +336,16 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="routine_start_date">Start date</label>
-                            <input type="date" class="form-control" name="start_date" id="routine_start_date" required>
+                            <input type="date" class="form-control" name="start_date" id="routine_start_date" max="{{ routine_latest_date.isoformat() }}" required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="routine_end_date">End date (optional)</label>
-                            <input type="date" class="form-control" name="end_date" id="routine_end_date">
+                            <input type="date" class="form-control" name="end_date" id="routine_end_date" max="{{ routine_latest_date.isoformat() }}" aria-describedby="routineDateHelp">
+                            <div class="form-text" id="routineDateHelp">
+                                Latest allowed: {{ routine_latest_date.strftime('%d %b %Y') }}.
+                                Leave blank for a rolling window of up to {{ planning_days }} days,
+                                within the {{ "{:,}".format(routine_max_days) }}-day service limit.
+                            </div>
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="routine_journey_description">Trip description</label>

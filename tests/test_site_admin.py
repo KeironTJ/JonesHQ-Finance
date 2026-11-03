@@ -149,3 +149,55 @@ def test_settings_service_validates_input(app):
 def test_no_changes_records_no_event(app, monkeypatch):
     assert SiteSettingsService.update({}) == []
     assert SecurityEvent.query.filter_by(event_type='site_settings_updated').count() == 0
+
+
+def test_trip_limits_have_defaults_and_are_saved_and_audited(site_admin_client):
+    settings = SiteSettingsService.get()
+    assert settings.trip_planning_max_days == 1800
+    assert settings.trip_active_routine_limit == 25
+    page = request(site_admin_client, 'get', '/site-admin/settings')
+    assert b'Trip routine limits' in page.data
+    assert b'value="1800"' in page.data
+    assert b'value="25"' in page.data
+
+    response = request(site_admin_client, 'post', '/site-admin/settings', data={
+        'trip_planning_max_days': '365', 'trip_active_routine_limit': '10',
+        'announcement_level': 'info',
+    })
+    assert response.status_code == 302
+    db.session.expire_all()
+    settings = SiteSettingsService.get()
+    assert settings.trip_planning_max_days == 365
+    assert settings.trip_active_routine_limit == 10
+    event = SecurityEvent.query.filter_by(event_type='site_settings_updated').one()
+    assert 'trip_planning_max_days' in event.details
+    assert 'trip_active_routine_limit' in event.details
+    SiteSettingsService.update({'announcement': 'Unrelated update'})
+    assert SiteSettingsService.get().trip_planning_max_days == 365
+    assert SiteSettingsService.get().trip_active_routine_limit == 10
+
+
+@pytest.mark.parametrize(('field', 'value'), [
+    ('trip_planning_max_days', '0'),
+    ('trip_planning_max_days', '3651'),
+    ('trip_active_routine_limit', '101'),
+    ('trip_active_routine_limit', '-1'),
+    ('trip_planning_max_days', ''),
+    ('trip_planning_max_days', 'abc'),
+    ('trip_planning_max_days', '1.5'),
+    ('trip_active_routine_limit', True),
+])
+def test_trip_limits_reject_invalid_settings_without_saving(app, field, value):
+    with pytest.raises(ValueError, match='must be'):
+        SiteSettingsService.update({field: value})
+    assert db.session.get(SiteSettings, 1) is None
+
+
+def test_admin_form_rejects_invalid_trip_limits(site_admin_client):
+    response = request(site_admin_client, 'post', '/site-admin/settings', data={
+        'trip_planning_max_days': '99999', 'trip_active_routine_limit': '25',
+        'announcement_level': 'info',
+    })
+    assert response.status_code == 200
+    assert b'is-invalid' in response.data
+    assert db.session.get(SiteSettings, 1) is None

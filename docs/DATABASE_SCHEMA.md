@@ -296,11 +296,16 @@ Reusable journey details for quickly logging individual trips or generating trip
 - Many-to-one with `Vehicle`
 
 ### **TripSchedule** (trip_schedule.py)
-Persistent weekly or fortnightly routine. The trip log materializes planned occurrences for the next 90 days; completed trips remain actual records and skipped occurrences remain excluded from mileage and fuel forecasts.
+Persistent weekly or fortnightly routine. The trip log materializes planned occurrences through the routine's end date (inclusive), or for the next 90 days when no end date is set; completed trips remain actual records and skipped occurrences remain excluded from mileage and fuel forecasts.
 - `family_id`, `vehicle_id`: Household boundary and vehicle visibility
 - `name`, `trip_type`, `miles`, `journey_description`: Journey defaults
 - `weekdays`, `frequency`: Selected days and weekly/fortnightly cadence
 - `start_date`, `end_date`, `is_active`: Schedule bounds and pause/resume state
+- Generation is bounded by the service-wide `SiteSettings.trip_planning_max_days`
+  (default 1,800 days ahead) and `SiteSettings.trip_active_routine_limit` (default
+  25 active, unexpired routines per household, including private vehicles).
+  Site admins manage both under Service settings; lowering them preserves
+  existing trips but blocks further generation until routines meet the limits.
 
 **Relationships:**
 - Many-to-one with `Vehicle`

@@ -1,21 +1,66 @@
 """Manage recurring journey schedules and their planned trip occurrences."""
 from datetime import date, timedelta
 
-from sqlalchemy import or_
+from sqlalchemy import or_, update
 
 from extensions import db
+from models.family import Family
 from models.trip_schedule import TripSchedule
 from models.trips import Trip
 from models.vehicles import Vehicle
+from services.platform.site_settings_service import SiteSettingsService
 from services.vehicles.vehicle_service import VehicleService
 from utils import db_helpers
 from utils.db_helpers import family_get_or_404, family_query
+
+
+class TripRoutineLimitError(ValueError):
+    """A routine exceeds the operator's generation limits."""
 
 
 class TripScheduleService:
     """Create recurring trip plans while keeping planned and actual mileage distinct."""
 
     PLANNING_DAYS = 90
+
+    @staticmethod
+    def _lock_household():
+        family_id = db_helpers.get_family_id()
+        if family_id is None:
+            raise ValueError('Sign in to manage trip routines.')
+        # A write lock serializes quota checks on SQLite as well as PostgreSQL.
+        result = db.session.execute(
+            update(Family).where(Family.id == family_id).values(id=Family.id),
+        )
+        if result.rowcount != 1:
+            raise ValueError('Household not found.')
+
+    @staticmethod
+    def active_routine_count(today=None):
+        today = today or date.today()
+        return family_query(TripSchedule, include_private=True).filter(
+            TripSchedule.is_active.is_(True),
+            or_(TripSchedule.end_date.is_(None), TripSchedule.end_date >= today),
+        ).count()
+
+    @staticmethod
+    def _validate_dates(start_date, end_date, settings, today):
+        latest = today + timedelta(days=settings.trip_planning_max_days)
+        if start_date > latest or (end_date and end_date > latest):
+            raise TripRoutineLimitError(
+                f'Choose routine dates on or before {latest:%d %b %Y}. '
+                f'Trips can be planned up to {settings.trip_planning_max_days:,} days ahead. '
+                'Shorten the routine or ask the site administrator about the limit.'
+            )
+
+    @staticmethod
+    def _validate_capacity(settings, *, adding=False, today=None):
+        count = TripScheduleService.active_routine_count(today)
+        if count + int(adding) > settings.trip_active_routine_limit:
+            raise TripRoutineLimitError(
+                f'Your household can have up to {settings.trip_active_routine_limit} active trip routines. '
+                'Pause or end a routine before generating more trips or starting another.'
+            )
 
     @staticmethod
     def _validated_data(data):
@@ -47,6 +92,9 @@ class TripScheduleService:
         end_date = date.fromisoformat(data['end_date']) if data.get('end_date') else None
         if end_date and end_date < start_date:
             raise ValueError('End date must be on or after the start date')
+        TripScheduleService._validate_dates(
+            start_date, end_date, SiteSettingsService.get(), date.today(),
+        )
 
         journey_description = (data.get('journey_description') or '').strip()
         if len(journey_description) > 255:
@@ -67,9 +115,12 @@ class TripScheduleService:
     @staticmethod
     def _occurrence_dates(schedule, today):
         start = max(today, schedule.start_date)
-        end = today + timedelta(days=TripScheduleService.PLANNING_DAYS - 1)
-        if schedule.end_date:
-            end = min(end, schedule.end_date)
+        end = schedule.end_date or (
+            today + timedelta(days=min(
+                TripScheduleService.PLANNING_DAYS - 1,
+                SiteSettingsService.get().trip_planning_max_days,
+            ))
+        )
         if start > end:
             return []
 
@@ -113,6 +164,13 @@ class TripScheduleService:
 
     @staticmethod
     def _materialize(schedules, today):
+        settings = SiteSettingsService.get()
+        TripScheduleService._validate_capacity(settings, today=today)
+        for schedule in schedules:
+            if schedule.is_active:
+                TripScheduleService._validate_dates(
+                    schedule.start_date, schedule.end_date, settings, today,
+                )
         created_vehicle_ids = set()
         for schedule in schedules:
             if not schedule.is_active:
@@ -145,7 +203,8 @@ class TripScheduleService:
 
     @staticmethod
     def ensure_upcoming_trips(today=None):
-        """Idempotently fill each active schedule's rolling 90-day window."""
+        """Fill through each routine's end date, or 90 days ahead if open-ended."""
+        TripScheduleService._lock_household()
         schedules = family_query(TripSchedule).filter_by(is_active=True).with_for_update().all()
         created_vehicle_ids = TripScheduleService._materialize(
             schedules, today or date.today(),
@@ -156,9 +215,13 @@ class TripScheduleService:
 
     @staticmethod
     def create_schedule(data):
+        TripScheduleService._lock_household()
+        values = TripScheduleService._validated_data(data)
+        if values['end_date'] is None or values['end_date'] >= date.today():
+            TripScheduleService._validate_capacity(SiteSettingsService.get(), adding=True)
         schedule = TripSchedule(
             family_id=db_helpers.get_family_id(),
-            **TripScheduleService._validated_data(data),
+            **values,
         )
         db.session.add(schedule)
         db.session.flush()
@@ -168,9 +231,16 @@ class TripScheduleService:
 
     @staticmethod
     def update_schedule(schedule_id, data):
+        TripScheduleService._lock_household()
         schedule = family_get_or_404(TripSchedule, schedule_id)
         previous_vehicle_id = schedule.vehicle_id
         values = TripScheduleService._validated_data(data)
+        if schedule.is_active:
+            adding = (
+                schedule.end_date is not None and schedule.end_date < date.today()
+                and (values['end_date'] is None or values['end_date'] >= date.today())
+            )
+            TripScheduleService._validate_capacity(SiteSettingsService.get(), adding=adding)
         for field, value in values.items():
             setattr(schedule, field, value)
         today = date.today()
@@ -205,7 +275,17 @@ class TripScheduleService:
 
     @staticmethod
     def set_schedule_active(schedule_id, is_active):
+        TripScheduleService._lock_household()
         schedule = family_get_or_404(TripSchedule, schedule_id)
+        if is_active:
+            settings = SiteSettingsService.get()
+            TripScheduleService._validate_dates(
+                schedule.start_date, schedule.end_date, settings, date.today(),
+            )
+            adding = not schedule.is_active and (
+                schedule.end_date is None or schedule.end_date >= date.today()
+            )
+            TripScheduleService._validate_capacity(settings, adding=adding)
         schedule.is_active = is_active
         today = date.today()
         if is_active:
@@ -346,6 +426,12 @@ class TripScheduleService:
     def get_overview(today=None):
         """Summarise each routine for the management page."""
         today = today or date.today()
+        settings = SiteSettingsService.get()
+        capacity_warning = None
+        try:
+            TripScheduleService._validate_capacity(settings, today=today)
+        except ValueError as error:
+            capacity_warning = str(error)
         schedules = family_query(TripSchedule).order_by(
             TripSchedule.is_active.desc(), TripSchedule.name,
         ).all()
@@ -358,6 +444,15 @@ class TripScheduleService:
 
         overview = []
         for schedule in schedules:
+            limit_warning = None
+            if schedule.is_active and (schedule.end_date is None or schedule.end_date >= today):
+                limit_warning = capacity_warning
+                try:
+                    TripScheduleService._validate_dates(
+                        schedule.start_date, schedule.end_date, settings, today,
+                    )
+                except ValueError as error:
+                    limit_warning = str(error)
             trips = trips_by_schedule.get(schedule.id, [])
             upcoming = sorted(
                 (trip for trip in trips if trip.trip_status == 'planned' and trip.date > today),
@@ -366,6 +461,7 @@ class TripScheduleService:
             completed = [trip for trip in trips if trip.trip_status == 'actual']
             overview.append({
                 'schedule': schedule,
+                'limit_warning': limit_warning,
                 'next_trip': upcoming[0] if upcoming else None,
                 'upcoming_count': len(upcoming),
                 'due_count': sum(

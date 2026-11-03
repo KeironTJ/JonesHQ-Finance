@@ -15,7 +15,11 @@ class SiteSettingsService:
         """Return the settings row, or an unsaved row with defaults if none exists yet."""
         settings = db.session.get(SiteSettings, 1)
         if settings is None:
-            settings = SiteSettings(id=1, household_signups_paused=False, announcement_level='info')
+            settings = SiteSettings(
+                id=1, household_signups_paused=False, announcement_level='info',
+                trip_planning_max_days=SiteSettings.DEFAULT_TRIP_PLANNING_DAYS,
+                trip_active_routine_limit=SiteSettings.DEFAULT_ACTIVE_TRIP_ROUTINES,
+            )
         return settings
 
     @staticmethod
@@ -43,20 +47,31 @@ class SiteSettingsService:
         if level not in SiteSettings.ANNOUNCEMENT_LEVELS:
             raise ValueError('Choose a valid announcement style.')
 
-        settings = db.session.get(SiteSettings, 1)
-        if settings is None:
-            settings = SiteSettings(id=1, household_signups_paused=False, announcement_level='info')
-            db.session.add(settings)
+        settings = SiteSettingsService.get()
+        limits = {}
+        for field, label, maximum in (
+            ('trip_planning_max_days', 'Trip planning days', SiteSettings.MAX_TRIP_PLANNING_DAYS),
+            ('trip_active_routine_limit', 'Active trip routines', SiteSettings.MAX_ACTIVE_TRIP_ROUTINES),
+        ):
+            raw = data.get(field, getattr(settings, field))
+            if isinstance(raw, bool) or not str(raw).isascii() or not str(raw).isdigit():
+                raise ValueError(f'{label} must be a whole number between 1 and {maximum}.')
+            value = int(raw)
+            if not 1 <= value <= maximum:
+                raise ValueError(f'{label} must be between 1 and {maximum}.')
+            limits[field] = value
 
         new_values = {
             'household_signups_paused': paused,
             'signups_paused_message': paused_message,
             'announcement': announcement,
             'announcement_level': level,
+            **limits,
         }
         changed = [field for field, value in new_values.items() if getattr(settings, field) != value]
         for field, value in new_values.items():
             setattr(settings, field, value)
+        db.session.add(settings)
         db.session.commit()
 
         if changed:

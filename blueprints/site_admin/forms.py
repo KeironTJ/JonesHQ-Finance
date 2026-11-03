@@ -2,6 +2,7 @@
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, IntegerField, SelectField, StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional
+from models.site_settings import SiteSettings
 
 
 class HouseholdInviteForm(FlaskForm):
@@ -27,5 +28,11 @@ class SiteSettingsForm(FlaskForm):
         ('info', 'Information (blue)'),
         ('warning', 'Warning (amber)'),
         ('danger', 'Urgent (red)'),
+    ])
+    trip_planning_max_days = IntegerField('Maximum days ahead', validators=[
+        Optional(), NumberRange(min=1, max=SiteSettings.MAX_TRIP_PLANNING_DAYS),
+    ])
+    trip_active_routine_limit = IntegerField('Active routines per household', validators=[
+        Optional(), NumberRange(min=1, max=SiteSettings.MAX_ACTIVE_TRIP_ROUTINES),
     ])
     submit = SubmitField('Save settings')

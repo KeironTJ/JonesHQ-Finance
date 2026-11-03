@@ -375,6 +375,33 @@ def test_trip_schedule_plans_idempotently_and_tracks_exceptions(app, family, mon
     assert remaining[0].schedule_id is None
 
 
+@pytest.mark.parametrize(('start_offset', 'end_offset', 'frequency'), [
+    (0, 126, 'weekly'),
+    (0, 126, 'fortnightly'),
+    (112, 140, 'weekly'),
+    (0, 21, 'weekly'),
+    (-14, -1, 'weekly'),
+    (0, None, 'weekly'),
+])
+def test_trip_schedule_occurrences_use_end_date(
+    app, start_offset, end_offset, frequency,
+):
+    today = date(2026, 1, 5)
+    schedule = TripSchedule(
+        start_date=today + timedelta(days=start_offset),
+        end_date=today + timedelta(days=end_offset) if end_offset is not None else None,
+        weekdays=str(today.weekday()),
+        frequency=frequency,
+    )
+    interval = 14 if frequency == 'fortnightly' else 7
+    expected_end = end_offset if end_offset is not None else 89
+
+    assert TripScheduleService._occurrence_dates(schedule, today) == [
+        today + timedelta(days=offset)
+        for offset in range(max(0, start_offset), expected_end + 1, interval)
+    ]
+
+
 def _routine_vehicle_and_schedule(family, monkeypatch, start, days=7):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     vehicle = VehicleService.create_vehicle({
@@ -394,6 +421,50 @@ def _routine_vehicle_and_schedule(family, monkeypatch, start, days=7):
     ]))
     trips = Trip.query.filter_by(schedule_id=schedule.id).order_by(Trip.date).all()
     return vehicle, schedule, trips
+
+
+def test_trip_schedule_materializes_full_end_date_across_lifecycle(
+    app, family, monkeypatch,
+):
+    today = date.today()
+    vehicle, schedule, trips = _routine_vehicle_and_schedule(
+        family, monkeypatch, today, days=127,
+    )
+    expected_dates = [today + timedelta(days=offset) for offset in range(127)]
+    assert [trip.scheduled_date for trip in trips] == expected_dates
+    assert TripScheduleService.ensure_upcoming_trips(today=today) == set()
+
+    # Simulate an existing routine generated under the old 90-day limit.
+    for trip in trips[90:]:
+        db.session.delete(trip)
+    db.session.commit()
+    assert TripScheduleService.ensure_upcoming_trips(today=today) == {vehicle.id}
+    _, occurrences = TripScheduleService.get_occurrences(schedule.id, today=today)
+    assert [trip.scheduled_date for trip in occurrences] == expected_dates
+
+    TripScheduleService.set_schedule_active(schedule.id, False)
+    assert Trip.query.filter_by(schedule_id=schedule.id).count() == 0
+    TripScheduleService.set_schedule_active(schedule.id, True)
+    assert Trip.query.filter_by(schedule_id=schedule.id).count() == 127
+
+    for days in (155, 15):
+        TripScheduleService.update_schedule(schedule.id, MultiDict([
+            ('vehicle_id', str(vehicle.id)),
+            ('name', schedule.name),
+            ('trip_type', schedule.trip_type),
+            ('miles', str(schedule.miles)),
+            ('frequency', schedule.frequency),
+            ('start_date', today.isoformat()),
+            ('end_date', (today + timedelta(days=days - 1)).isoformat()),
+            *[('days', str(day)) for day in range(7)],
+        ]))
+        planned = Trip.query.filter_by(schedule_id=schedule.id).order_by(
+            Trip.scheduled_date,
+        ).all()
+        assert [trip.scheduled_date for trip in planned] == [
+            today + timedelta(days=offset) for offset in range(days)
+        ]
+        assert TripScheduleService.ensure_upcoming_trips(today=today) == set()
 
 
 def test_fuel_record_confirms_planned_trips_up_to_fill_date(app, family, monkeypatch):

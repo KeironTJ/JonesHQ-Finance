@@ -303,6 +303,16 @@ password/passkey authentication, can open it. Nothing here shows household finan
     sign-ins and family member invites are unaffected.
   - **Announcement**: plain-text banner (information, warning or urgent) at the
     top of every app page, including sign-in. Leave blank to remove it.
+  - **Trip routine limits**: maximum days ahead (default **1,800**, allowed
+    **1-3,650**) and active routines per household (default **25**, allowed
+    **1-100**). These are enforced server-side for creation, editing, resuming
+    and automatic trip generation. Private vehicles count towards the same
+    household allowance; paused and expired routines do not. Dates beyond the
+    horizon are rejected, not silently shortened. Routines without an end date
+    retain a rolling window of up to 90 days within the horizon.
+    Lowering limits preserves existing trips and displays an adjustment warning.
+    Automatic generation for the household waits until visible out-of-range
+    routines are shortened or paused and the household is within its allowance.
 
   Changes are recorded as a `site_settings_updated` security event.
 - **Users & audit console** (`/site-admin/console`, Flask-Admin; the old `/admin`

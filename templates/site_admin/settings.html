@@ -40,6 +40,29 @@
                 {{ form.announcement_level(class="form-select") }}
             </div>
 
+            <h6>Trip routine limits</h6>
+            <p class="form-text">Protects the service from excessive trip generation. Limits apply to every
+                household, including private vehicles. Lowering a limit never deletes existing trips.
+                Households over a limit must adjust or pause routines before more trips can be generated.</p>
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    {{ form.trip_planning_max_days.label(class="form-label") }}
+                    {{ form.trip_planning_max_days(class="form-control" + (" is-invalid" if form.trip_planning_max_days.errors else ""),
+                                                   required=true, min=1, max=3650, aria_describedby="tripPlanningHelp") }}
+                    {% for error in form.trip_planning_max_days.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+                    <div class="form-text" id="tripPlanningHelp">1-3,650 days from today. Routines with an end date
+                        generate through that date; without one, they plan up to 90 days ahead within this limit.</div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    {{ form.trip_active_routine_limit.label(class="form-label") }}
+                    {{ form.trip_active_routine_limit(class="form-control" + (" is-invalid" if form.trip_active_routine_limit.errors else ""),
+                                                      required=true, min=1, max=100, aria_describedby="tripRoutineHelp") }}
+                    {% for error in form.trip_active_routine_limit.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+                    <div class="form-text" id="tripRoutineHelp">1-100 routines. Paused routines and routines
+                        whose end date has passed do not count.</div>
+                </div>
+            </div>
+
             {{ form.submit(class="btn btn-primary") }}
         </form>
     </div>
