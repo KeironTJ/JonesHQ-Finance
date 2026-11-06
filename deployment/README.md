@@ -134,6 +134,111 @@ readable archive listing is not a restore test. The helper reads the current
 database from `.env.production`, including after an automatic recovery switches
 the active database.
 
+### Optional encrypted off-site backup to Cloudflare R2
+
+This is not enabled automatically. It supplements, rather than replaces, the
+local container backups and pre-update recovery points above. It backs up the
+active PostgreSQL database only, not the application, configuration, encryption
+keys or other files. Confirm a successful off-site restore before relying on it.
+
+The job takes a consistent custom-format `pg_dump`, checks its archive listing,
+encrypts it with an age public recipient, uploads the encrypted file to a private
+EU-jurisdiction R2 bucket, and downloads it for a byte-for-byte comparison.
+Only after that succeeds does it send the private success URL to Healthchecks.io.
+The comparison is not a decryption or database restore test. The timer runs
+daily at 02:00 UTC, catching up after boot. An external monitor should use a
+24-hour interval and a six-hour grace period and send a tested alert.
+
+The service takes a shared lock on the updater's lock file and runs the backup
+as `joneshq`; an updater cannot start while a backup holds that lock. An
+incomplete-update marker prevents a backup. Plaintext dumps are made in a
+private temporary directory, removed after encryption, and must fit on the
+server's temporary filesystem. A process killed during a backup can leave
+temporary data until systemd cleans the service's private temporary directory.
+
+**Cloud setup, before enabling the timer:**
+
+1. Create a private R2 bucket with the **European Union jurisdiction**; a
+   Western Europe location hint is not a jurisdiction guarantee. Create an
+   object lifecycle rule to expire objects under `database/` after 30 days.
+   Cloudflare typically deletes expired objects within 24 hours; retention is
+   not an exact cutoff. During a long outage this rule can eventually delete
+   every backup, so monitor failures and keep independent local copies.
+2. Create an R2 **Object Read & Write** credential restricted to this bucket.
+   Record its access key ID and secret access key in a password manager. It can
+   modify the bucket's objects, so do not use an account-wide admin credential.
+3. Generate an age identity on a separate trusted machine using `age-keygen`.
+   Store the private identity securely outside this server, with an additional
+   recovery copy in a separate secure location. Losing it makes the encrypted
+   backups unrecoverable. Only its public `age1...` recipient belongs on the
+   server. Never paste the private identity, R2 keys or Healthchecks ping URL
+   into chat, Git, logs or shell command arguments.
+4. Create a Healthchecks.io check, configure a 24-hour schedule and six-hour
+   grace period, and confirm its notification channel. Save its UUID ping URL
+   securely; the URL itself authorizes success pings.
+
+Install `age`, rclone 1.59 or newer, PostgreSQL client tools matching the
+server, and the application's production Python dependencies. Configure the following files
+under `/etc/joneshq-offsite/`, owned by `root:joneshq`, with directory mode
+`0750` and file mode `0640`. Enter secrets in a local editor, not in command
+history. Do not copy the age private identity to the server.
+
+`recipient.txt` contains only the age public recipient, one line. `backup.conf`
+contains these two literal values:
+
+```ini
+R2_BUCKET=your-private-bucket-name
+HEALTHCHECK_URL=https://hc-ping.com/your-check-uuid
+```
+
+`rclone.conf` contains a dedicated remote. Replace the placeholders privately:
+
+```ini
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = YOUR_ACCESS_KEY_ID
+secret_access_key = YOUR_SECRET_ACCESS_KEY
+region = auto
+endpoint = https://YOUR_ACCOUNT_ID.eu.r2.cloudflarestorage.com
+no_check_bucket = true
+```
+
+The endpoint must be the EU jurisdiction endpoint, not the default endpoint.
+These files are not managed by the updater and must be preserved securely when
+rebuilding the server. R2 and Healthchecks credentials can be revoked and
+recreated; the age private identity cannot be recreated from its public key.
+
+Once this release is installed, install the two systemd units as root:
+
+```bash
+install -o root -g root -m 0644 /home/joneshq/joneshq-finance/deployment/joneshq-offsite-backup.service /etc/systemd/system/
+install -o root -g root -m 0644 /home/joneshq/joneshq-finance/deployment/joneshq-offsite-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+```
+
+First run the backup manually with `systemctl start joneshq-offsite-backup.service`, then inspect
+`systemctl status joneshq-offsite-backup.service` and confirm the encrypted
+object in the `database/` prefix and the success event in Healthchecks.io.
+Rehearse downloading an object to a separate trusted machine, decrypting with
+the saved identity using `age -d -i IDENTITY -o database.dump BACKUP.dump.age`,
+and restoring into a **new isolated PostgreSQL database**. Follow the
+verification and never-restore-over-production rules in
+[Recovering from a failed update](#recovering-from-a-failed-update). Keep
+plaintext restore files private and remove the specific test files afterward.
+
+Only after a successful rehearsal, enable the schedule:
+
+```bash
+systemctl enable --now joneshq-offsite-backup.timer
+systemctl list-timers joneshq-offsite-backup.timer
+```
+
+Check `journalctl -u joneshq-offsite-backup.service` and test a missed-heartbeat
+alert. No database or credentials are intentionally sent to Healthchecks.io.
+Monitor disk usage, backup freshness, retention and restoreability regularly.
+The local Proxmox and per-update backups remain in place.
+
 ### Recovery artifacts
 
 Recovery directories (`/home/joneshq/backups/postgres-update-*`,
