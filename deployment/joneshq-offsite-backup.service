@@ -1,0 +1,18 @@
+[Unit]
+Description=Encrypted off-site JonesHQ Finance PostgreSQL backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/joneshq/joneshq-finance
+ExecStart=/usr/bin/flock -s /var/lock/joneshq-quick-update.lock /usr/sbin/runuser -u joneshq -- /home/joneshq/joneshq-finance/venv/bin/python deployment/postgres_offsite_backup.py
+TimeoutStartSec=7200
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=joneshq-offsite-backup

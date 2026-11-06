@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily off-site JonesHQ Finance database backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+Persistent=true
+Unit=joneshq-offsite-backup.service
+
+[Install]
+WantedBy=timers.target
