@@ -54,7 +54,7 @@ def health():
     return jsonify(status='ok' if healthy else 'unavailable'), 200 if healthy else 503
 
 
-def _safe_next_page(default_endpoint='dashboard.index'):
+def _safe_next_page(default_endpoint='central.hub'):
     target = request.args.get('next', '')
     decoded = unquote(target)
     if (
@@ -78,7 +78,7 @@ def login():
     """User login page with security features"""
     # Redirect if already logged in
     if current_user.is_authenticated:
-        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'dashboard.index'))
+        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'central.hub'))
     
     form = LoginForm()
     
@@ -91,7 +91,7 @@ def login():
         except ValueError as error:
             flash(str(error) or 'Invalid email or password.', 'danger')
         else:
-            default_endpoint = 'auth.account_security' if user.family_id is None else 'dashboard.index'
+            default_endpoint = 'auth.account_security' if user.family_id is None else 'central.hub'
             if user.two_factor_enabled:
                 session.pop('2fa_pending', None)
                 session['2fa_pending'] = {
@@ -143,9 +143,9 @@ def passkey_login_verify():
     UserSessionService.start(user, remember=context.get('remember', False), method='passkey')
     flash(f'Welcome back, {user.name}!', 'success')
     target = context.get('next')
-    if user.family_id is None and target == url_for('dashboard.index'):
+    if user.family_id is None and target in (url_for('dashboard.index'), url_for('central.hub')):
         target = url_for('auth.account_security')
-    return jsonify(redirect=target or url_for('auth.account_security'))
+    return jsonify(redirect=target or url_for('auth.account_security' if user.family_id is None else 'central.hub'))
 
 
 def _pending_two_factor():
@@ -172,7 +172,7 @@ def _two_factor_user_key():
 def two_factor_login():
     """Second login step: authenticator or recovery code"""
     if current_user.is_authenticated:
-        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'dashboard.index'))
+        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'central.hub'))
 
     pending = _pending_two_factor()
     if pending is None:
@@ -199,7 +199,7 @@ def two_factor_login():
             if method == 'recovery':
                 remaining = TwoFactorService.remaining_recovery_codes(user)
                 flash(f'You used a recovery code. {remaining} remaining - generate new ones from Account security if you are running low.', 'warning')
-            return redirect(pending.get('next') or url_for('dashboard.index'))
+            return redirect(pending.get('next') or url_for('auth.account_security' if user.family_id is None else 'central.hub'))
 
     return render_template(
         'auth/two_factor_login.html', form=form, pending=pending,
@@ -497,7 +497,7 @@ def two_factor_disable():
 def register():
     """Household registration — requires a one-time invite unless open registration is enabled"""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard.index'))
+        return redirect(url_for('central.hub'))
 
     if SiteSettingsService.household_signups_paused():
         return render_template('auth/register.html', form=None,
@@ -535,7 +535,7 @@ def register():
             UserSessionService.start(user, method='registration')
             EmailVerificationService.send_verification(user)
             flash(f'Welcome to {family.name}! Your household has been created.', 'success')
-            return redirect(url_for('onboarding.index'))
+            return redirect(url_for('central.hub'))
 
     return render_template('auth/register.html', form=form, invite=invite)
 

@@ -48,7 +48,7 @@ def test_plan_status_actions_preserve_partial_items_and_transaction_links(
     assert plan.items[0].transaction_id == transaction.id
     assert transaction.amount == -25
     assert transaction.is_paid is True
-    dashboard = client.get('/').get_data(as_text=True)
+    dashboard = client.get('/dashboard').get_data(as_text=True)
     assert ('Partially finished' in dashboard) == (status == 'active')
     if status != 'active':
         assert client.post(f'/plans/{plan.id}/status', data={'status': 'active'}).status_code == 302

@@ -17,6 +17,7 @@
     {% endfor %}
     {% block extra_css %}{% endblock %}
 </head>
+{% set central_workspace = request.blueprint in ('central', 'auth', 'family', 'preferences', 'site_admin') %}
 <body class="{{ 'workspace' if current_user.is_authenticated else 'public-layout' }}">
     <a class="skip-link" href="#main-content">Skip to content</a>
     {% if current_user.is_authenticated %}
@@ -30,9 +31,9 @@
                         data-bs-target="#workspaceNav" aria-controls="workspaceNav" aria-label="Open navigation">
                     <i class="bi bi-list" aria-hidden="true"></i>
                 </button>
-                <a class="workspace-home" href="{{ url_for('dashboard.index') }}">Your household</a>
+                <a class="workspace-home" href="{{ url_for('central.hub' if central_workspace else 'dashboard.index') }}">{{ 'Central' if central_workspace else 'Finance' }}</a>
                 <span class="topbar-divider" aria-hidden="true">/</span>
-                <span class="workspace-location">{{ {'dashboard': 'Overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title) }}</span>
+                <span class="workspace-location">{{ {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'dashboard': 'Finance overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title) }}</span>
             </div>
             <div class="topbar-actions">
                 <button class="workspace-search" type="button" data-bs-toggle="modal" data-bs-target="#navigationSearch"

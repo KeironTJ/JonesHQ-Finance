@@ -104,7 +104,7 @@ def test_household_onboarding_can_be_paused_and_resumed(app, family, user):
     assert b'Continue setup' in dashboard.data
 
 
-def test_registration_redirects_new_household_to_onboarding(app):
+def test_registration_opens_hub_before_optional_finance_setup(app):
     from flask import g
     from services.platform.household_invite_service import HouseholdInviteService
 
@@ -123,13 +123,13 @@ def test_registration_redirects_new_household_to_onboarding(app):
     })
 
     assert response.status_code == 302
-    assert response.location.endswith('/onboarding/')
+    assert response.location.endswith('/hub')
     created_user = User.query.filter_by(email='new-admin@example.com').one()
     assert created_user.onboarding_version == 0
     assert created_user.family.onboarding_version == 0
 
 
-def test_invited_member_redirects_to_personal_onboarding(app, family, user):
+def test_invited_member_opens_hub_before_optional_finance_setup(app, family, user):
     from flask import g
 
     family.onboarding_version = 1
@@ -154,7 +154,7 @@ def test_invited_member_redirects_to_personal_onboarding(app, family, user):
     })
 
     assert response.status_code == 302
-    assert response.location.endswith('/onboarding/')
+    assert response.location.endswith('/hub')
     invited_user = User.query.filter_by(email='invited@example.com').one()
     assert invited_user.onboarding_version == 0
     assert invited_user.family_id == family.id

@@ -203,7 +203,7 @@ def test_dashboard_consumes_personal_not_household_display_preferences(app, fami
     db.session.commit()
     client = _client(app, user)
     with client:
-        response = client.get('/')
+        response = client.get('/dashboard')
         assert response.status_code == 200
         assert PreferenceService.get_value('dashboard.networth_expanded') is False
         assert PreferenceService.get_value('dashboard.quick_nav_expanded') is True

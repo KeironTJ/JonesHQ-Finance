@@ -251,7 +251,7 @@ def test_dashboard_renders_attention_and_action_links(app, family, user):
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get('/')
+    response = client.get('/dashboard')
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert 'Needs attention' in html
@@ -263,7 +263,7 @@ def test_dashboard_renders_attention_and_action_links(app, family, user):
 def test_dashboard_empty_attention_state(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get('/')
+    response = client.get('/dashboard')
     assert response.status_code == 200
     assert b'No items need attention in your accessible sections' in response.data
 
@@ -288,7 +288,7 @@ def test_attention_tiles_keep_explanation_and_snooze_controls_on_demand(app, fam
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    html = client.get('/?attention_kind=plan').get_data(as_text=True)
+    html = client.get('/dashboard?attention_kind=plan').get_data(as_text=True)
     parser = DetailParser()
     parser.feed(html)
     row_details = [
@@ -319,7 +319,7 @@ def test_attention_starts_collapsed_but_stays_open_during_queue_navigation(
 ):
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get(f'/{query}')
+    response = client.get(f'/dashboard{query}')
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     expected_class = 'collapse show' if expanded else 'collapse'
@@ -486,7 +486,7 @@ def test_snooze_route_preserves_filters_and_handles_database_failure(app, family
     assert 'attention_kind=plan' in response.location
     assert 'year=2025' in response.location
     assert response.location.endswith('#needs-attention')
-    snoozed = client.get('/?attention_view=snoozed').get_data(as_text=True)
+    snoozed = client.get('/dashboard?attention_view=snoozed').get_data(as_text=True)
     assert 'Restore reminder for Route reminder' in snoozed
     response = client.post('/dashboard/attention/snooze', data={'key': key, 'days': '0'})
     assert response.status_code == 302
@@ -510,16 +510,16 @@ def test_dashboard_limits_rendered_reminders_and_filters_without_javascript(app,
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    html = client.get('/').get_data(as_text=True)
+    html = client.get('/dashboard').get_data(as_text=True)
     assert html.count('class="attention-item border-top"') == 10
     assert 'of 25 active reminders' in html
     assert 'Page 1 of 3' in html
     assert 'Reminder categories' in html
     assert 'Snooze duration for' in html
-    empty = client.get('/?attention_kind=transaction').get_data(as_text=True)
+    empty = client.get('/dashboard?attention_kind=transaction').get_data(as_text=True)
     assert 'No reminders match this view.' in empty
     assert 'Clear filters' in empty
-    invalid = client.get('/?attention_page=bad', follow_redirects=True)
+    invalid = client.get('/dashboard?attention_page=bad', follow_redirects=True)
     assert b'Choose a valid reminder page.' in invalid.data
 
 

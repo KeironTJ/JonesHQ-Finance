@@ -118,7 +118,7 @@ def test_real_registration_and_passwordless_login(app, user):
     logout(client)
     response = sign_in(client, authenticator, count=1, user_id=user.id)
     assert response.status_code == 200, response.data
-    assert response.json['redirect'] == '/dashboard'
+    assert response.json['redirect'] == '/hub'
     assert logged_in(client)
     assert key.sign_count == 1
     assert key.last_used_at is not None
@@ -444,7 +444,7 @@ def test_login_redirect_is_local_only(app, user, target):
     logout(client)
     options = client.post('/login/passkey/options', query_string={'next': target}, json={}).json
     response = client.post('/login/passkey/verify', json=authenticator.response(options))
-    assert response.json['redirect'] == '/dashboard'
+    assert response.json['redirect'] == '/hub'
 
 
 @pytest.mark.parametrize('body', [None, [], 'invalid', 12])

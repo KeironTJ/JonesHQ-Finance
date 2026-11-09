@@ -12,20 +12,24 @@
 {%- endmacro %}
 <aside class="workspace-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="workspaceNav" aria-labelledby="workspaceNavLabel">
     <div class="sidebar-brand">
-        <a href="{{ url_for('dashboard.index') }}" aria-label="Family HQ home">
+        <a href="{{ url_for('central.hub') }}" aria-label="Central Hub home">
             <span class="brand-mark"><i class="bi bi-house-heart" aria-hidden="true"></i></span>
-            <span><strong id="workspaceNavLabel">Family HQ</strong><small>Household finance</small></span>
+            <span><strong id="workspaceNavLabel">{{ 'Central Hub' if central_workspace else 'Finance' }}</strong><small>Family HQ</small></span>
         </a>
         <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#workspaceNav" aria-label="Close navigation"></button>
     </div>
     <div class="offcanvas-body sidebar-body">
         <nav aria-label="Main navigation">
-            {{ nav_link('dashboard.index', 'Overview', 'grid-1x2', exact=true) }}
+            {{ nav_link('central.hub', 'Central Hub', 'grid', exact=true) }}
+            {% if current_user.family_id is not none %}
+            {{ nav_link('dashboard.index', 'Finance overview' if not central_workspace else 'Open Finance', 'wallet2', exact=true) }}
+            {% endif %}
+            {% if not central_workspace %}
             {% for label, links in [
                 ('Day to day', [
                     ('accounts.index', 'Accounts', 'wallet2', 'accounts', true),
                     ('transactions.index', 'Transactions', 'arrow-left-right', 'transactions', true),
-                    ('transactions.subscriptions', 'Subscriptions', 'arrow-repeat', 'transactions', false),
+                    ('transactions.subscriptions', 'Recurring bills', 'arrow-repeat', 'transactions', false),
                     ('expenses.index', 'Work expenses', 'receipt', 'expenses', false)
                 ]),
                 ('Build your future', [
@@ -58,10 +62,13 @@
                 {% endfor %}
                 {% endif %}
             {% endfor %}
-            <div class="nav-section-label">Your workspace</div>
-            {% if current_user.is_household_owner %}
-                {{ nav_link('family.index', 'Family & members', 'people') }}
-                {{ nav_link('settings.index', 'Settings', 'gear', 'settings') }}
+            {% if current_user.is_household_owner and current_user.family_id is not none %}
+                {{ nav_link('settings.index', 'Finance settings', 'gear', 'settings') }}
+            {% endif %}
+            {% endif %}
+            <div class="nav-section-label">Your account &amp; household</div>
+            {% if current_user.is_household_owner and current_user.family_id is not none %}
+                {{ nav_link('family.index', 'Household & members', 'people') }}
             {% endif %}
             {{ nav_link('preferences.index', 'Personal preferences', 'sliders') }}
             {{ nav_link('auth.account_security', 'Account security', 'shield-lock') }}

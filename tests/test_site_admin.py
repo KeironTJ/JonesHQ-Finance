@@ -46,7 +46,7 @@ def test_household_owner_without_site_admin_cannot_open_site_admin_area(app, use
                    data={'household_signups_paused': 'y'}).status_code == 403
     assert SiteSettingsService.household_signups_paused() is False
 
-    dashboard = request(client, 'get', '/')
+    dashboard = request(client, 'get', '/dashboard')
     assert b'Site admin area' not in dashboard.data
     assert b'Owner' in dashboard.data
 
@@ -81,7 +81,7 @@ def test_overview_is_clearly_separate_and_has_no_household_financial_data(site_a
     assert b'ZZSECRET' not in response.data
     assert b'Invite only' in response.data
     assert b'test-only-secret-key' not in response.data
-    assert b'Site admin area' in request(site_admin_client, 'get', '/').data
+    assert b'Site admin area' in request(site_admin_client, 'get', '/hub').data
 
 
 def test_legacy_admin_url_redirects_to_site_admin_area(site_admin_client):

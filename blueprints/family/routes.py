@@ -285,7 +285,7 @@ def _join_existing(invite, token):
         else:
             UserSessionService.start(user, method='family invite')
             flash('You have joined the household using your existing account.', 'success')
-            return redirect(url_for('onboarding.index'))
+            return redirect(url_for('central.hub'))
     return render_template('family/join.html', invite=invite, token=token)
 
 
@@ -346,6 +346,6 @@ def join(token):
         UserSessionService.start(user, method='family invite')
         EmailVerificationService.send_verification(user)
         flash(f'Welcome to the family, {name}!', 'success')
-        return redirect(url_for('onboarding.index'))
+        return redirect(url_for('central.hub'))
 
     return render_template('family/join.html', invite=invite, token=token)

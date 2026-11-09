@@ -177,7 +177,7 @@ def test_reauthenticate_rejects_wrong_password_and_unsafe_next(app, user):
 
     response = request(client, 'post', '/account/confirm?next=https://evil.example/',
                        data={'password': 'TestPass1!'})
-    assert response.headers['Location'] == '/dashboard'
+    assert response.headers['Location'] == '/hub'
 
 
 def test_reauthenticate_is_rate_limited(app, user):

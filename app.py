@@ -123,6 +123,7 @@ def create_app(config_name=None):
     from blueprints.plans import plans_bp
     from blueprints.onboarding import onboarding_bp
     from blueprints.site_admin import site_admin_bp
+    from blueprints.central import central_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -145,6 +146,7 @@ def create_app(config_name=None):
     app.register_blueprint(plans_bp)
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(site_admin_bp)
+    app.register_blueprint(central_bp)
 
     # ── Section-level access enforcement ──────────────────────────────────
     @app.before_request

@@ -10,7 +10,6 @@ from services.platform.preference_service import PreferenceService
 from datetime import date
 
 
-@dashboard_bp.route('/')
 @dashboard_bp.route('/dashboard')
 def index():
     """Main dashboard view with payday tracking"""

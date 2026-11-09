@@ -4,6 +4,16 @@ The interface uses coordinated navigation, neutral surfaces and restrained seman
 colours. Financial values should be easy to compare; actions and status should be
 recognisable without relying on colour alone. All assets and system fonts are local.
 
+## Application-wide scope
+
+The existing Finance design system is the shared visual foundation for Central Hub,
+Finance, Family Hub and future workspaces. Reuse its layout, components, tokens
+and appearance implementation rather than importing another application's styling
+or introducing separate theme controls. Personal palettes and Light, Dark and
+Follow device modes remain account-wide and consistent when switching workspaces.
+Workspace identity may vary through labels and icons without overriding the user's
+chosen palette or duplicating appearance preferences.
+
 ## Stylesheet ownership
 
 The shared [base template](../templates/base.html) loads styles in this order:

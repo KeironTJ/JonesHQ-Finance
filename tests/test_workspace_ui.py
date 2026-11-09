@@ -29,7 +29,7 @@ class NavigationParser(HTMLParser):
 
 
 @pytest.mark.parametrize('path', [
-    '/', '/dashboard', '/accounts', '/transactions', '/transactions/create',
+    '/hub', '/dashboard', '/accounts', '/transactions', '/transactions/create',
     '/transactions/subscriptions', '/transactions/consolidated',
     '/income', '/credit-cards', '/loans/', '/mortgage', '/pensions',
     '/networth', '/vehicles', '/childcare', '/plans', '/expenses',
@@ -49,14 +49,13 @@ def test_workspace_pages_render_shared_shell(app, user, path):
     assert '/static/css/theme.css' in html
 
 
-@pytest.mark.parametrize('path', ['/', '/dashboard'])
-def test_overview_navigation_active_for_both_dashboard_routes(app, user, path):
+@pytest.mark.parametrize('path, active_href', [('/hub', '/hub'), ('/dashboard', '/dashboard')])
+def test_workspace_navigation_distinguishes_hub_and_finance(app, user, path, active_href):
     client = app.test_client()
     login_client(client, user.id)
     parser = NavigationParser()
     parser.feed(client.get(path).get_data(as_text=True))
-    overview = next(link for link in parser.links if link['href'] == '/dashboard')
-    assert overview['aria-current'] == 'page'
+    assert [link['href'] for link in parser.links if link.get('aria-current') == 'page'] == [active_href]
 
 
 def test_navigation_search_source_respects_member_permissions(app, user):

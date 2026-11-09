@@ -86,7 +86,7 @@ def test_login_rejects_unsafe_redirects(app, user, target):
         data={'email': user.email, 'password': 'TestPass1!'},
     )
     assert response.status_code == 302
-    assert response.location.endswith('/dashboard')
+    assert response.location.endswith('/hub')
 
 
 def test_login_preserves_local_redirect(app, user):

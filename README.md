@@ -14,6 +14,23 @@ pensions, mortgages, subscriptions, and net worth.
 
 ## Features
 
+### Central Hub and workspaces
+
+Signed-in visits to `/` open `/hub`, the initial Central Hub. Sign-in without
+a valid local `next` destination, household registration and invitation acceptance
+also lead here. Explicit sign-in destinations remain supported, and detached
+accounts still land on Account security.
+
+The hub opens Finance at `/dashboard`; existing Finance URLs are unchanged.
+Family Hub is a non-interactive "Coming soon" preview, not an imported application.
+No billing or subscription entitlement enforcement is introduced.
+
+Account security, household membership and personal preferences use the central
+navigation shell. Finance retains its own section navigation and settings.
+Preferences currently include both shared appearance and Finance-specific options.
+Finance onboarding remains available from its dashboard and is not required to
+enter Central Hub. Existing onboarding completion markers are unchanged.
+
 - **Account Management**: Track multiple bank accounts (Joint, Personal, Savings)
 - **Transaction Tracking**: Record and categorize all financial transactions
 - **Vendor Management**: Associate transactions with merchant records for analytics

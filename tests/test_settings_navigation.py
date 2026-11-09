@@ -5,7 +5,7 @@ from tests.auth_helpers import login_client
 
 
 @pytest.mark.parametrize('path, active', [
-    ('/help', False),
+    ('/accounts', False),
     ('/settings', True),
     ('/settings/tax', True),
 ])
