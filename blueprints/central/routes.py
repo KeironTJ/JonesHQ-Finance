@@ -1,5 +1,6 @@
 from flask import redirect, render_template, url_for
 from flask_login import current_user, login_required
+from services.platform.landing_service import LandingService
 
 from . import central_bp
 
@@ -8,7 +9,7 @@ from . import central_bp
 def index():
     if not current_user.is_authenticated:
         return redirect(url_for('auth.intro'))
-    return redirect(url_for('central.hub'))
+    return redirect(LandingService.resolve(current_user))
 
 
 @central_bp.route('/hub')

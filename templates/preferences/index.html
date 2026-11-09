@@ -4,6 +4,23 @@
 <div class="container-fluid">
     <h1><i class="bi bi-sliders" aria-hidden="true"></i> Personal preferences</h1>
     <p class="text-muted">Your appearance applies across Central Hub, Finance and future workspaces. It affects only your account.</p>
+    <form method="POST" action="{{ url_for('preferences.workspace') }}" class="card mb-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body" id="workspace-card">
+            <h2 class="h4">Your starting point</h2>
+            <label class="form-label" for="defaultWorkspace">After signing in, open</label>
+            <select class="form-select mb-2" id="defaultWorkspace" name="default_workspace" aria-describedby="defaultWorkspaceHelp">
+                {% for key, details in workspaces.items() %}
+                <option value="{{ key }}" {% if default_workspace == key %}selected{% endif %}>{{ details[0] }}</option>
+                {% endfor %}
+            </select>
+            <p class="form-text" id="defaultWorkspaceHelp">Used after sign-in and when opening the application's home address. Direct links still take you to the requested page. You can always return to Central Hub from navigation.</p>
+            {% if current_user.family_id is none %}
+            <p class="text-muted small">Until you join a household, sign-in will open Account security instead.</p>
+            {% endif %}
+            <button class="btn btn-primary" type="submit">Save starting point</button>
+        </div>
+    </form>
     <form method="POST" action="{{ url_for('preferences.appearance') }}" id="appearanceForm" class="card mb-4">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-body" id="appearance-card">

@@ -16,10 +16,12 @@ pensions, mortgages, subscriptions, and net worth.
 
 ### Central Hub and workspaces
 
-Signed-in visits to `/` open `/hub`, the initial Central Hub. Sign-in without
-a valid local `next` destination, household registration and invitation acceptance
-also lead here. Explicit sign-in destinations remain supported, and detached
-accounts still land on Account security.
+Signed-in visits to `/` and sign-in without a valid local `next` destination open
+the user's default workspace: Central Hub (`/hub`) unless Finance (`/dashboard`)
+is chosen under Personal preferences. Password, two-factor and passkey sign-in
+use the same landing rules. Explicit local destinations take precedence and still
+enforce their normal permissions. Detached accounts default to Account security.
+Household registration and invitation acceptance still lead to Central Hub.
 
 The hub opens Finance at `/dashboard`; existing Finance URLs are unchanged.
 Family Hub is a non-interactive "Coming soon" preview, not an imported application.
@@ -32,6 +34,9 @@ loading financial records. Finance preferences at `/preferences/finance` control
 the user's dashboard, reminder window, list display and default bank account;
 all household members can manage their own preferences. Owner-only `/settings`
 contains shared financial rules, not platform configuration.
+The starting-point form posts independently to `/preferences/workspace`; its
+`default_workspace` choice is stored in the user's existing preferences without a
+schema migration. It does not change module permissions, financial defaults or themes.
 Existing POST requests to `/preferences` remain compatible with Finance preference
 saving. The appearance and single-preference endpoints and stored values are unchanged.
 Finance onboarding remains available from its dashboard and is not required to

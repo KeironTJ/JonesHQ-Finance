@@ -2,6 +2,7 @@ from extensions import db
 from models.accounts import Account
 from models.users import User
 from services.platform.settings_service import SettingsService
+from services.platform.landing_service import LandingService
 from utils.db_helpers import family_query, get_current_user_id
 
 
@@ -16,6 +17,17 @@ class PreferenceService:
     }
     APPEARANCE_DEFAULTS = {'mode': 'light', 'palette': 'blue'}
     MODES = ('light', 'dark', 'auto')
+
+    @staticmethod
+    def update_workspace(data):
+        if not hasattr(data, 'get'):
+            raise ValueError('Workspace preferences must be an object.')
+        workspace = data.get('default_workspace')
+        if not isinstance(workspace, str) or workspace not in LandingService.WORKSPACES:
+            raise ValueError('Choose Central Hub or Finance as your default workspace.')
+        user = PreferenceService._user()
+        user.preferences = {**(user.preferences or {}), 'default_workspace': workspace}
+        db.session.commit()
 
     @staticmethod
     def appearance_for(user):

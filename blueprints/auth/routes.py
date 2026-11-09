@@ -9,7 +9,6 @@ import time
 from flask import render_template, redirect, url_for, flash, request, current_app, session, jsonify, Response
 from flask_login import logout_user, current_user, login_required
 from flask_limiter.util import get_remote_address
-from urllib.parse import unquote, urlsplit
 from sqlalchemy.exc import SQLAlchemyError
 from . import auth_bp
 from .forms import (
@@ -28,6 +27,7 @@ from services.platform.security_event_service import SecurityEventService
 from services.platform.site_settings_service import SiteSettingsService
 from services.platform.two_factor_service import TwoFactorService
 from services.platform.user_session_service import UserSessionService
+from services.platform.landing_service import LandingService
 from utils.reauth import recent_auth_required
 
 
@@ -55,20 +55,7 @@ def health():
 
 
 def _safe_next_page(default_endpoint='central.hub'):
-    target = request.args.get('next', '')
-    decoded = unquote(target)
-    if (
-        not decoded.startswith('/') or decoded.startswith('//')
-        or '\\' in decoded or any(ord(char) < 32 or ord(char) == 127 for char in decoded)
-    ):
-        return url_for(default_endpoint)
-    try:
-        parsed = urlsplit(decoded)
-    except ValueError:
-        return url_for(default_endpoint)
-    if parsed.scheme or parsed.netloc:
-        return url_for(default_endpoint)
-    return target
+    return LandingService.safe_next(request.args.get('next')) or url_for(default_endpoint)
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -78,7 +65,7 @@ def login():
     """User login page with security features"""
     # Redirect if already logged in
     if current_user.is_authenticated:
-        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'central.hub'))
+        return redirect(LandingService.resolve(current_user, request.args.get('next')))
     
     form = LoginForm()
     
@@ -91,19 +78,18 @@ def login():
         except ValueError as error:
             flash(str(error) or 'Invalid email or password.', 'danger')
         else:
-            default_endpoint = 'auth.account_security' if user.family_id is None else 'central.hub'
             if user.two_factor_enabled:
                 session.pop('2fa_pending', None)
                 session['2fa_pending'] = {
                     'user_id': user.id,
                     'remember': bool(form.remember.data),
-                    'next': _safe_next_page(default_endpoint),
+                    'next': LandingService.safe_next(request.args.get('next')),
                     'started': int(time.time()),
                 }
                 return redirect(url_for('auth.two_factor_login'))
             UserSessionService.start(user, remember=form.remember.data)
             flash(f'Welcome back, {user.name}!', 'success')
-            return redirect(_safe_next_page(default_endpoint))
+            return redirect(LandingService.resolve(user, request.args.get('next')))
     
     return render_template('auth/login.html', form=form, passkeys_configured=PasskeyService.is_configured())
 
@@ -124,7 +110,7 @@ def passkey_login_options():
         return jsonify(error='You are already signed in.'), 400
     try:
         data = _passkey_data()
-        data['next'] = _safe_next_page()
+        data['next'] = LandingService.safe_next(request.args.get('next'))
         return jsonify(PasskeyService.begin_authentication(data))
     except (ValueError, TypeError) as error:
         return jsonify(error=str(error)), 400
@@ -142,10 +128,7 @@ def passkey_login_verify():
     session.pop('2fa_pending', None)
     UserSessionService.start(user, remember=context.get('remember', False), method='passkey')
     flash(f'Welcome back, {user.name}!', 'success')
-    target = context.get('next')
-    if user.family_id is None and target in (url_for('dashboard.index'), url_for('central.hub')):
-        target = url_for('auth.account_security')
-    return jsonify(redirect=target or url_for('auth.account_security' if user.family_id is None else 'central.hub'))
+    return jsonify(redirect=LandingService.resolve(user, context.get('next')))
 
 
 def _pending_two_factor():
@@ -172,7 +155,7 @@ def _two_factor_user_key():
 def two_factor_login():
     """Second login step: authenticator or recovery code"""
     if current_user.is_authenticated:
-        return redirect(url_for('auth.account_security' if current_user.family_id is None else 'central.hub'))
+        return redirect(LandingService.resolve(current_user, request.args.get('next')))
 
     pending = _pending_two_factor()
     if pending is None:
@@ -199,7 +182,7 @@ def two_factor_login():
             if method == 'recovery':
                 remaining = TwoFactorService.remaining_recovery_codes(user)
                 flash(f'You used a recovery code. {remaining} remaining - generate new ones from Account security if you are running low.', 'warning')
-            return redirect(pending.get('next') or url_for('auth.account_security' if user.family_id is None else 'central.hub'))
+            return redirect(LandingService.resolve(user, pending.get('next')))
 
     return render_template(
         'auth/two_factor_login.html', form=form, pending=pending,

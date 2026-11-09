@@ -5,13 +5,34 @@ from sqlalchemy.exc import SQLAlchemyError
 from . import preferences_bp
 from extensions import db
 from services.platform.preference_service import PreferenceService
+from services.platform.landing_service import LandingService
 
 
 @preferences_bp.route('', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         return finance()
-    return render_template('preferences/index.html')
+    return render_template(
+        'preferences/index.html',
+        default_workspace=LandingService.workspace_for(current_user),
+        workspaces=LandingService.WORKSPACES,
+    )
+
+
+@preferences_bp.route('/workspace', methods=['POST'])
+def workspace():
+    try:
+        PreferenceService.update_workspace(request.form)
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid workspace choice.', 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to save default workspace')
+        flash('Unable to save your default workspace. Please try again.', 'danger')
+    else:
+        flash('Your default workspace has been saved.', 'success')
+    return redirect(url_for('preferences.index', _anchor='workspace-card'))
 
 
 @preferences_bp.route('/finance', methods=['GET', 'POST'])
