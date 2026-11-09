@@ -95,6 +95,11 @@ action. Macro values remain autoescaped.
 
 ## Personal appearance
 
+Account-wide appearance is edited at `/preferences` in the central shell.
+Finance-only defaults are edited separately at `/preferences/finance`, using the
+Finance shell. Both use the same stylesheets and account-wide appearance state;
+do not introduce module-specific theme storage or reset appearance when switching.
+
 Personal preferences offers Blue (the default), Graphite, Green, Pink, Light Blue
 (`sky`) and Purple, each with Light, Dark and Follow device modes. The root
 `data-palette` and resolved `data-theme` select tokens. Keep financial success and

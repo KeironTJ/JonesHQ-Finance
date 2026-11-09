@@ -27,7 +27,13 @@ No billing or subscription entitlement enforcement is introduced.
 
 Account security, household membership and personal preferences use the central
 navigation shell. Finance retains its own section navigation and settings.
-Preferences currently include both shared appearance and Finance-specific options.
+Personal preferences at `/preferences` control account-wide appearance without
+loading financial records. Finance preferences at `/preferences/finance` control
+the user's dashboard, reminder window, list display and default bank account;
+all household members can manage their own preferences. Owner-only `/settings`
+contains shared financial rules, not platform configuration.
+Existing POST requests to `/preferences` remain compatible with Finance preference
+saving. The appearance and single-preference endpoints and stored values are unchanged.
 Finance onboarding remains available from its dashboard and is not required to
 enter Central Hub. Existing onboarding completion markers are unchanged.
 

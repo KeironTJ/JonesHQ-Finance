@@ -17,7 +17,8 @@
     {% endfor %}
     {% block extra_css %}{% endblock %}
 </head>
-{% set central_workspace = request.blueprint in ('central', 'auth', 'family', 'preferences', 'site_admin') %}
+{% set finance_preferences = request.endpoint == 'preferences.finance' or (request.endpoint == 'preferences.index' and request.method == 'POST') %}
+{% set central_workspace = request.blueprint in ('central', 'auth', 'family', 'preferences', 'site_admin') and not finance_preferences %}
 <body class="{{ 'workspace' if current_user.is_authenticated else 'public-layout' }}">
     <a class="skip-link" href="#main-content">Skip to content</a>
     {% if current_user.is_authenticated %}
@@ -33,7 +34,7 @@
                 </button>
                 <a class="workspace-home" href="{{ url_for('central.hub' if central_workspace else 'dashboard.index') }}">{{ 'Central' if central_workspace else 'Finance' }}</a>
                 <span class="topbar-divider" aria-hidden="true">/</span>
-                <span class="workspace-location">{{ {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'dashboard': 'Finance overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title) }}</span>
+                <span class="workspace-location">{{ 'Finance preferences' if finance_preferences else {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'dashboard': 'Finance overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title) }}</span>
             </div>
             <div class="topbar-actions">
                 <button class="workspace-search" type="button" data-bs-toggle="modal" data-bs-target="#navigationSearch"

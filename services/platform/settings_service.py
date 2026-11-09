@@ -19,7 +19,7 @@ from utils.db_helpers import (
 
 class SettingsService:
     SECTIONS = {
-        'household': ('Household & payday', {
+        'household': ('Payday & budget periods', {
             'payday_day': ('payday_day', 15, 'int', 'Day of month when payday occurs (adjusted for weekends)'),
         }),
         'credit-cards': ('Credit cards', {

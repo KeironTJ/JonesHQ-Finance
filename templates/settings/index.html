@@ -1,22 +1,23 @@
 {% extends "base.html" %}
 {% from 'shared/_ui.html' import page_header %}
-{% block title %}Settings{% endblock %}
+{% block title %}Finance settings{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    {{ page_header('Settings', 'Make Family HQ work for your household. Each area saves independently.', 'Your workspace') }}
+    {{ page_header('Finance settings', 'Shared financial rules for your household. Each area saves independently.', 'Finance') }}
     <h2 class="h4">Your preferences</h2>
     <div class="card mb-4">
         <div class="card-body">
-            <h3 class="h5">Personal preferences</h3>
-            <p>Appearance, dashboard layout, category and vendor display, and your default account. Your colour palette and display mode follow your account across devices.</p>
-            <a class="btn btn-outline-primary" href="{{ url_for('preferences.index') }}">Manage personal preferences</a>
+            <h3 class="h5">Finance preferences</h3>
+            <p>Your dashboard layout, reminder window, category and vendor display, and default bank account. These affect only you and are available to household members too.</p>
+            <a class="btn btn-outline-primary" href="{{ url_for('preferences.finance') }}">Manage Finance preferences</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('preferences.index') }}">Shared appearance</a>
         </div>
     </div>
     <h2 class="h4">Household configuration <span class="badge bg-secondary fs-6">Owner only</span></h2>
     <p class="text-muted">Shared rules and defaults for your household, not other households.</p>
     <div class="row g-3 mb-4">
         {% for section, title, description in [
-            ('household', 'Household & payday', 'The shared payday used for budget periods and weekend adjustments.'),
+            ('household', 'Payday & budget periods', 'The shared payday used for budget periods and weekend adjustments.'),
             ('credit-cards', 'Credit cards', 'Default horizon for generating future card transactions.'),
             ('expenses', 'Work expenses', 'Reimbursement accounts, transaction sync and claim-period rules.'),
             ('networth', 'Net worth', 'The shared start date for the net worth timeline.')
@@ -33,8 +34,7 @@
         {% endfor %}
         {% for endpoint, title, description in [
             ('settings.tax_settings', 'Tax & National Insurance', 'Tax-year bands and rates used to estimate take-home pay.'),
-            ('vendors.types_index', 'Vendor types', 'Add, edit and order your household vendor types.'),
-            ('family.index', 'Family & members', 'Household members, access permissions and assignment labels.')
+            ('vendors.types_index', 'Vendor types', 'Add, edit and order your household vendor types.')
         ] %}
         <div class="col-md-6">
             <div class="card h-100">
@@ -47,5 +47,8 @@
         </div>
         {% endfor %}
     </div>
+    <p class="text-muted">Household membership is managed centrally, not in Finance settings.
+        <a href="{{ url_for('family.index') }}">Household &amp; members</a>
+    </p>
 </div>
 {% endblock %}

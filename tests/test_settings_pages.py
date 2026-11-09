@@ -82,8 +82,8 @@ def test_member_preferences_are_personal_and_work_on_module_pages(app, family, u
     assert member.preferences == {key: True}
     assert not user.preferences
     assert Settings.query.count() == 0
-    html = client.get('/preferences').get_data(as_text=True)
-    assert 'Personal preferences' in html
+    html = client.get('/preferences/finance').get_data(as_text=True)
+    assert 'Finance preferences' in html
     assert 'href="/settings"' not in html
     module_html = client.get(path).get_data(as_text=True)
     assert 'id="collapseAllDefault" checked' in module_html
@@ -150,7 +150,7 @@ def test_attention_window_is_personal_and_persistent(app, family, user, days):
     }).status_code == 302
     assert member.preferences['dashboard.attention_days'] == days
     assert not user.preferences
-    html = client.get('/preferences').get_data(as_text=True)
+    html = client.get('/preferences/finance').get_data(as_text=True)
     assert f'value="{days}" aria-describedby="attentionDaysHelp"' in html
     assert Settings.query.count() == 0
 
@@ -260,7 +260,7 @@ def test_account_settings_reject_other_family_or_private_accounts(
     db.session.add(account)
     db.session.commit()
     client = _client(app, user)
-    path = '/preferences' if field == 'default_account_id' else '/settings/modules/expenses'
+    path = '/preferences/finance' if field == 'default_account_id' else '/settings/modules/expenses'
     response = client.post(path, data={
         field: str(account.id), 'expense_period_mode': 'calendar_month',
         'expense_cutoff_day': '0', 'expense_reimburse_day': '0',

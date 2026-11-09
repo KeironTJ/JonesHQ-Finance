@@ -1,4 +1,5 @@
 from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask_login import current_user
 from sqlalchemy.exc import SQLAlchemyError
 
 from . import preferences_bp
@@ -9,10 +10,20 @@ from services.platform.preference_service import PreferenceService
 @preferences_bp.route('', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
+        return finance()
+    return render_template('preferences/index.html')
+
+
+@preferences_bp.route('/finance', methods=['GET', 'POST'])
+def finance():
+    if current_user.family_id is None:
+        flash('Join a household before managing Finance preferences.', 'info')
+        return redirect(url_for('preferences.index'))
+    if request.method == 'POST':
         try:
             PreferenceService.update(request.form)
-            flash('Your preferences have been saved.', 'success')
-            return redirect(url_for('preferences.index'))
+            flash('Your Finance preferences have been saved.', 'success')
+            return redirect(url_for('preferences.finance'))
         except (ValueError, TypeError) as error:
             db.session.rollback()
             flash(str(error) or 'Invalid preference value.', 'danger')
@@ -29,7 +40,7 @@ def index():
             )
             for key, default in PreferenceService.DEFAULTS.items()
         }
-    return render_template('preferences/index.html', **context)
+    return render_template('preferences/finance.html', **context)
 
 
 @preferences_bp.route('/save', methods=['POST'])

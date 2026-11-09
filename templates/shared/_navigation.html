@@ -62,6 +62,7 @@
                 {% endfor %}
                 {% endif %}
             {% endfor %}
+            {{ nav_link('preferences.finance', 'Finance preferences', 'sliders', exact=true) }}
             {% if current_user.is_household_owner and current_user.family_id is not none %}
                 {{ nav_link('settings.index', 'Finance settings', 'gear', 'settings') }}
             {% endif %}
@@ -70,7 +71,7 @@
             {% if current_user.is_household_owner and current_user.family_id is not none %}
                 {{ nav_link('family.index', 'Household & members', 'people') }}
             {% endif %}
-            {{ nav_link('preferences.index', 'Personal preferences', 'sliders') }}
+            {{ nav_link('preferences.index', 'Personal preferences', 'palette', exact=true) }}
             {{ nav_link('auth.account_security', 'Account security', 'shield-lock') }}
             {{ nav_link('auth.help', 'Help & support', 'question-circle') }}
             {% if current_user.is_site_admin %}
