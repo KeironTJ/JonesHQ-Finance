@@ -40,9 +40,9 @@ def test_finance_preferences_use_finance_navigation_for_owners_and_members(app, 
     assert 'name="dashboard.attention_days"' in html
     parser = NavigationParser()
     parser.feed(html)
-    assert [link['href'] for link in parser.links if link.get('aria-current') == 'page'] == ['/preferences/finance']
-    assert sum(link['href'] == '/preferences/finance' for link in parser.links) == 1
-    assert ('href="/settings"' in html) == (role == 'admin')
+    assert [link['href'] for link in parser.links if link.get('aria-current') == 'page'] == ['/hub/settings/finance']
+    assert sum(link['href'] == '/hub/settings/finance' for link in parser.links) == 1
+    assert ('href="/settings/access"' in html) == (role == 'admin')
 
 
 @pytest.mark.parametrize('path', ['/preferences', '/preferences/finance'])

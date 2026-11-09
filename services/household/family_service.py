@@ -11,10 +11,23 @@ from models.users import User, UserSession
 from services.finance.income_service import IncomeService
 from services.platform.security_event_service import SecurityEventService
 from services.platform.user_session_service import UserSessionService
-from utils.db_helpers import get_current_user_id
+from utils.db_helpers import get_current_user_id, family_get_or_404
 
 
 class FamilyService:
+    @staticmethod
+    def update_role(member_id, data):
+        member = family_get_or_404(User, member_id)
+        if member.id == get_current_user_id():
+            raise ValueError('You cannot edit your own household role here.')
+        role = data.get('role')
+        if role not in ('admin', 'member'):
+            raise ValueError('Choose Owner or Member as the household role.')
+        member.role = role
+        db.session.commit()
+        SecurityEventService.record('family_member_updated', details=f'{member.name} ({role})')
+        return member
+
     @staticmethod
     def join_existing(user, data):
         if not user.is_active or user.id != get_current_user_id():

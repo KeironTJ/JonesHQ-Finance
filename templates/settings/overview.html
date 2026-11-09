@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ settings_groups[settings_area].label }} settings{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <h1>{{ settings_groups[settings_area].label }} settings</h1>
+    <p class="text-muted">
+        {% if settings_area == 'central' %}
+        Shared account and household settings across every workspace.
+        {% else %}
+        Your personal Finance preferences and your household's financial configuration.
+        {% endif %}
+        Each area saves independently.
+    </p>
+    {% if settings_area == 'finance' and current_user.family_id is none %}
+    <div class="alert alert-info">Join a household before managing Finance settings.</div>
+    {% endif %}
+    <div class="row g-3">
+        {% for page in settings_groups[settings_area].pages %}
+        <div class="col-md-6">
+            <section class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5">{{ page.label }}</h2>
+                    <p class="small text-muted">
+                        {% if page.scope == 'personal' %}Only affects you{% elif page.scope == 'owner' %}Affects your household &middot; Owner only{% else %}Affects your household{% endif %}
+                    </p>
+                    <p>{{ page.description }}</p>
+                    <a class="btn btn-outline-primary" href="{{ url_for(page.endpoint, **page['values']) }}">Manage {{ page.label|lower }}</a>
+                </div>
+            </section>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="text-muted mt-4">
+        {% if settings_area == 'finance' %}
+        Appearance, account security and household membership live in <a href="{{ url_for('central.settings') }}">Central settings</a>.
+        {% elif current_user.family_id is not none %}
+        Dashboard defaults and financial rules live in <a href="{{ url_for('central.finance_settings') }}">Finance settings</a>.
+        {% endif %}
+    </p>
+</div>
+{% endblock %}

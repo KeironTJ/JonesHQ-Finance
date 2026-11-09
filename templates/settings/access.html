@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% block title %}Finance access & assignment{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    {% call page_header('Finance access & assignment', 'Financial section permissions and transaction display names for your household.', 'Finance') %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('central.finance_settings') }}">Finance settings</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('family.index') }}">Household &amp; members</a>
+    {% endcall %}
+    <div class="alert alert-info">
+        Section access does not override private-record visibility. Shared bank accounts still show their transactions to members with access.
+        Household owners have all Finance sections; changing ownership belongs in Household &amp; members.
+    </div>
+    {% for member in members %}
+    <section class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5">{{ member.name }} <span class="badge bg-secondary">{{ 'Owner' if member.is_household_owner else 'Member' }}</span></h2>
+            {% if member.id == current_user.id %}
+            <p class="text-muted mb-0">All Finance sections. Transaction display name: {{ member.member_name or member.name }}. Your own access cannot be edited here.</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('settings.update_finance_access', member_id=member.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="form-label" for="finance-name-{{ member.id }}">Transaction display name</label>
+                <input class="form-control mb-3" id="finance-name-{{ member.id }}" name="member_name" value="{{ member.member_name or member.name }}">
+                {% if member.is_household_owner %}
+                <p class="text-muted">All Finance sections. Only the transaction display name can be changed here.</p>
+                {% else %}
+                <fieldset>
+                    <legend class="h6">Allowed Finance sections</legend>
+                    <div class="row g-3">
+                        {% for group, keys in section_groups.items() %}
+                        <div class="col-md-3">
+                            <h3 class="h6">{{ group }}</h3>
+                            {% for key in keys %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sections" value="{{ key }}" id="finance-{{ member.id }}-{{ key }}" {% if key in member.get_allowed_sections() %}checked{% endif %}>
+                                <label class="form-check-label" for="finance-{{ member.id }}-{{ key }}">{{ section_labels[key] }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+                {% endif %}
+                <button class="btn btn-primary mt-3" type="submit">Save Finance access for {{ member.name }}</button>
+            </form>
+            {% endif %}
+        </div>
+    </section>
+    {% endfor %}
+    <section class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5">Transaction assignment labels</h2>
+            <p class="text-muted">Labels for children or other people without logins. A label does not create membership or grant access.</p>
+            <form method="POST" action="{{ url_for('family.create_assignment_label') }}" class="mb-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="form-label" for="assignmentLabel">Label name</label>
+                <input class="form-control mb-2" id="assignmentLabel" name="label_name" required>
+                <button class="btn btn-outline-primary" type="submit">Add label</button>
+            </form>
+            <div class="d-flex flex-wrap gap-2">
+                {% for label in assignment_labels %}
+                <form method="POST" action="{{ url_for('family.delete_assignment_label', label_id=label.id) }}" onsubmit="return confirm('Remove this transaction assignment label?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-outline-secondary" type="submit">Remove {{ label.name }}</button>
+                </form>
+                {% else %}
+                <p class="text-muted">No custom labels yet. Household members are available automatically.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

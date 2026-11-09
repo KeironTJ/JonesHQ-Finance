@@ -41,7 +41,8 @@ def test_shared_pages_have_central_navigation(app, user, path):
     parser = NavigationParser()
     parser.feed(response.get_data(as_text=True))
     hrefs = {link['href'] for link in parser.links}
-    assert {'/hub', '/dashboard', '/account/security', '/preferences'} <= hrefs
+    assert {'/hub', '/dashboard', '/hub/settings'} <= hrefs
+    assert not {'/account/security', '/preferences', '/family/'} & hrefs
     assert '/transactions' not in hrefs
     assert '/settings' not in hrefs
 

@@ -23,7 +23,6 @@ from blueprints.family import family_bp
 from blueprints.family.forms import DeleteHouseholdForm
 from extensions import db, limiter
 from models.family import Family, FamilyInvite
-from models.family_assignment_labels import FamilyAssignmentLabel
 from models.users import User
 from utils.permissions import SECTION_GROUPS, SECTION_LABELS, OWNER_ONLY_SECTIONS
 from utils.db_helpers import family_query, get_family_id
@@ -79,23 +78,34 @@ def index():
         .limit(20)
         .all()
     )
-    assignment_labels = (
-        FamilyAssignmentLabel.query
-        .filter_by(family_id=family.id, is_active=True)
-        .order_by(FamilyAssignmentLabel.sort_order.asc(), FamilyAssignmentLabel.name.asc())
-        .all()
-    )
-
     return render_template(
         'family/index.html',
         family=family,
         members=members,
         active_invites=active_invites,
         expired_invites=expired_invites,
-        assignment_labels=assignment_labels,
         section_groups=SECTION_GROUPS,
         section_labels=SECTION_LABELS,
     )
+
+
+@family_bp.route('/members/<int:member_id>/role', methods=['POST'])
+@login_required
+@recent_auth_required
+def update_role(member_id):
+    _require_household_owner()
+    try:
+        member = FamilyService.update_role(member_id, request.form)
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid household role.', 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to update household role')
+        flash('Unable to update household role. Please try again.', 'danger')
+    else:
+        flash(f'Updated household role for {member.name}.', 'success')
+    return redirect(url_for('family.index'))
 
 
 @family_bp.route('/assignment-labels', methods=['POST'])
@@ -107,20 +117,26 @@ def create_assignment_label():
     family = current_user.family
     if family is None:
         flash('No family found. Please visit the Family page first.', 'danger')
-        return redirect(url_for('family.index'))
+        return redirect(url_for('settings.finance_access'))
 
     name = (request.form.get('label_name') or '').strip()
     if not name:
         flash('Label name is required.', 'danger')
-        return redirect(url_for('family.index'))
+        return redirect(url_for('settings.finance_access'))
 
-    label = FamilyService.create_assignment_label(family.id, name)
+    try:
+        label = FamilyService.create_assignment_label(family.id, name)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to create transaction assignment label')
+        flash('Unable to add assignment label. Please try again.', 'danger')
+        return redirect(url_for('settings.finance_access'))
     if label is None:
         flash('That assignment label already exists.', 'warning')
-        return redirect(url_for('family.index'))
+        return redirect(url_for('settings.finance_access'))
 
     flash(f'Added assignment label: {name}', 'success')
-    return redirect(url_for('family.index'))
+    return redirect(url_for('settings.finance_access'))
 
 
 @family_bp.route('/assignment-labels/<int:label_id>/delete', methods=['POST'])
@@ -129,9 +145,15 @@ def delete_assignment_label(label_id):
     """Delete a custom family assignment label."""
     _require_household_owner()
 
-    name = FamilyService.delete_assignment_label(label_id, current_user.family_id)
+    try:
+        name = FamilyService.delete_assignment_label(label_id, current_user.family_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to remove transaction assignment label')
+        flash('Unable to remove assignment label. Please try again.', 'danger')
+        return redirect(url_for('settings.finance_access'))
     flash(f'Removed assignment label: {name}', 'success')
-    return redirect(url_for('family.index'))
+    return redirect(url_for('settings.finance_access'))
 
 
 @family_bp.route('/invite', methods=['POST'])

@@ -1,3 +1,13 @@
+<div hidden>
+    {% for key, group in settings_groups.items() %}
+    {% if key == 'central' or current_user.family_id is not none %}
+    <a href="{{ url_for(group.endpoint) }}" data-nav-search>{{ group.label }} settings</a>
+    {% for page in group.pages %}
+    <a href="{{ url_for(page.endpoint, **page['values']) }}" data-nav-search>{{ group.label }} settings: {{ page.label }}</a>
+    {% endfor %}
+    {% endif %}
+    {% endfor %}
+</div>
 <div class="modal fade navigation-search" id="navigationSearch" tabindex="-1" aria-labelledby="navigationSearchTitle">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">

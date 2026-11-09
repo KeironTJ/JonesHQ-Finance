@@ -1,0 +1,30 @@
+<section class="card mb-4" aria-label="Settings navigation">
+    <div class="card-body">
+        <nav aria-label="Settings breadcrumb">
+            <ol class="breadcrumb small mb-3">
+                <li class="breadcrumb-item"><a href="{{ url_for('central.settings') }}">Settings</a></li>
+                {% if settings_page %}
+                <li class="breadcrumb-item"><a href="{{ url_for(settings_groups[settings_area].endpoint) }}">{{ settings_groups[settings_area].label }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ settings_page.label }}</li>
+                {% else %}
+                <li class="breadcrumb-item active" aria-current="page">{{ settings_groups[settings_area].label }}</li>
+                {% endif %}
+            </ol>
+        </nav>
+        <nav class="nav nav-pills gap-2" aria-label="Settings workspaces">
+            {% for key, group in settings_groups.items() %}
+            {% if key == 'central' or current_user.family_id is not none %}
+            <a class="nav-link{{ ' active' if key == settings_area else '' }}" href="{{ url_for(group.endpoint) }}"{% if key == settings_area %} aria-current="true"{% endif %}>{{ group.label }} settings</a>
+            {% endif %}
+            {% endfor %}
+        </nav>
+        {% if settings_page %}
+        <nav class="d-flex flex-wrap gap-2 mt-3" aria-label="{{ settings_groups[settings_area].label }} sub-settings">
+            {% for page in settings_groups[settings_area].pages %}
+            <a class="btn btn-sm {{ 'btn-primary' if settings_page == page else 'btn-outline-secondary' }}" href="{{ url_for(page.endpoint, **page['values']) }}"{% if settings_page == page %} aria-current="page"{% endif %}>{{ page.label }}</a>
+            {% endfor %}
+        </nav>
+        <p class="small text-muted mb-0 mt-3">{% if settings_page.scope == 'personal' %}Only affects you{% elif settings_page.scope == 'owner' %}Affects your household &middot; Owner only{% else %}Affects your household{% endif %}</p>
+        {% endif %}
+    </div>
+</section>

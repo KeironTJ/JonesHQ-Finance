@@ -29,6 +29,16 @@ No billing or subscription entitlement enforcement is introduced.
 
 Account security, household membership and personal preferences use the central
 navigation shell. Finance retains its own section navigation and settings.
+One Settings link opens Central settings (`/hub/settings`) from shared pages or
+Finance settings (`/hub/settings/finance`) from Finance. Both landing pages are
+available to members; their cards and shared sub-navigation respect existing
+owner and section permissions. Central covers appearance, the starting workspace,
+account security and household membership. Finance groups personal defaults,
+financial access and shared financial rules. Breadcrumbs and scope labels make
+the current workspace and personal-versus-household effects explicit. Settings
+sub-pages are also discoverable in page search without cluttering the main sidebar.
+Existing editor URLs and write permissions remain unchanged, including owner-only
+`/settings`. Vendor types retain their existing vendor-section permissions.
 Personal preferences at `/preferences` control account-wide appearance without
 loading financial records. Finance preferences at `/preferences/finance` control
 the user's dashboard, reminder window, list display and default bank account;
@@ -41,6 +51,15 @@ Existing POST requests to `/preferences` remain compatible with Finance preferen
 saving. The appearance and single-preference endpoints and stored values are unchanged.
 Finance onboarding remains available from its dashboard and is not required to
 enter Central Hub. Existing onboarding completion markers are unchanged.
+
+Household membership and roles remain at `/family/`. Existing members' financial
+section permissions, transaction display names and assignment labels are managed
+at `/settings/access` (owner only, with recent authentication for permission writes).
+Role changes preserve saved Finance permissions; Finance access changes cannot
+change household roles. Owners retain full section access, subject to existing
+private-record rules. Invitations retain their existing initial Finance permission
+choices, now explicitly labelled separately from the household role.
+Existing assignment-label POST URLs remain compatible and return to Finance access.
 
 - **Account Management**: Track multiple bank accounts (Joint, Personal, Savings)
 - **Transaction Tracking**: Record and categorize all financial transactions

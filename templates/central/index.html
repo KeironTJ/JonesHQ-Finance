@@ -65,11 +65,7 @@
     <h2 class="h4" id="account-title">One shared account</h2>
     <p class="text-muted">Manage the essentials without entering a workspace.</p>
     <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-outline-secondary" href="{{ url_for('auth.account_security') }}"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i> Account security</a>
-        <a class="btn btn-outline-secondary" href="{{ url_for('preferences.index') }}">Personal preferences</a>
-        {% if current_user.is_household_owner and current_user.family_id is not none %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('family.index') }}">Household &amp; members</a>
-        {% endif %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('central.settings') }}"><i class="bi bi-gear me-1" aria-hidden="true"></i> Central settings</a>
         <a class="btn btn-outline-secondary" href="{{ url_for('auth.help') }}">Help &amp; support</a>
     </div>
     <p class="small text-muted mt-3">Billing and paid module access are not enabled in this initial hub.</p>

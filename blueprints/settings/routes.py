@@ -1,6 +1,9 @@
 from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from decimal import InvalidOperation
 from sqlalchemy.exc import SQLAlchemyError
+from services.finance.finance_access_service import FinanceAccessService
+from utils.permissions import SECTION_GROUPS, SECTION_LABELS
+from utils.reauth import recent_auth_required
 
 from . import settings_bp
 from extensions import db
@@ -12,6 +15,34 @@ from utils.db_helpers import family_get_or_404, family_query
 @settings_bp.route('/settings')
 def index():
     return render_template('settings/index.html')
+
+
+@settings_bp.route('/settings/access')
+def finance_access():
+    return render_template(
+        'settings/access.html', **FinanceAccessService.get_page_data(),
+        section_groups=SECTION_GROUPS, section_labels=SECTION_LABELS,
+    )
+
+
+@settings_bp.route('/settings/access/members/<int:member_id>', methods=['POST'])
+@recent_auth_required
+def update_finance_access(member_id):
+    try:
+        member = FinanceAccessService.update_member(member_id, {
+            'member_name': request.form.get('member_name'),
+            'sections': request.form.getlist('sections'),
+        })
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid Finance access settings.', 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to update Finance access')
+        flash('Unable to update Finance access. Please try again.', 'danger')
+    else:
+        flash(f'Updated Finance access for {member.name}.', 'success')
+    return redirect(url_for('settings.finance_access'))
 
 
 @settings_bp.route('/settings/modules/<section>', methods=['GET', 'POST'])

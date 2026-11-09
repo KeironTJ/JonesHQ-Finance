@@ -5,7 +5,9 @@
         const input = document.getElementById('navigationSearchInput');
         const results = document.getElementById('navigationSearchResults');
         const status = document.getElementById('navigationSearchStatus');
-        const links = [...document.querySelectorAll('[data-nav-search]')];
+        const links = [...new Map(
+            [...document.querySelectorAll('[data-nav-search]')].map(link => [link.href, link])
+        ).values()];
 
         function render() {
             const query = input.value.trim().toLocaleLowerCase();

@@ -72,9 +72,13 @@ action. Macro values remain autoescaped.
 
 ## Navigation and interactions
 
-- [Navigation](../templates/shared/_navigation.html) is the source of page-search
-  entries. Keep section permissions and owner/site-admin checks here; search must
-  never expose links hidden from that user.
+- [Navigation](../templates/shared/_navigation.html) supplies the primary page-search
+  entries. Settings entries additionally come from the permission-filtered
+  [settings navigation service](../services/platform/settings_navigation_service.py).
+  Search must never expose links hidden from that user.
+- Keep one Settings entry in the main sidebar. Central and Finance settings share
+  workspace tabs, sub-navigation, breadcrumbs and personal/household scope labels.
+  Settings must reuse the existing Finance theme and components.
 - At desktop widths the sidebar is independently scrollable. Below 992px it uses
   Bootstrap's offcanvas focus management, backdrop, Escape handling and scroll lock.
 - The search button or **Ctrl/Cmd+K** opens page search. Arrow keys browse results;

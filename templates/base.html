@@ -19,6 +19,7 @@
 </head>
 {% set finance_preferences = request.endpoint == 'preferences.finance' or (request.endpoint == 'preferences.index' and request.method == 'POST') %}
 {% set central_workspace = request.blueprint in ('central', 'auth', 'family', 'preferences', 'site_admin') and not finance_preferences %}
+{% if settings_area %}{% set central_workspace = settings_area == 'central' %}{% endif %}
 <body class="{{ 'workspace' if current_user.is_authenticated else 'public-layout' }}">
     <a class="skip-link" href="#main-content">Skip to content</a>
     {% if current_user.is_authenticated %}
@@ -34,7 +35,7 @@
                 </button>
                 <a class="workspace-home" href="{{ url_for('central.hub' if central_workspace else 'dashboard.index') }}">{{ 'Central' if central_workspace else 'Finance' }}</a>
                 <span class="topbar-divider" aria-hidden="true">/</span>
-                <span class="workspace-location">{{ 'Finance preferences' if finance_preferences else {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'dashboard': 'Finance overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title) }}</span>
+                <span class="workspace-location">{{ settings_groups[settings_area].label ~ ' settings' if settings_area else ('Finance preferences' if finance_preferences else {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'dashboard': 'Finance overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title)) }}</span>
             </div>
             <div class="topbar-actions">
                 <button class="workspace-search" type="button" data-bs-toggle="modal" data-bs-target="#navigationSearch"
@@ -44,7 +45,7 @@
                 <button class="btn btn-icon" id="themeToggleBtn" type="button" aria-label="Switch to dark theme" title="Switch theme">
                     <i class="bi bi-moon" id="themeIcon" aria-hidden="true"></i>
                 </button>
-                <a class="user-avatar" href="{{ url_for('preferences.index') }}" aria-label="Personal preferences for {{ current_user.name }}">
+                <a class="user-avatar" href="{{ url_for('central.settings') }}" aria-label="Settings for {{ current_user.name }}">
                     {{ current_user.name[:1]|upper }}
                 </a>
             </div>
@@ -80,6 +81,9 @@
                     </div>
                     {% endif %}
                 {% endwith %}
+                {% if settings_area %}
+                    {% include 'shared/_settings_navigation.html' %}
+                {% endif %}
                 {% block content %}{% endblock %}
             </div>
         </main>

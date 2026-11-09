@@ -69,7 +69,7 @@ def test_navigation_search_source_respects_member_permissions(app, user):
     hrefs = {link['href'] for link in parser.links}
     assert {'/accounts', '/transactions', '/transactions/subscriptions'} <= hrefs
     assert not {'/settings', '/family/', '/income', '/credit-cards', '/site-admin/'} & hrefs
-    assert '/preferences' in hrefs
+    assert '/hub/settings/finance' in hrefs
 
 
 def test_public_shell_has_no_household_navigation(app):

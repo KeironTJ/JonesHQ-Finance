@@ -1,434 +1,120 @@
 {% extends 'base.html' %}
 {% from 'shared/_ui.html' import page_header %}
-
-{% block title %}Family Management - Family HQ{% endblock %}
-
+{% block title %}Household & members{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    {% call page_header('Family Management', 'One shared workspace, with the right access for every member.', 'Your workspace') %}
-        <span class="badge bg-secondary fs-6">{{ family.name }}</span>
+    {% call page_header('Household & members', 'Membership, household roles and invitations across your workspaces.', 'Central') %}
+        <span class="badge bg-secondary">{{ family.name }}</span>
+        <a class="btn btn-outline-primary" href="{{ url_for('settings.finance_access') }}">Finance access &amp; assignment</a>
     {% endcall %}
-
-    <!-- ── Members ───────────────────────────────────────────────── -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Members</h5>
-        </div>
-        <div class="card-body p-0 table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Role</th>
-                        <th>Display Name</th>
-                        <th>Sections</th>
-                        <th>Joined</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for member in members %}
-                    <tr>
-                        <td>
-                            {{ member.name }}
-                            {% if member.id == current_user.id %}
-                            <span class="badge bg-primary ms-1">You</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-muted small">{{ member.email }}</td>
-                        <td>
-                            {% if member.is_household_owner %}
-                            <span class="badge bg-danger">Owner</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Member</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ member.member_name or '—' }}</td>
-                        <td>
-                            {% if member.is_household_owner %}
-                            <span class="text-muted fst-italic">All sections</span>
-                            {% else %}
-                                {% set sections = member.get_allowed_sections() %}
-                                {% if sections %}
-                                    {% for s in sections | sort %}
-                                    <span class="badge bg-info text-dark me-1">{{ section_labels.get(s, s) }}</span>
-                                    {% endfor %}
-                                {% else %}
-                                <span class="text-danger fst-italic">No sections</span>
-                                {% endif %}
-                            {% endif %}
-                        </td>
-                        <td class="text-muted small">{{ member.created_at.strftime('%d %b %Y') }}</td>
-                        <td>
-                            {% if member.id != current_user.id %}
-                            <!-- Edit sections button -->
-                            <button class="btn btn-sm btn-outline-primary"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#editMemberModal"
-                                    data-member-id="{{ member.id }}"
-                                    data-member-name="{{ member.name }}"
-                                    data-member-display="{{ member.member_name or '' }}"
-                                    data-member-role="{{ member.role }}"
-                                    data-member-sections="{{ member.allowed_sections or '' }}">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <!-- Remove button -->
-                            <form method="POST"
-                                  action="{{ url_for('family.remove_member', member_id=member.id) }}"
-                                  class="d-inline"
-                                  onsubmit="return confirm('Remove {{ member.name }} from the family?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-person-dash"></i>
-                                </button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- ── Transaction Assignment Labels ─────────────────────────── -->
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-person-badge"></i> Transaction Assignment Labels</h5>
-            <small class="text-muted">Use this for children or anyone without a login account</small>
-        </div>
+    <p class="text-muted">Owners manage the household and have full Finance section access. Members keep their individual Finance permissions and private-record visibility. Changing a role does not edit the member's saved Finance section choices.</p>
+    <section class="card mb-4">
         <div class="card-body">
-            <form method="POST" action="/family/assignment-labels" class="row g-2 mb-3">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="col-md-8">
-                    <input type="text" class="form-control" name="label_name" placeholder="Add assignment label (e.g., Oliver, Sofia, Household)" required>
-                </div>
-                <div class="col-md-4 d-grid">
-                    <button type="submit" class="btn btn-outline-primary"><i class="bi bi-plus-circle"></i> Add Label</button>
-                </div>
-            </form>
-
-            {% if assignment_labels %}
-            <div class="d-flex flex-wrap gap-2">
-                {% for label in assignment_labels %}
-                <form method="POST" action="/family/assignment-labels/{{ label.id }}/delete" class="d-inline" onsubmit="return confirm('Remove assignment label {{ label.name }}?');">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">
-                        {{ label.name }} <i class="bi bi-x ms-1"></i>
-                    </button>
-                </form>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="text-muted mb-0">No custom labels yet. Family members are still available automatically in transaction assignment dropdowns.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- ── Active invites ────────────────────────────────────────── -->
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Active Invite Links</h5>
-            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createInviteModal">
-                <i class="bi bi-plus-circle"></i> Create Invite
-            </button>
-        </div>
-        <div class="card-body">
-            {% if active_invites %}
+            <h2 class="h5">Members</h2>
             <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr>
-                            <th>For</th>
-                            <th>Role</th>
-                            <th>Sections</th>
-                            <th>Expires</th>
-                            <th>Link</th>
-                            <th></th>
-                        </tr>
-                    </thead>
+                <table class="table mb-0">
+                    <thead><tr><th>Name</th><th>Email</th><th>Household role</th><th>Joined</th><th>Actions</th></tr></thead>
                     <tbody>
-                        {% for invite in active_invites %}
+                        {% for member in members %}
                         <tr>
-                            <td>{{ invite.member_name }}</td>
+                            <td>{{ member.name }}{% if member.id == current_user.id %} <span class="badge bg-secondary">You</span>{% endif %}</td>
+                            <td>{{ member.email }}</td>
+                            <td>{{ 'Owner' if member.is_household_owner else 'Member' }}</td>
+                            <td>{{ member.created_at.strftime('%d %b %Y') }}</td>
                             <td>
-                                {% if invite.role == 'admin' %}
-                                <span class="badge bg-danger">Owner</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Member</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if invite.role == 'admin' %}
-                                <span class="text-muted fst-italic">All</span>
-                                {% elif invite.allowed_sections %}
-                                    {% for s in invite.allowed_sections | from_json | sort %}
-                                    <span class="badge bg-info text-dark me-1">{{ section_labels.get(s, s) }}</span>
-                                    {% endfor %}
-                                {% else %}
-                                <span class="text-danger">None</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-muted small">{{ invite.expires_at.strftime('%d %b %Y') }}</td>
-                            <td>
-                                <div class="input-group input-group-sm" style="max-width:360px;">
-                                    <input type="text" class="form-control form-control-sm font-monospace"
-                                           value="{{ request.host_url.rstrip('/') }}{{ url_for('family.join', token=invite.token) }}"
-                                           id="invite-link-{{ invite.id }}" readonly>
-                                    <button class="btn btn-outline-secondary btn-sm"
-                                            onclick="copyInviteLink('invite-link-{{ invite.id }}')">
-                                        <i class="bi bi-clipboard"></i>
-                                    </button>
-                                </div>
-                            </td>
-                            <td>
-                                <form method="POST"
-                                      action="{{ url_for('family.revoke_invite', invite_id=invite.id) }}"
-                                      class="d-inline"
-                                      onsubmit="return confirm('Revoke this invite?');">
+                                {% if member.id != current_user.id %}
+                                <form method="POST" action="{{ url_for('family.update_role', member_id=member.id) }}" class="mb-2">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                                        <i class="bi bi-x-circle"></i>
-                                    </button>
+                                    <label class="form-label small" for="role-{{ member.id }}">Household role for {{ member.name }}</label>
+                                    <select class="form-select mb-2" name="role" id="role-{{ member.id }}">
+                                        <option value="member" {% if not member.is_household_owner %}selected{% endif %}>Member</option>
+                                        <option value="admin" {% if member.is_household_owner %}selected{% endif %}>Owner</option>
+                                    </select>
+                                    <button class="btn btn-outline-primary btn-sm" type="submit">Save role for {{ member.name }}</button>
                                 </form>
+                                <form method="POST" action="{{ url_for('family.remove_member', member_id=member.id) }}" onsubmit="return confirm('Remove this member from the household?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-outline-danger btn-sm" type="submit">Remove {{ member.name }} from household</button>
+                                </form>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            {% else %}
-            <p class="text-muted mb-0">No active invite links. Click <strong>Create Invite</strong> to generate one.</p>
-            {% endif %}
         </div>
-    </div>
-
-    <!-- ── Past invites ───────────────────────────────────────────── -->
-    {% if expired_invites %}
-    <div class="card mb-4">
-        <div class="card-header">
-            <h6 class="mb-0 text-muted"><i class="bi bi-clock-history"></i> Recent Used / Expired Invites</h6>
-        </div>
-        <div class="card-body p-0">
-            <table class="table table-sm table-striped mb-0">
-                <thead>
-                    <tr><th>For</th><th>Role</th><th>Created</th><th>Status</th></tr>
-                </thead>
-                <tbody>
-                    {% for invite in expired_invites %}
-                    <tr class="text-muted">
-                        <td>{{ invite.member_name }}</td>
-                        <td>{{ invite.role }}</td>
-                        <td>{{ invite.created_at.strftime('%d %b %Y') }}</td>
-                        <td>
-                            {% if invite.used_at %}
-                            <span class="badge bg-success">Used {{ invite.used_at.strftime('%d %b') }}</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Expired</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="card border-danger mb-4">
+    </section>
+    <section class="card mb-4">
         <div class="card-body">
-            <h2 class="h5">Delete this household</h2>
-            <p>Delete all shared and private household records, including other members'
-                private records. Login accounts remain, but everyone loses household access.</p>
-            <a href="{{ url_for('family.delete_household') }}" class="btn btn-outline-danger">
-                Review household deletion
-            </a>
-        </div>
-    </div>
-</div>
-
-<!-- ── Create Invite Modal ──────────────────────────────────────────── -->
-<div class="modal fade" id="createInviteModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
+            <h2 class="h5">Create invite link</h2>
             <form method="POST" action="{{ url_for('family.create_invite') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-person-plus"></i> Create Invite Link</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Display Name <span class="text-danger">*</span></label>
-                            <input type="text" name="member_name" class="form-control"
-                                   placeholder="e.g. Emma" required>
-                            <div class="form-text">How this person appears in transaction data.</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Role</label>
-                            <select name="role" class="form-select" id="inviteRoleSelect">
-                                <option value="member" selected>Member (restricted)</option>
-                                <option value="admin">Owner (full access)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div id="sectionCheckboxes">
-                        <label class="form-label fw-semibold">Allowed Sections</label>
-                        <div class="row g-2">
-                            {% for group_name, keys in section_groups.items() %}
-                            <div class="col-md-3">
-                                <div class="card h-100">
-                                    <div class="card-header py-1 px-2 small fw-bold">{{ group_name }}</div>
-                                    <div class="card-body py-2 px-2">
-                                        {% for key in keys %}
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox"
-                                                   name="sections" value="{{ key }}"
-                                                   id="inv-sec-{{ key }}" checked>
-                                            <label class="form-check-label small" for="inv-sec-{{ key }}">
-                                                {{ section_labels.get(key, key) }}
-                                            </label>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                </div>
+                <label class="form-label" for="inviteName">Member name</label>
+                <input class="form-control mb-3" id="inviteName" name="member_name" required>
+                <label class="form-label" for="inviteRole">Household role</label>
+                <select class="form-select mb-3" name="role" id="inviteRole">
+                    <option value="member">Member</option>
+                    <option value="admin">Owner (full household and Finance section access)</option>
+                </select>
+                <details class="mb-3">
+                    <summary>Initial Finance permissions for this invitation</summary>
+                    <p class="text-muted mt-2">As before, new member invitations select all Finance sections initially. Review before creating the link. Owners always have all sections. After joining, manage financial permissions in Finance access &amp; assignment.</p>
+                    <div class="row g-3">
+                        {% for group, keys in section_groups.items() %}
+                        <fieldset class="col-md-3">
+                            <legend class="h6">{{ group }}</legend>
+                            {% for key in keys %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sections" value="{{ key }}" id="invite-{{ key }}" checked>
+                                <label class="form-check-label" for="invite-{{ key }}">{{ section_labels[key] }}</label>
                             </div>
                             {% endfor %}
-                        </div>
+                        </fieldset>
+                        {% endfor %}
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-link-45deg"></i> Generate Link</button>
-                </div>
+                </details>
+                <button class="btn btn-primary" type="submit">Create invite</button>
             </form>
         </div>
-    </div>
-</div>
-
-<!-- ── Edit Member Modal ─────────────────────────────────────────────── -->
-<div class="modal fade" id="editMemberModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form method="POST" id="editMemberForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="editMemberTitle"><i class="bi bi-pencil"></i> Edit Member</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Display Name</label>
-                            <input type="text" name="member_name" id="editMemberDisplayName" class="form-control">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Role</label>
-                            <select name="role" class="form-select" id="editMemberRole">
-                                <option value="member">Member (restricted)</option>
-                                <option value="admin">Owner (full access)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div id="editSectionCheckboxes">
-                        <label class="form-label fw-semibold">Allowed Sections</label>
-                        <div class="row g-2">
-                            {% for group_name, keys in section_groups.items() %}
-                            <div class="col-md-3">
-                                <div class="card h-100">
-                                    <div class="card-header py-1 px-2 small fw-bold">{{ group_name }}</div>
-                                    <div class="card-body py-2 px-2">
-                                        {% for key in keys %}
-                                        <div class="form-check">
-                                            <input class="form-check-input edit-section-cb" type="checkbox"
-                                                   name="sections" value="{{ key }}"
-                                                   id="edit-sec-{{ key }}">
-                                            <label class="form-check-label small" for="edit-sec-{{ key }}">
-                                                {{ section_labels.get(key, key) }}
-                                            </label>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save Changes</button>
-                </div>
-            </form>
+    </section>
+    <section class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5">Active invite links</h2>
+            {% for invite in active_invites %}
+            <div class="border-top py-3">
+                <h3 class="h6">{{ invite.member_name }} &middot; {{ 'Owner' if invite.role == 'admin' else 'Member' }}</h3>
+                <p class="small text-muted">Expires {{ invite.expires_at.strftime('%d %b %Y') }}. Initial Finance access:
+                    {% if invite.role == 'admin' %}All sections{% else %}
+                    {% for key in invite.allowed_sections | from_json | sort %}{{ section_labels.get(key, key) }}{% if not loop.last %}, {% endif %}{% else %}No sections{% endfor %}
+                    {% endif %}
+                </p>
+                <label class="form-label" for="invite-link-{{ invite.id }}">Invitation link for {{ invite.member_name }}</label>
+                <input class="form-control mb-2" id="invite-link-{{ invite.id }}" value="{{ request.host_url.rstrip('/') }}{{ url_for('family.join', token=invite.token) }}" readonly>
+                <form method="POST" action="{{ url_for('family.revoke_invite', invite_id=invite.id) }}" onsubmit="return confirm('Revoke this invite?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-outline-danger btn-sm" type="submit">Revoke invite for {{ invite.member_name }}</button>
+                </form>
+            </div>
+            {% else %}
+            <p class="text-muted">No active invite links.</p>
+            {% endfor %}
         </div>
-    </div>
+    </section>
+    {% if expired_invites %}
+    <section class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5">Recent used / expired invites</h2>
+            <ul>{% for invite in expired_invites %}<li>{{ invite.member_name }} &middot; {{ 'Used' if invite.used_at else 'Expired' }}</li>{% endfor %}</ul>
+        </div>
+    </section>
+    {% endif %}
+    <section class="card border-danger mb-4">
+        <div class="card-body">
+            <h2 class="h5">Delete this household</h2>
+            <p>Delete all shared and private household records, including other members' private records. Login accounts remain, but everyone loses household access.</p>
+            <a class="btn btn-outline-danger" href="{{ url_for('family.delete_household') }}">Review household deletion</a>
+        </div>
+    </section>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-// ── Invite modal: hide section checkboxes for owners (role value "admin")
-document.getElementById('inviteRoleSelect').addEventListener('change', function () {
-    document.getElementById('sectionCheckboxes').style.display =
-        this.value === 'admin' ? 'none' : '';
-});
-
-// ── Edit member modal population
-const editModal = document.getElementById('editMemberModal');
-editModal.addEventListener('show.bs.modal', function (event) {
-    const btn = event.relatedTarget;
-    const memberId   = btn.dataset.memberId;
-    const memberName = btn.dataset.memberName;
-    const displayName = btn.dataset.memberDisplay;
-    const role       = btn.dataset.memberRole;
-    const sectionsJson = btn.dataset.memberSections;
-
-    document.getElementById('editMemberTitle').textContent = 'Edit Member – ' + memberName;
-    document.getElementById('editMemberDisplayName').value = displayName;
-    document.getElementById('editMemberRole').value = role;
-    document.getElementById('editMemberForm').action =
-        '/family/members/' + memberId + '/update';
-
-    // Uncheck all first
-    document.querySelectorAll('.edit-section-cb').forEach(cb => cb.checked = false);
-
-    // Show/hide section boxes based on role
-    const sectionDiv = document.getElementById('editSectionCheckboxes');
-    if (role === 'admin') {
-        sectionDiv.style.display = 'none';
-    } else {
-        sectionDiv.style.display = '';
-        if (sectionsJson) {
-            try {
-                const allowed = JSON.parse(sectionsJson);
-                allowed.forEach(key => {
-                    const cb = document.getElementById('edit-sec-' + key);
-                    if (cb) cb.checked = true;
-                });
-            } catch (e) {}
-        }
-    }
-});
-
-document.getElementById('editMemberRole').addEventListener('change', function () {
-    document.getElementById('editSectionCheckboxes').style.display =
-        this.value === 'admin' ? 'none' : '';
-});
-
-// ── Copy invite link
-function copyInviteLink(inputId) {
-    const input = document.getElementById(inputId);
-    input.select();
-    document.execCommand('copy');
-    // Brief visual feedback
-    const btn = input.nextElementSibling;
-    const origHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
-    setTimeout(() => btn.innerHTML = origHtml, 1500);
-}
-</script>
 {% endblock %}
