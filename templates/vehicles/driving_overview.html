@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% from 'shared/_ui.html' import page_header %}
+
+{% block title %}Driving Overview{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/vehicle-tables.css') }}">
+<style>
+.driving-chart-wrap { position: relative; min-height: 300px; }
+.driving-overview-table th { white-space: nowrap; }
+.jhq-thead th {
+    background: var(--bg-surface-3);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border-color);
+    border-top: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid jhq-page-enter">
+    <div class="row">
+        <div class="col-12">
+            {{ page_header('Driving Overview', 'A household-wide view of journeys, mileage, fuel costs and what is coming up.', 'Household life') }}
+            {% set trip_section = 'driving_overview' %}
+            {% include 'vehicles/_trip_nav.html' %}
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                <p class="text-muted mb-0">Active vehicles · Year to date through {{ today.strftime('%d %b %Y') }} · plans and fuel outlook for the next 30 days</p>
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('vehicles.index') }}">
+                    <i class="bi bi-car-front me-1" aria-hidden="true"></i>My Garage
+                </a>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-xl-3">
+                    <div class="card shadow-sm h-100"><div class="card-body">
+                        <div class="small text-muted">Completed trips this year</div>
+                        <div class="fs-4 fw-bold">{{ overview.year_trip_count }}</div>
+                        <div class="small text-muted">{{ "{:,}".format(overview.year_miles) }} miles driven</div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-xl-3">
+                    <div class="card shadow-sm h-100"><div class="card-body">
+                        <div class="small text-muted">Personal / business miles</div>
+                        <div class="fs-4 fw-bold">{{ "{:,}".format(overview.year_personal_miles) }}</div>
+                        <div class="small text-muted">{{ "{:,}".format(overview.year_business_miles) }} business miles</div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-xl-3">
+                    <div class="card shadow-sm h-100"><div class="card-body">
+                        <div class="small text-muted">Planned next 30 days</div>
+                        <div class="fs-4 fw-bold">{{ overview.planned_trip_count }} trips</div>
+                        <div class="small text-muted">{{ "{:,}".format(overview.planned_miles) }} miles · ≈ £{{ "%.2f"|format(overview.planned_cost) }} fuel</div>
+                    </div></div>
+                </div>
+                <div class="col-6 col-xl-3">
+                    <div class="card shadow-sm h-100"><div class="card-body">
+                        <div class="small text-muted">Forecast refuels next 30 days</div>
+                        <div class="fs-4 fw-bold">{{ overview.forecast_refill_count }}</div>
+                        <div class="small text-muted">Estimated fuel spend ≈ £{{ "%.2f"|format(overview.forecast_fuel_cost) }}</div>
+                    </div></div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header fw-semibold"><i class="bi bi-graph-up me-1" aria-hidden="true"></i>Six-month driving and fuel history</div>
+                        <div class="card-body">
+                            {% if overview.history %}
+                            <div class="driving-chart-wrap">
+                                <canvas id="fleetDrivingChart" role="img" aria-label="Monthly household driving miles and fuel spend. Exact figures are in the history table below."></canvas>
+                            </div>
+                            {% else %}
+                            <p class="text-muted mb-0">There is not enough driving history to chart yet.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-7">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header fw-semibold">Monthly history</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 driving-overview-table">
+                                <thead class="jhq-thead">
+                                    <tr>
+                                        <th>Month</th>
+                                        <th class="text-end">Trips</th>
+                                        <th class="text-end">Miles</th>
+                                        <th class="text-end">Personal</th>
+                                        <th class="text-end">Business</th>
+                                        <th class="text-end">Fuel spend</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for month in overview.history %}
+                                    <tr>
+                                        <td>{{ month.label }}</td>
+                                        <td class="text-end">{{ month.trip_count }}</td>
+                                        <td class="text-end">{{ "{:,}".format(month.miles) }}</td>
+                                        <td class="text-end">{{ "{:,}".format(month.personal_miles) }}</td>
+                                        <td class="text-end">{{ "{:,}".format(month.business_miles) }}</td>
+                                        <td class="text-end">£{{ "%.2f"|format(month.fuel_cost) }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="6" class="text-center text-muted py-3">No completed trips or fuel fills in this period.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-5">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header fw-semibold">Vehicle comparison · year to date</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0 driving-overview-table">
+                                <thead class="jhq-thead">
+                                    <tr><th>Vehicle</th><th class="text-end">Miles</th><th class="text-end">Avg MPG</th><th class="text-end">Planned</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in vehicle_rows %}
+                                    <tr>
+                                        <td>
+                                            <a href="{{ url_for('vehicles.trips', vehicle_id_trip=row.vehicle.id) }}">{{ row.vehicle.name }}</a>
+                                            <div class="small text-muted">{{ row.vehicle.registration }}</div>
+                                        </td>
+                                        <td class="text-end">{{ "{:,}".format(row.overview.year_miles) }}</td>
+                                        <td class="text-end">{{ "%.1f"|format(row.stats.avg_mpg or 0) }}</td>
+                                        <td class="text-end">{{ "{:,}".format(row.overview.planned_miles) }} mi</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="4" class="text-center text-muted py-3">No active vehicles.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-7">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header fw-semibold"><i class="bi bi-calendar3 me-1" aria-hidden="true"></i>Upcoming trips</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="jhq-thead"><tr><th>Date</th><th>Vehicle</th><th>Journey</th><th class="text-end">Miles</th><th class="text-end">Est. fuel</th></tr></thead>
+                                <tbody>
+                                    {% for trip in overview.upcoming_trips %}
+                                    <tr>
+                                        <td>{{ trip.date.strftime('%a %d %b') }}</td>
+                                        <td>{{ trip.vehicle_name }}</td>
+                                        <td>{{ trip.description or 'Planned trip' }}</td>
+                                        <td class="text-end">{{ "{:,}".format(trip.miles) }}</td>
+                                        <td class="text-end">≈ £{{ "%.2f"|format(trip.cost) }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="5" class="text-center text-muted py-3">No trips planned in the next 30 days.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-5">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header fw-semibold"><i class="bi bi-fuel-pump me-1" aria-hidden="true"></i>Forecast refuels</div>
+                        <div class="list-group list-group-flush">
+                            {% for refill in overview.upcoming_refills %}
+                            <div class="list-group-item d-flex justify-content-between gap-3">
+                                <div><div class="fw-semibold">{{ refill.vehicle_name }}</div><div class="small text-muted">{{ refill.date.strftime('%a %d %b') }}</div></div>
+                                <span class="fw-semibold text-nowrap">≈ £{{ "%.2f"|format(refill.cost) }}</span>
+                            </div>
+                            {% else %}
+                            <div class="list-group-item text-muted">No refuels forecast in the next 30 days.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if overview.history %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+<script id="fleetDrivingChartData" type="application/json">{{ chart_data | tojson }}</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const dataElement = document.getElementById('fleetDrivingChartData');
+    const chartData = dataElement ? JSON.parse(dataElement.textContent) : null;
+    const canvas = document.getElementById('fleetDrivingChart');
+    if (!chartData || !canvas) return;
+
+    const palette = financeChartPalette();
+    new Chart(canvas, {
+        data: {
+            labels: chartData.labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Miles driven',
+                    data: chartData.miles,
+                    yAxisID: 'yMiles',
+                    backgroundColor: palette[1] + '80',
+                    borderColor: palette[1],
+                    borderWidth: 1,
+                },
+                {
+                    type: 'line',
+                    label: 'Fuel spend (£)',
+                    data: chartData.fuelSpend,
+                    yAxisID: 'ySpend',
+                    borderColor: palette[0],
+                    backgroundColor: palette[0] + '26',
+                    tension: 0.25,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                yMiles: {
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true,
+                    title: { display: true, text: 'Miles' },
+                },
+                ySpend: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    title: { display: true, text: 'Fuel spend (£)' },
+                    grid: { drawOnChartArea: false },
+                },
+            },
+        },
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

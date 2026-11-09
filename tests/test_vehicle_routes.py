@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from extensions import db
+from models.fuel import FuelRecord
 from models.trip_template import TripTemplate
 from models.trip_schedule import TripSchedule
 from models.trips import Trip
@@ -53,6 +54,74 @@ def test_trip_template_routes_create_update_and_delete(app, family, user):
     response = client.post(f'/vehicles/trip-templates/delete/{template.id}')
     assert response.status_code == 302
     assert TripTemplate.query.count() == 0
+
+
+def test_vehicle_overview_shows_trip_forecast_and_recent_history(app, family, user):
+    vehicle = Vehicle(
+        family_id=family.id,
+        name='Overview Car',
+        make='Test',
+        model='Summary',
+        registration='OV12 CAR',
+        is_active=True,
+    )
+    db.session.add(vehicle)
+    db.session.flush()
+    today = date.today()
+    db.session.add_all([
+        Trip(
+            family_id=family.id,
+            vehicle_id=vehicle.id,
+            date=today,
+            total_miles=18,
+            personal_miles=18,
+            trip_status='actual',
+        ),
+        Trip(
+            family_id=family.id,
+            vehicle_id=vehicle.id,
+            date=today + timedelta(days=7),
+            total_miles=40,
+            personal_miles=40,
+            trip_status='planned',
+            trip_cost=7.25,
+        ),
+        FuelRecord(
+            family_id=family.id,
+            vehicle_id=vehicle.id,
+            date=today,
+            mileage=1000,
+            cost=42.50,
+            gallons=8,
+        ),
+    ])
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+
+    response = client.get('/vehicles')
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'Driving overview' in html
+    assert 'Trips this year' in html
+    assert 'Planned trips' in html
+    assert 'Planned trip fuel' in html
+    assert 'Forecast refuels' in html
+    assert 'Recent history' in html
+    assert '£7.25' in html
+    assert '£42.50' in html
+
+    overview_response = client.get('/vehicles/driving-overview')
+    overview_html = overview_response.get_data(as_text=True)
+    assert overview_response.status_code == 200
+    assert 'Six-month driving and fuel history' in overview_html
+    assert 'Vehicle comparison' in overview_html
+    assert 'Upcoming trips' in overview_html
+    assert 'Forecast refuels' in overview_html
+    assert 'Overview Car' in overview_html
+    assert 'Planned trip' in overview_html
+    assert 'fleetDrivingChartData' in overview_html
 
 
 def test_trip_schedule_route_creates_and_pauses_planned_trips(app, family, user):

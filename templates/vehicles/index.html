@@ -64,6 +64,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('vehicles.driving_overview') }}">
+                        <i class="bi bi-graph-up" aria-hidden="true"></i><span>Driving Overview</span>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('vehicles.fuel') }}">
                         <i class="bi bi-fuel-pump-fill" aria-hidden="true"></i><span>Fuel Log</span>
                     </a>
@@ -110,6 +115,7 @@
                     <div class="row g-4">
                         {% for vehicle in vehicles %}
                         {% set stats = vehicle_stats.get(vehicle.id) %}
+                        {% set overview = vehicle_overviews.get(vehicle.id) %}
                         {% set ts = tank_statuses.get(vehicle.id) %}
                         {% set next_fill = next_predicted_refills.get(vehicle.id) %}
 
@@ -256,6 +262,76 @@
                                             <div class="small text-muted">Total Miles</div>
                                             <div class="fw-bold text-success">{{ "{:,}".format(stats.total_miles or 0) }}</div>
                                         </div>
+                                    </div>
+                                    {% endif %}
+
+                                    {% if overview %}
+                                    <hr class="my-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0 fw-semibold"><i class="bi bi-graph-up me-1"></i>Driving overview</h6>
+                                        <span class="small text-muted">Year to date · next 30 days</span>
+                                    </div>
+                                    <div class="row g-2 text-center mb-3">
+                                        <div class="col-6 col-lg-3">
+                                            <div class="p-2 jhq-metric-tile h-100">
+                                                <div class="small text-muted">Trips this year</div>
+                                                <div class="fw-bold">{{ overview.year_trip_count }}</div>
+                                                <div class="small text-muted">{{ "{:,}".format(overview.year_miles) }} mi</div>
+                                                <div class="small text-muted">Personal {{ "{:,}".format(overview.year_personal_miles) }} · Business {{ "{:,}".format(overview.year_business_miles) }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-lg-3">
+                                            <div class="p-2 jhq-metric-tile h-100">
+                                                <div class="small text-muted">Planned trips</div>
+                                                <div class="fw-bold">{{ overview.planned_trip_count }}</div>
+                                                <div class="small text-muted">{{ "{:,}".format(overview.planned_miles) }} mi</div>
+                                                <div class="small text-muted">{{ "{:,}".format(overview.planned_personal_miles) }} personal · {{ "{:,}".format(overview.planned_business_miles) }} business</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-lg-3">
+                                            <div class="p-2 jhq-metric-tile h-100">
+                                                <div class="small text-muted">Planned trip fuel</div>
+                                                <div class="fw-bold">≈ £{{ "%.2f"|format(overview.planned_cost) }}</div>
+                                                <div class="small text-muted">estimate</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-lg-3">
+                                            <div class="p-2 jhq-metric-tile h-100">
+                                                <div class="small text-muted">Forecast refuels</div>
+                                                <div class="fw-bold">{{ overview.forecast_refill_count }}</div>
+                                                <div class="small text-muted">≈ £{{ "%.2f"|format(overview.forecast_fuel_cost) }} in 30 days</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0 fw-semibold">Recent history</h6>
+                                        <a class="small text-decoration-none" href="{{ url_for('vehicles.driving_overview') }}">Fleet overview</a>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-0">
+                                            <thead class="jhq-thead">
+                                                <tr>
+                                                    <th>Month</th>
+                                                    <th class="text-end">Trips</th>
+                                                    <th class="text-end">Miles</th>
+                                                    <th class="text-end">Fuel spend</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for month in overview.history %}
+                                                <tr>
+                                                    <td>{{ month.label }}</td>
+                                                    <td class="text-end">{{ month.trip_count }}</td>
+                                                    <td class="text-end">
+                                                        {{ "{:,}".format(month.miles) }}
+                                                        <div class="small text-muted">{{ "{:,}".format(month.personal_miles) }} personal · {{ "{:,}".format(month.business_miles) }} business</div>
+                                                    </td>
+                                                    <td class="text-end">£{{ "%.2f"|format(month.fuel_cost) }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
                                     </div>
                                     {% endif %}
 

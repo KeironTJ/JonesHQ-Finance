@@ -570,6 +570,162 @@ class VehicleService:
             'total_gallons': total_gallons,
             'avg_price_per_gallon': avg_price_per_gallon
         }
+
+    @staticmethod
+    def get_vehicle_overview(vehicle_id, today=None, forecast_refills=None):
+        """Summarize recent and upcoming trips, fuel costs, and refill forecasts."""
+        today = today or date.today()
+        forecast_end = today + timedelta(days=30)
+        history_start = today.replace(day=1)
+        for _ in range(5):
+            history_start = (history_start - timedelta(days=1)).replace(day=1)
+
+        year_start = today.replace(month=1, day=1)
+        actual_trips = family_query(Trip).filter(
+            Trip.vehicle_id == vehicle_id,
+            Trip.trip_status == 'actual',
+            Trip.date >= year_start,
+            Trip.date <= today,
+        ).all()
+        planned_trips = family_query(Trip).filter(
+            Trip.vehicle_id == vehicle_id,
+            Trip.trip_status == 'planned',
+            Trip.date >= today,
+            Trip.date <= forecast_end,
+        ).all()
+
+        historical_trips = family_query(Trip).filter(
+            Trip.vehicle_id == vehicle_id,
+            Trip.trip_status == 'actual',
+            Trip.date >= history_start,
+            Trip.date <= today,
+        ).all()
+        historical_fills = family_query(FuelRecord).filter(
+            FuelRecord.vehicle_id == vehicle_id,
+            FuelRecord.date >= history_start,
+            FuelRecord.date <= today,
+        ).all()
+
+        months = []
+        month_start = history_start
+        while month_start <= today:
+            month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+            trips = [
+                trip for trip in historical_trips
+                if trip.date.year == month_start.year and trip.date.month == month_start.month
+            ]
+            fills = [
+                fill for fill in historical_fills
+                if fill.date.year == month_start.year and fill.date.month == month_start.month
+            ]
+            months.append({
+                'label': month_start.strftime('%b %Y'),
+                'trip_count': len(trips),
+                'miles': sum(trip.total_miles or 0 for trip in trips),
+                'personal_miles': sum(trip.personal_miles or 0 for trip in trips),
+                'business_miles': sum(trip.business_miles or 0 for trip in trips),
+                'fuel_cost': sum((fill.cost or Decimal('0') for fill in fills), Decimal('0')),
+            })
+            month_start = month_end + timedelta(days=1)
+
+        if forecast_refills is None:
+            from services.vehicles.fuel_forecasting_service import FuelForecastingService
+            forecast_refills = FuelForecastingService.predict_refills(vehicle_id)
+        forecast_refills = [
+            refill for refill in forecast_refills
+            if today <= refill['date'] <= forecast_end
+        ]
+        return {
+            'year_trip_count': len(actual_trips),
+            'year_miles': sum(trip.total_miles or 0 for trip in actual_trips),
+            'year_personal_miles': sum(trip.personal_miles or 0 for trip in actual_trips),
+            'year_business_miles': sum(trip.business_miles or 0 for trip in actual_trips),
+            'average_trip_miles': (
+                sum(trip.total_miles or 0 for trip in actual_trips) / len(actual_trips)
+                if actual_trips else 0
+            ),
+            'planned_trip_count': len(planned_trips),
+            'planned_miles': sum(trip.total_miles or 0 for trip in planned_trips),
+            'planned_personal_miles': sum(trip.personal_miles or 0 for trip in planned_trips),
+            'planned_business_miles': sum(trip.business_miles or 0 for trip in planned_trips),
+            'planned_cost': sum(
+                (trip.trip_cost or Decimal('0') for trip in planned_trips),
+                Decimal('0'),
+            ),
+            'forecast_refill_count': len(forecast_refills),
+            'forecast_fuel_cost': sum(
+                (Decimal(str(refill['cost'])) for refill in forecast_refills),
+                Decimal('0'),
+            ),
+            'history': months,
+        }
+
+    @staticmethod
+    def get_fleet_driving_overview(vehicle_overviews, vehicles, today=None, predictions_by_vehicle=None):
+        """Combine per-vehicle summaries into household driving trends and plans."""
+        today = today or date.today()
+        forecast_end = today + timedelta(days=30)
+        vehicle_by_id = {vehicle.id: vehicle for vehicle in vehicles}
+        summaries = [vehicle_overviews[vehicle.id] for vehicle in vehicles]
+        history_by_label = {}
+
+        for summary in summaries:
+            for month in summary['history']:
+                row = history_by_label.setdefault(month['label'], {
+                    'label': month['label'],
+                    'trip_count': 0,
+                    'miles': 0,
+                    'personal_miles': 0,
+                    'business_miles': 0,
+                    'fuel_cost': Decimal('0'),
+                })
+                for key in ('trip_count', 'miles', 'personal_miles', 'business_miles'):
+                    row[key] += month[key]
+                row['fuel_cost'] += month['fuel_cost']
+
+        planned_trips = family_query(Trip).filter(
+            Trip.vehicle_id.in_(vehicle_by_id),
+            Trip.trip_status == 'planned',
+            Trip.date >= today,
+            Trip.date <= forecast_end,
+        ).order_by(Trip.date, Trip.id).all() if vehicle_by_id else []
+        upcoming_trips = [{
+            'date': trip.date,
+            'vehicle_name': vehicle_by_id[trip.vehicle_id].name,
+            'description': trip.journey_description,
+            'miles': trip.total_miles or 0,
+            'cost': trip.trip_cost or Decimal('0'),
+        } for trip in planned_trips]
+
+        upcoming_refills = []
+        for vehicle in vehicles:
+            for refill in (predictions_by_vehicle or {}).get(vehicle.id, []):
+                if today <= refill['date'] <= forecast_end:
+                    upcoming_refills.append({
+                        'date': refill['date'],
+                        'vehicle_name': vehicle.name,
+                        'cost': Decimal(str(refill['cost'])),
+                    })
+        upcoming_refills.sort(key=lambda refill: refill['date'])
+
+        history = list(history_by_label.values())
+        return {
+            'vehicle_count': len(vehicles),
+            'year_trip_count': sum(summary['year_trip_count'] for summary in summaries),
+            'year_miles': sum(summary['year_miles'] for summary in summaries),
+            'year_personal_miles': sum(summary['year_personal_miles'] for summary in summaries),
+            'year_business_miles': sum(summary['year_business_miles'] for summary in summaries),
+            'planned_trip_count': sum(summary['planned_trip_count'] for summary in summaries),
+            'planned_miles': sum(summary['planned_miles'] for summary in summaries),
+            'planned_cost': sum((summary['planned_cost'] for summary in summaries), Decimal('0')),
+            'forecast_refill_count': sum(summary['forecast_refill_count'] for summary in summaries),
+            'forecast_fuel_cost': sum(
+                (summary['forecast_fuel_cost'] for summary in summaries), Decimal('0'),
+            ),
+            'history': history,
+            'upcoming_trips': upcoming_trips,
+            'upcoming_refills': upcoming_refills,
+        }
     
     @staticmethod
     def calculate_trip_cost(vehicle_id, miles, trip_date):

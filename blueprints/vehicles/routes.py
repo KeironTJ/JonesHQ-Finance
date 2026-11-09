@@ -32,14 +32,17 @@ def index():
 
     # Get stats and tank status for each active vehicle
     vehicle_stats = {}
+    vehicle_overviews = {}
     tank_statuses = {}
     next_predicted_refills = {}
     for vehicle in active_vehicles:
         vehicle_stats[vehicle.id] = VehicleService.get_vehicle_stats(vehicle.id)
-        tank_statuses[vehicle.id] = FuelForecastingService.get_tank_status(vehicle.id)
         predictions = FuelForecastingService.predict_refills(vehicle.id)
-        from datetime import date as _date
-        future = [p for p in predictions if p['date'] >= _date.today()]
+        vehicle_overviews[vehicle.id] = VehicleService.get_vehicle_overview(
+            vehicle.id, forecast_refills=predictions,
+        )
+        tank_statuses[vehicle.id] = FuelForecastingService.get_tank_status(vehicle.id)
+        future = [p for p in predictions if p['date'] >= date.today()]
         next_predicted_refills[vehicle.id] = future[0] if future else None
 
     # Last fuel fill per vehicle — single batched query to pre-fill the Add Fuel modal
@@ -64,11 +67,49 @@ def index():
         all_vehicles=all_vehicles,
         accounts=accounts,
         vehicle_stats=vehicle_stats,
+        vehicle_overviews=vehicle_overviews,
         tank_statuses=tank_statuses,
         next_predicted_refills=next_predicted_refills,
         last_fill_by_vehicle=last_fill_by_vehicle,
         active_tab=active_tab,
         today=date.today(),
+    )
+
+
+@vehicles_bp.route('/vehicles/driving-overview')
+def driving_overview():
+    """Fleet-wide driving history and upcoming trip/fuel outlook."""
+    vehicles = family_query(Vehicle).filter_by(is_active=True).order_by(Vehicle.name).all()
+    today = date.today()
+    predictions_by_vehicle = {
+        vehicle.id: FuelForecastingService.predict_refills(vehicle.id)
+        for vehicle in vehicles
+    }
+    overviews = {
+        vehicle.id: VehicleService.get_vehicle_overview(
+            vehicle.id, today=today, forecast_refills=predictions_by_vehicle[vehicle.id],
+        )
+        for vehicle in vehicles
+    }
+    overview = VehicleService.get_fleet_driving_overview(
+        overviews, vehicles, today=today, predictions_by_vehicle=predictions_by_vehicle,
+    )
+    vehicle_rows = [{
+        'vehicle': vehicle,
+        'overview': overviews[vehicle.id],
+        'stats': VehicleService.get_vehicle_stats(vehicle.id),
+    } for vehicle in vehicles]
+    chart_data = {
+        'labels': [month['label'] for month in overview['history']],
+        'miles': [month['miles'] for month in overview['history']],
+        'fuelSpend': [float(month['fuel_cost']) for month in overview['history']],
+    }
+    return render_template(
+        'vehicles/driving_overview.html',
+        overview=overview,
+        vehicle_rows=vehicle_rows,
+        chart_data=chart_data,
+        today=today,
     )
 
 
