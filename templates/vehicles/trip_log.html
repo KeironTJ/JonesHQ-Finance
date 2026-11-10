@@ -1082,7 +1082,7 @@ function bulkDeleteTrips() {
 
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = '/vehicles/trips/bulk-delete';
+    form.action = '/finance/vehicles/trips/bulk-delete';
     const csrf = document.createElement('input');
     csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = '{{ csrf_token() }}';
     form.appendChild(csrf);

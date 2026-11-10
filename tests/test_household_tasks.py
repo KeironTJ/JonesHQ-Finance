@@ -82,7 +82,7 @@ def test_empty_hub_does_not_create_records_on_get_and_adult_can_manage_without_f
     assert response.location.endswith(f'list_id={task_list.id}')
     assert task_list.family_id == adult.family_id
     assert task_list.creator_membership_id == adult.get_active_household_membership().id
-    assert client.get('/dashboard').status_code == 403
+    assert client.get('/finance/dashboard').status_code == 403
     assert client.post(f'/household/tasks/lists/{task_list.id}/edit', data={
         'title': 'Weekly jobs', 'icon': 'house', 'colour': 'success',
     }).status_code == 302
@@ -295,7 +295,7 @@ def test_active_household_not_default_and_cross_household_ids_rejected(app, user
     client = client_for(app, user)
     response = client.post('/household/tasks/new', data={'title': 'Test', 'list_id': task_list.id, 'assigned_membership_id': member.id})
     assert b'active assignee' in response.data and HouseholdTask.query.count() == 1
-    client.post('/family/select', data={'family_id': other.id})
+    client.post('/central/family/select', data={'family_id': other.id})
     for path in (f'/household/tasks/{original.id}', f'/household/tasks?list_id={task_list.id}'):
         assert client.get(path).status_code == 404
     assert client.post(f'/household/tasks/{original.id}/completion', data={'action': 'complete'}).status_code == 404
@@ -421,7 +421,7 @@ def test_departure_removes_personal_lists_preserves_shared_tasks_and_detaches_li
     client_for(app, adult).post(f'/household/tasks/{task.id}/completion', data={'action': 'complete'})
     stamp = task.completed_at
     if departure == 'account':
-        response = client_for(app, adult).post('/account/security/delete', data={
+        response = client_for(app, adult).post('/central/account/security/delete', data={
             'password': 'TestPass1!', 'confirmation': 'DELETE MY ACCOUNT',
         })
         assert response.location.endswith('/login')

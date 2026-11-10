@@ -19,7 +19,7 @@ def test_household_onboarding_configures_essentials(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/onboarding/', data={
+    response = client.post('/finance/onboarding/', data={
         'payday_day': '25',
         'create_account': '1',
         'account_name': 'Main Current',
@@ -30,7 +30,7 @@ def test_household_onboarding_configures_essentials(app, family, user):
     })
 
     assert response.status_code == 302
-    assert response.location.endswith('/dashboard')
+    assert response.location.endswith('/finance/dashboard')
     db.session.refresh(family)
     db.session.refresh(user)
     account = Account.query.filter_by(family_id=family.id).one()
@@ -70,12 +70,12 @@ def test_personal_onboarding_only_sets_member_default(app, family, user):
 
     client = app.test_client()
     _login(client, member.id)
-    response = client.post('/onboarding/', data={
+    response = client.post('/finance/onboarding/', data={
         'default_account_id': str(shared_account.id),
     })
 
     assert response.status_code == 302
-    assert response.location.endswith('/dashboard')
+    assert response.location.endswith('/finance/dashboard')
     db.session.refresh(member)
     db.session.refresh(family)
     assert member.onboarding_version == 1
@@ -89,17 +89,17 @@ def test_household_onboarding_can_be_paused_and_resumed(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/onboarding/skip')
+    response = client.post('/finance/onboarding/skip')
 
     assert response.status_code == 302
-    assert response.location.endswith('/dashboard')
+    assert response.location.endswith('/finance/dashboard')
     db.session.refresh(family)
     db.session.refresh(user)
     assert family.onboarding_version == 0
     assert user.onboarding_version == 0
     assert Account.query.filter_by(family_id=family.id).count() == 0
 
-    dashboard = client.get('/dashboard')
+    dashboard = client.get('/finance/dashboard')
     assert dashboard.status_code == 200
     assert b'Continue setup' in dashboard.data
 
@@ -123,7 +123,7 @@ def test_registration_opens_hub_before_optional_finance_setup(app):
     })
 
     assert response.status_code == 302
-    assert response.location.endswith('/hub')
+    assert response.location.endswith('/central/')
     created_user = User.query.filter_by(email='new-admin@example.com').one()
     assert created_user.onboarding_version == 0
     assert created_user.family.onboarding_version == 0
@@ -146,7 +146,7 @@ def test_invited_member_opens_hub_before_optional_finance_setup(app, family, use
     g.pop('_login_user', None)
     client = app.test_client()
 
-    response = client.post('/family/join/personal-setup-token', data={
+    response = client.post('/central/family/join/personal-setup-token', data={
         'name': 'Invited Member',
         'email': 'invited@example.com',
         'password': 'TestPass1!',
@@ -154,7 +154,7 @@ def test_invited_member_opens_hub_before_optional_finance_setup(app, family, use
     })
 
     assert response.status_code == 302
-    assert response.location.endswith('/hub')
+    assert response.location.endswith('/central/')
     invited_user = User.query.filter_by(email='invited@example.com').one()
     assert invited_user.onboarding_version == 0
     assert invited_user.family_id == family.id

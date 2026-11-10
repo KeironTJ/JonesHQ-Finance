@@ -60,12 +60,12 @@ def test_setup_requires_valid_code_and_returns_recovery_codes(app, user):
 def test_setup_page_shows_qr_and_confirms(app, user):
 	client = app.test_client()
 	password_login(client)
-	response = client.get('/account/security/two-factor/setup')
+	response = client.get('/central/account/security/two-factor/setup')
 	assert response.status_code == 200
 	assert b'<svg' in response.data
 	assert user.totp_secret.encode() in response.data
 
-	response = client.post('/account/security/two-factor/setup', data={'code': totp_code(user)})
+	response = client.post('/central/account/security/two-factor/setup', data={'code': totp_code(user)})
 	assert response.status_code == 200
 	assert b'Save these now' in response.data
 	assert user.two_factor_enabled
@@ -93,9 +93,9 @@ def test_login_requires_second_step_when_enabled(app, user):
 def test_login_preserves_remember_and_safe_next(app, user):
 	enable_two_factor(user)
 	client = app.test_client()
-	client.post('/login?next=/accounts/', data={'email': user.email, 'password': 'TestPass1!', 'remember': 'y'})
+	client.post('/login?next=/finance/accounts/', data={'email': user.email, 'password': 'TestPass1!', 'remember': 'y'})
 	response = client.post('/login/two-factor', data={'code': totp_code(user, 1)})
-	assert response.headers['Location'] == '/accounts/'
+	assert response.headers['Location'] == '/finance/accounts/'
 	assert 'remember_token' in response.headers.get('Set-Cookie', '') or any(
 		'remember_token' in value for value in response.headers.getlist('Set-Cookie'))
 
@@ -187,11 +187,11 @@ def test_site_admin_without_two_factor_is_forced_to_setup(app, user):
 	db.session.commit()
 	client = app.test_client()
 	password_login(client)
-	response = client.get('/dashboard/')
+	response = client.get('/finance/dashboard/')
 	assert response.status_code == 302
-	assert response.headers['Location'].endswith('/account/security/two-factor/setup')
+	assert response.headers['Location'].endswith('/central/account/security/two-factor/setup')
 	assert client.get('/site-admin/console/').status_code == 302
-	assert client.get('/account/security/two-factor/setup').status_code == 200
+	assert client.get('/central/account/security/two-factor/setup').status_code == 200
 
 
 def test_site_admin_cannot_disable_two_factor(app, user):
@@ -237,6 +237,6 @@ def test_admin_panel_never_shows_two_factor_secret(app, user):
 def test_account_security_page(app, user):
 	client = app.test_client()
 	password_login(client)
-	response = client.get('/account/security')
+	response = client.get('/central/account/security')
 	assert response.status_code == 200
 	assert b'Turn on two-factor login' in response.data

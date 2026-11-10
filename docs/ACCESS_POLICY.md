@@ -42,7 +42,7 @@ local role or module grant is incorrect. Children can use the Household Hub
 calendar, My day, appearance and sign-in security.
 
 Children with Household Hub access start at `/household/my-day` after sign-in
-and on `/`; `/hub` renders the same child page. Explicit safe destinations are
+and on `/`; `/central/` renders the same child page. Explicit safe destinations are
 preserved and still enforce access. My day uses London's current date, shows
 all approved household activities (not just those they attend), privacy-scoped
 manual events, their own actionable tasks/jobs and reward progress. Pending
@@ -51,7 +51,7 @@ Earlier work is separate; approval and point-reservation rules are unchanged.
 Revoking Hub access denies My day immediately. Detached accounts retain the
 Account security fallback.
 
-Owners have an optional read-only setup checklist at `/hub/setup`. It links
+Owners have an optional read-only setup checklist at `/central/setup`. It links
 the existing people, access, tasks and rewards editors and respects the selected
 household and module grants. It neither creates sample records nor grants access.
 

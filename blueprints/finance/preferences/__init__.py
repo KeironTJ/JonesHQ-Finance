@@ -1,7 +1,7 @@
 from flask import Blueprint
 from flask_login import login_required
 
-finance_preferences_bp = Blueprint('finance_preferences', __name__, url_prefix='/preferences')
+finance_preferences_bp = Blueprint('finance_preferences', __name__)
 
 
 @finance_preferences_bp.before_request

@@ -3,7 +3,6 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from services.household.household_access_service import HouseholdAccessService
-from services.platform.landing_service import LandingService
 from services.household.membership_service import HouseholdMembershipService
 from services.platform.settings_navigation_service import SettingsNavigationService
 from services.platform.module_registry import ModuleRegistry
@@ -35,13 +34,6 @@ def settings_navigation():
 
 
 @central_bp.route('/')
-def index():
-    if not current_user.is_authenticated:
-        return redirect(url_for('auth.intro'))
-    return redirect(LandingService.resolve(current_user))
-
-
-@central_bp.route('/hub')
 @login_required
 def hub():
     if current_user.is_managed_child and ModuleAccessService.can_access(current_user, 'household'):
@@ -53,33 +45,33 @@ def hub():
     )
 
 
-@central_bp.route('/hub/settings')
+@central_bp.route('/settings')
 @login_required
 def settings():
     return render_template('central/settings.html')
 
 
-@central_bp.route('/hub/setup')
+@central_bp.route('/setup')
 @login_required
 def household_setup():
     from services.household.setup_service import HouseholdSetupService
     return render_template('central/setup.html', **HouseholdSetupService.page_data())
 
 
-@central_bp.route('/hub/settings/children/new')
+@central_bp.route('/settings/children/new')
 @login_required
 def new_managed_child():
     HouseholdAccessService.require_owner()
     return render_template('central/child_form.html', submitted={})
 
 
-@central_bp.route('/hub/settings/access')
+@central_bp.route('/settings/access')
 @login_required
 def household_access():
     return render_template('central/access.html', **HouseholdAccessService.get_page_data())
 
 
-@central_bp.route('/hub/settings/access/members/<int:member_id>', methods=['POST'])
+@central_bp.route('/settings/access/members/<int:member_id>', methods=['POST'])
 @login_required
 @recent_auth_required
 def update_module_access(member_id):
@@ -97,7 +89,7 @@ def update_module_access(member_id):
     return redirect(url_for('central.household_access'))
 
 
-@central_bp.route('/hub/settings/children/create', methods=['POST'])
+@central_bp.route('/settings/children/create', methods=['POST'])
 @login_required
 @recent_auth_required
 def create_managed_child():

@@ -112,7 +112,7 @@ flask household-invite list
 flask household-invite revoke <id>
 ```
 
-Family member invites (`/family/join/<token>`) are unchanged.
+Family member invites use `/central/family/join/<token>`.
 
 Flask sessions are still signed client-side cookies, not encrypted storage.
 Never store financial records or authentication secrets in them. Login itself is
@@ -433,7 +433,7 @@ keep their owner.
 
 ### Individual account deletion
 
-Account security links to a deletion review at `/account/security/delete`.
+Account security links to a deletion review at `/central/account/security/delete`.
 Deletion requires recent password confirmation, the current password again,
 CSRF protection and the exact phrase `DELETE MY ACCOUNT`. POST attempts are
 limited to three per 15 minutes per user. Review counts are recalculated on
@@ -472,7 +472,7 @@ foreign keys, review the deletion plan/order and test with foreign keys enabled.
 
 ### Whole-household deletion
 
-Family Management has a separate deletion review at `/family/delete`, below the
+Family Management has a separate deletion review at `/central/family/delete`, below the
 ordinary management controls. One active administrator of that household can
 confirm deletion, including other members' private records; other administrators
 do not need to approve. The page lists affected members and table counts without

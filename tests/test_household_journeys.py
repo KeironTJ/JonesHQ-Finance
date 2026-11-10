@@ -35,29 +35,29 @@ def client_for(app, actor):
 
 def test_settings_connect_people_access_and_focused_child_creation(app, user):
     client = client_for(app, user)
-    for path in ('/hub/settings', '/family/', '/hub/settings/access', '/account/children', '/hub/setup'):
+    for path in ('/central/settings', '/central/family/', '/central/settings/access', '/central/account/children', '/central/setup'):
         response = client.get(path)
         assert response.status_code == 200
-        assert b'href="/hub/settings/children/new"' in response.data
-    settings = client.get('/hub/settings').get_data(as_text=True)
+        assert b'href="/central/settings/children/new"' in response.data
+    settings = client.get('/central/settings').get_data(as_text=True)
     assert all(heading in settings for heading in ('Your account', 'Household &amp; people', 'Module settings'))
-    assert b'id="invite-adult"' in client.get('/family/').data
-    access = client.get('/hub/settings/access').data
-    assert b'action="/hub/settings/children/create"' not in access
-    form = client.get('/hub/settings/children/new').get_data(as_text=True)
-    assert 'action="/hub/settings/children/create"' in form
+    assert b'id="invite-adult"' in client.get('/central/family/').data
+    access = client.get('/central/settings/access').data
+    assert b'action="/central/settings/children/create"' not in access
+    form = client.get('/central/settings/children/new').get_data(as_text=True)
+    assert 'action="/central/settings/children/create"' in form
     assert f'Use at least {app.config["PASSWORD_MIN_LENGTH"]} characters' in form
-    response = client.post('/hub/settings/children/create', data={
+    response = client.post('/central/settings/children/create', data={
         'name': 'New child', 'email': 'new-child@example.com',
         'password': 'TestPass1!', 'confirm_password': 'TestPass1!',
     })
-    assert response.location == '/family/'
+    assert response.location == '/central/family/'
     assert b'Manage child account' in client.get(response.location).data
 
 
 def test_child_form_escapes_retained_fields_and_never_echoes_password(app, user):
     client = client_for(app, user)
-    response = client.post('/hub/settings/children/create', data={
+    response = client.post('/central/settings/children/create', data={
         'name': '"><script>alert(1)</script>', 'email': 'invalid',
         'password': 'NeverEchoThisPassword1!', 'confirm_password': 'Different2!',
     })
@@ -79,7 +79,7 @@ def test_owner_setup_is_read_only_scoped_and_honest_about_module_access(app, fam
     db.session.commit()
     client = client_for(app, user)
     for _ in range(2):
-        response = client.get('/hub/setup')
+        response = client.get('/central/setup')
         assert response.status_code == 200
         assert b'2 adult accounts, 2 child accounts' in response.data
     assert TaskList.query.count() == 0
@@ -88,21 +88,21 @@ def test_owner_setup_is_read_only_scoped_and_honest_about_module_access(app, fam
     create_task(app, user, shared, title='First shared job')
     reward_for(app, user)
     client = client_for(app, user)
-    response = client.get('/hub/setup')
+    response = client.get('/central/setup')
     assert b'already has a shared task' in response.data
     assert b'Your reward catalogue is started' in response.data
-    client.post('/family/select', data={'family_id': other.id})
-    response = client.get('/hub/setup')
+    client.post('/central/family/select', data={'family_id': other.id})
+    response = client.get('/central/setup')
     assert b'Set up Second household' in response.data
     assert b'1 adult account, 0 child accounts' in response.data
     assert b'Enable Household Hub for your account' in response.data
     assert b'href="/household/rewards' not in response.data
     assert b'href="/household/tasks' not in response.data
-    response = client.post('/hub/settings/children/create', data={
+    response = client.post('/central/settings/children/create', data={
         'name': 'Second child', 'email': 'second-child@example.com',
         'password': 'TestPass1!', 'confirm_password': 'TestPass1!',
     })
-    assert response.location == '/family/'
+    assert response.location == '/central/family/'
     created = User.query.filter_by(email='second-child@example.com').one()
     assert created.family_id == other.id and created.guardian_id == user.id
     assert child.family_id == family.id
@@ -112,24 +112,24 @@ def test_owner_pages_reject_members_children_and_detached_accounts(app, user, pe
     member, child, _ = people
     for actor in (member, child):
         client = client_for(app, actor)
-        for path in ('/hub/setup', '/hub/settings/children/new'):
+        for path in ('/central/setup', '/central/settings/children/new'):
             assert client.get(path).status_code == 403
     child.get_active_household_membership().role = 'admin'
     db.session.commit()
     client = client_for(app, child)
-    assert client.get('/hub/setup').status_code == 403
-    assert client.get('/hub/settings/children/new').status_code == 403
+    assert client.get('/central/setup').status_code == 403
+    assert client.get('/central/settings/children/new').status_code == 403
     detach_user_from_households(user)
     client = client_for(app, user)
-    assert client.get('/hub/setup').status_code == 403
-    assert client.get('/hub/settings/children/new').status_code == 403
+    assert client.get('/central/setup').status_code == 403
+    assert client.get('/central/settings/children/new').status_code == 403
 
 
 def test_child_empty_day_has_simple_navigation_and_no_get_mutations(app, user, people):
     adult_member, child, _ = people
     client = client_for(app, child)
     assert client.get('/').location == '/household/my-day'
-    for path in ('/household/my-day', '/hub'):
+    for path in ('/household/my-day', '/central/'):
         response = client.get(path)
         assert response.status_code == 200
         assert b'<h1>My day</h1>' in response.data
@@ -137,16 +137,16 @@ def test_child_empty_day_has_simple_navigation_and_no_get_mutations(app, user, p
         sidebar = response.get_data(as_text=True).split('id="workspaceNav"', 1)[1].split('</aside>', 1)[0]
         assert 'href="/household/my-day"' in sidebar
         assert 'href="/household/rewards"' in sidebar
-        assert 'href="/dashboard"' not in sidebar
+        assert 'href="/finance/dashboard"' not in sidebar
         assert 'Switch workspace' not in sidebar
         assert 'Household setup' not in sidebar
-    preferences = client.get('/preferences').data
+    preferences = client.get('/central/preferences').data
     assert b'My day opens after sign-in' in preferences
     assert b'name="default_workspace"' not in preferences
     for model in (TaskList, HouseholdTask, RewardJob, RewardGoal, RewardPointEntry):
         assert model.query.count() == 0
     assert client_for(app, adult_member).get('/household/my-day').status_code == 403
-    assert client_for(app, user).get('/').location == '/hub'
+    assert client_for(app, user).get('/').location == '/central/'
 
 
 def test_my_day_only_shows_own_actionable_tasks_and_separates_dates(app, user, people):
@@ -277,17 +277,17 @@ def test_child_home_handles_revocation_detachment_and_active_household(app, user
     create_activity(app, user, title='Original household activity', starts_on=today, ends_on=today)
     create_activity(app, other_owner, title='Second household activity', starts_on=today, ends_on=today)
     client = client_for(app, child)
-    client.post('/family/select', data={'family_id': other.id})
+    client.post('/central/family/select', data={'family_id': other.id})
     response = client.get('/household/my-day')
     assert b'Second household activity' in response.data and b'Original household activity' not in response.data
     membership.allowed_modules = []
     db.session.commit()
     assert client.get('/household/my-day').status_code == 403
-    assert client.get('/').location == '/hub'
-    assert b'<h1>My day</h1>' not in client.get('/hub').data
+    assert client.get('/').location == '/central/'
+    assert b'<h1>My day</h1>' not in client.get('/central/').data
     detach_user_from_households(child)
     client = client_for(app, child)
-    assert client.get('/').location == '/account/security'
+    assert client.get('/').location == '/central/account/security'
     assert client.get('/household/my-day').status_code == 403
 
 

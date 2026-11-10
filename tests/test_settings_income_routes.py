@@ -14,7 +14,7 @@ def test_settings_preference_route_persists_json_value(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/settings/save_preference', json={
+    response = client.post('/finance/settings/save_preference', json={
         'key': 'categories.collapse_all_default',
         'value': True,
     })
@@ -32,7 +32,7 @@ def test_settings_preference_route_rejects_unknown_keys(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/settings/save_preference', json={
+    response = client.post('/finance/settings/save_preference', json={
         'key': 'internal.setting',
         'value': True,
     })
@@ -45,7 +45,7 @@ def test_income_add_route_creates_income_record(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/income/add', data={
+    response = client.post('/finance/income/add', data={
         'person': 'Household',
         'pay_date': '2026-01-15',
         'gross_annual': '60000',

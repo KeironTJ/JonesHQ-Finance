@@ -86,15 +86,15 @@ def test_login_rejects_unsafe_redirects(app, user, target):
         data={'email': user.email, 'password': 'TestPass1!'},
     )
     assert response.status_code == 302
-    assert response.location.endswith('/hub')
+    assert response.location.endswith('/central/')
 
 
 def test_login_preserves_local_redirect(app, user):
     response = app.test_client().post(
-        '/login', query_string={'next': '/accounts/?view=all'},
+        '/login', query_string={'next': '/finance/accounts/?view=all'},
         data={'email': user.email, 'password': 'TestPass1!'},
     )
-    assert response.location == '/accounts/?view=all'
+    assert response.location == '/finance/accounts/?view=all'
 
 
 def test_login_rate_limit_is_actually_enforced(app):
@@ -147,7 +147,7 @@ def test_logout_requires_post_and_csrf(app, user, monkeypatch):
     with client.session_transaction() as session:
         assert session['_user_id'].startswith(f'{user.id}:')
     g.pop('csrf_token', None)
-    page = client.get('/accounts')
+    page = client.get('/finance/accounts')
     token = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
     response = client.post('/logout', data={'csrf_token': token})
     assert response.status_code == 302
@@ -171,7 +171,7 @@ def test_deactivation_rejects_existing_session(app, user):
     user.is_active = False
     db.session.commit()
     g.pop('_login_user', None)
-    response = client.get('/accounts')
+    response = client.get('/finance/accounts')
     assert response.status_code == 302
     assert '/intro' in response.location
 
@@ -193,7 +193,7 @@ def test_sensitive_responses_are_not_cacheable_but_static_assets_are(app, user):
     client = app.test_client()
     assert client.get('/login').headers['Cache-Control'] == 'no-store'
     login(client)
-    response = client.get('/accounts')
+    response = client.get('/finance/accounts')
     assert response.status_code == 200
     assert response.headers['Cache-Control'] == 'no-store'
     assert client.post('/logout').headers['Cache-Control'] == 'no-store'
@@ -213,7 +213,7 @@ def test_invitation_uses_registration_password_policy(app, family, user):
     )
     db.session.add(invite)
     db.session.commit()
-    response = app.test_client().post(f'/family/join/{invite.token}', data={
+    response = app.test_client().post(f'/central/family/join/{invite.token}', data={
         'name': 'Member', 'email': 'member@example.com',
         'password': 'weakpass', 'confirm_password': 'weakpass',
     })
@@ -232,8 +232,8 @@ def test_invitation_posts_are_rate_limited(app, family, user):
     db.session.commit()
     client = app.test_client()
     for _ in range(5):
-        assert client.post(f'/family/join/{invite.token}', data={}).status_code == 200
-    assert client.post(f'/family/join/{invite.token}', data={}).status_code == 429
+        assert client.post(f'/central/family/join/{invite.token}', data={}).status_code == 200
+    assert client.post(f'/central/family/join/{invite.token}', data={}).status_code == 429
 
 
 @pytest.mark.parametrize('invalid_key', [

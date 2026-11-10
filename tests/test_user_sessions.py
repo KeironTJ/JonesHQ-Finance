@@ -26,7 +26,7 @@ def request(client, method, path, **kwargs):
 
 
 def is_signed_in(client):
-    return request(client, 'get', '/account/security').status_code == 200
+    return request(client, 'get', '/central/account/security').status_code == 200
 
 
 def password_login(client, **extra):
@@ -139,7 +139,7 @@ def test_revoke_others_keeps_current_session(app, user):
     login_client(current, user.id)
     login_client(other, user.id)
 
-    response = request(current, 'post', '/account/security/sessions/revoke-others')
+    response = request(current, 'post', '/central/account/security/sessions/revoke-others')
     assert response.status_code == 302
     assert is_signed_in(current)
     assert not is_signed_in(other)
@@ -152,13 +152,13 @@ def test_revoke_specific_session_and_current_session(app, user):
     login_client(other, user.id)
     current_id, other_id = [record.id for record in UserSession.query.order_by(UserSession.id)]
 
-    response = request(current, 'post', f'/account/security/sessions/{other_id}/revoke')
+    response = request(current, 'post', f'/central/account/security/sessions/{other_id}/revoke')
     assert response.status_code == 302
-    assert '/account/security' in response.location
+    assert '/central/account/security' in response.location
     assert not is_signed_in(other)
     assert is_signed_in(current)
 
-    response = request(current, 'post', f'/account/security/sessions/{current_id}/revoke')
+    response = request(current, 'post', f'/central/account/security/sessions/{current_id}/revoke')
     assert '/login' in response.location
     assert not is_signed_in(current)
 
@@ -171,7 +171,7 @@ def test_cannot_revoke_another_users_session(app, family, user):
 
     client = app.test_client()
     login_client(client, user.id)
-    response = request(client, 'post', f'/account/security/sessions/{other_record.id}/revoke', follow_redirects=True)
+    response = request(client, 'post', f'/central/account/security/sessions/{other_record.id}/revoke', follow_redirects=True)
     assert b'not found' in response.data
     assert is_signed_in(other_client)
 
@@ -181,7 +181,7 @@ def test_account_security_lists_devices(app, user):
     login_client(client, user.id)
     UserSessionService.create(
         user, user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile Safari/604.1')
-    response = request(client, 'get', '/account/security')
+    response = request(client, 'get', '/central/account/security')
     assert b'This device' in response.data
     assert b'Safari on iPhone' in response.data
     assert b'Sign out all other devices' in response.data
@@ -200,10 +200,10 @@ def test_enabling_two_factor_signs_out_other_sessions(app, user):
     login_client(current, user.id)
     login_client(other, user.id)
 
-    request(current, 'get', '/account/security/two-factor/setup')
+    request(current, 'get', '/central/account/security/two-factor/setup')
     db.session.refresh(user)
     code = pyotp.TOTP(user.totp_secret).at(int(time.time()))
-    response = request(current, 'post', '/account/security/two-factor/setup', data={'code': code})
+    response = request(current, 'post', '/central/account/security/two-factor/setup', data={'code': code})
     assert b'1 other session signed out' in response.data
     assert is_signed_in(current)
     assert not is_signed_in(other)

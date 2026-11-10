@@ -30,7 +30,7 @@ def request(client, method, path, **kwargs):
 
 
 def is_signed_in(client):
-    return request(client, 'get', '/account/security').status_code == 200
+    return request(client, 'get', '/central/account/security').status_code == 200
 
 
 def make_stale(user):
@@ -53,7 +53,7 @@ def make_member(family, email='member@example.com'):
 
 
 def change_password(client, current='TestPass1!', new='NewSecret#2024', confirm=None):
-    return request(client, 'post', '/account/security/password', data={
+    return request(client, 'post', '/central/account/security/password', data={
         'current_password': current,
         'new_password': new,
         'confirm_password': new if confirm is None else confirm,
@@ -95,7 +95,7 @@ def test_change_password_rejections(app, user, kwargs, message):
     response = change_password(client, **kwargs)
     assert response.status_code == 302
     assert user.check_password('TestPass1!')
-    page = request(client, 'get', '/account/security')
+    page = request(client, 'get', '/central/account/security')
     assert message in page.data
 
 
@@ -119,7 +119,7 @@ def test_change_password_is_rate_limited(app, user):
 def test_fresh_login_is_recently_authenticated(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    assert request(client, 'get', '/account/security/two-factor/setup').status_code == 200
+    assert request(client, 'get', '/central/account/security/two-factor/setup').status_code == 200
 
 
 def test_stale_session_must_confirm_password_for_get(app, user):
@@ -127,18 +127,18 @@ def test_stale_session_must_confirm_password_for_get(app, user):
     login_client(client, user.id)
     make_stale(user)
 
-    response = request(client, 'get', '/account/security/two-factor/setup')
+    response = request(client, 'get', '/central/account/security/two-factor/setup')
     assert response.status_code == 302
     location = urlsplit(response.headers['Location'])
-    assert location.path == '/account/confirm'
-    assert parse_qs(location.query)['next'] == ['/account/security/two-factor/setup']
+    assert location.path == '/central/account/confirm'
+    assert parse_qs(location.query)['next'] == ['/central/account/security/two-factor/setup']
 
-    assert request(client, 'get', '/account/confirm?next=/account/security/two-factor/setup').status_code == 200
-    response = request(client, 'post', '/account/confirm?next=/account/security/two-factor/setup',
+    assert request(client, 'get', '/central/account/confirm?next=/central/account/security/two-factor/setup').status_code == 200
+    response = request(client, 'post', '/central/account/confirm?next=/central/account/security/two-factor/setup',
                        data={'password': 'TestPass1!'})
     assert response.status_code == 302
-    assert response.headers['Location'] == '/account/security/two-factor/setup'
-    assert request(client, 'get', '/account/security/two-factor/setup').status_code == 200
+    assert response.headers['Location'] == '/central/account/security/two-factor/setup'
+    assert request(client, 'get', '/central/account/security/two-factor/setup').status_code == 200
     assert 'reauthenticated' in event_types(user)
 
 
@@ -146,12 +146,12 @@ def test_stale_post_returns_to_referring_page(app, user):
     client = app.test_client()
     login_client(client, user.id)
     make_stale(user)
-    response = request(client, 'post', '/family/invite', data={'member_name': 'Sam'},
-                       headers={'Referer': 'http://localhost/family/?tab=members'})
+    response = request(client, 'post', '/central/family/invite', data={'member_name': 'Sam'},
+                       headers={'Referer': 'http://localhost/central/family/?tab=members'})
     assert response.status_code == 302
     location = urlsplit(response.headers['Location'])
-    assert location.path == '/account/confirm'
-    assert parse_qs(location.query)['next'] == ['/family/?tab=members']
+    assert location.path == '/central/account/confirm'
+    assert parse_qs(location.query)['next'] == ['/central/family/?tab=members']
     assert FamilyInvite.query.count() == 0
 
 
@@ -159,9 +159,9 @@ def test_stale_post_ignores_foreign_referrer(app, user):
     client = app.test_client()
     login_client(client, user.id)
     make_stale(user)
-    response = request(client, 'post', '/family/invite', data={'member_name': 'Sam'},
+    response = request(client, 'post', '/central/family/invite', data={'member_name': 'Sam'},
                        headers={'Referer': 'https://evil.example/family/'})
-    assert parse_qs(urlsplit(response.headers['Location']).query)['next'] == ['/account/security']
+    assert parse_qs(urlsplit(response.headers['Location']).query)['next'] == ['/central/account/security']
 
 
 def test_reauthenticate_rejects_wrong_password_and_unsafe_next(app, user):
@@ -169,23 +169,23 @@ def test_reauthenticate_rejects_wrong_password_and_unsafe_next(app, user):
     login_client(client, user.id)
     make_stale(user)
 
-    response = request(client, 'post', '/account/confirm', data={'password': 'WrongPass1!'})
+    response = request(client, 'post', '/central/account/confirm', data={'password': 'WrongPass1!'})
     assert response.status_code == 200
     assert b'Your password was not correct' in response.data
     assert 'password_confirm_failed' in event_types(user)
-    assert request(client, 'get', '/account/security/two-factor/setup').status_code == 302
+    assert request(client, 'get', '/central/account/security/two-factor/setup').status_code == 302
 
-    response = request(client, 'post', '/account/confirm?next=https://evil.example/',
+    response = request(client, 'post', '/central/account/confirm?next=https://evil.example/',
                        data={'password': 'TestPass1!'})
-    assert response.headers['Location'] == '/hub'
+    assert response.headers['Location'] == '/central/'
 
 
 def test_reauthenticate_is_rate_limited(app, user):
     client = app.test_client()
     login_client(client, user.id)
     for _ in range(5):
-        request(client, 'post', '/account/confirm', data={'password': 'WrongPass1!'})
-    assert request(client, 'post', '/account/confirm', data={'password': 'TestPass1!'}).status_code == 429
+        request(client, 'post', '/central/account/confirm', data={'password': 'WrongPass1!'})
+    assert request(client, 'post', '/central/account/confirm', data={'password': 'TestPass1!'}).status_code == 429
 
 
 def test_reauth_window_is_configurable(app, user):
@@ -194,25 +194,25 @@ def test_reauth_window_is_configurable(app, user):
     UserSession.query.filter_by(user_id=user.id).update(
         {'reauthenticated_at': _now() - timedelta(minutes=10)}, synchronize_session=False)
     db.session.commit()
-    assert request(client, 'get', '/account/security/two-factor/setup').status_code == 200
+    assert request(client, 'get', '/central/account/security/two-factor/setup').status_code == 200
     app.config['REAUTH_WINDOW_MINUTES'] = 5
     try:
-        assert request(client, 'get', '/account/security/two-factor/setup').status_code == 302
+        assert request(client, 'get', '/central/account/security/two-factor/setup').status_code == 302
     finally:
         app.config['REAUTH_WINDOW_MINUTES'] = 15
 
 
 def test_reauthenticate_requires_login(app, user):
-    response = app.test_client().get('/account/confirm')
+    response = app.test_client().get('/central/account/confirm')
     assert response.status_code == 302
     assert urlsplit(response.headers['Location']).path == '/intro'
 
 
 @pytest.mark.parametrize('path', [
-    '/family/invite',
-    '/family/invite/1/revoke',
-    '/family/members/999/update',
-    '/family/members/999/remove',
+    '/central/family/invite',
+    '/central/family/invite/1/revoke',
+    '/central/family/members/999/update',
+    '/central/family/members/999/remove',
 ])
 def test_stale_family_admin_actions_require_password(app, user, path):
     client = app.test_client()
@@ -220,7 +220,7 @@ def test_stale_family_admin_actions_require_password(app, user, path):
     make_stale(user)
     response = request(client, 'post', path, data={'member_name': 'Sam'})
     assert response.status_code == 302
-    assert urlsplit(response.headers['Location']).path == '/account/confirm'
+    assert urlsplit(response.headers['Location']).path == '/central/account/confirm'
 
 
 def test_stale_site_admin_must_confirm_for_household_invites_and_admin(app, user):
@@ -234,9 +234,9 @@ def test_stale_site_admin_must_confirm_for_household_invites_and_admin(app, user
     for path in ('/site-admin/household-invites', '/site-admin/console/', '/site-admin/console/admin_user/'):
         response = request(client, 'get', path)
         assert response.status_code == 302, path
-        assert urlsplit(response.headers['Location']).path == '/account/confirm', path
+        assert urlsplit(response.headers['Location']).path == '/central/account/confirm', path
 
-    request(client, 'post', '/account/confirm', data={'password': 'TestPass1!'})
+    request(client, 'post', '/central/account/confirm', data={'password': 'TestPass1!'})
     assert request(client, 'get', '/site-admin/console/admin_user/').status_code == 200
 
 
@@ -245,7 +245,7 @@ def test_non_admin_is_not_sent_to_reauth_for_admin_panel(app, user):
     login_client(client, user.id)
     response = request(client, 'get', '/site-admin/console/')
     assert response.status_code == 302
-    assert urlsplit(response.headers['Location']).path != '/account/confirm'
+    assert urlsplit(response.headers['Location']).path != '/central/account/confirm'
 
 
 def test_site_admin_without_two_factor_can_reauth_then_setup(app, user):
@@ -254,12 +254,12 @@ def test_site_admin_without_two_factor_can_reauth_then_setup(app, user):
     client = app.test_client()
     login_client(client, user.id)
     make_stale(user)
-    response = request(client, 'get', '/account/security/two-factor/setup')
-    assert urlsplit(response.headers['Location']).path == '/account/confirm'
-    assert request(client, 'get', '/account/confirm').status_code == 200
-    request(client, 'post', '/account/confirm?next=/account/security/two-factor/setup',
+    response = request(client, 'get', '/central/account/security/two-factor/setup')
+    assert urlsplit(response.headers['Location']).path == '/central/account/confirm'
+    assert request(client, 'get', '/central/account/confirm').status_code == 200
+    request(client, 'post', '/central/account/confirm?next=/central/account/security/two-factor/setup',
             data={'password': 'TestPass1!'})
-    assert request(client, 'get', '/account/security/two-factor/setup').status_code == 200
+    assert request(client, 'get', '/central/account/security/two-factor/setup').status_code == 200
 
 
 # ── Family membership ────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ def test_removed_member_is_signed_out(app, user, family):
     login_client(member_client, member.id)
     assert is_signed_in(member_client)
 
-    response = request(admin_client, 'post', f'/family/members/{member.id}/remove')
+    response = request(admin_client, 'post', f'/central/family/members/{member.id}/remove')
     assert response.status_code == 302
     assert UserSession.query.filter_by(user_id=member.id, revoked_at=None).count() == 0
     assert not is_signed_in(member_client)
@@ -283,10 +283,10 @@ def test_family_invite_and_member_update_are_logged(app, user, family):
     member = make_member(family)
     client = app.test_client()
     login_client(client, user.id)
-    request(client, 'post', '/family/invite', data={'member_name': 'Sam', 'role': 'member'})
+    request(client, 'post', '/central/family/invite', data={'member_name': 'Sam', 'role': 'member'})
     invite = FamilyInvite.query.one()
-    request(client, 'post', f'/family/invite/{invite.id}/revoke')
-    request(client, 'post', f'/family/members/{member.id}/update',
+    request(client, 'post', f'/central/family/invite/{invite.id}/revoke')
+    request(client, 'post', f'/central/family/members/{member.id}/update',
             data={'member_name': 'Member', 'role': 'admin'})
     events = SecurityEvent.query.filter_by(user_id=user.id).all()
     by_type = {event.event_type: event for event in events}
@@ -328,7 +328,7 @@ def test_lockout_is_logged(app, user):
 def test_security_page_shows_recent_activity(app, user):
     client = app.test_client()
     request(client, 'post', '/login', data={'email': 'admin@example.com', 'password': 'TestPass1!'})
-    page = request(client, 'get', '/account/security')
+    page = request(client, 'get', '/central/account/security')
     assert b'Recent security activity' in page.data
     assert b'Signed in' in page.data
     assert b'Change password' in page.data

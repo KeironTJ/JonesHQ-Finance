@@ -36,7 +36,7 @@ def test_purchase_route_refreshes_forecasts_and_manual_options_still_work(
     db.session.commit()
     client = app.test_client()
     _login(client, user.id)
-    response = client.post(f'/credit-cards/{card.id}/transaction/add', data={
+    response = client.post(f'/finance/credit-cards/{card.id}/transaction/add', data={
         'txn_date': today.isoformat(), 'txn_type': 'Purchase',
         'txn_item': 'Automatic forecast', 'txn_amount': '-50',
     })
@@ -47,7 +47,7 @@ def test_purchase_route_refreshes_forecasts_and_manual_options_still_work(
     assert payment.amount == Decimal('50')
     assert payment.bank_transaction.amount == Decimal('-50')
 
-    for path in (f'/credit-cards/{card.id}/generate-future', '/credit-cards/generate-all-future'):
+    for path in (f'/finance/credit-cards/{card.id}/generate-future', '/finance/credit-cards/generate-all-future'):
         response = client.post(path, follow_redirects=True)
         assert response.status_code == 200
         assert b'Error generating' not in response.data
@@ -83,7 +83,7 @@ def test_credit_card_payment_route_creates_linked_bank_transaction(
 
     client = app.test_client()
     _login(client, user_id)
-    response = client.post(f'/credit-cards/{card_id}/transaction/add', data={
+    response = client.post(f'/finance/credit-cards/{card_id}/transaction/add', data={
         'txn_date': '2026-01-15',
         'txn_type': 'Payment',
         'txn_item': 'Monthly payment',
@@ -119,7 +119,7 @@ def test_credit_card_transaction_create_and_edit_manage_plan_link(app, family, u
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/credit-cards/{card.id}/transaction/add', data={
+    response = client.post(f'/finance/credit-cards/{card.id}/transaction/add', data={
         'txn_date': '2026-09-21', 'txn_type': 'Purchase',
         'txn_item': 'Toy shop', 'txn_amount': '-70.00',
         'category_id': str(category.id), 'plan_item_id': str(item.id),
@@ -129,7 +129,7 @@ def test_credit_card_transaction_create_and_edit_manage_plan_link(app, family, u
     assert item.credit_card_transaction_id == transaction.id
     assert item.transaction_id is None
 
-    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
+    response = client.post(f'/finance/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
         'txn_date': '2026-09-21', 'txn_type': 'Purchase',
         'txn_item': 'Toy shop', 'txn_amount': '-70.00',
         'category_id': str(category.id), 'plan_item_id': '',
@@ -151,12 +151,12 @@ def test_credit_card_transaction_create_and_edit_vendor(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    quick_add = client.post('/vendors/quick-add', json={'name': 'Quick Vendor'})
+    quick_add = client.post('/finance/vendors/quick-add', json={'name': 'Quick Vendor'})
     assert quick_add.status_code == 201
     quick_vendor_id = quick_add.get_json()['id']
     assert db.session.get(Vendor, quick_vendor_id).family_id == family.id
 
-    response = client.post(f'/credit-cards/{card.id}/transaction/add', data={
+    response = client.post(f'/finance/credit-cards/{card.id}/transaction/add', data={
         'txn_date': '2026-09-21', 'txn_type': 'Purchase',
         'txn_item': 'First purchase', 'txn_amount': '-70.00',
         'vendor_id': str(quick_vendor_id),
@@ -167,10 +167,10 @@ def test_credit_card_transaction_create_and_edit_vendor(app, family, user):
     assert transaction.vendor_id == quick_vendor_id
     assert transaction.assigned_to == user.name
 
-    quick_add = client.post('/vendors/quick-add', json={'name': 'Second Vendor'})
+    quick_add = client.post('/finance/vendors/quick-add', json={'name': 'Second Vendor'})
     assert quick_add.status_code == 200
     assert quick_add.get_json()['id'] == second_vendor.id
-    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
+    response = client.post(f'/finance/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
         'txn_date': '2026-09-21', 'txn_type': 'Purchase',
         'txn_item': 'Second purchase', 'txn_amount': '-70.00',
         'vendor_id': str(second_vendor.id),
@@ -180,11 +180,11 @@ def test_credit_card_transaction_create_and_edit_vendor(app, family, user):
     assert transaction.vendor_id == second_vendor.id
     assert transaction.assigned_to == 'Household'
 
-    response = client.get(f'/credit-cards/{card.id}?is_paid=pending')
+    response = client.get(f'/finance/credit-cards/{card.id}?is_paid=pending')
     assert response.status_code == 200
     assert b'Household' in response.data
 
-    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
+    response = client.post(f'/finance/credit-cards/{card.id}/transaction/{transaction.id}/edit', data={
         'txn_date': '2026-09-21', 'txn_type': 'Purchase',
         'txn_item': 'Second purchase', 'txn_amount': '-70.00',
         'vendor_id': '', 'assigned_to': '',
@@ -217,8 +217,8 @@ def test_credit_card_transaction_forms_share_quick_add_and_family_assignments(ap
     _login(client, user.id)
 
     for url in [
-        f'/credit-cards/{card.id}/transaction/add',
-        f'/credit-cards/{card.id}/transaction/{transaction.id}/edit',
+        f'/finance/credit-cards/{card.id}/transaction/add',
+        f'/finance/credit-cards/{card.id}/transaction/{transaction.id}/edit',
     ]:
         response = client.get(url)
         assert response.status_code == 200
@@ -252,7 +252,7 @@ def test_credit_card_detail_renders_plan_link_action_and_badge(app, family, user
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get(f'/credit-cards/{card.id}?is_paid=pending')
+    response = client.get(f'/finance/credit-cards/{card.id}?is_paid=pending')
 
     assert response.status_code == 200
     assert b'ccPlanLinkModal' in response.data
@@ -281,7 +281,7 @@ def test_credit_card_plan_link_rejects_foreign_item(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/credit-cards/transaction/{transaction.id}/link-plan', data={'item_id': str(foreign_item.id)})
+    response = client.post(f'/finance/credit-cards/transaction/{transaction.id}/link-plan', data={'item_id': str(foreign_item.id)})
 
     assert response.status_code == 404
     assert foreign_item.credit_card_transaction_id is None
@@ -304,7 +304,7 @@ def test_deleting_credit_card_transaction_clears_plan_link(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/credit-cards/{card.id}/transaction/{transaction.id}/delete')
+    response = client.post(f'/finance/credit-cards/{card.id}/transaction/{transaction.id}/delete')
 
     assert response.status_code == 302
     assert item.credit_card_transaction_id is None

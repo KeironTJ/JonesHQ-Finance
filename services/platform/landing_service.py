@@ -34,7 +34,7 @@ class LandingService:
         target = LandingService.safe_next(target)
         if not ModuleRegistry.has_active_household(user):
             if target and urlsplit(unquote(target)).path.rstrip('/') not in (
-                '', '/hub', '/dashboard',
+                '', '/central', '/finance/dashboard',
             ):
                 return target
             return url_for('auth.account_security')

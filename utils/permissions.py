@@ -6,22 +6,22 @@ a *key* (short string) used as the canonical identifier across the codebase:
 
     key                URL prefix(es)
     ─────────────────  ────────────────────────────────────────────
-    accounts           /accounts
-    transactions       /transactions
-    expenses           /expenses
-    categories         /categories
-    vendors            /vendors
-    credit_cards       /credit-cards
-    loans              /loans
-    mortgage           /mortgage
-    income             /income
-    pensions           /pensions
-    networth           /networth
-    vehicles           /vehicles, /vehicles/fuel, /vehicles/trips
-    childcare          /childcare
-    plans              /plans
-    settings           /settings            (household owners only)
-    family             /family              (household owners only)
+    accounts           /finance/accounts
+    transactions       /finance/transactions
+    expenses           /finance/expenses
+    categories         /finance/categories
+    vendors            /finance/vendors
+    credit_cards       /finance/credit-cards
+    loans              /finance/loans
+    mortgage           /finance/mortgage
+    income             /finance/income
+    pensions           /finance/pensions
+    networth           /finance/networth
+    vehicles           /finance/vehicles, /finance/vehicles/fuel, /finance/vehicles/trips
+    childcare          /finance/childcare
+    plans              /finance/plans
+    settings           /finance/settings    (household owners only)
+    family             /central/family      (household owners only)
 
 Household owners bypass all section checks.
 Members must have the section key listed in their ``allowed_sections`` column.
@@ -36,22 +36,22 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 # Maps URL path-prefix → section key.
 # Longer/more-specific entries must come first so they match before shorter ones.
 SECTION_MAP = [
-    ('/credit-cards', 'credit_cards'),
-    ('/accounts',     'accounts'),
-    ('/transactions', 'transactions'),
-    ('/expenses',     'expenses'),
-    ('/categories',   'categories'),
-    ('/vendors',      'vendors'),
-    ('/loans',        'loans'),
-    ('/mortgage',     'mortgage'),
-    ('/income',       'income'),
-    ('/pensions',     'pensions'),
-    ('/networth',     'networth'),
-    ('/vehicles',     'vehicles'),
-    ('/childcare',    'childcare'),
-    ('/plans',        'plans'),
-    ('/settings',     'settings'),
-    ('/family',       'family'),
+    ('/finance/credit-cards', 'credit_cards'),
+    ('/finance/accounts',     'accounts'),
+    ('/finance/transactions', 'transactions'),
+    ('/finance/expenses',     'expenses'),
+    ('/finance/categories',   'categories'),
+    ('/finance/vendors',      'vendors'),
+    ('/finance/loans',        'loans'),
+    ('/finance/mortgage',     'mortgage'),
+    ('/finance/income',       'income'),
+    ('/finance/pensions',     'pensions'),
+    ('/finance/networth',     'networth'),
+    ('/finance/vehicles',     'vehicles'),
+    ('/finance/childcare',    'childcare'),
+    ('/finance/plans',        'plans'),
+    ('/finance/settings',     'settings'),
+    ('/central/family',       'family'),
 ]
 
 # Section keys that only household owners can access, regardless of allowed_sections
@@ -86,6 +86,8 @@ SECTION_GROUPS = {
 
 def section_for_path(path):
     """Return the section key matching *path*, or ``None`` for un-protected routes."""
+    if path == '/finance/settings/overview':
+        return None
     for prefix, key in SECTION_MAP:
         if path == prefix or path.startswith(prefix + '/'):
             return key
@@ -138,7 +140,7 @@ def can_access_section(section_key):
     Usage in Jinja2::
 
         {% if can_access_section('income') %}
-            <a href="/income">Income</a>
+            <a href="/finance/income">Income</a>
         {% endif %}
     """
     if not current_user.is_authenticated:

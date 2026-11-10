@@ -94,7 +94,7 @@ def test_privacy_notice_linked_before_family_join(app, user, family):
     db.session.add(invite)
     db.session.commit()
     g.pop('_login_user', None)
-    response = app.test_client().get(f'/family/join/{invite.token}')
+    response = app.test_client().get(f'/central/family/join/{invite.token}')
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert body.index('href="/privacy"') < body.index('Create Account &amp; Join')
@@ -109,7 +109,7 @@ def test_privacy_notice_renders_configured_security_retention(app, monkeypatch):
 
 
 @pytest.mark.parametrize('path', [
-    '/expenses/mileage', '/vendors/analytics', '/categories/analytics', '/networth',
+    '/finance/expenses/mileage', '/finance/vendors/analytics', '/finance/categories/analytics', '/finance/networth',
 ])
 def test_chart_pages_use_local_chart_library(app, user, path):
     client = app.test_client()

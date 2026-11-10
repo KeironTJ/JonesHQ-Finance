@@ -190,7 +190,7 @@ def two_factor_login():
     )
 
 
-@auth_bp.route('/account/security')
+@auth_bp.route('/central/account/security')
 @login_required
 def account_security():
     return render_template(
@@ -213,7 +213,7 @@ def _current_user_key():
     return f"ip:{get_remote_address()}"
 
 
-@auth_bp.route('/account/security/passkeys/options', methods=['POST'])
+@auth_bp.route('/central/account/security/passkeys/options', methods=['POST'])
 @login_required
 @recent_auth_required
 @limiter.limit("10 per minute", key_func=_current_user_key, methods=["POST"])
@@ -224,7 +224,7 @@ def passkey_register_options():
         return jsonify(error=str(error)), 400
 
 
-@auth_bp.route('/account/security/passkeys/verify', methods=['POST'])
+@auth_bp.route('/central/account/security/passkeys/verify', methods=['POST'])
 @login_required
 @recent_auth_required
 @limiter.limit("10 per minute", key_func=_current_user_key, methods=["POST"])
@@ -237,7 +237,7 @@ def passkey_register_verify():
     return jsonify(redirect=url_for('auth.account_security'))
 
 
-@auth_bp.route('/account/security/passkeys/<int:key_id>/remove', methods=['POST'])
+@auth_bp.route('/central/account/security/passkeys/<int:key_id>/remove', methods=['POST'])
 @login_required
 @recent_auth_required
 @limiter.limit("10 per minute", key_func=_current_user_key, methods=["POST"])
@@ -251,7 +251,7 @@ def passkey_remove(key_id):
     return redirect(url_for('auth.account_security'))
 
 
-@auth_bp.route('/account/confirm/passkey/options', methods=['POST'])
+@auth_bp.route('/central/account/confirm/passkey/options', methods=['POST'])
 @login_required
 @limiter.limit("5 per 15 minutes", key_func=_current_user_key, methods=["POST"])
 def passkey_reauth_options():
@@ -263,7 +263,7 @@ def passkey_reauth_options():
         return jsonify(error=str(error)), 400
 
 
-@auth_bp.route('/account/confirm/passkey/verify', methods=['POST'])
+@auth_bp.route('/central/account/confirm/passkey/verify', methods=['POST'])
 @login_required
 @limiter.limit("5 per 15 minutes", key_func=_current_user_key, methods=["POST"])
 def passkey_reauth_verify():
@@ -274,7 +274,7 @@ def passkey_reauth_verify():
     return jsonify(redirect=context.get('next') or url_for('auth.account_security'))
 
 
-@auth_bp.route('/account/security/delete', methods=['GET', 'POST'])
+@auth_bp.route('/central/account/security/delete', methods=['GET', 'POST'])
 @login_required
 @recent_auth_required
 @limiter.limit("3 per 15 minutes", key_func=_current_user_key, methods=["POST"])
@@ -310,7 +310,7 @@ def delete_account():
         'auth/delete_account.html', form=form, counts=counts, blocked_reason=blocked_reason)
 
 
-@auth_bp.route('/account/security/export', methods=['POST'])
+@auth_bp.route('/finance/export', methods=['POST'])
 @login_required
 @recent_auth_required
 @limiter.limit("2 per hour", key_func=_current_user_key)
@@ -334,7 +334,7 @@ def export_data():
     })
 
 
-@auth_bp.route('/account/confirm', methods=['GET', 'POST'])
+@auth_bp.route('/central/account/confirm', methods=['GET', 'POST'])
 @login_required
 @limiter.limit("10 per minute", methods=["POST"])
 @limiter.limit("5 per 15 minutes", key_func=_current_user_key, methods=["POST"])
@@ -351,7 +351,7 @@ def reauthenticate():
     return render_template('auth/reauthenticate.html', form=form, passkeys_configured=PasskeyService.is_configured())
 
 
-@auth_bp.route('/account/security/password', methods=['POST'])
+@auth_bp.route('/central/account/security/password', methods=['POST'])
 @login_required
 @limiter.limit("5 per 15 minutes", key_func=_current_user_key)
 def change_password():
@@ -376,7 +376,7 @@ def change_password():
     return redirect(url_for('auth.account_security'))
 
 
-@auth_bp.route('/account/security/sessions/<int:session_id>/revoke', methods=['POST'])
+@auth_bp.route('/central/account/security/sessions/<int:session_id>/revoke', methods=['POST'])
 @login_required
 @limiter.limit("30 per hour")
 def revoke_session(session_id):
@@ -393,7 +393,7 @@ def revoke_session(session_id):
     return redirect(url_for('auth.account_security'))
 
 
-@auth_bp.route('/account/security/sessions/revoke-others', methods=['POST'])
+@auth_bp.route('/central/account/security/sessions/revoke-others', methods=['POST'])
 @login_required
 @limiter.limit("30 per hour")
 def revoke_other_sessions():
@@ -402,7 +402,7 @@ def revoke_other_sessions():
     return redirect(url_for('auth.account_security'))
 
 
-@auth_bp.route('/account/security/two-factor/setup', methods=['GET', 'POST'])
+@auth_bp.route('/central/account/security/two-factor/setup', methods=['GET', 'POST'])
 @login_required
 @recent_auth_required
 @limiter.limit("10 per minute", methods=["POST"])
@@ -440,7 +440,7 @@ def two_factor_setup():
     )
 
 
-@auth_bp.route('/account/security/two-factor/recovery-codes', methods=['POST'])
+@auth_bp.route('/central/account/security/two-factor/recovery-codes', methods=['POST'])
 @login_required
 @limiter.limit("5 per 15 minutes")
 def two_factor_regenerate_codes():
@@ -458,7 +458,7 @@ def two_factor_regenerate_codes():
     return redirect(url_for('auth.account_security'))
 
 
-@auth_bp.route('/account/security/two-factor/disable', methods=['POST'])
+@auth_bp.route('/central/account/security/two-factor/disable', methods=['POST'])
 @login_required
 @limiter.limit("5 per 15 minutes")
 def two_factor_disable():
@@ -602,7 +602,7 @@ def verify_email(token):
     return redirect(url_for('auth.login'))
 
 
-@auth_bp.route('/account/security/verify-email', methods=['POST'])
+@auth_bp.route('/central/account/security/verify-email', methods=['POST'])
 @login_required
 @limiter.limit("3 per hour", key_func=_current_user_key)
 def resend_verification():

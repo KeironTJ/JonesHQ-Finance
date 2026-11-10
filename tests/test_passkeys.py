@@ -86,11 +86,11 @@ def logged_in(client):
 
 def register(client, user, authenticator=None):
     authenticator = authenticator or Authenticator()
-    options = client.post('/account/security/passkeys/options', json={'name': 'My phone'})
+    options = client.post('/central/account/security/passkeys/options', json={'name': 'My phone'})
     assert options.status_code == 200, options.data
     assert options.json['authenticatorSelection']['residentKey'] == 'required'
     assert options.json['authenticatorSelection']['userVerification'] == 'required'
-    response = client.post('/account/security/passkeys/verify', json=authenticator.response(options.json, register=True))
+    response = client.post('/central/account/security/passkeys/verify', json=authenticator.response(options.json, register=True))
     assert response.status_code == 200, response.data
     return authenticator
 
@@ -119,7 +119,7 @@ def test_real_registration_and_passwordless_login(app, user):
     logout(client)
     response = sign_in(client, authenticator, count=1, user_id=user.id)
     assert response.status_code == 200, response.data
-    assert response.json['redirect'] == '/hub'
+    assert response.json['redirect'] == '/central/'
     assert logged_in(client)
     assert key.sign_count == 1
     assert key.last_used_at is not None
@@ -161,8 +161,8 @@ def test_authentication_rejects_invalid_proof(app, user, kind):
 def test_registration_requires_trusted_origin_rp_and_user_verification(app, user, kwargs):
     client = app.test_client()
     password_login(client, user)
-    options = client.post('/account/security/passkeys/options', json={'name': 'Phone'}).json
-    response = client.post('/account/security/passkeys/verify', json=Authenticator().response(options, register=True, **kwargs))
+    options = client.post('/central/account/security/passkeys/options', json={'name': 'Phone'}).json
+    response = client.post('/central/account/security/passkeys/verify', json=Authenticator().response(options, register=True, **kwargs))
     assert response.status_code == 400
     assert user.passkeys.count() == 0
     assert PasskeyChallenge.query.count() == 0
@@ -196,9 +196,9 @@ def test_challenges_expire_and_are_bound_to_browser_and_purpose(app, user):
     db.session.commit()
     assert client.post('/login/passkey/verify', json=credential).status_code == 400
     password_login(client, user)
-    options = client.post('/account/security/passkeys/options', json={'name': 'Second'}).json
+    options = client.post('/central/account/security/passkeys/options', json={'name': 'Second'}).json
     # A registration challenge cannot confirm an authentication assertion.
-    assert client.post('/account/confirm/passkey/verify', json=authenticator.response(options)).status_code == 400
+    assert client.post('/central/account/confirm/passkey/verify', json=authenticator.response(options)).status_code == 400
 
 
 def test_signature_counter_replay_rejected_and_synced_zero_counter_supported(app, user):
@@ -252,17 +252,17 @@ def test_multiple_passkeys_exclusion_duplicate_and_removal(app, user):
     password_login(client, user)
     first = register(client, user)
     second = register(client, user)
-    options = client.post('/account/security/passkeys/options', json={'name': 'Duplicate'}).json
+    options = client.post('/central/account/security/passkeys/options', json={'name': 'Duplicate'}).json
     assert {key['id'] for key in options['excludeCredentials']} == {
         bytes_to_base64url(first.credential_id), bytes_to_base64url(second.credential_id),
     }
-    assert client.post('/account/security/passkeys/verify', json=first.response(options, register=True)).status_code == 400
+    assert client.post('/central/account/security/passkeys/verify', json=first.response(options, register=True)).status_code == 400
     assert user.passkeys.count() == 2
     key_id = user.passkeys.first().id
-    response = client.post(f'/account/security/passkeys/{key_id}/remove')
+    response = client.post(f'/central/account/security/passkeys/{key_id}/remove')
     assert response.status_code == 302
     assert user.passkeys.count() == 1
-    assert client.get('/account/security').status_code == 200
+    assert client.get('/central/account/security').status_code == 200
     logout(client)
     assert sign_in(client, first).status_code == 400
     assert sign_in(client, second).status_code == 200
@@ -270,24 +270,24 @@ def test_multiple_passkeys_exclusion_duplicate_and_removal(app, user):
 
 def test_registration_and_removal_require_recent_auth_and_csrf(app, user, monkeypatch):
     client = app.test_client()
-    assert client.post('/account/security/passkeys/options', json={'name': 'Phone'}).status_code == 302
+    assert client.post('/central/account/security/passkeys/options', json={'name': 'Phone'}).status_code == 302
     password_login(client, user)
     register(client, user)
     record = user.sessions.one()
     record.reauthenticated_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     db.session.commit()
     g.pop('_login_user', None)
-    response = client.post('/account/security/passkeys/options', json={'name': 'Second'})
+    response = client.post('/central/account/security/passkeys/options', json={'name': 'Second'})
     assert response.status_code == 302
-    assert '/account/confirm' in response.headers['Location']
-    assert client.post(f'/account/security/passkeys/{user.passkeys.one().id}/remove').status_code == 302
+    assert '/central/account/confirm' in response.headers['Location']
+    assert client.post(f'/central/account/security/passkeys/{user.passkeys.one().id}/remove').status_code == 302
     assert user.passkeys.count() == 1
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     for endpoint in (
         '/login/passkey/options', '/login/passkey/verify',
-        '/account/security/passkeys/options', '/account/security/passkeys/verify',
-        '/account/confirm/passkey/options', '/account/confirm/passkey/verify',
-        f'/account/security/passkeys/{user.passkeys.one().id}/remove',
+        '/central/account/security/passkeys/options', '/central/account/security/passkeys/verify',
+        '/central/account/confirm/passkey/options', '/central/account/confirm/passkey/verify',
+        f'/central/account/security/passkeys/{user.passkeys.one().id}/remove',
     ):
         assert client.post(endpoint, json={}).status_code == 400
 
@@ -308,20 +308,20 @@ def test_reauth_is_account_bound_and_allows_passkey_sensitive_actions(app, user)
     password_login(second, other)
     other_authenticator = register(second, other)
     g.pop('_login_user', None)
-    options = client.post('/account/confirm/passkey/options?next=/accounts/', json={}).json
+    options = client.post('/central/account/confirm/passkey/options?next=/finance/accounts/', json={}).json
     assert len(options['allowCredentials']) == 1
-    assert client.post('/account/confirm/passkey/verify', json=other_authenticator.response(options)).status_code == 400
+    assert client.post('/central/account/confirm/passkey/verify', json=other_authenticator.response(options)).status_code == 400
     key_id = other.passkeys.one().id
-    assert client.post(f'/account/security/passkeys/{key_id}/remove').status_code == 302
+    assert client.post(f'/central/account/security/passkeys/{key_id}/remove').status_code == 302
     assert other.passkeys.count() == 1
     record = user.sessions.filter_by(revoked_at=None).one()
     record.reauthenticated_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     db.session.commit()
     g.pop('_login_user', None)
-    options = client.post('/account/confirm/passkey/options?next=/accounts/', json={}).json
-    result = client.post('/account/confirm/passkey/verify', json=authenticator.response(options))
+    options = client.post('/central/account/confirm/passkey/options?next=/finance/accounts/', json={}).json
+    result = client.post('/central/account/confirm/passkey/verify', json=authenticator.response(options))
     assert result.status_code == 200
-    assert result.json['redirect'] == '/accounts/'
+    assert result.json['redirect'] == '/finance/accounts/'
     assert datetime.now(timezone.utc).replace(tzinfo=None) - record.reauthenticated_at < timedelta(seconds=10)
 
 
@@ -330,23 +330,23 @@ def test_site_admin_accepts_passkey_but_not_password_only_and_keeps_last_factor(
     db.session.commit()
     client = app.test_client()
     password_login(client, user)
-    assert client.get('/account/security').status_code == 200
+    assert client.get('/central/account/security').status_code == 200
     authenticator = register(client, user)
     assert client.get('/site-admin/').status_code == 200
     assert client.get('/site-admin/console/').status_code == 200
-    response = client.post(f'/account/security/passkeys/{user.passkeys.one().id}/remove', follow_redirects=True)
+    response = client.post(f'/central/account/security/passkeys/{user.passkeys.one().id}/remove', follow_redirects=True)
     assert b'before removing your last passkey' in response.data
     assert user.passkeys.count() == 1
     logout(client)
     password_login(client, user)
-    assert '/account/confirm' in client.get('/site-admin/').headers['Location']
-    assert '/account/confirm' in client.get('/site-admin/console/').headers['Location']
-    assert client.post('/account/security/passkeys/options', json={'name': 'Attacker'}).status_code == 400
-    assert client.post(f'/account/security/passkeys/{user.passkeys.one().id}/remove').status_code == 302
+    assert '/central/account/confirm' in client.get('/site-admin/').headers['Location']
+    assert '/central/account/confirm' in client.get('/site-admin/console/').headers['Location']
+    assert client.post('/central/account/security/passkeys/options', json={'name': 'Attacker'}).status_code == 400
+    assert client.post(f'/central/account/security/passkeys/{user.passkeys.one().id}/remove').status_code == 302
     assert user.passkeys.count() == 1
-    assert client.get('/account/security/two-factor/setup').status_code == 302
+    assert client.get('/central/account/security/two-factor/setup').status_code == 302
     assert user.totp_secret is None
-    response = client.post('/account/confirm', data={'password': 'TestPass1!'})
+    response = client.post('/central/account/confirm', data={'password': 'TestPass1!'})
     assert response.status_code == 200
     assert b'Use a registered passkey' in response.data
     logout(client)
@@ -358,7 +358,7 @@ def test_server_reset_removes_passkeys_and_challenges_and_revokes_sessions(app, 
     client = app.test_client()
     password_login(client, user)
     register(client, user)
-    client.post('/account/security/passkeys/options', json={'name': 'Pending'})
+    client.post('/central/account/security/passkeys/options', json={'name': 'Pending'})
     runner = app.test_cli_runner()
     result = runner.invoke(args=['passkeys', 'reset', user.email.upper()])
     assert result.exit_code == 0, result.output
@@ -390,7 +390,7 @@ def test_site_admin_can_disable_totp_with_passkey_and_keep_last_factor_protectio
 def test_registration_validates_name(app, user, name):
     client = app.test_client()
     password_login(client, user)
-    assert client.post('/account/security/passkeys/options', json={'name': name}).status_code == 400
+    assert client.post('/central/account/security/passkeys/options', json={'name': name}).status_code == 400
     assert PasskeyChallenge.query.count() == 0
 
 
@@ -405,7 +405,7 @@ def test_registration_limit_and_malformed_user_handle(app, user):
             public_key=key.public_key, sign_count=0, name=f'Key {index}', created_at=key.created_at,
         ))
     db.session.commit()
-    assert client.post('/account/security/passkeys/options', json={'name': 'Too many'}).status_code == 400
+    assert client.post('/central/account/security/passkeys/options', json={'name': 'Too many'}).status_code == 400
     logout(client)
     options = client.post('/login/passkey/options', json={}).json
     credential = authenticator.response(options)
@@ -418,11 +418,11 @@ def test_unattached_user_login_goes_to_security_and_safe_next_is_preserved(app, 
     password_login(client, user)
     authenticator = register(client, user)
     logout(client)
-    options = client.post('/login/passkey/options?next=/accounts/', json={}).json
-    assert client.post('/login/passkey/verify', json=authenticator.response(options)).json['redirect'] == '/accounts/'
+    options = client.post('/login/passkey/options?next=/finance/accounts/', json={}).json
+    assert client.post('/login/passkey/verify', json=authenticator.response(options)).json['redirect'] == '/finance/accounts/'
     logout(client)
     detach_user_from_households(user)
-    assert sign_in(client, authenticator).json['redirect'] == '/account/security'
+    assert sign_in(client, authenticator).json['redirect'] == '/central/account/security'
 
 
 def test_passkey_changes_revoke_other_sessions(app, user):
@@ -432,7 +432,7 @@ def test_passkey_changes_revoke_other_sessions(app, user):
     register(client, user)
     assert UserSessionService.load_user(f'{user.id}:{token}') is None
     _, token = UserSessionService.create(user)
-    client.post(f'/account/security/passkeys/{user.passkeys.one().id}/remove')
+    client.post(f'/central/account/security/passkeys/{user.passkeys.one().id}/remove')
     assert UserSessionService.load_user(f'{user.id}:{token}') is None
 
 
@@ -444,7 +444,7 @@ def test_login_redirect_is_local_only(app, user, target):
     logout(client)
     options = client.post('/login/passkey/options', query_string={'next': target}, json={}).json
     response = client.post('/login/passkey/verify', json=authenticator.response(options))
-    assert response.json['redirect'] == '/hub'
+    assert response.json['redirect'] == '/central/'
 
 
 @pytest.mark.parametrize('body', [None, [], 'invalid', 12])
@@ -492,8 +492,8 @@ def test_ui_renders_and_credentials_not_in_admin(app, user):
     assert b'Sign in with a passkey' in client.get('/login').data
     password_login(client, user)
     register(client, user)
-    assert b'My phone' in client.get('/account/security').data
-    assert b'Confirm with a passkey' in client.get('/account/confirm').data
+    assert b'My phone' in client.get('/central/account/security').data
+    assert b'Confirm with a passkey' in client.get('/central/account/confirm').data
     user.is_site_admin = True
     db.session.commit()
     result = client.get('/site-admin/console/admin_user/')
@@ -510,7 +510,7 @@ def test_account_deletion_plan_includes_passkeys(app, user, monkeypatch):
     client = app.test_client()
     password_login(client, user)
     register(client, user)
-    client.post('/account/security/passkeys/options', json={'name': 'Pending'})
+    client.post('/central/account/security/passkeys/options', json={'name': 'Pending'})
     counts = AccountDeletionService.delete_account(user, {
         'confirmation': 'DELETE MY ACCOUNT', 'password': 'TestPass1!',
     })

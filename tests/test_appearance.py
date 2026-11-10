@@ -32,7 +32,7 @@ def test_appearance_context_without_request_uses_defaults(app, user):
 def test_appearance_saved_atomically_and_rendered_in_new_session(app, user, palette, mode):
     user.preferences = {'dashboard.attention_days': 90}
     db.session.commit()
-    response = client_for(app, user).post('/preferences/appearance', json={
+    response = client_for(app, user).post('/central/preferences/appearance', json={
         'palette': palette, 'mode': mode,
     })
     assert response.status_code == 200
@@ -41,7 +41,7 @@ def test_appearance_saved_atomically_and_rendered_in_new_session(app, user, pale
     assert user.preferences == {
         'dashboard.attention_days': 90, 'appearance.palette': palette, 'appearance.mode': mode,
     }
-    html = client_for(app, user).get('/preferences').get_data(as_text=True)
+    html = client_for(app, user).get('/central/preferences').get_data(as_text=True)
     assert f'data-palette="{palette}"' in html
     assert f'data-mode="{mode}"' in html
     assert 'data-account="true"' in html
@@ -60,7 +60,7 @@ def test_appearance_saved_atomically_and_rendered_in_new_session(app, user, pale
 def test_invalid_appearance_cannot_partially_change_preferences(app, user, payload):
     user.preferences = {'appearance.mode': 'auto', 'appearance.palette': 'purple'}
     db.session.commit()
-    response = client_for(app, user).post('/preferences/appearance', json=payload)
+    response = client_for(app, user).post('/central/preferences/appearance', json=payload)
     assert response.status_code == 400
     assert response.get_json()['error']
     assert response.get_json()['success'] is False
@@ -69,13 +69,13 @@ def test_invalid_appearance_cannot_partially_change_preferences(app, user, paylo
 
 def test_appearance_form_works_without_javascript(app, user):
     client = client_for(app, user)
-    response = client.post('/preferences/appearance', data={'palette': 'graphite', 'mode': 'dark'})
+    response = client.post('/central/preferences/appearance', data={'palette': 'graphite', 'mode': 'dark'})
     assert response.status_code == 302
-    assert response.location.endswith('/preferences#appearance-card')
+    assert response.location.endswith('/central/preferences#appearance-card')
     assert user.preferences == {'appearance.palette': 'graphite', 'appearance.mode': 'dark'}
-    html = client.get('/preferences').get_data(as_text=True)
+    html = client.get('/central/preferences').get_data(as_text=True)
     assert 'Your appearance has been saved to your account.' in html
-    response = client.post('/preferences/appearance', data={'palette': 'nope', 'mode': 'light'}, follow_redirects=True)
+    response = client.post('/central/preferences/appearance', data={'palette': 'nope', 'mode': 'light'}, follow_redirects=True)
     assert b'Choose a supported appearance palette.' in response.data
     assert user.preferences['appearance.mode'] == 'dark'
 
@@ -90,12 +90,12 @@ def test_appearance_is_personal_even_for_members(app, family, user, same_househo
     member.set_password('TestPass1!')
     db.session.add(member)
     db.session.commit()
-    response = client_for(app, member).post('/preferences/appearance', json={
+    response = client_for(app, member).post('/central/preferences/appearance', json={
         'palette': 'pink', 'mode': 'auto', 'user_id': user.id,
     })
     assert response.status_code == 200
     assert not user.preferences
-    html = client_for(app, user).get('/preferences').get_data(as_text=True)
+    html = client_for(app, user).get('/central/preferences').get_data(as_text=True)
     assert 'data-mode="light" data-palette="blue"' in html
     assert member.preferences == {'appearance.palette': 'pink', 'appearance.mode': 'auto'}
 
@@ -105,7 +105,7 @@ def test_appearance_write_failure_rolls_back_and_reports_error(app, user, monkey
     def fail():
         raise SQLAlchemyError('Test write failure')
     monkeypatch.setattr(db.session, 'commit', fail)
-    response = client.post('/preferences/appearance', json={'palette': 'pink', 'mode': 'dark'})
+    response = client.post('/central/preferences/appearance', json={'palette': 'pink', 'mode': 'dark'})
     assert response.status_code == 500
     assert response.get_json()['success'] is False
     assert 'Unable to save' in response.get_json()['error']
@@ -115,7 +115,7 @@ def test_appearance_write_failure_rolls_back_and_reports_error(app, user, monkey
 def test_appearance_requires_login_and_public_defaults_are_blue(app):
     g.pop('_login_user', None)
     client = app.test_client()
-    assert client.post('/preferences/appearance', json={'palette': 'blue', 'mode': 'dark'}).status_code == 302
+    assert client.post('/central/preferences/appearance', json={'palette': 'blue', 'mode': 'dark'}).status_code == 302
     response = client.get('/login')
     assert response.status_code == 200
     html = response.get_data(as_text=True)
@@ -125,10 +125,10 @@ def test_appearance_requires_login_and_public_defaults_are_blue(app):
 
 def test_other_preference_saves_preserve_appearance(app, user):
     client = client_for(app, user)
-    client.post('/preferences/appearance', json={'palette': 'sky', 'mode': 'auto'})
-    response = client.post('/preferences', data={'dashboard.attention_days': '120'})
+    client.post('/central/preferences/appearance', json={'palette': 'sky', 'mode': 'auto'})
+    response = client.post('/finance/preferences', data={'dashboard.attention_days': '120'})
     assert response.status_code == 302
-    response = client.post('/preferences/save', json={
+    response = client.post('/finance/preferences/save', json={
         'key': 'vendors.collapse_all_default', 'value': True,
     })
     assert response.status_code == 200
@@ -141,7 +141,7 @@ def test_other_preference_saves_preserve_appearance(app, user):
 def test_appearance_requires_csrf_token(app, user, monkeypatch):
     client = client_for(app, user)
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
-    response = client.post('/preferences/appearance', json={'palette': 'blue', 'mode': 'dark'})
+    response = client.post('/central/preferences/appearance', json={'palette': 'blue', 'mode': 'dark'})
     assert response.status_code == 400
     assert not user.preferences
 

@@ -3,7 +3,7 @@
 ## Overview
 
 The bank transaction list, forms, and actions are implemented in
-`blueprints/finance/transactions/routes.py`. Request parsing and redirects stay in the
+`blueprints/finance/finance/transactions/routes.py`. Request parsing and redirects stay in the
 blueprint; reusable transaction operations live in
 `services/finance/transaction_service.py`.
 
@@ -11,17 +11,17 @@ blueprint; reusable transaction operations live in
 
 | Route | Methods | Purpose |
 | --- | --- | --- |
-| `/transactions` | GET | List, filter, and review bank transactions |
-| `/transactions/create` | GET, POST | Create one or recurring transaction records |
-| `/transactions/<id>/edit` | GET, POST | Edit a transaction and synchronize linked records |
-| `/transactions/<id>/delete` | POST | Delete a transaction and handle linked records |
-| `/transactions/<id>/toggle_paid` | POST | Toggle paid status and synchronize applicable links |
-| `/transactions/<id>/toggle_fixed` | POST | Lock or unlock a transaction |
-| `/transactions/bulk-edit` | POST | Edit supported fields on selected records |
-| `/transactions/bulk-delete` | POST | Delete selected records and handle linked records |
-| `/transactions/transfer` | GET, POST | Create paired account-transfer transactions |
-| `/transactions/save-filter-preference` | POST | Save the user's filter-panel preference |
-| `/transactions/consolidated` | GET | Review bank, card, and loan activity together |
+| `/finance/transactions` | GET | List, filter, and review bank transactions |
+| `/finance/transactions/create` | GET, POST | Create one or recurring transaction records |
+| `/finance/transactions/<id>/edit` | GET, POST | Edit a transaction and synchronize linked records |
+| `/finance/transactions/<id>/delete` | POST | Delete a transaction and handle linked records |
+| `/finance/transactions/<id>/toggle_paid` | POST | Toggle paid status and synchronize applicable links |
+| `/finance/transactions/<id>/toggle_fixed` | POST | Lock or unlock a transaction |
+| `/finance/transactions/bulk-edit` | POST | Edit supported fields on selected records |
+| `/finance/transactions/bulk-delete` | POST | Delete selected records and handle linked records |
+| `/finance/transactions/transfer` | GET, POST | Create paired account-transfer transactions |
+| `/finance/transactions/save-filter-preference` | POST | Save the user's filter-panel preference |
+| `/finance/transactions/consolidated` | GET | Review bank, card, and loan activity together |
 
 The subscription-management routes are also part of the transactions blueprint;
 see [Subscriptions](SUBSCRIPTIONS.md).
@@ -94,6 +94,6 @@ lookups.
    paired-transfer workflow rather than by independently editing one side.
 
 Database amount, date, and relationship fields are defined by
-`models/transactions.py`. See [Integrated Transactions](INTEGRATED_TRANSACTIONS.md)
+`models/finance/transactions.py`. See [Integrated Transactions](INTEGRATED_TRANSACTIONS.md)
 for linked-domain behavior and [Database Schema](DATABASE_SCHEMA.md) for the
 current model inventory.

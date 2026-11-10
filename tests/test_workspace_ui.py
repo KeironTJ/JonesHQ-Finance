@@ -50,11 +50,11 @@ class QuickNavigationParser(HTMLParser):
 
 
 @pytest.mark.parametrize('path', [
-    '/hub', '/dashboard', '/accounts', '/transactions', '/transactions/create',
-    '/transactions/subscriptions', '/transactions/consolidated',
-    '/income', '/credit-cards', '/loans/', '/mortgage', '/pensions',
-    '/networth', '/vehicles', '/childcare', '/plans', '/expenses',
-    '/categories/', '/vendors/', '/family/', '/preferences', '/settings',
+    '/central/', '/finance/dashboard', '/finance/accounts', '/finance/transactions', '/finance/transactions/create',
+    '/finance/transactions/subscriptions', '/finance/transactions/consolidated',
+    '/finance/income', '/finance/credit-cards', '/finance/loans/', '/finance/mortgage', '/finance/pensions',
+    '/finance/networth', '/finance/vehicles', '/finance/childcare', '/finance/plans', '/finance/expenses',
+    '/finance/categories/', '/finance/vendors/', '/central/family/', '/central/preferences', '/finance/settings',
 ])
 def test_workspace_pages_render_shared_shell(app, user, path):
     client = app.test_client()
@@ -70,7 +70,7 @@ def test_workspace_pages_render_shared_shell(app, user, path):
     assert '/static/css/theme.css' in html
 
 
-@pytest.mark.parametrize('path, active_href', [('/hub', '/hub'), ('/dashboard', '/dashboard')])
+@pytest.mark.parametrize('path, active_href', [('/central/', '/central/'), ('/finance/dashboard', '/finance/dashboard')])
 def test_workspace_navigation_distinguishes_hub_and_finance(app, user, path, active_href):
     client = app.test_client()
     login_client(client, user.id)
@@ -86,11 +86,11 @@ def test_navigation_search_source_respects_member_permissions(app, user):
     client = app.test_client()
     login_client(client, user.id)
     parser = NavigationParser()
-    parser.feed(client.get('/accounts').get_data(as_text=True))
+    parser.feed(client.get('/finance/accounts').get_data(as_text=True))
     hrefs = {link['href'] for link in parser.links}
-    assert {'/accounts', '/transactions', '/transactions/subscriptions'} <= hrefs
-    assert not {'/settings', '/family/', '/income', '/credit-cards', '/site-admin/'} & hrefs
-    assert '/hub/settings' in hrefs
+    assert {'/finance/accounts', '/finance/transactions', '/finance/transactions/subscriptions'} <= hrefs
+    assert not {'/finance/settings', '/central/family/', '/finance/income', '/finance/credit-cards', '/site-admin/'} & hrefs
+    assert '/central/settings' in hrefs
 
 
 def test_finance_dashboard_shortcuts_respect_member_permissions(app, user):
@@ -100,31 +100,49 @@ def test_finance_dashboard_shortcuts_respect_member_permissions(app, user):
     client = app.test_client()
     login_client(client, user.id)
     parser = QuickNavigationParser()
-    parser.feed(client.get('/dashboard').get_data(as_text=True))
+    parser.feed(client.get('/finance/dashboard').get_data(as_text=True))
     assert set(parser.links) == {
-        '/transactions', '/accounts', '/expenses', '/hub/settings/finance',
+        '/finance/transactions', '/finance/accounts', '/finance/expenses', '/finance/settings/overview',
     }
 
 
 def test_workspace_navigation_switches_between_central_and_finance(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    for path, target in [('/hub', '/dashboard'), ('/dashboard', '/hub')]:
+    for path, target, label in [
+        ('/central/', '/finance/dashboard', 'Open Finance'),
+        ('/finance/dashboard', '/central/', 'Central Hub'),
+    ]:
         parser = NavigationParser()
-        parser.feed(client.get(path).get_data(as_text=True))
+        html = client.get(path).get_data(as_text=True)
+        parser.feed(html)
         assert target in {link['href'] for link in parser.links}
+        assert label in html
+        if path == '/central/':
+            assert 'class="workspace-home" href="/central/">Central Hub</a>' in html
+    finance = client.get('/finance/dashboard').get_data(as_text=True)
+    assert 'Switch to Household Hub' in finance
 
 
 def test_central_hub_modules_come_from_platform_registry(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    html = client.get('/hub').get_data(as_text=True)
+    html = client.get('/central/').get_data(as_text=True)
     assert 'Your modules' in html
     assert 'Open Finance' in html
     assert 'Household Hub' in html
     assert 'Organise household life with shared meals, activities and tasks.' in html
     assert 'Open Household Hub' in html
     assert 'No features or records from the other application have been imported.' not in html
+
+
+def test_module_navigation_names_cross_workspace_transitions(app, user):
+    client = app.test_client()
+    login_client(client, user.id)
+    finance = client.get('/finance/dashboard').get_data(as_text=True)
+    household = client.get('/household/').get_data(as_text=True)
+    assert 'Switch to Household Hub' in finance
+    assert 'Switch to Finance' in household
 
 
 def test_central_hub_uses_membership_instead_of_legacy_family_field(app, user):
@@ -146,13 +164,13 @@ def test_central_hub_uses_membership_instead_of_legacy_family_field(app, user):
     with client.session_transaction() as browser_session:
         browser_session[HouseholdMembershipService.SESSION_KEY] = second_family.id
 
-    html = client.get('/hub').get_data(as_text=True)
+    html = client.get('/central/').get_data(as_text=True)
 
     assert 'Household required' not in html
     assert 'Open Finance' in html
     parser = NavigationParser()
     parser.feed(html)
-    assert '/dashboard' in {link['href'] for link in parser.links}
+    assert '/finance/dashboard' in {link['href'] for link in parser.links}
 
 
 @pytest.mark.parametrize('role', ['admin', 'member'])
@@ -163,11 +181,11 @@ def test_dashboard_settings_shortcut_uses_grouped_settings(app, user, role):
     client = app.test_client()
     login_client(client, user.id)
     parser = QuickNavigationParser()
-    parser.feed(client.get('/dashboard').get_data(as_text=True))
-    assert '/hub/settings/finance' in parser.links
-    assert '/settings' not in parser.links
-    assert '/preferences/finance' not in parser.links
-    assert client.get('/hub/settings/finance').status_code == 200
+    parser.feed(client.get('/finance/dashboard').get_data(as_text=True))
+    assert '/finance/settings/overview' in parser.links
+    assert '/finance/settings' not in parser.links
+    assert '/finance/preferences' not in parser.links
+    assert client.get('/finance/settings/overview').status_code == 200
 
 
 def test_public_shell_has_no_household_navigation(app):
@@ -210,9 +228,9 @@ def test_shared_metric_escapes_content_and_preserves_values(app):
 
 
 @pytest.mark.parametrize('path, active_href', [
-    ('/transactions/create', '/transactions'),
-    ('/transactions/subscriptions', '/transactions/subscriptions'),
-    ('/transactions/consolidated', '/transactions/consolidated'),
+    ('/finance/transactions/create', '/finance/transactions'),
+    ('/finance/transactions/subscriptions', '/finance/transactions/subscriptions'),
+    ('/finance/transactions/consolidated', '/finance/transactions/consolidated'),
 ])
 def test_transaction_navigation_selects_only_the_relevant_page(app, user, path, active_href):
     client = app.test_client()

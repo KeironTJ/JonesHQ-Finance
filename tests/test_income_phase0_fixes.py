@@ -329,7 +329,7 @@ def test_recurring_form_lists_income_categories_case_insensitively(app, family, 
     client = app.test_client()
     login_client(client, user.id)
 
-    html = client.get('/income/recurring/add').get_data(as_text=True)
+    html = client.get('/finance/income/recurring/add').get_data(as_text=True)
     assert 'Bonus' in html and 'Rent' in html
 
 
@@ -456,7 +456,7 @@ def test_add_route_shows_validation_message_not_internals(app, family, user):
 
     client = app.test_client()
     login_client(client, user.id)
-    response = client.post('/income/add', data={
+    response = client.post('/finance/income/add', data={
         'person': 'Household', 'pay_date': '2026-01-15', 'gross_annual': 'NaN', 'tax_code': '1257L',
     }, follow_redirects=True)
     assert 'Gross annual income must be a number.' in response.get_data(as_text=True)

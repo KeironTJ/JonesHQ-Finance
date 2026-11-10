@@ -33,7 +33,7 @@
     {% for endpoint, title, icon, section, exact in links %}
         {% set active = none %}
         {% if endpoint == 'transactions.index' %}
-            {% set active = request.blueprint == 'transactions' and not request.path.startswith('/transactions/subscriptions') and request.endpoint != 'transactions.consolidated' %}
+            {% set active = request.blueprint == 'transactions' and not request.path.startswith('/finance/transactions/subscriptions') and request.endpoint != 'transactions.consolidated' %}
         {% endif %}
         {{ nav_link(endpoint, title, icon, section, exact, active_override=false if settings_area else active) }}
     {% endfor %}

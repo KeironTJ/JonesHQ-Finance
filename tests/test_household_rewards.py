@@ -98,7 +98,7 @@ def test_empty_pages_do_not_mutate_and_child_has_simple_journey(app, user, peopl
     assert b'Adult setup' not in response.data and b'Add a reward job' not in response.data
     assert client_for(app, child).get('/household/rewards?view=manage').status_code == 403
     assert client_for(app, adult).get('/household/rewards').status_code == 200
-    assert client_for(app, adult).get('/dashboard').status_code == 403
+    assert client_for(app, adult).get('/finance/dashboard').status_code == 403
     assert client_for(app, adult).get('/household/rewards?view=nonsense').status_code == 302
 
 
@@ -379,7 +379,7 @@ def test_selected_household_not_legacy_default_controls_new_rewards(app, user, f
     db.session.add_all([adult_membership, child_membership])
     db.session.commit()
     client = client_for(app, user)
-    assert client.post('/family/select', data={'family_id': other.id}).status_code == 302
+    assert client.post('/central/family/select', data={'family_id': other.id}).status_code == 302
     response = client.post('/household/rewards/actions/create-job', data={
         'title': 'Second home job', 'assigned_membership_id': child_membership.id,
         'reward_points': '5', 'family_id': family.id, 'creator_membership_id': 999999,
@@ -404,7 +404,7 @@ def test_account_deletion_closes_departed_jobs_preserves_anonymous_audit(app, us
     child.account_type = 'adult'
     child.guardian_id = None
     db.session.commit()
-    response = client_for(app, child).post('/account/security/delete', data={
+    response = client_for(app, child).post('/central/account/security/delete', data={
         'password': 'TestPass1!', 'confirmation': 'DELETE MY ACCOUNT',
     })
     assert response.location.endswith('/login')

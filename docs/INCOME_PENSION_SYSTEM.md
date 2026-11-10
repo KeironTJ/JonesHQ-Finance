@@ -10,7 +10,7 @@ Comprehensive system for tracking lifetime income, calculating tax/NI/pension co
 | **Income source** | `recurring_income` | One job, pension, self-employment or rental income for one person: type, pay frequency, starting pay, tax code, pension, student loan, yearly rise, deposit account, category, visibility. |
 | **Timeline change** | `income_changes` | A dated event on a source: new salary, % pay rise, bonus / one-off, tax-code change, pension % change. Deleted with its source. |
 | **Payslip** | `income` | One pay date. Forecasts are saved a household-chosen number of years ahead (Sources → Tools; setting `income.forecast_years`, default **5**, max 10); actuals are entered over them. |
-| **Plan** | none (computed) | `/income/plan`: per-tax-year totals up to retirement, projected in memory from each source's timeline. Nothing is saved. |
+| **Plan** | none (computed) | `/finance/income/plan`: per-tax-year totals up to retirement, projected in memory from each source's timeline. Nothing is saved. |
 
 **Terms on a date** (`income_schedule.terms_for`): start from the source's own
 figures, apply the yearly rise (`annual_increase_percent` each year from
@@ -58,22 +58,22 @@ ended sources only contribute payslips actually saved.
 **Expense integration:** a source can fold reimbursable expenses into its payday
 (`fold_expenses`), as before.
 
-### Routes (`blueprints/finance/income/routes.py`)
+### Routes (`blueprints/finance/finance/income/routes.py`)
 
 | Route | Purpose |
 |---|---|
-| `GET /income` | Payslips list (tops forecasts up to the horizon) |
-| `GET /income/recurring` | Sources, grouped by person |
-| `GET/POST /income/recurring/add`, `/income/recurring/<id>/edit` | Source form with live preview (`static/js/income-source-form.js`) |
-| `GET /income/recurring/<id>` | Source page: current terms, timeline, upcoming/recent payslips, end income, rebuild range, delete |
-| `POST /income/recurring/<id>/changes`, `/income/changes/<id>/delete` | Add / remove a timeline change |
-| `POST /income/refresh-forecasts` | Refresh all forecasts (optional `forecast_years` saves the horizon first) |
-| `GET /income/plan?until=&person=` | Plan to a tax year (max 50 years) |
-| `POST /income/plan/retirement` | Save / clear a person's date of birth and retirement age |
+| `GET /finance/income` | Payslips list (tops forecasts up to the horizon) |
+| `GET /finance/income/recurring` | Sources, grouped by person |
+| `GET/POST /finance/income/recurring/add`, `/finance/income/recurring/<id>/edit` | Source form with live preview (`static/js/finance/income-source-form.js`) |
+| `GET /finance/income/recurring/<id>` | Source page: current terms, timeline, upcoming/recent payslips, end income, rebuild range, delete |
+| `POST /finance/income/recurring/<id>/changes`, `/finance/income/changes/<id>/delete` | Add / remove a timeline change |
+| `POST /finance/income/refresh-forecasts` | Refresh all forecasts (optional `forecast_years` saves the horizon first) |
+| `GET /finance/income/plan?until=&person=` | Plan to a tax year (max 50 years) |
+| `POST /finance/income/plan/retirement` | Save / clear a person's date of birth and retirement age |
 
 ## Database Models
 
-### Income Model (`models/income.py`)
+### Income Model (`models/finance/income.py`)
 Tracks each pay period with full breakdown of deductions and contributions.
 
 **Key Fields:**
@@ -121,7 +121,7 @@ Monthly snapshots of pension values for tracking growth.
 - `value`: Pension value at this date
 - `growth_percent`: % growth since previous snapshot
 
-## Income Service (`services/finance/income_service.py`)
+## Income Service (`services/finance/finance/income_service.py`)
 
 ### Tax & NI Calculations
 All deduction maths lives in one pure module, `services/finance/payroll_calculator.py`

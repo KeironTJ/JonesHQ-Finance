@@ -18,7 +18,7 @@ def test_expense_index_route_loads_for_authenticated_family(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/expenses')
+    response = client.get('/finance/expenses')
 
     assert response.status_code == 200
     assert b'Expenses' in response.data or b'expense' in response.data.lower()
@@ -48,18 +48,18 @@ def test_expense_index_shows_folded_payslip_badge(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/expenses')
+    response = client.get('/finance/expenses')
 
     assert response.status_code == 200
     assert b'Folded: \xc2\xa325.00' in response.data
-    assert f'/income/{income.id}/edit'.encode() in response.data
+    assert f'/finance/income/{income.id}/edit'.encode() in response.data
 
 
 def test_expense_mileage_route_loads_empty_state(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/expenses/mileage')
+    response = client.get('/finance/expenses/mileage')
 
     assert response.status_code == 200
 
@@ -95,7 +95,7 @@ def test_delete_expense_with_linked_transaction(app, family, user):
     _login(client, user.id)
 
     response = client.post(
-        f'/expenses/delete/{expense_id}',
+        f'/finance/expenses/delete/{expense_id}',
         follow_redirects=True,
     )
 

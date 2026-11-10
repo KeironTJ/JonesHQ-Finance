@@ -5,9 +5,9 @@ from tests.auth_helpers import login_client
 
 
 @pytest.mark.parametrize('path, active', [
-    ('/accounts', False),
-    ('/settings', True),
-    ('/settings/tax', True),
+    ('/finance/accounts', False),
+    ('/finance/settings', True),
+    ('/finance/settings/tax', True),
 ])
 def test_settings_link_is_in_workspace_navigation(app, user, path, active):
     client = app.test_client()
@@ -18,10 +18,10 @@ def test_settings_link_is_in_workspace_navigation(app, user, path, active):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     navigation = html.split('id="workspaceNav"', 1)[1].split('</aside>', 1)[0]
-    assert navigation.count('href="/hub/settings"') == 1
-    assert 'href="/preferences/finance"' not in navigation
-    assert 'href="/settings/access"' not in navigation
-    settings_link = navigation.split('href="/hub/settings"', 1)
+    assert navigation.count('href="/central/settings"') == 1
+    assert 'href="/finance/preferences"' not in navigation
+    assert 'href="/finance/settings/access"' not in navigation
+    settings_link = navigation.split('href="/central/settings"', 1)
     link_classes = settings_link[0].rsplit('<a class="', 1)[1].split('"', 1)[0]
     assert ('active' in link_classes.split()) is active
     assert ('aria-current="page"' in settings_link[1].split('>', 1)[0]) is active
@@ -37,5 +37,5 @@ def test_settings_remains_hidden_and_forbidden_for_members(app, user):
     response = client.get('/help')
 
     assert response.status_code == 200
-    assert 'href="/settings"' not in response.get_data(as_text=True)
-    assert client.get('/settings').status_code == 403
+    assert 'href="/finance/settings"' not in response.get_data(as_text=True)
+    assert client.get('/finance/settings').status_code == 403

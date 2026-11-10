@@ -80,7 +80,7 @@ def export_records(user, family):
 def download(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    return client, client.post('/account/security/export')
+    return client, client.post('/finance/export')
 
 
 def test_export_shape_precision_dates_and_secret_exclusion(app, user, export_records):
@@ -170,7 +170,7 @@ def test_export_section_permissions_cannot_be_overridden_by_request(app, user, e
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    response = client.post('/account/security/export?section=transactions&family_id=999',
+    response = client.post('/finance/export?section=transactions&family_id=999',
                            data={'sections': 'all', 'include_private': 'true'})
     payload = response.get_json()
     assert payload['sections'] == ['accounts']
@@ -203,8 +203,8 @@ def test_export_shared_account_transaction_does_not_inherit_income_privacy(app, 
 
 def test_export_requires_login_and_post(app):
     client = app.test_client()
-    assert client.post('/account/security/export').status_code == 302
-    assert client.get('/account/security/export').status_code == 405
+    assert client.post('/finance/export').status_code == 302
+    assert client.get('/finance/export').status_code == 405
 
 
 def test_export_requires_recent_password(app, user):
@@ -215,20 +215,20 @@ def test_export_requires_recent_password(app, user):
     })
     db.session.commit()
     g.pop('_login_user', None)
-    response = client.post('/account/security/export')
+    response = client.post('/finance/export')
     assert response.status_code == 302
-    assert '/account/confirm' in response.headers['Location']
+    assert '/central/account/confirm' in response.headers['Location']
     assert SecurityEvent.query.filter_by(event_type='data_exported').count() == 0
 
 
 def test_export_rate_limit_is_per_user(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    assert client.post('/account/security/export').status_code == 200
+    assert client.post('/finance/export').status_code == 200
     g.pop('_login_user', None)
     login_client(client, user.id)
-    assert client.post('/account/security/export').status_code == 200
-    assert client.post('/account/security/export').status_code == 429
+    assert client.post('/finance/export').status_code == 200
+    assert client.post('/finance/export').status_code == 429
 
 
 def test_export_requires_csrf(app, user, monkeypatch):
@@ -237,7 +237,7 @@ def test_export_requires_csrf(app, user, monkeypatch):
     g.pop('csrf_token', None)
     client = app.test_client()
     login_client(client, user.id)
-    assert client.post('/account/security/export').status_code == 400
+    assert client.post('/finance/export').status_code == 400
     assert SecurityEvent.query.filter_by(event_type='data_exported').count() == 0
 
 
@@ -245,7 +245,7 @@ def test_export_rejects_removed_member(app, user):
     client = app.test_client()
     login_client(client, user.id)
     detach_user_from_households(user)
-    response = client.post('/account/security/export')
+    response = client.post('/finance/export')
     assert response.status_code == 302
     assert SecurityEvent.query.filter_by(event_type='data_exported').count() == 0
 
@@ -262,8 +262,8 @@ def test_export_database_failure_does_not_return_partial_download(app, user, mon
 def test_account_security_explains_export_and_provides_post_form(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get('/account/security')
-    assert b'action="/account/security/export"' in response.data
+    response = client.get('/central/account/security')
+    assert b'action="/finance/export"' in response.data
     assert b'not a database backup' in response.data
     assert b'two downloads per hour' in response.data
 

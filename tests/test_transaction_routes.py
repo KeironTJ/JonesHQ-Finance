@@ -45,7 +45,7 @@ def test_index_aggregate_has_no_row_ordering_and_counts_all_filtered_rows(app, f
 
     event.listen(db.engine, 'before_cursor_execute', check_aggregate)
     try:
-        response = client.get(f'/transactions?is_paid=pending&per_page=1&sort={sort}')
+        response = client.get(f'/finance/transactions?is_paid=pending&per_page=1&sort={sort}')
     finally:
         event.remove(db.engine, 'before_cursor_execute', check_aggregate)
     assert response.status_code == 200
@@ -61,7 +61,7 @@ def test_transaction_index_renders_compact_filters(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/transactions?search=rent&is_paid=pending')
+    response = client.get('/finance/transactions?search=rent&is_paid=pending')
 
     assert response.status_code == 200
     assert b'transactionFilterDrawer' in response.data
@@ -86,7 +86,7 @@ def test_transaction_row_actions_omit_lock_control(app, family, user, is_paid):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/transactions?payday_period=&is_paid=')
+    response = client.get('/finance/transactions?payday_period=&is_paid=')
 
     assert response.status_code == 200
     html = response.get_data(as_text=True)
@@ -103,7 +103,7 @@ def test_consolidated_index_renders_responsive_filters(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/transactions/consolidated?source=bank&is_paid=pending')
+    response = client.get('/finance/transactions/consolidated?source=bank&is_paid=pending')
 
     assert response.status_code == 200
     assert b'consolidatedFilterDrawer' in response.data
@@ -116,8 +116,8 @@ def test_transaction_create_and_transfer_render_compact_editors(app, family, use
     client = app.test_client()
     _login(client, user.id)
 
-    create_response = client.get('/transactions/create')
-    transfer_response = client.get('/transactions/transfer')
+    create_response = client.get('/finance/transactions/create')
+    transfer_response = client.get('/finance/transactions/transfer')
 
     assert create_response.status_code == 200
     assert b'transaction-editor-page' in create_response.data
@@ -135,7 +135,7 @@ def test_transfer_form_renders_after_missing_required_input(app, family, user, d
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/transactions/transfer', data=data)
+    response = client.post('/finance/transactions/transfer', data=data)
 
     assert response.status_code == 200
     assert date.today().isoformat().encode() in response.data
@@ -151,10 +151,10 @@ def test_create_transaction_route_applies_weekend_choice(app, family, user):
     db.session.commit()
     client = app.test_client()
     _login(client, user.id)
-    response = client.get('/transactions/create')
+    response = client.get('/finance/transactions/create')
     assert b'name="weekend_adjustment"' in response.data
     assert b'value="none" selected' in response.data
-    response = client.post('/transactions/create', data={
+    response = client.post('/finance/transactions/create', data={
         'account_id': str(account.id), 'category_id': str(category.id),
         'amount': '-10', 'transaction_date': '2026-12-25',
         'weekend_adjustment': 'next',
@@ -184,7 +184,7 @@ def test_transaction_routes_create_edit_delete(app, family, user):
 
     client = app.test_client()
     _login(client, user_id)
-    response = client.post('/transactions/create', data={
+    response = client.post('/finance/transactions/create', data={
         'account_id': str(account_id),
         'category_id': str(category_id),
         'amount': '-25.50',
@@ -201,13 +201,13 @@ def test_transaction_routes_create_edit_delete(app, family, user):
     assert transaction.family_id == family_id
     assert transaction.amount == Decimal('-25.50')
 
-    response = client.get(f'/transactions/{transaction_id}/edit')
+    response = client.get(f'/finance/transactions/{transaction_id}/edit')
     assert response.status_code == 200
     assert b'transaction-editor-page' in response.data
     assert b'transaction-paid-control is-paid' in response.data
     assert b'Included in paid balances' in response.data
 
-    response = client.post(f'/transactions/{transaction_id}/edit', data={
+    response = client.post(f'/finance/transactions/{transaction_id}/edit', data={
         'account_id': str(account_id),
         'category_id': str(category_id),
         'amount': '-30.00',
@@ -225,7 +225,7 @@ def test_transaction_routes_create_edit_delete(app, family, user):
     assert transaction.description == 'Updated transaction'
     assert transaction.year_month == '2026-02'
 
-    response = client.post(f'/{transaction_id}/delete')
+    response = client.post(f'/finance/transactions/{transaction_id}/delete')
     assert response.status_code == 302
     assert db.session.get(Transaction, transaction_id) is None
 
@@ -240,7 +240,7 @@ def test_transaction_create_and_edit_manage_plan_link(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/transactions/create', data={
+    response = client.post('/finance/transactions/create', data={
         'account_id': str(account.id), 'category_id': str(category.id),
         'amount': '-50.00', 'transaction_date': '2026-09-21',
         'description': 'Toy shop', 'plan_item_id': str(item.id),
@@ -249,7 +249,7 @@ def test_transaction_create_and_edit_manage_plan_link(app, family, user):
     assert response.status_code == 302
     assert item.transaction_id == transaction.id
 
-    response = client.post(f'/transactions/{transaction.id}/edit', data={
+    response = client.post(f'/finance/transactions/{transaction.id}/edit', data={
         'account_id': str(account.id), 'category_id': str(category.id),
         'amount': '-50.00', 'transaction_date': '2026-09-21',
         'description': 'Toy shop', 'plan_item_id': '',
@@ -267,7 +267,7 @@ def test_transaction_create_can_quick_create_plan_item(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/transactions/create', data={
+    response = client.post('/finance/transactions/create', data={
         'account_id': str(account.id), 'category_id': str(category.id),
         'amount': '-35.00', 'transaction_date': '2026-09-21',
         'description': 'Book shop', 'plan_id': str(plan.id),
@@ -291,7 +291,7 @@ def test_recurring_transaction_batch_rejects_single_plan_link(app, family, user)
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/transactions/create', data={
+    response = client.post('/finance/transactions/create', data={
         'account_id': str(account.id), 'category_id': str(category.id),
         'amount': '-10.00', 'transaction_date': '2026-09-21',
         'is_recurring': 'on', 'occurrences': '12', 'frequency': 'monthly',
@@ -320,7 +320,7 @@ def test_transaction_create_rejects_references_from_another_family(app, family, 
 
     client = app.test_client()
     _login(client, user.id)
-    response = client.post('/transactions/create', data={
+    response = client.post('/finance/transactions/create', data={
         'account_id': str(account.id),
         'category_id': str(foreign_category.id),
         'amount': '-25.50',
@@ -356,7 +356,7 @@ def test_transaction_edit_rejects_references_from_another_family(app, family, us
 
     client = app.test_client()
     _login(client, user.id)
-    response = client.post(f'/transactions/{transaction.id}/edit', data={
+    response = client.post(f'/finance/transactions/{transaction.id}/edit', data={
         'account_id': str(account.id),
         'category_id': str(foreign_category.id),
         'amount': '-30.00',
@@ -394,7 +394,7 @@ def test_transaction_bulk_edit_rejects_references_from_another_family(app, famil
 
     client = app.test_client()
     _login(client, user.id)
-    response = client.post('/transactions/bulk-edit', data={
+    response = client.post('/finance/transactions/bulk-edit', data={
         'transaction_ids': str(transaction.id),
         'bulk_category_id': str(foreign_category.id),
     })

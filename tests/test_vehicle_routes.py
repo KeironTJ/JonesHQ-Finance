@@ -25,7 +25,7 @@ def test_trip_template_routes_create_update_and_delete(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.post('/vehicles/trip-templates/add', data={
+    response = client.post('/finance/vehicles/trip-templates/add', data={
         'vehicle_id': str(vehicle.id),
         'name': 'Work',
         'trip_type': 'business',
@@ -38,7 +38,7 @@ def test_trip_template_routes_create_update_and_delete(app, family, user):
     assert template.name == 'Work'
 
     response = client.post(
-        f'/vehicles/trip-templates/update/{template.id}',
+        f'/finance/vehicles/trip-templates/update/{template.id}',
         data={
             'vehicle_id': str(vehicle.id),
             'name': 'Updated work',
@@ -51,7 +51,7 @@ def test_trip_template_routes_create_update_and_delete(app, family, user):
     assert template.name == 'Updated work'
     assert template.miles == 26
 
-    response = client.post(f'/vehicles/trip-templates/delete/{template.id}')
+    response = client.post(f'/finance/vehicles/trip-templates/delete/{template.id}')
     assert response.status_code == 302
     assert TripTemplate.query.count() == 0
 
@@ -99,7 +99,7 @@ def test_vehicle_overview_shows_trip_forecast_and_recent_history(app, family, us
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.get('/vehicles')
+    response = client.get('/finance/vehicles')
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
@@ -112,7 +112,7 @@ def test_vehicle_overview_shows_trip_forecast_and_recent_history(app, family, us
     assert '£7.25' in html
     assert '£42.50' in html
 
-    overview_response = client.get('/vehicles/driving-overview')
+    overview_response = client.get('/finance/vehicles/driving-overview')
     overview_html = overview_response.get_data(as_text=True)
     assert overview_response.status_code == 200
     assert 'Six-month driving and fuel history' in overview_html
@@ -139,7 +139,7 @@ def test_trip_schedule_route_creates_and_pauses_planned_trips(app, family, user)
     login_client(client, user.id)
     start_date = date.today() + timedelta(days=30)
 
-    response = client.post('/vehicles/trip-schedules/add', data={
+    response = client.post('/finance/vehicles/trip-schedules/add', data={
         'vehicle_id': str(vehicle.id),
         'name': 'School run routine',
         'trip_type': 'personal',
@@ -155,16 +155,16 @@ def test_trip_schedule_route_creates_and_pauses_planned_trips(app, family, user)
     assert response.status_code == 302
     assert Trip.query.filter_by(schedule_id=schedule.id, trip_status='planned').count() == 1
 
-    page = client.get('/vehicles/routines')
+    page = client.get('/finance/vehicles/routines')
     assert page.status_code == 200
     assert 'School run routine' in page.get_data(as_text=True)
-    assert f'data-href="/vehicles/routines?schedule_id={schedule.id}#occurrences"' in page.get_data(as_text=True)
-    page = client.get(f'/vehicles/routines?schedule_id={schedule.id}')
-    assert 'data-href="/vehicles/routines"' in page.get_data(as_text=True)
+    assert f'data-href="/finance/vehicles/routines?schedule_id={schedule.id}#occurrences"' in page.get_data(as_text=True)
+    page = client.get(f'/finance/vehicles/routines?schedule_id={schedule.id}')
+    assert 'data-href="/finance/vehicles/routines"' in page.get_data(as_text=True)
     assert start_date.strftime('%a %d %b %Y') in page.get_data(as_text=True)
 
     response = client.post(
-        f'/vehicles/trip-schedules/toggle/{schedule.id}',
+        f'/finance/vehicles/trip-schedules/toggle/{schedule.id}',
         data={'is_active': '0'},
     )
 
@@ -190,7 +190,7 @@ def test_routine_page_shows_limits_and_preserves_trips_after_limit_reduction(app
         'days': str(today.weekday()),
     }
 
-    response = client.post('/vehicles/trip-schedules/add', data=data, follow_redirects=True)
+    response = client.post('/finance/vehicles/trip-schedules/add', data=data, follow_redirects=True)
     html = response.get_data(as_text=True)
     assert '1,800 days ahead' in html
     assert TripSchedule.query.count() == 0
@@ -199,12 +199,12 @@ def test_routine_page_shows_limits_and_preserves_trips_after_limit_reduction(app
     assert f'max="{latest}"' in html
 
     data['end_date'] = (today + timedelta(days=14)).isoformat()
-    assert client.post('/vehicles/trip-schedules/add', data=data).status_code == 302
+    assert client.post('/finance/vehicles/trip-schedules/add', data=data).status_code == 302
     trip_ids = {trip.id for trip in Trip.query.all()}
     assert len(trip_ids) == 3
     SiteSettingsService.update({'trip_planning_max_days': '7'})
 
-    response = client.get('/vehicles/routines')
+    response = client.get('/finance/vehicles/routines')
     html = response.get_data(as_text=True)
     assert response.status_code == 200
     assert 'New routine trips are paused' in html
@@ -229,7 +229,7 @@ def test_completed_routine_occurrence_can_be_edited_or_skipped(app, family, user
     login_client(client, user.id)
     today = date.today()
 
-    client.post('/vehicles/trip-schedules/add', data={
+    client.post('/finance/vehicles/trip-schedules/add', data={
         'vehicle_id': str(vehicle.id),
         'name': 'Completed commute',
         'trip_type': 'personal',
@@ -242,16 +242,16 @@ def test_completed_routine_occurrence_can_be_edited_or_skipped(app, family, user
     })
     schedule = TripSchedule.query.filter_by(family_id=family.id).one()
     trip = Trip.query.filter_by(schedule_id=schedule.id).one()
-    client.post(f'/vehicles/trips/{trip.id}/confirm')
+    client.post(f'/finance/vehicles/trips/{trip.id}/confirm')
 
-    page = client.get(f'/vehicles/routines?schedule_id={schedule.id}')
+    page = client.get(f'/finance/vehicles/routines?schedule_id={schedule.id}')
     html = page.get_data(as_text=True)
     assert 'Completed' in html
-    assert f'data-update-url="/vehicles/trip/update/{trip.id}"' in html
-    assert f'action="/vehicles/trips/{trip.id}/skip"' in html
+    assert f'data-update-url="/finance/vehicles/trip/update/{trip.id}"' in html
+    assert f'action="/finance/vehicles/trips/{trip.id}/skip"' in html
     assert 'Didn&#39;t happen' in html or "Didn't happen" in html
 
-    response = client.post(f'/vehicles/trips/{trip.id}/skip')
+    response = client.post(f'/finance/vehicles/trips/{trip.id}/skip')
     assert response.status_code == 302
     assert trip.trip_status == 'skipped'
 
@@ -280,7 +280,7 @@ def test_trip_page_renders_saved_journeys_and_bulk_preview(app, family, user):
 
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get('/vehicles/trips')
+    response = client.get('/finance/vehicles/trips')
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
@@ -299,7 +299,7 @@ def test_trip_page_renders_saved_journeys_and_bulk_preview(app, family, user):
     db.session.add(other_user)
     db.session.commit()
     login_client(client, other_user.id)
-    private_response = client.get('/vehicles/trips')
+    private_response = client.get('/finance/vehicles/trips')
 
     assert private_response.status_code == 200
     assert 'School run' not in private_response.get_data(as_text=True)
@@ -327,15 +327,15 @@ def test_trip_log_respects_pay_period_and_hides_skipped(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    html = client.get('/vehicles/trips').get_data(as_text=True)
+    html = client.get('/finance/vehicles/trips').get_data(as_text=True)
     assert 'Done today' in html
     assert 'Skipped today' not in html
     assert 'Far future plan' not in html
 
-    html = client.get('/vehicles/trips?show_skipped=1').get_data(as_text=True)
+    html = client.get('/finance/vehicles/trips?show_skipped=1').get_data(as_text=True)
     assert 'Skipped today' in html
 
-    html = client.get('/vehicles/trips?payday_period_trip=all').get_data(as_text=True)
+    html = client.get('/finance/vehicles/trips?payday_period_trip=all').get_data(as_text=True)
     assert 'Far future plan' in html
     assert 'Confirm due (' not in html
 
@@ -362,8 +362,8 @@ def test_confirm_due_route_confirms_past_planned_trips(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    assert 'Confirm due (1)' in client.get('/vehicles/trips?payday_period_trip=all').get_data(as_text=True)
-    response = client.post('/vehicles/trips/confirm-due')
+    assert 'Confirm due (1)' in client.get('/finance/vehicles/trips?payday_period_trip=all').get_data(as_text=True)
+    response = client.post('/finance/vehicles/trips/confirm-due')
 
     assert response.status_code == 302
     assert past.trip_status == 'actual'
@@ -387,8 +387,8 @@ def test_clear_future_route_removes_manual_trips(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    assert 'clearFutureTripsModal' in client.get('/vehicles/trips').get_data(as_text=True)
-    response = client.post('/vehicles/trips/clear-future', data={
+    assert 'clearFutureTripsModal' in client.get('/finance/vehicles/trips').get_data(as_text=True)
+    response = client.post('/finance/vehicles/trips/clear-future', data={
         'from_date': (date.today() + timedelta(days=1)).isoformat(),
         'vehicle_id': str(vehicle.id),
         'routine_mode': 'keep',
@@ -413,26 +413,26 @@ def test_journeys_page_and_trip_subnav(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.get('/vehicles/journeys')
+    response = client.get('/finance/vehicles/journeys')
     html = response.get_data(as_text=True)
     assert response.status_code == 200
     assert 'Gym run' in html
     assert 'tripTemplateForm' in html
 
-    for path in ('/vehicles/trips', '/vehicles/routines', '/vehicles/journeys'):
+    for path in ('/finance/vehicles/trips', '/finance/vehicles/routines', '/finance/vehicles/journeys'):
         page = client.get(path).get_data(as_text=True)
         assert 'vehicle-subnav' in page
-        assert 'href="/vehicles/routines"' in page
-        assert 'href="/vehicles/journeys"' in page
-    trip_html = client.get('/vehicles/trips').get_data(as_text=True)
+        assert 'href="/finance/vehicles/routines"' in page
+        assert 'href="/finance/vehicles/journeys"' in page
+    trip_html = client.get('/finance/vehicles/trips').get_data(as_text=True)
     assert 'tripTemplatesModal' not in trip_html
     assert 'Gym run' in trip_html  # still offered in the Add Trip journey picker
 
-    response = client.post('/vehicles/trip-templates/add', data={
+    response = client.post('/finance/vehicles/trip-templates/add', data={
         'vehicle_id': str(vehicle.id), 'name': 'Shop', 'trip_type': 'personal', 'miles': '3',
     })
     assert response.status_code == 302
-    assert response.headers['Location'].endswith('/vehicles/journeys')
+    assert response.headers['Location'].endswith('/finance/vehicles/journeys')
 
 
 def test_trip_log_period_dropdown_omits_empty_periods(app, family, user):
@@ -455,7 +455,7 @@ def test_trip_log_period_dropdown_omits_empty_periods(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    html = client.get('/vehicles/trips').get_data(as_text=True)
+    html = client.get('/finance/vehicles/trips').get_data(as_text=True)
 
     assert f'value="{old_label}" selected' in html
     assert f'value="{current_label}"' not in html

@@ -32,7 +32,7 @@
                         data-bs-target="#workspaceNav" aria-controls="workspaceNav" aria-label="Open navigation">
                     <i class="bi bi-list" aria-hidden="true"></i>
                 </button>
-                <a class="workspace-home" href="{{ url_for('household.my_day' if current_user.is_managed_child and can_open_household else active_module.home_endpoint if active_module else 'central.hub') }}">{{ 'My day' if current_user.is_managed_child and can_open_household else active_module.title if active_module else 'Central' }}</a>
+                <a class="workspace-home" href="{{ url_for('household.my_day' if current_user.is_managed_child and can_open_household else active_module.home_endpoint if active_module else 'central.hub') }}">{{ 'My day' if current_user.is_managed_child and can_open_household else active_module.title if active_module else 'Central Hub' }}</a>
                 <span class="topbar-divider" aria-hidden="true">/</span>
                 {% set page_labels = active_module.get('page_labels', {}) if active_module else {} %}
                 {% set page_label = page_labels.get(request.endpoint, page_labels.get(request.blueprint, {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title))) %}

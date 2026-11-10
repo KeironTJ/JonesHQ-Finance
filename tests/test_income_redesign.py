@@ -438,37 +438,37 @@ def test_income_pages_render(client, scoped):
     recurring = _source()
     IncomeService.add_income_change(recurring.id, {
         'change_type': 'bonus', 'amount': '500', 'effective_date': date.today().isoformat()})
-    for url in ('/income', '/income/recurring', f'/income/recurring/{recurring.id}',
-                f'/income/recurring/{recurring.id}/edit', '/income/recurring/add',
-                '/income/plan', '/income/plan?person=Household&until=2040'):
+    for url in ('/finance/income', '/finance/income/recurring', f'/finance/income/recurring/{recurring.id}',
+                f'/finance/income/recurring/{recurring.id}/edit', '/finance/income/recurring/add',
+                '/finance/income/plan', '/finance/income/plan?person=Household&until=2040'):
         response = client.get(url)
         assert response.status_code == 200, url
 
 
 def test_add_weekly_source_via_form_then_timeline_routes(client, scoped):
-    response = client.post('/income/recurring/add', data={
+    response = client.post('/finance/income/recurring/add', data={
         'person': 'Household', 'source': 'Shop', 'income_type': 'employment', 'pay_frequency': 'weekly',
         'start_date': date.today().isoformat(), 'first_pay_date': date.today().isoformat(),
         'gross_annual': '26000', 'tax_code': '1257L', 'student_loan_plans': ['plan_2'],
         'pension_scheme': 'net_pay', 'auto_create_transaction': 'on',
     })
     recurring = RecurringIncome.query.filter_by(source='Shop').one()
-    assert response.status_code == 302 and response.location.endswith(f'/income/recurring/{recurring.id}')
+    assert response.status_code == 302 and response.location.endswith(f'/finance/income/recurring/{recurring.id}')
     assert recurring.pay_frequency == 'weekly' and recurring.student_loan_plans == 'plan_2'
     assert Income.query.filter_by(recurring_income_id=recurring.id).count() > 90
 
-    client.post(f'/income/recurring/{recurring.id}/changes', data={
+    client.post(f'/finance/income/recurring/{recurring.id}/changes', data={
         'change_type': 'salary', 'amount': '30000', 'effective_date': date.today().isoformat()})
     change = IncomeChange.query.one()
-    page = client.get(f'/income/recurring/{recurring.id}').get_data(as_text=True)
+    page = client.get(f'/finance/income/recurring/{recurring.id}').get_data(as_text=True)
     assert 'New salary' in page and '£30,000.00 a year' in page
 
-    client.post(f'/income/changes/{change.id}/delete')
+    client.post(f'/finance/income/changes/{change.id}/delete')
     assert IncomeChange.query.count() == 0
 
 
 def test_preview_supports_frequency_and_student_loan(client):
-    response = client.post('/income/calculate-preview', json={
+    response = client.post('/finance/income/calculate-preview', json={
         'gross_annual': '52000', 'tax_code': '1257L', 'pay_frequency': 'weekly',
         'student_loan_plans': ['plan_2'], 'employee_pension_pct': '5',
     })
@@ -479,25 +479,25 @@ def test_preview_supports_frequency_and_student_loan(client):
 
 def test_refresh_all_route(client, scoped):
     _source()
-    response = client.post('/income/refresh-forecasts', follow_redirects=True)
+    response = client.post('/finance/income/refresh-forecasts', follow_redirects=True)
     assert 'Forecasts refreshed' in response.get_data(as_text=True)
 
 
 def test_refresh_route_saves_forecast_years(client, scoped):
     _source()
-    client.post('/income/refresh-forecasts', data={'forecast_years': '7', 'next': 'sources'})
+    client.post('/finance/income/refresh-forecasts', data={'forecast_years': '7', 'next': 'sources'})
     assert IncomeForecastService.forecast_years() == 7
-    response = client.post('/income/refresh-forecasts', data={'forecast_years': '99'}, follow_redirects=True)
+    response = client.post('/finance/income/refresh-forecasts', data={'forecast_years': '99'}, follow_redirects=True)
     assert 'from 1 to 10 years' in response.get_data(as_text=True)
     assert IncomeForecastService.forecast_years() == 7
 
 
 def test_retirement_route(client, scoped):
     _source()
-    response = client.post('/income/plan/retirement', data={
+    response = client.post('/finance/income/plan/retirement', data={
         'person': 'Household', 'date_of_birth': '1980-05-01', 'retirement_age': '66'}, follow_redirects=True)
     assert 'retires on 01 May 2046' in response.get_data(as_text=True)
-    page = client.get('/income/plan').get_data(as_text=True)
+    page = client.get('/finance/income/plan').get_data(as_text=True)
     assert 'Household retires' in page and 'value="1980-05-01"' in page
 
 

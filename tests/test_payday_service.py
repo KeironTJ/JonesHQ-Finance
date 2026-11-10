@@ -175,10 +175,10 @@ def test_recurring_income_payday_controls_match_owner_access(app, user, role, ca
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.get('/income/recurring')
+    response = client.get('/finance/income/recurring')
 
     assert response.status_code == 200
-    assert ('/income/reperiod-transactions' in response.get_data(as_text=True)) is can_edit
+    assert ('/finance/income/reperiod-transactions' in response.get_data(as_text=True)) is can_edit
 
 
 def test_member_cannot_change_household_payday_through_income(app, user):
@@ -188,6 +188,6 @@ def test_member_cannot_change_household_payday_through_income(app, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.post('/income/reperiod-transactions', data={'new_payday_day': '1'})
+    response = client.post('/finance/income/reperiod-transactions', data={'new_payday_day': '1'})
 
     assert response.status_code == 403

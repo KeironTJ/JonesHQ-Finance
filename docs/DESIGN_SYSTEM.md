@@ -102,8 +102,8 @@ action. Macro values remain autoescaped.
 
 ## Personal appearance
 
-Account-wide appearance is edited at `/preferences` in the central shell.
-Finance-only defaults are edited separately at `/preferences/finance`, using the
+Account-wide appearance is edited at `/central/preferences` in the central shell.
+Finance-only defaults are edited separately at `/finance/preferences`, using the
 Finance shell. Both use the same stylesheets and account-wide appearance state;
 do not introduce module-specific theme storage or reset appearance when switching.
 

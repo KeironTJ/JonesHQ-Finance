@@ -210,26 +210,26 @@ def test_member_forms_and_retirement_routes(scoped, user, app):
     client = app.test_client()
     login_client(client, user.id)
     income = Income.query.filter_by(recurring_income_id=job.id).first()
-    for url in ('/income/add', f'/income/{income.id}/edit',
-                '/income/recurring/add', f'/income/recurring/{job.id}/edit',
-                '/pensions/add', f'/pensions/{pot.id}/edit'):
+    for url in ('/finance/income/add', f'/finance/income/{income.id}/edit',
+                '/finance/income/recurring/add', f'/finance/income/recurring/{job.id}/edit',
+                '/finance/pensions/add', f'/finance/pensions/{pot.id}/edit'):
         response = client.get(url)
         assert response.status_code == 200
         assert f'value="{person.id}"' in response.text
         assert 'name="member_id"' in response.text
-    assert 'value="63"' in client.get('/income/plan').text
-    response = client.post('/income/add', data={
+    assert 'value="63"' in client.get('/finance/income/plan').text
+    response = client.post('/finance/income/add', data={
         'member_id': str(person.id), 'person': 'forged display text',
         'pay_date': date.today().isoformat(), 'gross_annual': '12000', 'tax_code': '1257L',
     })
     assert response.status_code == 302
     assert Income.query.filter_by(recurring_income_id=None, member_id=person.id, person='Sam').count() == 1
-    response = client.post(f'/pensions/{pot.id}/retirement', data={
+    response = client.post(f'/finance/pensions/{pot.id}/retirement', data={
         'date_of_birth': '1980-01-01', 'retirement_age': '69',
     })
     assert response.status_code == 302
     assert IncomeProjectionService.retirement_for('Sam', person.id)['age'] == 69
-    for url in ('/income/plan', '/pensions/retirement-summary'):
+    for url in ('/finance/income/plan', '/finance/pensions/retirement-summary'):
         response = client.get(url)
         assert response.status_code == 200
         assert '69' in response.text
@@ -244,15 +244,15 @@ def test_personal_preferences_do_not_change_shared_retirement_profile(scoped, us
     }, person.id)
     client = app.test_client()
     login_client(client, user.id)
-    response = client.post('/preferences/save', json={
+    response = client.post('/finance/preferences/save', json={
         'key': 'dashboard.networth_expanded', 'value': True,
     })
     assert response.status_code == 200
     assert user.preferences['dashboard.networth_expanded'] is True
     assert not person.preferences
     assert RetirementService.profile('Sam', person.id)['age'] == 68
-    assert client.get('/settings').status_code == 200
-    assert client.get('/income/plan').status_code == 200
+    assert client.get('/finance/settings').status_code == 200
+    assert client.get('/finance/income/plan').status_code == 200
 
 
 def test_preferences_and_retirement_migrations_have_one_head():

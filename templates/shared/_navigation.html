@@ -35,7 +35,7 @@
             {{ nav_link('central.hub', 'Central Hub', 'grid', exact=true) }}
             {% for module in navigation_modules %}
             {% if module.can_open %}
-            {{ nav_link(module.home_endpoint, module.overview_label if active_module and module.key == active_module.key else 'Open ' ~ module.title, module.icon|replace('bi-', ''), exact=true, active_override=false if settings_area else none) }}
+            {{ nav_link(module.home_endpoint, module.overview_label if active_module and module.key == active_module.key else ('Switch to ' if active_module else 'Open ') ~ module.title, module.icon|replace('bi-', ''), exact=true, active_override=false if settings_area else none) }}
             {% endif %}
             {% endfor %}
             {% if not central_workspace and active_module %}

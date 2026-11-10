@@ -298,8 +298,8 @@ def test_no_full_to_full_interval_has_no_forecast(vehicle):
 
 
 @pytest.mark.parametrize('path', [
-    '/vehicles/fuel?payday_period=all',
-    '/vehicles/trips?payday_period_trip=all',
+    '/finance/vehicles/fuel?payday_period=all',
+    '/finance/vehicles/trips?payday_period_trip=all',
 ])
 def test_fill_pages_display_derived_legacy_mpg_without_writing_records(
     app, user, vehicle, path,
@@ -334,13 +334,13 @@ def test_edit_routes_refresh_saved_forecasts(app, user, forecast_vehicle, action
     client = app.test_client()
     login_client(client, user.id)
     if action == 'delete':
-        response = client.post(f'/vehicles/trip/delete/{trip.id}')
+        response = client.post(f'/finance/vehicles/trip/delete/{trip.id}')
         assert forecasts(vehicle) == []
     elif action == 'bulk-delete':
-        response = client.post('/vehicles/trips/bulk-delete', data={'trip_ids': f'[{trip.id}]'})
+        response = client.post('/finance/vehicles/trips/bulk-delete', data={'trip_ids': f'[{trip.id}]'})
         assert forecasts(vehicle) == []
     elif action == 'bulk-add':
-        response = client.post('/vehicles/trips/bulk-add', data={
+        response = client.post('/finance/vehicles/trips/bulk-add', data={
             'vehicle_id': vehicle.id, 'start_date': '2026-09-04',
             'end_date': '2026-09-04', 'days': '4', 'miles': '80',
         })
@@ -348,7 +348,7 @@ def test_edit_routes_refresh_saved_forecasts(app, user, forecast_vehicle, action
             date(2026, 9, 3), date(2026, 9, 4),
         ]
     else:
-        response = client.post(f'/vehicles/update/{vehicle.id}', data={
+        response = client.post(f'/finance/vehicles/update/{vehicle.id}', data={
             'registration': 'NEW REG', 'tank_size': '20',
             'refuel_threshold_pct': '95', 'fuel_account_id': vehicle.fuel_account_id,
             'is_active': 'on',
@@ -379,7 +379,7 @@ def test_registration_and_account_change_moves_forecasts_and_invalidates_both_ca
     )
     client = app.test_client()
     login_client(client, user.id)
-    response = client.post(f'/vehicles/update/{vehicle.id}', data={
+    response = client.post(f'/finance/vehicles/update/{vehicle.id}', data={
         'registration': 'NEW REG', 'fuel_account_id': new_account.id, 'is_active': 'on',
     })
     assert response.status_code == 302

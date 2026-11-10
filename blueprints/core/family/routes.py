@@ -2,15 +2,15 @@
 Family blueprint routes.
 
 Household-owner routes (require login + owner role):
-  GET  /family               – management page (members, active invites)
-  POST /family/invite        – create a new invite link
-  POST /family/invite/<id>/revoke  – revoke an unused invite
-  POST /family/members/<id>/update – update a member's sections
-  POST /family/members/<id>/remove – remove a member from the family
+  GET  /central/family               – management page (members, active invites)
+  POST /central/family/invite        – create a new invite link
+  POST /central/family/invite/<id>/revoke  – revoke an unused invite
+  POST /central/family/members/<id>/update – update a member's sections
+  POST /central/family/members/<id>/remove – remove a member from the family
 
 Public route (no login required):
-  GET  /family/join/<token>  – show join/register form
-  POST /family/join/<token>  – complete registration and join
+  GET  /central/family/join/<token>  – show join/register form
+  POST /central/family/join/<token>  – complete registration and join
 """
 import json
 from datetime import datetime, timezone

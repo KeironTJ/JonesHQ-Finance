@@ -27,8 +27,11 @@ def register_blueprints(app):
         pensions_bp, plans_bp, finance_preferences_bp, settings_bp,
         transactions_bp, vehicles_bp, vendors_bp,
     ):
-        app.register_blueprint(blueprint)
-    app.register_blueprint(loans_bp, url_prefix='/loans')
+        app.register_blueprint(
+            blueprint,
+            url_prefix='/finance' + (blueprint.url_prefix or ''),
+        )
+    app.register_blueprint(loans_bp, url_prefix='/finance/loans')
 
 
 MODULE = {

@@ -107,6 +107,16 @@ def create_app(config_name=None):
     register_blueprints(app)
     ModuleRegistry.register_modules(app)
 
+    @app.route('/')
+    def application_root():
+        from flask import redirect, url_for
+        from flask_login import current_user
+        from services.platform.landing_service import LandingService
+
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.intro'))
+        return redirect(LandingService.resolve(current_user))
+
     @app.before_request
     def enforce_module_access():
         from services.platform.module_access_service import ModuleAccessService

@@ -70,7 +70,7 @@ def test_adult_member_can_manage_library_without_finance_or_owner_role(app, peop
     meal = Meal.query.one()
     assert meal.family_id == adult.family_id
     assert meal.ingredients == RECIPE['ingredients']
-    assert client.get('/dashboard').status_code == 403
+    assert client.get('/finance/dashboard').status_code == 403
     assert client.get(response.location).status_code == 200
     response = client.post(f'/household/meals/{meal.id}/edit', data={**RECIPE, 'name': 'Updated pasta'})
     assert response.status_code == 302
@@ -206,7 +206,7 @@ def test_module_revocation_blocks_all_meal_surfaces_immediately(app, user):
     ):
         assert client.get(path).status_code == 403
     assert client.post('/household/meal-planner/add', data={}).status_code == 403
-    assert b'Meal library' not in client.get('/hub').data
+    assert b'Meal library' not in client.get('/central/').data
 
 
 def test_scoping_foreign_ids_and_active_household_not_legacy_default(app, user, family):
@@ -220,7 +220,7 @@ def test_scoping_foreign_ids_and_active_household_not_legacy_default(app, user, 
     original = create_meal(app, user)
     original_plan = create_plan(app, user, original)
     client = client_for(app, user)
-    client.post('/family/select', data={'family_id': foreign.id})
+    client.post('/central/family/select', data={'family_id': foreign.id})
     for path in (
         f'/household/meals/{original.id}', f'/household/meals/{original.id}/edit',
         f'/household/meal-planner/{original_plan.id}',
@@ -337,7 +337,7 @@ def test_shared_meals_survive_individual_account_deletion(app, user, people):
     adult, _ = people
     meal = create_meal(app, adult)
     plan = create_plan(app, adult, meal)
-    response = client_for(app, adult).post('/account/security/delete', data={
+    response = client_for(app, adult).post('/central/account/security/delete', data={
         'password': 'TestPass1!', 'confirmation': 'DELETE MY ACCOUNT',
     })
     assert response.location.endswith('/login')

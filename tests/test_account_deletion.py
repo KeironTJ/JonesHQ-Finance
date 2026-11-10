@@ -186,7 +186,7 @@ def test_deletion_removes_private_domains_but_preserves_shared_and_other_househo
     user_id = user.id
     client = sign_in(app, user)
     other_client = sign_in(app, user)
-    response = client.post('/account/security/delete', data=VALID_DATA)
+    response = client.post('/central/account/security/delete', data=VALID_DATA)
     assert response.status_code == 302
     assert response.headers['Location'].endswith('/login')
     assert not row_exists(User, user_id)
@@ -226,14 +226,14 @@ def test_deletion_removes_private_domains_but_preserves_shared_and_other_househo
     assert UserSession.query.filter_by(user_id=user_id).count() == 0
     assert db.session.execute(text('PRAGMA foreign_key_check')).all() == []
     g.pop('_login_user', None)
-    assert other_client.get('/account/security').status_code == 302
+    assert other_client.get('/central/account/security').status_code == 302
 
 
 def test_preview_is_read_only_and_lists_all_owned_domains(app, deletion_user, graph):
     user, _ = deletion_user
     own, *_ = graph
     client = sign_in(app, user)
-    response = client.get('/account/security/delete')
+    response = client.get('/central/account/security/delete')
     assert response.status_code == 200
     assert b'DELETE MY ACCOUNT' in response.data
     assert b'Shared financial records remain' in response.data
@@ -253,7 +253,7 @@ def test_preview_is_read_only_and_lists_all_owned_domains(app, deletion_user, gr
 ])
 def test_invalid_confirmation_does_not_delete(app, deletion_user, data, message):
     user, _ = deletion_user
-    response = sign_in(app, user).post('/account/security/delete', data=data)
+    response = sign_in(app, user).post('/central/account/security/delete', data=data)
     assert response.status_code == 200
     assert message in response.data
     assert row_exists(User, user.id)
@@ -265,7 +265,7 @@ def test_last_admin_cannot_delete_until_another_active_admin_exists(app, user, f
         add(User, email=f'ineligible-{role}@example.com', name='Not eligible',
                           family_id=family.id, password_hash=user.password_hash, role=role, is_active=active)
     db.session.commit()
-    response = client.post('/account/security/delete', data=VALID_DATA)
+    response = client.post('/central/account/security/delete', data=VALID_DATA)
     assert b'Appoint another active household owner' in response.data
     assert row_exists(User, user.id)
 
@@ -276,7 +276,7 @@ def test_site_admin_must_revoke_role_first(app, deletion_user):
     user.totp_secret = 'JBSWY3DPEHPK3PXP'
     user.totp_enabled_at = _now()
     db.session.commit()
-    response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/account/security/delete', data=VALID_DATA)
     assert b'Revoke your site-admin role' in response.data
     assert row_exists(User, user.id)
 
@@ -285,7 +285,7 @@ def test_removed_member_can_delete_owned_records_in_former_household(app, deleti
     user, _ = deletion_user
     detach_user_from_households(user)
     user_id = user.id
-    response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/account/security/delete', data=VALID_DATA)
     assert response.status_code == 302
     assert not row_exists(User, user_id)
     assert Account.query.filter_by(name='Own').count() == 0
@@ -299,7 +299,7 @@ def test_deletion_failure_rolls_back_everything(app, deletion_user, graph, monke
         side_effect=OperationalError('commit', {}, Exception('unavailable'))))
     # Avoid the separate request-session touch commit so failure occurs at the deletion boundary.
     monkeypatch.setattr('services.platform.user_session_service.UserSessionService.touch', lambda user: None)
-    response = client.post('/account/security/delete', data=VALID_DATA)
+    response = client.post('/central/account/security/delete', data=VALID_DATA)
     assert response.status_code == 200
     assert b'No deletion was committed' in response.data
     assert row_exists(User, user.id)
@@ -315,25 +315,25 @@ def test_cross_household_corrupt_child_blocks_deletion(app, deletion_user, graph
         family_id=foreign['account'].family_id, account_id=own['account'].id,
         balance=5, balance_date=TODAY))
     db.session.commit()
-    response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/account/security/delete', data=VALID_DATA)
     assert b'household data is inconsistent' in response.data
     assert row_exists(User, user.id)
 
 
 def test_requires_login_recent_password_and_csrf(app, deletion_user, monkeypatch):
     user, _ = deletion_user
-    assert app.test_client().post('/account/security/delete', data=VALID_DATA).status_code == 302
+    assert app.test_client().post('/central/account/security/delete', data=VALID_DATA).status_code == 302
     client = sign_in(app, user)
     UserSession.query.filter_by(user_id=user.id).update({
         'reauthenticated_at': _now() - timedelta(hours=1)})
     db.session.commit()
     g.pop('_login_user', None)
-    response = client.post('/account/security/delete', data=VALID_DATA)
-    assert '/account/confirm' in response.headers['Location']
+    response = client.post('/central/account/security/delete', data=VALID_DATA)
+    assert '/central/account/confirm' in response.headers['Location']
     sign_in_client = sign_in(app, user)
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     g.pop('csrf_valid', None)
-    assert sign_in_client.post('/account/security/delete', data=VALID_DATA).status_code == 400
+    assert sign_in_client.post('/central/account/security/delete', data=VALID_DATA).status_code == 400
     assert row_exists(User, user.id)
 
 
@@ -343,15 +343,15 @@ def test_wrong_password_attempts_are_rate_limited(app, deletion_user):
     bad = dict(VALID_DATA, password='wrong')
     for _ in range(3):
         g.pop('_login_user', None)
-        assert client.post('/account/security/delete', data=bad).status_code == 200
-    assert client.post('/account/security/delete', data=bad).status_code == 429
+        assert client.post('/central/account/security/delete', data=bad).status_code == 200
+    assert client.post('/central/account/security/delete', data=bad).status_code == 429
     assert row_exists(User, user.id)
 
 
 def test_service_rejects_attempt_to_delete_someone_else(app, deletion_user):
     user, replacement = deletion_user
     client = sign_in(app, user)
-    client.get('/account/security')
+    client.get('/central/account/security')
     with pytest.raises(ValueError, match='your own account'):
         AccountDeletionService.delete_account(replacement, VALID_DATA)
     assert row_exists(User, replacement.id)
@@ -374,7 +374,7 @@ def test_private_transaction_cycles_and_sources_delete_without_fk_violations(app
     subscription.credit_card_id = own['card'].id
     db.session.commit()
     user_id = user.id
-    response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/account/security/delete', data=VALID_DATA)
     assert response.status_code == 302
     assert not row_exists(User, user_id)
     assert db.session.execute(text('PRAGMA foreign_key_check')).all() == []
@@ -385,7 +385,7 @@ def test_deletion_clears_remember_cookie(app, deletion_user):
     client = sign_in(app, user, remember=True)
     cookie_name = app.config.get('REMEMBER_COOKIE_NAME', COOKIE_NAME)
     client.set_cookie(cookie_name, 'previous-remember-token')
-    response = client.post('/account/security/delete', data=VALID_DATA)
+    response = client.post('/central/account/security/delete', data=VALID_DATA)
     assert response.status_code == 302
     assert client.get_cookie(cookie_name) is None
     with client.session_transaction() as session:
@@ -403,7 +403,7 @@ def test_replacement_admin_deactivated_after_preview_blocks_deletion(app, deleti
         return counts
 
     monkeypatch.setattr(AccountDeletionService, 'preview', deactivate_after_preview)
-    response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/account/security/delete', data=VALID_DATA)
     assert b'Appoint another active household owner' in response.data
     assert row_exists(User, user.id)
 
@@ -422,7 +422,7 @@ def test_unhandled_dependencies_block_deletion(app, deletion_user, graph, monkey
         return plan
 
     monkeypatch.setattr(AccountDeletionService, '_plan', incomplete_plan)
-    response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/account/security/delete', data=VALID_DATA)
     assert message in response.data
     assert row_exists(User, user.id)
     assert Account.query.filter_by(name='Own').count() == 1

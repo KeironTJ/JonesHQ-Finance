@@ -103,7 +103,7 @@ def test_daily_activity_endpoint_scopes_references(app, user, activity_records, 
     client = app.test_client()
     login_client(client, user.id)
     g.pop('_login_user', None)
-    response = client.post('/childcare/update_activity', json={
+    response = client.post('/finance/childcare/update_activity', json={
         'date': '2026-01-05', 'child_id': children[child_index].id,
         'activity_type_id': types[type_index].id, 'occurred': True,
     })

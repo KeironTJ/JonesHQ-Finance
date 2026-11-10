@@ -55,7 +55,7 @@ def test_loan_payment_toggle_route_syncs_bank_payment(app, family, user):
 
     client = app.test_client()
     _login(client, user_id)
-    response = client.post(f'/loans/{loan_id}/payment/{payment_id}/toggle-paid')
+    response = client.post(f'/finance/loans/{loan_id}/payment/{payment_id}/toggle-paid')
 
     assert response.status_code == 200
     db.session.refresh(payment)
@@ -76,7 +76,7 @@ def test_childcare_bulk_route_returns_zero_for_empty_month(app, family, user):
 
     client = app.test_client()
     _login(client, user_id)
-    response = client.post('/childcare/bulk_create_transactions', json={
+    response = client.post('/finance/childcare/bulk_create_transactions', json={
         'year': 2026,
         'month': 1,
         'transactions': [{'child_id': child_id, 'account_id': 1}],

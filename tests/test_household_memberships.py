@@ -24,7 +24,7 @@ def test_auto_stamp_uses_selected_household_and_preserves_explicit_ids(app, user
         user.family_id = None
     db.session.commit()
 
-    with app.test_request_context('/accounts'):
+    with app.test_request_context('/finance/accounts'):
         login_user(user)
         HouseholdMembershipService.select(user, second_family.id)
         implicit = Account(name='Implicit', account_type='Current')
@@ -44,7 +44,7 @@ def test_auto_stamp_does_not_invent_household_without_request_or_membership(app,
     db.session.flush()
     assert outside_request.family_id is None
     detach_user_from_households(user)
-    with app.test_request_context('/accounts'):
+    with app.test_request_context('/finance/accounts'):
         login_user(user)
         detached = Account(name='Detached', account_type='Current')
         db.session.add(detached)
@@ -110,16 +110,16 @@ def test_household_switcher_changes_active_context_and_is_membership_scoped(app,
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    html = client.get('/hub').get_data(as_text=True)
+    html = client.get('/central/').get_data(as_text=True)
     assert 'id="activeHousehold"' in html
-    response = client.post('/family/select', data={'family_id': second_family.id})
+    response = client.post('/central/family/select', data={'family_id': second_family.id})
     assert response.status_code == 302
-    assert response.location.endswith('/hub')
-    response = client.post('/family/select', data={'family_id': 999999})
+    assert response.location.endswith('/central/')
+    response = client.post('/central/family/select', data={'family_id': 999999})
     assert response.status_code == 302
     assert b'Choose a household you belong to.' in client.get(response.location).data
     with client:
-        client.get('/dashboard')
+        client.get('/finance/dashboard')
         assert get_family_id() == second_family.id
 
 
@@ -139,10 +139,10 @@ def test_member_can_switch_household_without_finance_owner_permission(app, user)
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    response = client.post('/family/select', data={'family_id': second_family.id})
+    response = client.post('/central/family/select', data={'family_id': second_family.id})
     assert response.status_code == 302
-    assert client.get('/accounts').status_code == 403
-    assert client.get('/transactions').status_code == 200
+    assert client.get('/finance/accounts').status_code == 403
+    assert client.get('/finance/transactions').status_code == 200
 
 
 def test_family_members_relationship_includes_membership(app, user, family):
@@ -194,20 +194,20 @@ def test_role_and_finance_edits_use_selected_household_not_targets_default(app, 
     client = app.test_client()
     login_client(client, user.id)
 
-    html = client.get('/family/').get_data(as_text=True)
+    html = client.get('/central/family/').get_data(as_text=True)
     assert '<option value="member" selected>Member</option>' in html
-    response = client.post(f'/settings/access/members/{member.id}', data={
+    response = client.post(f'/finance/settings/access/members/{member.id}', data={
         'member_name': 'Local display', 'sections': ['transactions'],
     })
     assert response.status_code == 302
     db.session.refresh(membership)
     assert membership.allowed_sections == '["transactions"]'
     assert member.role == 'admin'
-    response = client.post(f'/family/members/{member.id}/role', data={'role': 'admin'})
+    response = client.post(f'/central/family/members/{member.id}/role', data={'role': 'admin'})
     assert response.status_code == 302
     db.session.refresh(membership)
     assert membership.role == 'admin'
-    response = client.post(f'/family/members/{member.id}/role', data={'role': 'member'})
+    response = client.post(f'/central/family/members/{member.id}/role', data={'role': 'member'})
     assert response.status_code == 302
     db.session.refresh(membership)
     assert membership.role == 'member'

@@ -17,7 +17,7 @@ def index():
     return render_template('settings/index.html')
 
 
-@settings_bp.route('/hub/settings/finance')
+@settings_bp.route('/settings/overview')
 def overview():
     return render_template('settings/overview.html')
 

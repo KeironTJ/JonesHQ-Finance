@@ -8,8 +8,7 @@ from services.finance.preference_service import FinancePreferenceService
 from services.platform.module_registry import ModuleRegistry
 
 
-@finance_preferences_bp.route('', methods=['POST'])
-@finance_preferences_bp.route('/finance', methods=['GET', 'POST'])
+@finance_preferences_bp.route('/preferences', methods=['GET', 'POST'])
 def index():
     if not ModuleRegistry.has_active_household(current_user):
         flash('Join a household before managing Finance preferences.', 'info')
@@ -38,7 +37,7 @@ def index():
     return render_template('preferences/finance.html', **context)
 
 
-@finance_preferences_bp.route('/save', methods=['POST'])
+@finance_preferences_bp.route('/preferences/save', methods=['POST'])
 def save_preference():
     try:
         FinancePreferenceService.save_preference(request.get_json())

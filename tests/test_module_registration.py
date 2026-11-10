@@ -20,7 +20,7 @@ def test_core_registers_without_finance_blueprints(app):
     assert set(core_app.blueprints) == {
         'auth', 'central', 'family', 'preferences', 'site_admin',
     }
-    assert not any(rule.rule == '/dashboard' for rule in core_app.url_map.iter_rules())
+    assert not any(rule.rule == '/finance/dashboard' for rule in core_app.url_map.iter_rules())
 
 
 def test_registry_owns_every_finance_blueprint(app):
@@ -36,14 +36,24 @@ def test_registry_owns_every_finance_blueprint(app):
     assert not {'auth', 'central', 'family', 'preferences', 'site_admin'} & set(owners)
 
 
-def test_finance_entry_points_keep_existing_urls(app):
+def test_module_entry_points_use_workspace_namespaces(app):
     with app.test_request_context():
-        assert url_for('dashboard.index') == '/dashboard'
-        assert url_for('finance_preferences.index') == '/preferences/finance'
-        assert url_for('finance_preferences.save_preference') == '/preferences/save'
-        assert url_for('settings.overview') == '/hub/settings/finance'
+        assert url_for('central.hub') == '/central/'
+        assert url_for('central.settings') == '/central/settings'
+        assert url_for('family.index') == '/central/family/'
+        assert url_for('preferences.index') == '/central/preferences'
+        assert url_for('auth.account_security') == '/central/account/security'
+        assert url_for('dashboard.index') == '/finance/dashboard'
+        assert url_for('finance_preferences.index') == '/finance/preferences'
+        assert url_for('finance_preferences.save_preference') == '/finance/preferences/save'
+        assert url_for('settings.overview') == '/finance/settings/overview'
         assert ModuleRegistry.module_for_blueprint('finance_preferences')['key'] == 'finance'
         assert ModuleRegistry.module_for_blueprint('preferences') is None
+
+
+def test_workspace_pages_are_not_exposed_at_legacy_root_paths(app):
+    registered_paths = {rule.rule for rule in app.url_map.iter_rules()}
+    assert not {'/hub', '/dashboard', '/accounts', '/family/'} & registered_paths
 
 
 def test_core_preferences_have_no_finance_implementation_imports(app):
@@ -63,16 +73,16 @@ def test_core_preferences_have_no_finance_implementation_imports(app):
         )
 
 
-def test_finance_owns_legacy_preference_post_but_not_appearance(app, user):
+def test_finance_and_central_preferences_have_distinct_routes(app, user):
     adapter = app.url_map.bind('localhost')
-    assert adapter.match('/preferences', method='GET')[0] == 'preferences.index'
-    assert adapter.match('/preferences', method='POST')[0] == 'finance_preferences.index'
-    assert adapter.match('/preferences/appearance', method='POST')[0] == 'preferences.appearance'
+    assert adapter.match('/central/preferences', method='GET')[0] == 'preferences.index'
+    assert adapter.match('/finance/preferences', method='POST')[0] == 'finance_preferences.index'
+    assert adapter.match('/central/preferences/appearance', method='POST')[0] == 'preferences.appearance'
     client = app.test_client()
     login_client(client, user.id)
-    for path in ('/preferences/finance', '/hub/settings/finance'):
+    for path in ('/finance/preferences', '/finance/settings/overview'):
         assert client.get(path).status_code == 200
-    assert client.get('/income').status_code == 200
+    assert client.get('/finance/income').status_code == 200
 
 
 def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, user, monkeypatch):
@@ -98,23 +108,23 @@ def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, u
     ]))
     client = app.test_client()
     login_client(client, user.id)
-    html = client.get('/accounts').get_data(as_text=True)
+    html = client.get('/finance/accounts').get_data(as_text=True)
     assert '<strong id="workspaceNavLabel">Example module</strong>' in html
     assert 'Example overview' in html
     assert 'Example guide' in html
     sidebar = NavigationParser()
     sidebar.feed(html)
     hrefs = {link['href'] for link in sidebar.links}
-    assert '/transactions' not in hrefs
-    assert '/hub/settings' in hrefs
-    assert 'href="/account/security" data-nav-search>Example settings</a>' in html
-    assert '/dashboard' in hrefs
-    assert '/accounts' in hrefs
-    central = client.get('/hub').get_data(as_text=True)
+    assert '/finance/transactions' not in hrefs
+    assert '/central/settings' in hrefs
+    assert 'href="/central/account/security" data-nav-search>Example settings</a>' in html
+    assert '/finance/dashboard' in hrefs
+    assert '/finance/accounts' in hrefs
+    central = client.get('/central/').get_data(as_text=True)
     assert 'Open Example module' in central
-    settings = client.get('/hub/settings').get_data(as_text=True)
+    settings = client.get('/central/settings').get_data(as_text=True)
     assert 'Open Example settings' in settings
-    assert 'href="/account/security"' in settings
+    assert 'href="/central/account/security"' in settings
 
 
 def test_module_navigation_permissions_follow_selected_household(app, user):
@@ -128,12 +138,12 @@ def test_module_navigation_permissions_follow_selected_household(app, user):
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    client.post('/family/select', data={'family_id': second_family.id})
-    for path in ('/accounts', '/transactions/subscriptions', '/hub/settings/finance'):
+    client.post('/central/family/select', data={'family_id': second_family.id})
+    for path in ('/finance/accounts', '/finance/transactions/subscriptions', '/finance/settings/overview'):
         html = client.get(path).get_data(as_text=True)
         sidebar = NavigationParser()
         sidebar.feed(html)
         hrefs = {link['href'] for link in sidebar.links}
-        assert {'/accounts', '/transactions', '/transactions/subscriptions'} <= hrefs
-        assert not {'/income', '/vendors/', '/settings', '/family/'} & hrefs
+        assert {'/finance/accounts', '/finance/transactions', '/finance/transactions/subscriptions'} <= hrefs
+        assert not {'/finance/income', '/finance/vendors/', '/finance/settings', '/central/family/'} & hrefs
         assert len([link for link in sidebar.links if link.get('aria-current') == 'page']) == 1

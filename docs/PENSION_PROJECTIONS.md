@@ -5,14 +5,14 @@ Your pension management system now includes comprehensive projection capabilitie
 
 ## Key Features
 
-### 1. **Pension Projections View** (`/pensions/projections`)
+### 1. **Pension Projections View** (`/finance/pensions/projections`)
 - Combined historical + projected data in Excel-style table
 - Monthly snapshots from now through retirement age
 - Three scenarios: Default (0.12%), Optimistic (0.5%), Pessimistic (0.05%)
 - Automatic growth calculations
 - Total values across all pensions
 
-### 2. **Retirement Summary Dashboard** (`/pensions/retirement-summary`)
+### 2. **Retirement Summary Dashboard** (`/finance/pensions/retirement-summary`)
 - Current age and years to retirement
 - Total current vs projected values
 - Estimated annual annuity income

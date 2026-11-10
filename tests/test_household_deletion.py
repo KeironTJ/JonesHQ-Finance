@@ -138,7 +138,7 @@ def test_deletes_every_household_table_but_retains_accounts_and_other_families(a
     for name in HOUSEHOLD_TABLES:
         assert db.session.execute(select(db.metadata.tables[name].c.id).where(
             db.metadata.tables[name].c.family_id == family_id)).first(), name
-    response = client.post('/family/delete', data=VALID_DATA)
+    response = client.post('/central/family/delete', data=VALID_DATA)
     assert response.status_code == 302
     assert response.headers['Location'].endswith('/login')
     assert db.session.execute(select(Family.id).where(Family.id == family_id)).first() is None
@@ -163,15 +163,15 @@ def test_deletes_every_household_table_but_retains_accounts_and_other_families(a
     assert db.session.execute(text('PRAGMA foreign_key_check')).all() == []
     for signed_out in (client, other_client):
         g.pop('_login_user', None)
-        assert signed_out.get('/account/security').status_code == 302
+        assert signed_out.get('/central/account/security').status_code == 302
     for retained in (foreign_client, former_client):
         g.pop('_login_user', None)
-        assert retained.get('/account/security').status_code == 200
+        assert retained.get('/central/account/security').status_code == 200
 
 
 def test_preview_is_read_only_and_warns_about_every_members_private_data(app, user, family, graph):
     client = sign_in(app, user)
-    response = client.get('/family/delete')
+    response = client.get('/central/family/delete')
     assert response.status_code == 200
     assert b'Member (member@example.com)' in response.data
     assert b'Former' not in response.data  # no former-member identities in the member list
@@ -188,7 +188,7 @@ def test_preview_is_read_only_and_warns_about_every_members_private_data(app, us
     (dict(VALID_DATA, password=''), b'This field is required'),
 ])
 def test_password_and_phrase_are_required(app, user, family, data, message):
-    response = sign_in(app, user).post('/family/delete', data=dict(data, family_id=family.id))
+    response = sign_in(app, user).post('/central/family/delete', data=dict(data, family_id=family.id))
     assert response.status_code == 200
     assert message in response.data
     assert db.session.get(Family, family.id) is not None
@@ -198,33 +198,33 @@ def test_member_and_detached_user_cannot_delete_household(app, user, family):
     user.role = 'member'
     db.session.commit()
     client = sign_in(app, user)
-    assert client.post('/family/delete', data=VALID_DATA).status_code == 403
+    assert client.post('/central/family/delete', data=VALID_DATA).status_code == 403
     detach_user_from_households(user)
     g.pop('_login_user', None)
-    assert client.post('/family/delete', data=VALID_DATA).status_code == 403
+    assert client.post('/central/family/delete', data=VALID_DATA).status_code == 403
     assert db.session.get(Family, family.id) is not None
 
 
 def test_requires_login_recent_auth_and_csrf(app, user, monkeypatch):
-    assert app.test_client().post('/family/delete', data=VALID_DATA).status_code == 302
+    assert app.test_client().post('/central/family/delete', data=VALID_DATA).status_code == 302
     client = sign_in(app, user)
     UserSession.query.filter_by(user_id=user.id).update({
         'reauthenticated_at': _now() - timedelta(hours=1)})
     db.session.commit()
     g.pop('_login_user', None)
-    assert '/account/confirm' in client.post('/family/delete', data=VALID_DATA).headers['Location']
+    assert '/central/account/confirm' in client.post('/central/family/delete', data=VALID_DATA).headers['Location']
     client = sign_in(app, user)
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     g.pop('csrf_valid', None)
-    assert client.post('/family/delete', data=VALID_DATA).status_code == 400
+    assert client.post('/central/family/delete', data=VALID_DATA).status_code == 400
 
 
 def test_attempts_are_rate_limited(app, user):
     client = sign_in(app, user)
     for _ in range(3):
         g.pop('_login_user', None)
-        assert client.post('/family/delete', data=dict(VALID_DATA, password='wrong')).status_code == 200
-    assert client.post('/family/delete', data=VALID_DATA).status_code == 429
+        assert client.post('/central/family/delete', data=dict(VALID_DATA, password='wrong')).status_code == 200
+    assert client.post('/central/family/delete', data=VALID_DATA).status_code == 429
 
 
 def test_commit_failure_rolls_back_data_membership_sessions_and_audit(app, user, family, graph, monkeypatch):
@@ -233,7 +233,7 @@ def test_commit_failure_rolls_back_data_membership_sessions_and_audit(app, user,
     monkeypatch.setattr('services.platform.user_session_service.UserSessionService.touch', lambda user: None)
     monkeypatch.setattr(db.session, 'commit', Mock(
         side_effect=OperationalError('commit', {}, Exception('unavailable'))))
-    response = client.post('/family/delete', data=VALID_DATA)
+    response = client.post('/central/family/delete', data=VALID_DATA)
     assert b'No deletion was committed' in response.data
     assert db.session.get(Family, family_id) is not None
     assert db.session.get(User, user_id).family_id == family_id
@@ -250,7 +250,7 @@ def test_foreign_child_link_blocks_deletion_without_mutating_foreign_records(app
     ).values(linked_transaction_id=own['transaction'].id))
     db.session.commit()
     db.session.expire(foreign['transaction'])
-    response = sign_in(app, user).post('/family/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/family/delete', data=VALID_DATA)
     assert b'household data is inconsistent' in response.data
     db.session.refresh(foreign['transaction'])
     assert foreign['transaction'].linked_transaction_id == own['transaction'].id
@@ -261,11 +261,11 @@ def test_request_cannot_select_a_different_household(app, user, family, graph):
     foreign_family_id = foreign_user.family_id
     client = sign_in(app, user)
     response = client.post(
-        f'/family/delete?family_id={foreign_family_id}', data=dict(VALID_DATA, family_id=foreign_family_id))
+        f'/central/family/delete?family_id={foreign_family_id}', data=dict(VALID_DATA, family_id=foreign_family_id))
     assert b'Your household membership changed' in response.data
     assert db.session.get(Family, foreign_family_id) is not None
     assert db.session.get(User, user.id).family_id == family.id
-    response = client.post(f'/family/delete?family_id={foreign_family_id}', data=VALID_DATA)
+    response = client.post(f'/central/family/delete?family_id={foreign_family_id}', data=VALID_DATA)
     assert response.status_code == 302
     assert db.session.get(Family, foreign_family_id) is not None
 
@@ -273,7 +273,7 @@ def test_request_cannot_select_a_different_household(app, user, family, graph):
 def test_service_rejects_another_users_identity(app, user, graph):
     _, _, foreign_user, *_ = graph
     client = sign_in(app, user)
-    client.get('/account/security')
+    client.get('/central/account/security')
     with pytest.raises(ValueError, match='own household'):
         HouseholdDeletionService.delete_household(foreign_user, VALID_DATA)
 
@@ -286,12 +286,12 @@ def test_active_other_member_sessions_are_revoked_but_two_factor_and_role_remain
     user.totp_enabled_at = _now()
     db.session.commit()
     other_client = sign_in(app, member)
-    response = sign_in(app, user).post('/family/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/family/delete', data=VALID_DATA)
     assert response.status_code == 302
     assert db.session.get(User, user.id).is_site_admin
     assert db.session.get(User, user.id).two_factor_enabled
     g.pop('_login_user', None)
-    assert other_client.get('/account/security').status_code == 302
+    assert other_client.get('/central/account/security').status_code == 302
 
 
 def test_membership_or_role_change_after_review_requires_a_new_review(app, user, family, monkeypatch):
@@ -305,7 +305,7 @@ def test_membership_or_role_change_after_review_requires_a_new_review(app, user,
         return result
 
     monkeypatch.setattr(HouseholdDeletionService, 'preview', demote_after_preview)
-    response = client.post('/family/delete', data=VALID_DATA)
+    response = client.post('/central/family/delete', data=VALID_DATA)
     assert b'Only an active household owner' in response.data
     assert db.session.get(Family, family.id) is not None
 
@@ -314,7 +314,7 @@ def test_unreviewed_household_table_blocks_deletion(app, user, family, monkeypat
     monkeypatch.setattr(
         'services.household.household_deletion_service.HOUSEHOLD_TABLES',
         tuple(name for name in HOUSEHOLD_TABLES if name != 'settings'))
-    response = sign_in(app, user).post('/family/delete', data=VALID_DATA)
+    response = sign_in(app, user).post('/central/family/delete', data=VALID_DATA)
     assert b'Household data requires a reviewed deletion rule' in response.data
     assert db.session.get(Family, family.id) is not None
 
@@ -327,7 +327,7 @@ def test_unknown_required_dependency_blocks_deletion(app, user, family):
     try:
         db.session.execute(table.insert().values(family_ref=family.id))
         db.session.commit()
-        response = sign_in(app, user).post('/family/delete', data=VALID_DATA)
+        response = sign_in(app, user).post('/central/family/delete', data=VALID_DATA)
         assert b'Linked records prevent safe' in response.data
         assert db.session.get(Family, family.id) is not None
     finally:
@@ -338,7 +338,7 @@ def test_unknown_required_dependency_blocks_deletion(app, user, family):
 
 def test_missing_reviewed_household_id_does_not_delete(app, user, family):
     data = {key: value for key, value in VALID_DATA.items() if key != 'family_id'}
-    response = sign_in(app, user).post('/family/delete', data=data)
+    response = sign_in(app, user).post('/central/family/delete', data=data)
     assert b'Reload the household deletion review' in response.data
     assert db.session.get(Family, family.id) is not None
 
@@ -351,27 +351,27 @@ def test_retained_account_can_sign_in_and_join_a_new_household(app, user, graph)
     db.session.commit()
     token, new_family_id = invite.token, foreign_user.family_id
     client = sign_in(app, user)
-    assert client.post('/family/delete', data=VALID_DATA).status_code == 302
+    assert client.post('/central/family/delete', data=VALID_DATA).status_code == 302
     g.pop('_login_user', None)
     response = client.post('/login', data={'email': user.email, 'password': 'TestPass1!'})
     assert response.status_code == 302
-    assert response.headers['Location'].endswith('/account/security')
+    assert response.headers['Location'].endswith('/central/account/security')
     g.pop('_login_user', None)
-    assert b'Join with my existing account' in client.get(f'/family/join/{token}').data
+    assert b'Join with my existing account' in client.get(f'/central/family/join/{token}').data
     another_client = sign_in(app, user)
     g.pop('_login_user', None)
-    response = client.post(f'/family/join/{token}')
+    response = client.post(f'/central/family/join/{token}')
     assert response.status_code == 302
     assert db.session.get(User, user_id).family_id == new_family_id
     assert db.session.get(User, user_id).password_hash == password_hash
     assert db.session.get(User, user_id).get_allowed_sections() == {'accounts'}
     assert FamilyInvite.query.filter_by(token=token).one().used_by_id == user_id
     g.pop('_login_user', None)
-    assert client.get('/account/security').status_code == 200
+    assert client.get('/central/account/security').status_code == 200
     g.pop('_login_user', None)
-    assert another_client.get('/account/security').status_code == 200
+    assert another_client.get('/central/account/security').status_code == 200
     g.pop('_login_user', None)
-    response = client.post(f'/family/join/{token}')
+    response = client.post(f'/central/family/join/{token}')
     assert response.status_code == 302
     assert HouseholdMembership.query.filter_by(
         user_id=user_id, family_id=new_family_id,
@@ -391,12 +391,12 @@ def test_deleting_primary_household_preserves_other_membership_and_session(app, 
     client = app.test_client()
     login_client(client, user_id)
 
-    response = client.post('/family/delete', data=dict(
+    response = client.post('/central/family/delete', data=dict(
         VALID_DATA, family_id=str(family_id),
     ))
 
     assert response.status_code == 302
-    assert response.headers['Location'].endswith('/hub')
+    assert response.headers['Location'].endswith('/central/')
     assert db.session.get(Family, family_id) is None
     retained = db.session.get(User, user_id)
     assert retained.family_id == other_family.id
@@ -406,7 +406,7 @@ def test_deleting_primary_household_preserves_other_membership_and_session(app, 
     ).one().allowed_sections == '["accounts"]'
     assert UserSession.query.filter_by(user_id=user_id, revoked_at=None).count() == 1
     with client:
-        client.get('/accounts')
+        client.get('/finance/accounts')
         from utils.db_helpers import get_family_id
         assert get_family_id() == other_family.id
 
@@ -418,7 +418,7 @@ def test_join_existing_adds_membership_without_moving_existing_household(app, us
     db.session.commit()
     token = invite.token
     client = sign_in(app, user)
-    response = client.post(f'/family/join/{token}')
+    response = client.post(f'/central/family/join/{token}')
     assert response.status_code == 302
     assert db.session.get(User, user.id).family_id == family.id
     assert HouseholdMembership.query.filter_by(
@@ -429,20 +429,20 @@ def test_join_existing_adds_membership_without_moving_existing_household(app, us
     ).one().role == 'member'
     assert FamilyInvite.query.filter_by(token=token).one().used_at is not None
     with client:
-        client.get('/hub')
+        client.get('/central/')
         from utils.db_helpers import get_family_id
         assert get_family_id() == foreign_family.id
 
 
 def test_changed_household_since_get_cannot_delete_the_new_household(app, user, family):
     client = sign_in(app, user)
-    assert client.get('/family/delete').status_code == 200
+    assert client.get('/central/family/delete').status_code == 200
     new_family = add(Family, name='Different household')
     user.family_id = new_family.id
     db.session.commit()
     db.session.expire_all()
     g.pop('_login_user', None)
-    response = client.post('/family/delete', data=VALID_DATA)
+    response = client.post('/central/family/delete', data=VALID_DATA)
     assert b'Your household membership changed' in response.data
     assert db.session.get(Family, family.id) is not None
     assert db.session.get(Family, new_family.id) is not None
@@ -461,4 +461,4 @@ def test_detached_two_factor_login_still_lands_on_account_security(app, user):
     assert response.headers['Location'].endswith('/login/two-factor')
     g.pop('_login_user', None)
     response = client.post('/login/two-factor', data={'code': pyotp.TOTP(user.totp_secret).now()})
-    assert response.headers['Location'].endswith('/account/security')
+    assert response.headers['Location'].endswith('/central/account/security')

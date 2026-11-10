@@ -10,7 +10,7 @@ statistics.
 ## Implementation
 
 ### 1. Database Layer ✅
-- **Vendor Model** (`models/vendors.py`)
+- **Vendor Model** (`models/finance/vendors.py`)
   - `family_id`: Household boundary
   - `name`: Vendor name (indexed; the database does not enforce global uniqueness)
   - `vendor_type_id`: Link to the household's `VendorType` record
@@ -31,23 +31,23 @@ statistics.
   - Adds the `vendors` and `vendor_types` tables and `transactions.vendor_id`
 
 ### 2. Application Layer
-- **Vendors Blueprint** (`blueprints/finance/vendors/`)
-  - Registered in `app.py` with URL prefix `/vendors`
+- **Vendors Blueprint** (`blueprints/finance/finance/vendors/`)
+  - Registered by `blueprints/finance/__init__.py` under `/finance/vendors`
   - Routes (`routes.py`):
-    - `GET /vendors/` - List all vendors with search and filter
-    - `GET /vendors/add` - Add new vendor form
-    - `POST /vendors/add` - Create new vendor
-    - `GET /vendors/edit/<id>` - Edit vendor form
-    - `POST /vendors/edit/<id>` - Update vendor
-    - `POST /vendors/delete/<id>` - Delete vendor (protected when transactions exist)
-    - `GET /vendors/types` - Manage vendor types
-    - `GET /vendors/analytics` - Vendor analytics
-    - `GET /vendors/api/search` - Autocomplete API endpoint
-    - `GET /vendors/api/stats` - Vendor statistics API
-    - `POST /vendors/quick-add` - Quick-add a vendor from a form
+    - `GET /finance/vendors/` - List all vendors with search and filter
+    - `GET /finance/vendors/add` - Add new vendor form
+    - `POST /finance/vendors/add` - Create new vendor
+    - `GET /finance/vendors/edit/<id>` - Edit vendor form
+    - `POST /finance/vendors/edit/<id>` - Update vendor
+    - `POST /finance/vendors/delete/<id>` - Delete vendor (protected when transactions exist)
+    - `GET /finance/vendors/types` - Manage vendor types
+    - `GET /finance/vendors/analytics` - Vendor analytics
+    - `GET /finance/vendors/api/search` - Autocomplete API endpoint
+    - `GET /finance/vendors/api/stats` - Vendor statistics API
+    - `POST /finance/vendors/quick-add` - Quick-add a vendor from a form
 
 ### 3. User Interface
-- **Vendor List** (`templates/vendors/vendors.html`) ✅
+- **Vendor List** (`templates/finance/vendors/finance/vendors.html`) ✅
   - Card-based layout showing all vendors
   - Search by name functionality
   - Filter by vendor type
@@ -56,13 +56,13 @@ statistics.
   - Edit/Delete buttons
   - **Note:** Transaction count temporarily removed to prevent query overhead
 
-- **Add Vendor** (`templates/vendors/add.html`)
+- **Add Vendor** (`templates/finance/vendors/add.html`)
   - Form with fields: name (required), type, default category, website, notes
   - Grouped category dropdown by head budget
   - Predefined vendor types dropdown
   - Tips sidebar with usage guidance
 
-- **Edit Vendor** (`templates/vendors/edit.html`)
+- **Edit Vendor** (`templates/finance/vendors/edit.html`)
   - All add fields plus active/inactive toggle
   - Info sidebar showing creation/update dates and transaction count
   - Warning when editing vendor with existing transactions
@@ -89,8 +89,8 @@ statistics.
 - ✅ **Auto-create vendors** - Credit card payment transactions automatically create vendor matching card name
 
 #### API Endpoints
-- ✅ `/vendors/api/search` - Autocomplete for transaction forms
-- ✅ `/vendors/api/stats` - Vendor analytics (transaction count)
+- ✅ `/finance/vendors/api/search` - Autocomplete for transaction forms
+- ✅ `/finance/vendors/api/stats` - Vendor analytics (transaction count)
 
 #### Data Quality
 - ✅ Vendor name is indexed; quick-add reuses an exact existing name within the family
@@ -197,7 +197,7 @@ Home → Vendors → List (search/filter)
 
 ## Vendor Analytics
 
-Open `/vendors/analytics` to review vendor analytics. The route scopes
+Open `/finance/vendors/analytics` to review vendor analytics. The route scopes
 transaction queries to the active household and supports payday and monthly
 views.
 

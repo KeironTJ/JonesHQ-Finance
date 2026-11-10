@@ -19,7 +19,7 @@ def reset_login_state():
     limiter.reset()
 
 
-@pytest.mark.parametrize('workspace, destination', [('central', '/hub'), ('finance', '/dashboard'), ('household', '/household/')])
+@pytest.mark.parametrize('workspace, destination', [('central', '/central/'), ('finance', '/finance/dashboard'), ('household', '/household/')])
 def test_workspace_is_personal_and_preserves_existing_preferences(app, family, user, workspace, destination):
     user.preferences = {
         'appearance.mode': 'auto', 'appearance.palette': 'purple',
@@ -33,32 +33,32 @@ def test_workspace_is_personal_and_preserves_existing_preferences(app, family, u
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    response = client.post('/preferences/workspace', data={
+    response = client.post('/central/preferences/workspace', data={
         'default_workspace': workspace, 'user_id': member.id,
     })
-    assert response.location.endswith('/preferences#workspace-card')
+    assert response.location.endswith('/central/preferences#workspace-card')
     db.session.refresh(user)
     assert user.preferences == {
         'appearance.mode': 'auto', 'appearance.palette': 'purple',
         'dashboard.attention_days': 90, 'default_workspace': workspace,
     }
     assert not member.preferences
-    html = client.get('/preferences').get_data(as_text=True)
+    html = client.get('/central/preferences').get_data(as_text=True)
     assert f'value="{workspace}" selected' in html
     assert client.get('/').location == destination
     assert client.get('/login').location == destination
     assert client.get('/login/two-factor').location == destination
-    assert client.get('/hub').status_code == 200
+    assert client.get('/central/').status_code == 200
 
 
-@pytest.mark.parametrize('value', [None, '', 'family', '/dashboard', 'https://example.com'])
+@pytest.mark.parametrize('value', [None, '', 'family', '/finance/dashboard', 'https://example.com'])
 def test_invalid_workspace_does_not_change_any_preferences(app, user, value):
     user.preferences = {'default_workspace': 'finance', 'appearance.mode': 'dark'}
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
     data = {} if value is None else {'default_workspace': value}
-    response = client.post('/preferences/workspace', data=data, follow_redirects=True)
+    response = client.post('/central/preferences/workspace', data=data, follow_redirects=True)
     assert response.status_code == 200
     assert b'Choose an available default workspace.' in response.data
     assert user.preferences == {'default_workspace': 'finance', 'appearance.mode': 'dark'}
@@ -72,7 +72,7 @@ def test_workspace_save_reports_database_failure(app, user, monkeypatch):
         raise SQLAlchemyError('Test failure')
 
     monkeypatch.setattr(db.session, 'commit', fail_commit)
-    response = client.post('/preferences/workspace', data={'default_workspace': 'finance'})
+    response = client.post('/central/preferences/workspace', data={'default_workspace': 'finance'})
     assert response.status_code == 302
     assert not user.preferences
     html = client.get(response.location).get_data(as_text=True)
@@ -81,24 +81,24 @@ def test_workspace_save_reports_database_failure(app, user, monkeypatch):
 
 def test_workspace_save_requires_login_and_csrf(app, user, monkeypatch):
     client = app.test_client()
-    assert client.post('/preferences/workspace', data={'default_workspace': 'finance'}).status_code == 302
+    assert client.post('/central/preferences/workspace', data={'default_workspace': 'finance'}).status_code == 302
     login_client(client, user.id)
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
-    assert client.post('/preferences/workspace', data={'default_workspace': 'finance'}).status_code == 400
+    assert client.post('/central/preferences/workspace', data={'default_workspace': 'finance'}).status_code == 400
     assert not user.preferences
 
 
 @pytest.mark.parametrize('method', ['password', 'two_factor', 'passkey'])
 @pytest.mark.parametrize('workspace, target, destination', [
-    (None, None, '/hub'),
-    ('central', None, '/hub'),
-    ('finance', None, '/dashboard'),
-    ('finance', '/hub', '/hub'),
-    ('central', '/dashboard?year=2027#needs-attention', '/dashboard?year=2027#needs-attention'),
-    ('finance', '/accounts/?view=all', '/accounts/?view=all'),
-    ('finance', 'https://example.com', '/dashboard'),
-    ('finance', '//example.com', '/dashboard'),
-    ('finance', '/%5cexample.com', '/dashboard'),
+    (None, None, '/central/'),
+    ('central', None, '/central/'),
+    ('finance', None, '/finance/dashboard'),
+    ('finance', '/central/', '/central/'),
+    ('central', '/finance/dashboard?year=2027#needs-attention', '/finance/dashboard?year=2027#needs-attention'),
+    ('finance', '/finance/accounts/?view=all', '/finance/accounts/?view=all'),
+    ('finance', 'https://example.com', '/finance/dashboard'),
+    ('finance', '//example.com', '/finance/dashboard'),
+    ('finance', '/%5cexample.com', '/finance/dashboard'),
 ])
 def test_all_login_methods_use_same_workspace_and_deep_link_rules(
     app, user, monkeypatch, method, workspace, target, destination,
@@ -148,14 +148,14 @@ def test_detached_login_ignores_finance_default(app, user, monkeypatch, method):
         g.pop('_login_user', None)
         options = client.post('/login/passkey/options', json={}).json
         response = client.post('/login/passkey/verify', json=authenticator.response(options))
-        assert response.json['redirect'] == '/account/security'
+        assert response.json['redirect'] == '/central/account/security'
     else:
         if method == 'two_factor':
             enable_two_factor(user)
         response = client.post('/login', data={'email': user.email, 'password': 'TestPass1!'})
         if method == 'two_factor':
             response = client.post('/login/two-factor', data={'code': totp_code(user, 1)})
-        assert response.location == '/account/security'
+        assert response.location == '/central/account/security'
 
 
 def test_member_default_workspace_does_not_grant_section_access(app, user):
@@ -164,14 +164,14 @@ def test_member_default_workspace_does_not_grant_section_access(app, user):
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    assert client.post('/preferences/workspace', data={'default_workspace': 'finance'}).status_code == 302
-    assert client.get('/').location == '/dashboard'
-    assert client.get('/income').status_code == 403
-    assert client.get('/settings').status_code == 403
+    assert client.post('/central/preferences/workspace', data={'default_workspace': 'finance'}).status_code == 302
+    assert client.get('/').location == '/finance/dashboard'
+    assert client.get('/finance/income').status_code == 403
+    assert client.get('/finance/settings').status_code == 403
 
 
-@pytest.mark.parametrize('target', [None, '/dashboard?year=2027', '/hub#workspaces', '/'])
+@pytest.mark.parametrize('target', [None, '/finance/dashboard?year=2027', '/central/#workspaces', '/'])
 def test_detached_default_destinations_use_security(app, user, target):
     detach_user_from_households(user)
     with app.test_request_context():
-        assert LandingService.resolve(user, target) == '/account/security'
+        assert LandingService.resolve(user, target) == '/central/account/security'

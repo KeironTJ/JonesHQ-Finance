@@ -38,16 +38,16 @@ def test_tax_settings_pages_render_and_save(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    listing = client.get('/settings/tax')
+    listing = client.get('/finance/settings/tax')
     assert listing.status_code == 200
     assert b'2026-2027' in listing.data
     assert b'20%' in listing.data
 
-    edit = client.get(f'/settings/tax/{tax_year.id}/edit')
+    edit = client.get(f'/finance/settings/tax/{tax_year.id}/edit')
     assert edit.status_code == 200
     assert b'value="12570.00"' in edit.data
 
-    response = client.post(f'/settings/tax/{tax_year.id}/edit', data={
+    response = client.post(f'/finance/settings/tax/{tax_year.id}/edit', data={
         'personal_allowance': '12570', 'basic_rate_limit': '50270', 'higher_rate_limit': '125140',
         'basic_rate': '21', 'higher_rate': '40', 'additional_rate': '45',
         'ni_threshold': '12570', 'ni_upper_earnings': '50270',

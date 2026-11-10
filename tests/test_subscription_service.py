@@ -210,13 +210,13 @@ def test_subscription_invalid_policy_preserves_form_selection(
     login_client(client, user.id)
     form = _bank_form(account, category)
     form['weekend_adjustment'] = 'invalid'
-    response = client.post('/transactions/subscriptions/create', data=form)
+    response = client.post('/finance/transactions/subscriptions/create', data=form)
     assert response.status_code == 200
     assert b'Select a valid weekend' in response.data
     assert Subscription.query.count() == 0
     form['weekend_adjustment'] = 'next'
     form['name'] = ''
-    response = client.post('/transactions/subscriptions/create', data=form)
+    response = client.post('/finance/transactions/subscriptions/create', data=form)
     assert b'value="next" selected' in response.data
 
 
@@ -258,14 +258,14 @@ def test_subscription_form_saves_and_restores_adjustment(app, family, user, monk
     login_client(client, user.id)
     form = _bank_form(account, category)
     form['weekend_adjustment'] = 'next'
-    response = client.post('/transactions/subscriptions/create', data=form)
+    response = client.post('/finance/transactions/subscriptions/create', data=form)
     assert response.status_code == 302
     subscription = Subscription.query.one()
-    response = client.get(f'/transactions/subscriptions/{subscription.id}/edit')
+    response = client.get(f'/finance/transactions/subscriptions/{subscription.id}/edit')
     assert b'value="next" selected' in response.data
     form['weekend_adjustment'] = 'previous'
     response = client.post(
-        f'/transactions/subscriptions/{subscription.id}/edit', data=form
+        f'/finance/transactions/subscriptions/{subscription.id}/edit', data=form
     )
     assert response.status_code == 302
     assert subscription.weekend_adjustment == 'previous'
@@ -624,15 +624,15 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.get('/transactions/subscriptions')
+    response = client.get('/finance/transactions/subscriptions')
     assert response.status_code == 200
-    response = client.get('/transactions/subscriptions/create')
+    response = client.get('/finance/transactions/subscriptions/create')
     assert response.status_code == 200
     assert b"openQuickAddVendor('vendor_id')" in response.data
     assert b'id="quickAddVendorModal"' in response.data
     assert b'js/quick_add_vendor.js' in response.data
     vendor_response = client.post(
-        '/vendors/quick-add', json={'name': 'Subscription vendor'}
+        '/finance/vendors/quick-add', json={'name': 'Subscription vendor'}
     )
     assert vendor_response.status_code == 201
     vendor_id = vendor_response.get_json()['id']
@@ -643,7 +643,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     )
     form['vendor_id'] = str(vendor_id)
     response = client.post(
-        '/transactions/subscriptions/create',
+        '/finance/transactions/subscriptions/create',
         data=form,
         follow_redirects=True,
     )
@@ -660,11 +660,11 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
             subscription_id=subscription.id
         ).all()
     )
-    response = client.get(f'/transactions/subscriptions/{subscription.id}/edit')
+    response = client.get(f'/finance/transactions/subscriptions/{subscription.id}/edit')
     assert response.status_code == 200
     assert b'No dated price changes yet.' in response.data
     empty_change_response = client.get(
-        f'/transactions/subscriptions/{subscription.id}/price-change'
+        f'/finance/transactions/subscriptions/{subscription.id}/price-change'
     )
     assert b'No dated price changes yet.' in empty_change_response.data
     assert b'id="amount" type="number" class="form-control" readonly' in response.data
@@ -678,7 +678,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
         'note': 'Price increase',
     })
     response = client.post(
-        f'/transactions/subscriptions/{subscription.id}/price-change',
+        f'/finance/transactions/subscriptions/{subscription.id}/price-change',
         data=price_change,
     )
     assert response.status_code == 200
@@ -691,14 +691,14 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     altered_price_change['amount'] = '25.00'
     altered_price_change['confirm_change'] = '1'
     response = client.post(
-        f'/transactions/subscriptions/{subscription.id}/price-change',
+        f'/finance/transactions/subscriptions/{subscription.id}/price-change',
         data=altered_price_change,
     )
     assert b'Review the price change preview before confirming' in response.data
     assert SubscriptionPriceChange.query.count() == 0
     price_change['confirm_change'] = '1'
     response = client.post(
-        f'/transactions/subscriptions/{subscription.id}/price-change',
+        f'/finance/transactions/subscriptions/{subscription.id}/price-change',
         data=price_change,
         follow_redirects=True,
     )
@@ -706,7 +706,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     assert b'Reason: Price increase' in response.data
     assert SubscriptionPriceChange.query.count() == 1
     edit_response = client.get(
-        f'/transactions/subscriptions/{subscription.id}/edit'
+        f'/finance/transactions/subscriptions/{subscription.id}/edit'
     )
     assert b'Price history' in edit_response.data
     assert b'<th scope="col">Reason</th>' in edit_response.data
@@ -714,7 +714,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     assert b'd-md-none' in edit_response.data
     assert b'Schedule a price change' in edit_response.data
     change_response = client.get(
-        f'/transactions/subscriptions/{subscription.id}/price-change'
+        f'/finance/transactions/subscriptions/{subscription.id}/price-change'
     )
     assert b'<th scope="col">Reason</th>' in change_response.data
     assert b'Price increase' in change_response.data
@@ -727,7 +727,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     edit_history = edit_response.data.split(history_start, 1)[1].split(b'</section>', 1)[0]
     change_history = change_response.data.split(history_start, 1)[1].split(b'</section>', 1)[0]
     assert edit_history == change_history
-    subscriptions_response = client.get('/transactions/subscriptions')
+    subscriptions_response = client.get('/finance/transactions/subscriptions')
     assert b'd-xl-none' in subscriptions_response.data
     assert b'subscription-mobile-actions' in subscriptions_response.data
     assert b'bi-currency-exchange' in subscriptions_response.data
@@ -742,7 +742,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     )
     price_change_record = SubscriptionPriceChange.query.one()
     edit_path = (
-        f'/transactions/subscriptions/{subscription.id}/price-change/'
+        f'/finance/transactions/subscriptions/{subscription.id}/price-change/'
         f'{price_change_record.id}'
     )
     response = client.get(edit_path)

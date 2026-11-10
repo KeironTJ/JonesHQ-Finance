@@ -4,7 +4,7 @@
 
 Expenses are household-scoped records with linked bank or credit-card activity,
 claim tracking, mileage reporting, calendar support, and configurable
-reimbursement workflows. The routes are in `blueprints/finance/expenses/routes.py`;
+reimbursement workflows. The routes are in `blueprints/finance/finance/expenses/routes.py`;
 business logic lives in `services/finance/expense_service.py`,
 `services/finance/expense_sync_service.py`, and the reimbursement-group
 service.
@@ -62,16 +62,16 @@ The implemented routes include:
 
 | Route | Purpose |
 | --- | --- |
-| `GET /expenses` | Expense list, reimbursement controls, and mileage summary |
-| `GET /expenses/mileage` | Mileage review and CSV export |
-| `POST /expenses/mileage/rate-update` | Apply an effective-dated mileage-rate update |
-| `POST /expenses/add`, `/expenses/update/<id>` | Create or update an expense |
-| `POST /expenses/<id>/set-period` | Set the expense period |
-| `POST /expenses/generate-reimbursements` | Reconcile period reimbursements |
-| `POST /expenses/generate-cc-payments` | Reconcile credit-card payments |
-| `POST /expenses/generate-partial-reimbursement` | Create a custom-range claim |
-| `POST /expenses/generate-all` | Run reimbursement then card-payment reconciliation |
-| `GET /expenses/groups` | Manage reimbursement groups |
+| `GET /finance/expenses` | Expense list, reimbursement controls, and mileage summary |
+| `GET /finance/expenses/mileage` | Mileage review and CSV export |
+| `POST /finance/expenses/mileage/rate-update` | Apply an effective-dated mileage-rate update |
+| `POST /finance/expenses/add`, `/finance/expenses/update/<id>` | Create or update an expense |
+| `POST /finance/expenses/<id>/set-period` | Set the expense period |
+| `POST /finance/expenses/generate-reimbursements` | Reconcile period reimbursements |
+| `POST /finance/expenses/generate-cc-payments` | Reconcile credit-card payments |
+| `POST /finance/expenses/generate-partial-reimbursement` | Create a custom-range claim |
+| `POST /finance/expenses/generate-all` | Run reimbursement then card-payment reconciliation |
+| `GET /finance/expenses/groups` | Manage reimbursement groups |
 
 Expense routes and services use family-scoped queries and lookups. Submitted
 IDs must be resolved within the current household; the write-time tenancy guard

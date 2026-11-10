@@ -353,7 +353,7 @@ def test_route_blocked_by_guard_rolls_back_and_redirects_with_message(app, famil
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.post('/vendors/add', data={
+    response = client.post('/finance/vendors/add', data={
         'name': 'Corner shop', 'default_category_id': str(foreign_category.id),
     }, headers={'Referer': 'https://evil.example/phish'})
 

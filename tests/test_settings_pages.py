@@ -38,27 +38,27 @@ def _member(family):
 
 @pytest.mark.parametrize('section', SettingsService.SECTIONS)
 def test_owner_settings_pages_have_independent_forms(app, user, section):
-    response = _client(app, user).get(f'/settings/modules/{section}')
+    response = _client(app, user).get(f'/finance/settings/modules/{section}')
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert f'action="/settings/modules/{section}"' in html
+    assert f'action="/finance/settings/modules/{section}"' in html
     assert 'Applies to this household' in html
     assert 'name="dashboard.networth_expanded"' not in html
     assert 'name="default_account_id"' not in html
 
 
 def test_settings_hub_links_to_all_independent_editors(app, user):
-    html = _client(app, user).get('/settings').get_data(as_text=True)
+    html = _client(app, user).get('/finance/settings').get_data(as_text=True)
     for section in SettingsService.SECTIONS:
-        assert f'href="/settings/modules/{section}"' in html
-    for path in ('/preferences', '/settings/tax', '/vendors/types', '/family/'):
+        assert f'href="/finance/settings/modules/{section}"' in html
+    for path in ('/central/preferences', '/finance/settings/tax', '/finance/vendors/types', '/central/family/'):
         assert f'href="{path}"' in html
-    assert 'action="/settings/update"' not in html
+    assert 'action="/finance/settings/update"' not in html
 
 
 @pytest.mark.parametrize('path', [
-    '/settings', '/settings/modules/household', '/settings/modules/expenses',
-    '/settings/modules/credit-cards', '/settings/modules/networth', '/settings/tax',
+    '/finance/settings', '/finance/settings/modules/household', '/finance/settings/modules/expenses',
+    '/finance/settings/modules/credit-cards', '/finance/settings/modules/networth', '/finance/settings/tax',
 ])
 def test_members_cannot_read_or_write_household_settings(app, family, path):
     client = _client(app, _member(family))
@@ -68,13 +68,13 @@ def test_members_cannot_read_or_write_household_settings(app, family, path):
 
 
 @pytest.mark.parametrize('key, path', [
-    ('categories.collapse_all_default', '/categories/'),
-    ('vendors.collapse_all_default', '/vendors/'),
+    ('categories.collapse_all_default', '/finance/categories/'),
+    ('vendors.collapse_all_default', '/finance/vendors/'),
 ])
 def test_member_preferences_are_personal_and_work_on_module_pages(app, family, user, key, path):
     member = _member(family)
     client = _client(app, member)
-    response = client.post('/preferences/save', json={
+    response = client.post('/finance/preferences/save', json={
         'key': key, 'value': True,
         'user_id': user.id, 'family_id': family.id,
     })
@@ -82,12 +82,12 @@ def test_member_preferences_are_personal_and_work_on_module_pages(app, family, u
     assert member.preferences == {key: True}
     assert not user.preferences
     assert Settings.query.count() == 0
-    html = client.get('/preferences/finance').get_data(as_text=True)
+    html = client.get('/finance/preferences').get_data(as_text=True)
     assert 'Finance preferences' in html
-    assert 'href="/settings"' not in html
+    assert 'href="/finance/settings"' not in html
     module_html = client.get(path).get_data(as_text=True)
     assert 'id="collapseAllDefault" checked' in module_html
-    assert 'fetch(\'/settings/save_preference\'' not in module_html
+    assert 'fetch(\'/finance/settings/save_preference\'' not in module_html
     owner_html = _client(app, user).get(path).get_data(as_text=True)
     assert 'id="collapseAllDefault" checked' not in owner_html
 
@@ -100,7 +100,7 @@ def test_member_preferences_are_personal_and_work_on_module_pages(app, family, u
     {},
 ])
 def test_invalid_personal_preferences_return_explicit_errors(app, user, payload):
-    response = _client(app, user).post('/preferences/save', json=payload)
+    response = _client(app, user).post('/finance/preferences/save', json=payload)
     assert response.status_code == 400
     assert response.get_json()['success'] is False
     assert response.get_json()['error']
@@ -110,8 +110,8 @@ def test_invalid_personal_preferences_return_explicit_errors(app, user, payload)
 def test_preferences_require_login(app):
     g.pop('_login_user', None)
     client = app.test_client()
-    assert client.get('/preferences').status_code == 302
-    assert client.post('/preferences/save', json={}).status_code == 302
+    assert client.get('/central/preferences').status_code == 302
+    assert client.post('/finance/preferences/save', json={}).status_code == 302
 
 
 def test_preference_database_failure_returns_error_and_rolls_back(app, user, monkeypatch):
@@ -121,7 +121,7 @@ def test_preference_database_failure_returns_error_and_rolls_back(app, user, mon
         raise sa.exc.SQLAlchemyError('Test write failure')
 
     monkeypatch.setattr(db.session, 'commit', fail_commit)
-    response = client.post('/preferences/save', json={
+    response = client.post('/finance/preferences/save', json={
         'key': 'vendors.collapse_all_default', 'value': True,
     })
     assert response.status_code == 500
@@ -135,9 +135,9 @@ def test_personal_default_account_can_be_selected_and_reset(app, family, user):
     db.session.add(account)
     db.session.commit()
     client = _client(app, user)
-    assert client.post('/preferences', data={'default_account_id': str(account.id)}).status_code == 302
+    assert client.post('/finance/preferences', data={'default_account_id': str(account.id)}).status_code == 302
     assert user.default_account_id == account.id
-    assert client.post('/preferences', data={'default_account_id': ''}).status_code == 302
+    assert client.post('/finance/preferences', data={'default_account_id': ''}).status_code == 302
     assert user.default_account_id is None
 
 
@@ -145,19 +145,19 @@ def test_personal_default_account_can_be_selected_and_reset(app, family, user):
 def test_attention_window_is_personal_and_persistent(app, family, user, days):
     member = _member(family)
     client = _client(app, member)
-    assert client.post('/preferences', data={
+    assert client.post('/finance/preferences', data={
         'dashboard.attention_days': str(days),
     }).status_code == 302
     assert member.preferences['dashboard.attention_days'] == days
     assert not user.preferences
-    html = client.get('/preferences/finance').get_data(as_text=True)
+    html = client.get('/finance/preferences').get_data(as_text=True)
     assert f'value="{days}" aria-describedby="attentionDaysHelp"' in html
     assert Settings.query.count() == 0
 
 
 @pytest.mark.parametrize('value', [0, 366, True, 1.5, '', 'abc', None, [], {}])
 def test_invalid_attention_windows_return_explicit_error(app, user, value):
-    response = _client(app, user).post('/preferences/save', json={
+    response = _client(app, user).post('/finance/preferences/save', json={
         'key': 'dashboard.attention_days', 'value': value,
     })
     assert response.status_code == 400
@@ -169,7 +169,7 @@ def test_invalid_attention_form_retains_input_and_does_not_save(app, user):
     client = _client(app, user)
     user.preferences = {'dashboard.attention_days': 30}
     db.session.commit()
-    response = client.post('/preferences', data={'dashboard.attention_days': '366'})
+    response = client.post('/finance/preferences', data={'dashboard.attention_days': '366'})
     assert response.status_code == 200
     assert b'Reminder window must be between 1 and 365 days.' in response.data
     assert b'value="366" aria-describedby="attentionDaysHelp"' in response.data
@@ -180,9 +180,9 @@ def test_saving_other_preferences_keeps_existing_attention_window(app, user):
     user.preferences = {'dashboard.attention_days': 90}
     db.session.commit()
     client = _client(app, user)
-    assert client.post('/preferences', data={}).status_code == 302
+    assert client.post('/finance/preferences', data={}).status_code == 302
     assert user.preferences['dashboard.attention_days'] == 90
-    assert client.post('/preferences/save', json={
+    assert client.post('/finance/preferences/save', json={
         'key': 'dashboard.attention_days', 'value': 120,
     }).status_code == 200
     assert user.preferences['dashboard.attention_days'] == 120
@@ -203,7 +203,7 @@ def test_dashboard_consumes_personal_not_household_display_preferences(app, fami
     db.session.commit()
     client = _client(app, user)
     with client:
-        response = client.get('/dashboard')
+        response = client.get('/finance/dashboard')
         assert response.status_code == 200
         assert FinancePreferenceService.get_value('dashboard.networth_expanded') is False
         assert FinancePreferenceService.get_value('dashboard.quick_nav_expanded') is True
@@ -211,20 +211,20 @@ def test_dashboard_consumes_personal_not_household_display_preferences(app, fami
     assert 'id="networthCollapse" class="collapse ">' in html
     assert 'id="paydayCollapse" class="collapse ">' in html
     assert 'id="quickNavCollapse" class="collapse show">' in html
-    assert 'href="/settings/modules/household"' in html
+    assert 'href="/finance/settings/modules/household"' in html
 
 
 def test_unknown_settings_section_is_not_found(app, user):
     client = _client(app, user)
-    assert client.get('/settings/modules/missing').status_code == 404
-    assert client.post('/settings/modules/missing').status_code == 404
+    assert client.get('/finance/settings/modules/missing').status_code == 404
+    assert client.post('/finance/settings/modules/missing').status_code == 404
 
 
 def test_saving_preferences_does_not_change_household_rules(app, family, user):
     db.session.add(Settings(family_id=family.id, key='payday_day', value='17', setting_type='int'))
     db.session.commit()
     client = _client(app, user)
-    response = client.post('/preferences', data={
+    response = client.post('/finance/preferences', data={
         'dashboard.networth_expanded': '1',
         'vendors.collapse_all_default': '1',
         'default_account_id': '',
@@ -260,7 +260,7 @@ def test_account_settings_reject_other_family_or_private_accounts(
     db.session.add(account)
     db.session.commit()
     client = _client(app, user)
-    path = '/preferences/finance' if field == 'default_account_id' else '/settings/modules/expenses'
+    path = '/finance/preferences' if field == 'default_account_id' else '/finance/settings/modules/expenses'
     response = client.post(path, data={
         field: str(account.id), 'expense_period_mode': 'calendar_month',
         'expense_cutoff_day': '0', 'expense_reimburse_day': '0',
@@ -287,7 +287,7 @@ def test_expense_settings_reject_other_family_references(app, user, model, field
     record = model(family_id=other_family.id, **values)
     db.session.add(record)
     db.session.commit()
-    response = _client(app, user).post('/settings/modules/expenses', data={
+    response = _client(app, user).post('/finance/settings/modules/expenses', data={
         field: str(record.id), 'expense_period_mode': 'calendar_month',
         'expense_cutoff_day': '0', 'expense_reimburse_day': '0',
     })
@@ -301,7 +301,7 @@ def test_inactive_account_cannot_be_a_personal_default(app, family, user):
     db.session.add(account)
     db.session.commit()
     client = _client(app, user)
-    response = client.post('/preferences', data={'default_account_id': str(account.id)})
+    response = client.post('/finance/preferences', data={'default_account_id': str(account.id)})
     assert response.status_code == 200
     assert 'active account you can access' in response.get_data(as_text=True)
     assert user.default_account_id is None
@@ -321,12 +321,12 @@ def test_section_save_only_changes_its_own_settings(app, family, user, section, 
     user.preferences = {'dashboard.networth_expanded': False}
     db.session.commit()
     client = _client(app, user)
-    response = client.post(f'/settings/modules/{section}', data={
+    response = client.post(f'/finance/settings/modules/{section}', data={
         **data, 'dashboard.networth_expanded': '1', 'unrelated': 'overwrite',
     })
     assert response.status_code == 302
     with client:
-        client.get('/settings')
+        client.get('/finance/settings')
         assert Settings.get_value(key) == value
     assert Settings.query.filter_by(key='unrelated').one().value == 'keep'
     assert user.preferences == {'dashboard.networth_expanded': False}
@@ -348,7 +348,7 @@ def test_section_save_only_changes_its_own_settings(app, family, user, section, 
     }),
 ])
 def test_invalid_section_does_not_partially_save(app, user, section, data):
-    response = _client(app, user).post(f'/settings/modules/{section}', data=data)
+    response = _client(app, user).post(f'/finance/settings/modules/{section}', data=data)
     assert response.status_code == 200
     assert 'alert-danger' in response.get_data(as_text=True)
     assert Settings.query.count() == 0
@@ -365,8 +365,8 @@ def test_blank_optional_settings_clear_existing_values(app, family, user):
         db.session.add(Settings(family_id=family.id, key=key, value=value, setting_type=setting_type))
     db.session.commit()
     client = _client(app, user)
-    assert client.post('/settings/modules/networth', data={'networth_start_date': ''}).status_code == 302
-    assert client.post('/settings/modules/expenses', data={
+    assert client.post('/finance/settings/modules/networth', data={'networth_start_date': ''}).status_code == 302
+    assert client.post('/finance/settings/modules/expenses', data={
         'expense_period_mode': 'calendar_month', 'expense_cutoff_day': '0',
         'expense_reimburse_day': '0',
     }).status_code == 302
@@ -380,7 +380,7 @@ def test_blank_optional_settings_clear_existing_values(app, family, user):
 def test_legacy_combined_form_cannot_reset_unrelated_settings(app, family, user):
     db.session.add(Settings(family_id=family.id, key='payday_day', value='17', setting_type='int'))
     db.session.commit()
-    response = _client(app, user).post('/settings/update', data={'payday_day': '25'})
+    response = _client(app, user).post('/finance/settings/update', data={'payday_day': '25'})
     assert response.status_code == 302
     assert Settings.query.filter_by(key='payday_day').one().value == '17'
 

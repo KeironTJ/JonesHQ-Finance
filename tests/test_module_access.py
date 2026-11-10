@@ -73,7 +73,7 @@ def test_every_finance_route_and_method_denied_without_module_access(app, family
             if method in rule.methods:
                 response = client.open(path, method=method)
                 assert response.status_code == 403, (method, path, response.status_code)
-    for path in ('/account/security/export', '/family/assignment-labels'):
+    for path in ('/finance/export', '/central/family/assignment-labels'):
         assert client.post(path).status_code == 403
 
 
@@ -84,20 +84,20 @@ def test_revocation_is_immediate_and_does_not_change_section_choices(app, family
     login_client(owner_client, user.id)
     login_client(member_client, member.id)
     g.pop('_login_user', None)
-    assert member_client.get('/accounts').status_code == 200
+    assert member_client.get('/finance/accounts').status_code == 200
     g.pop('_login_user', None)
-    response = owner_client.post(f'/hub/settings/access/members/{member.id}', data={'modules': ['household']})
+    response = owner_client.post(f'/central/settings/access/members/{member.id}', data={'modules': ['household']})
     assert response.status_code == 302
     assert member.get_active_household_membership().allowed_sections == '["accounts", "transactions"]'
     g.pop('_login_user', None)
-    assert member_client.get('/accounts').status_code == 403
-    assert member_client.get('/dashboard').status_code == 403
+    assert member_client.get('/finance/accounts').status_code == 403
+    assert member_client.get('/finance/dashboard').status_code == 403
     assert SecurityEvent.query.filter_by(event_type='module_access_updated').count() == 1
     g.pop('_login_user', None)
-    owner_client.post(f'/hub/settings/access/members/{member.id}', data={'modules': ['finance', 'household']})
+    owner_client.post(f'/central/settings/access/members/{member.id}', data={'modules': ['finance', 'household']})
     g.pop('_login_user', None)
-    assert member_client.get('/accounts').status_code == 200
-    assert member_client.get('/income').status_code == 403
+    assert member_client.get('/finance/accounts').status_code == 200
+    assert member_client.get('/finance/income').status_code == 403
 
 
 def test_module_grants_are_household_scoped(app, family, user):
@@ -110,12 +110,12 @@ def test_module_grants_are_household_scoped(app, family, user):
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    assert client.get('/dashboard').status_code == 200
-    client.post('/family/select', data={'family_id': other_family.id})
-    assert client.get('/dashboard').status_code == 403
-    assert client.get('/hub/settings/access').status_code == 200
-    client.post('/family/select', data={'family_id': family.id})
-    assert client.get('/dashboard').status_code == 200
+    assert client.get('/finance/dashboard').status_code == 200
+    client.post('/central/family/select', data={'family_id': other_family.id})
+    assert client.get('/finance/dashboard').status_code == 403
+    assert client.get('/central/settings/access').status_code == 200
+    client.post('/central/family/select', data={'family_id': family.id})
+    assert client.get('/finance/dashboard').status_code == 200
 
 
 def test_child_navigation_search_preferences_and_exports_do_not_offer_finance(app, family, user):
@@ -125,18 +125,18 @@ def test_child_navigation_search_preferences_and_exports_do_not_offer_finance(ap
     client = app.test_client()
     login_client(client, member.id)
     assert client.get('/').location.endswith('/household/my-day')
-    for path in ('/hub', '/preferences', '/hub/settings', '/account/security'):
+    for path in ('/central/', '/central/preferences', '/central/settings', '/central/account/security'):
         response = client.get(path)
         assert response.status_code == 200
         html = response.get_data(as_text=True)
-        for target in ('/dashboard', '/accounts', '/preferences/finance', '/account/security/export', '/family/'):
+        for target in ('/finance/dashboard', '/finance/accounts', '/finance/preferences', '/finance/export', '/central/family/'):
             assert f'href="{target}"' not in html
             assert f'action="{target}"' not in html
         assert 'value="finance"' not in html
-    response = client.post('/preferences/workspace', data={'default_workspace': 'finance'})
+    response = client.post('/central/preferences/workspace', data={'default_workspace': 'finance'})
     assert response.status_code == 302
     assert b'This workspace is not enabled' in client.get(response.location).data
-    assert client.post('/preferences/appearance', json={'mode': 'dark', 'palette': 'green'}).status_code == 200
+    assert client.post('/central/preferences/appearance', json={'mode': 'dark', 'palette': 'green'}).status_code == 200
     with app.test_request_context():
         login_user(member)
         with pytest.raises(ValueError, match='Finance access'):
@@ -146,7 +146,7 @@ def test_child_navigation_search_preferences_and_exports_do_not_offer_finance(ap
 def test_managed_child_creation_uses_owner_as_guardian_and_ignores_extra_fields(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
-    response = client.post('/hub/settings/children/create', data={
+    response = client.post('/central/settings/children/create', data={
         'name': 'Managed member', 'email': 'new-child@example.com',
         'password': 'TestPass1!', 'confirm_password': 'TestPass1!',
         'role': 'admin', 'account_type': 'adult', 'guardian_id': 999,
@@ -165,8 +165,8 @@ def test_managed_child_creation_uses_owner_as_guardian_and_ignores_extra_fields(
     assert SecurityEvent.query.filter_by(event_type='managed_child_created').count() == 1
     login_client(client, member.id)
     assert client.post('/login', data={'email': member.email, 'password': 'TestPass1!'}).status_code == 302
-    assert client.get('/hub').status_code == 200
-    assert client.get('/dashboard').status_code == 403
+    assert client.get('/central/').status_code == 200
+    assert client.get('/finance/dashboard').status_code == 403
 
 
 @pytest.mark.parametrize('payload', [
@@ -180,7 +180,7 @@ def test_invalid_child_creation_reports_error_without_partial_account(app, user,
     client = app.test_client()
     login_client(client, user.id)
     values = {'password': 'TestPass1!', 'confirm_password': 'TestPass1!', **payload}
-    response = client.post('/hub/settings/children/create', data=values)
+    response = client.post('/central/settings/children/create', data=values)
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert 'Add child' in html and 'alert-danger' in html
@@ -197,10 +197,10 @@ def test_owner_cannot_grant_child_finance_or_promote_through_legacy_routes(app, 
     client = app.test_client()
     login_client(client, user.id)
     for path, data in (
-        (f'/hub/settings/access/members/{member.id}', {'modules': ['finance']}),
-        (f'/family/members/{member.id}/role', {'role': 'admin'}),
-        (f'/family/members/{member.id}/update', {'role': 'admin', 'sections': ['accounts']}),
-        (f'/settings/access/members/{member.id}', {'sections': ['accounts']}),
+        (f'/central/settings/access/members/{member.id}', {'modules': ['finance']}),
+        (f'/central/family/members/{member.id}/role', {'role': 'admin'}),
+        (f'/central/family/members/{member.id}/update', {'role': 'admin', 'sections': ['accounts']}),
+        (f'/finance/settings/access/members/{member.id}', {'sections': ['accounts']}),
     ):
         response = client.post(path, data=data)
         assert response.status_code == 302
@@ -215,21 +215,21 @@ def test_only_designated_guardian_can_transfer_or_release_child(app, family, use
     other_owner = adult(family, role='admin')
     client = app.test_client()
     login_client(client, other_owner.id)
-    assert client.post(f'/account/children/{member.id}', data={'action': 'release'}).status_code == 404
+    assert client.post(f'/central/account/children/{member.id}', data={'action': 'release'}).status_code == 404
     assert member.is_managed_child
     login_client(client, user.id)
-    client.post(f'/account/children/{member.id}', data={
+    client.post(f'/central/account/children/{member.id}', data={
         'action': 'transfer', 'guardian_id': other_owner.id,
     })
     assert member.guardian_id == other_owner.id
-    assert client.post(f'/account/children/{member.id}', data={'action': 'release'}).status_code == 404
+    assert client.post(f'/central/account/children/{member.id}', data={'action': 'release'}).status_code == 404
     login_client(client, other_owner.id)
-    client.post(f'/account/children/{member.id}', data={'action': 'release'})
+    client.post(f'/central/account/children/{member.id}', data={'action': 'release'})
     assert not member.is_managed_child
     assert member.guardian_id is None
     assert member.get_active_household_membership().allowed_modules == ['household']
     login_client(client, member.id)
-    assert client.get('/dashboard').status_code == 403
+    assert client.get('/finance/dashboard').status_code == 403
 
 
 def test_guardian_cannot_transfer_to_child_or_unrelated_adult(app, family, user):
@@ -241,7 +241,7 @@ def test_guardian_cannot_transfer_to_child_or_unrelated_adult(app, family, user)
     client = app.test_client()
     login_client(client, user.id)
     for guardian_id in (member.id, outsider.id, 99999):
-        response = client.post(f'/account/children/{member.id}', data={
+        response = client.post(f'/central/account/children/{member.id}', data={
             'action': 'transfer', 'guardian_id': guardian_id,
         })
         assert response.status_code == 302
@@ -255,13 +255,13 @@ def test_child_cannot_manage_permissions_join_or_reach_operator_pages(app, famil
     client = app.test_client()
     login_client(client, member.id)
     for path in (
-        '/hub/settings/access', '/account/children', '/family/', '/family/join/invalid',
-        '/site-admin/', '/site-admin/console/', '/account/security/delete', '/register',
+        '/central/settings/access', '/central/account/children', '/central/family/', '/central/family/join/invalid',
+        '/site-admin/', '/site-admin/console/', '/central/account/security/delete', '/register',
     ):
         assert client.get(path).status_code == 403, path
     for path in (
-        '/hub/settings/children/create', f'/account/children/{member.id}',
-        f'/hub/settings/access/members/{member.id}',
+        '/central/settings/children/create', f'/central/account/children/{member.id}',
+        f'/central/settings/access/members/{member.id}',
     ):
         assert client.post(path).status_code == 403, path
 
@@ -274,18 +274,18 @@ def test_module_changes_require_owner_recent_auth_and_scoped_member(app, family,
     outsider = adult(other_family, 'outsider@example.com')
     client = app.test_client()
     login_client(client, user.id)
-    assert client.post(f'/hub/settings/access/members/{outsider.id}', data={'modules': []}).status_code == 404
-    response = client.post(f'/hub/settings/access/members/{member.id}', data={'modules': ['unknown']})
+    assert client.post(f'/central/settings/access/members/{outsider.id}', data={'modules': []}).status_code == 404
+    response = client.post(f'/central/settings/access/members/{member.id}', data={'modules': ['unknown']})
     assert response.status_code == 302
     assert member.get_active_household_membership().allowed_modules == ['finance', 'household']
     make_stale(user)
     g.pop('_login_user', None)
     assert client.post(
-        f'/hub/settings/access/members/{member.id}', data={'modules': []},
-    ).location.startswith('/account/confirm')
+        f'/central/settings/access/members/{member.id}', data={'modules': []},
+    ).location.startswith('/central/account/confirm')
     login_client(client, member.id)
-    assert client.get('/hub/settings/access').status_code == 403
-    assert client.post(f'/hub/settings/access/members/{user.id}').status_code == 403
+    assert client.get('/central/settings/access').status_code == 403
+    assert client.post(f'/central/settings/access/members/{user.id}').status_code == 403
 
 
 def test_guardian_cannot_delete_account_until_child_management_resolved(app, family, user):
@@ -300,15 +300,15 @@ def test_guardian_cannot_delete_account_until_child_management_resolved(app, fam
 def test_access_writes_require_recent_auth_and_csrf(app, family, user, monkeypatch, action):
     member = child(family, user)
     paths = {
-        'modules': f'/hub/settings/access/members/{member.id}',
-        'create': '/hub/settings/children/create',
-        'guardian': f'/account/children/{member.id}',
+        'modules': f'/central/settings/access/members/{member.id}',
+        'create': '/central/settings/children/create',
+        'guardian': f'/central/account/children/{member.id}',
     }
     client = app.test_client()
     login_client(client, user.id)
     make_stale(user)
     g.pop('_login_user', None)
-    assert client.post(paths[action]).location.startswith('/account/confirm')
+    assert client.post(paths[action]).location.startswith('/central/account/confirm')
     login_client(client, user.id)
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     g.pop('csrf_valid', None)
@@ -321,12 +321,12 @@ def test_access_writes_require_recent_auth_and_csrf(app, family, user, monkeypat
 def test_owner_can_restore_own_module_access_without_finance(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    path = f'/hub/settings/access/members/{user.id}'
+    path = f'/central/settings/access/members/{user.id}'
     assert client.post(path, data={'modules': []}).status_code == 302
-    assert client.get('/dashboard').status_code == 403
-    assert client.get('/hub/settings/access').status_code == 200
+    assert client.get('/finance/dashboard').status_code == 403
+    assert client.get('/central/settings/access').status_code == 200
     assert client.post(path, data={'modules': ['finance', 'household']}).status_code == 302
-    assert client.get('/dashboard').status_code == 200
+    assert client.get('/finance/dashboard').status_code == 200
 
 
 @pytest.mark.parametrize('kind', ['modules', 'create', 'guardian'])
@@ -340,12 +340,12 @@ def test_access_write_failures_rollback_data_and_audit(app, family, user, monkey
 
     monkeypatch.setattr(db.session, 'commit', fail)
     path, data = {
-        'modules': (f'/hub/settings/access/members/{member.id}', {'modules': []}),
-        'create': ('/hub/settings/children/create', {
+        'modules': (f'/central/settings/access/members/{member.id}', {'modules': []}),
+        'create': ('/central/settings/children/create', {
             'name': 'New child', 'email': 'new@example.com',
             'password': 'TestPass1!', 'confirm_password': 'TestPass1!',
         }),
-        'guardian': (f'/account/children/{member.id}', {'action': 'release'}),
+        'guardian': (f'/central/account/children/{member.id}', {'action': 'release'}),
     }[kind]
     response = client.post(path, data=data)
     assert response.status_code == (200 if kind == 'create' else 302)

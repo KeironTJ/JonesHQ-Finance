@@ -9,7 +9,7 @@ personalized financial advice.
 
 ### Net-Worth Timeline
 
-The `/networth` view defaults to 24 future months. Its `period` query parameter
+The `/finance/networth` view defaults to 24 future months. Its `period` query parameter
 selects the future window, bounded by the route to 12–180 months. Historical
 coverage is a fixed 60-month window unless a household net-worth start date is
 configured. The `year` parameter can select a year in the timeline.
@@ -36,7 +36,7 @@ settings.
 
 The date-specific calculation is implemented by
 `NetWorthService.calculate_networth_at_date()` in
-`services/analytics/networth_service.py`. It is household-scoped.
+`services/analytics/finance/networth_service.py`. It is household-scoped.
 
 ### Pension Projections
 

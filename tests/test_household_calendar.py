@@ -80,7 +80,7 @@ def test_month_agenda_event_forms_and_default_workspace(app, user):
         assert all(len(week) == 7 for week in page['weeks'])
         assert event in page['days'][date(2026, 11, 1)]
         assert event not in page['days'][date(2026, 11, 3)]
-    client.post('/preferences/workspace', data={'default_workspace': 'household'})
+    client.post('/central/preferences/workspace', data={'default_workspace': 'household'})
     assert client.get('/').location == '/household/'
 
 
@@ -91,7 +91,7 @@ def test_child_calendar_access_never_unlocks_finance(app, user, people):
     response = client.post('/household/events/new', data=DATA)
     assert response.status_code == 302
     assert response.location.startswith('/household/events/')
-    assert client.get('/dashboard').status_code == 403
+    assert client.get('/finance/dashboard').status_code == 403
     assert b'Open Finance' not in client.get('/household/').data
     child.get_active_household_membership().allowed_modules = []
     db.session.commit()
@@ -130,7 +130,7 @@ def test_child_private_visibility_and_guardian_transfer(app, user, people):
         'edit_members': [user.get_active_household_membership().id],
     }).status_code == 302
     assert client_for(app, user).get(f'/household/events/{event.id}/edit').status_code == 200
-    client_for(app, user).post(f'/account/children/{child.id}', data={
+    client_for(app, user).post(f'/central/account/children/{child.id}', data={
         'action': 'transfer', 'guardian_id': other_owner.id,
     })
     assert client_for(app, user).get(f'/household/events/{event.id}').status_code == 404
@@ -183,7 +183,7 @@ def test_foreign_household_ids_and_secondary_household_writes(app, family, user)
     db.session.commit()
     original = create_as(app, user)
     client = client_for(app, user)
-    client.post('/family/select', data={'family_id': other.id})
+    client.post('/central/family/select', data={'family_id': other.id})
     for suffix in ('', '/edit'):
         assert client.get(f'/household/events/{original.id}{suffix}').status_code == 404
     assert client.post(f'/household/events/{original.id}/delete').status_code == 404
@@ -281,7 +281,7 @@ def test_account_deletion_retains_shared_calendar_but_removes_private(app, user,
     private = create_as(app, member, visibility='private')
     private_id = private.id
     client = client_for(app, member)
-    response = client.post('/account/security/delete', data={
+    response = client.post('/central/account/security/delete', data={
         'password': 'TestPass1!', 'confirmation': 'DELETE MY ACCOUNT',
     })
     assert response.location.endswith('/login')
@@ -309,7 +309,7 @@ def test_departure_revokes_selected_grants_even_when_membership_id_is_reused(app
             login_user(user)
             FamilyService.remove_member(editor.id, family.id, user.id)
     else:
-        response = client_for(app, editor).post('/account/security/delete', data={
+        response = client_for(app, editor).post('/central/account/security/delete', data={
             'password': 'TestPass1!', 'confirmation': 'DELETE MY ACCOUNT',
         })
         assert response.location.endswith('/login')

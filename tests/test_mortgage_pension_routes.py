@@ -19,7 +19,7 @@ def test_mortgage_property_create_route(app, family, user):
     client = app.test_client()
     _login(client, user_id)
 
-    response = client.post('/mortgage/property/create', data={
+    response = client.post('/finance/mortgage/property/create', data={
         'address': 'Route Property',
         'purchase_date': '2020-01-01',
         'purchase_price': '250000',
@@ -40,7 +40,7 @@ def test_pension_create_and_snapshot_routes(app, family, user):
     client = app.test_client()
     _login(client, user_id)
 
-    response = client.post('/pensions/add', data={
+    response = client.post('/finance/pensions/add', data={
         'person': 'Household',
         'provider': 'Route Pension',
         'account_number': 'RP-1',
@@ -55,7 +55,7 @@ def test_pension_create_and_snapshot_routes(app, family, user):
     pension = Pension.query.one()
     assert pension.family_id == family_id
 
-    response = client.post(f'/pensions/{pension.id}/snapshots/add', data={
+    response = client.post(f'/finance/pensions/{pension.id}/snapshots/add', data={
         'review_date': '2026-01-15',
         'value': '5500',
     })

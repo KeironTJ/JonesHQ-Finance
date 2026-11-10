@@ -38,7 +38,7 @@ def test_plan_status_actions_preserve_partial_items_and_transaction_links(
     db.session.commit()
     client = app.test_client()
     _login(client, user.id)
-    response = client.post(f'/plans/{plan.id}/status', data={'status': status})
+    response = client.post(f'/finance/plans/{plan.id}/status', data={'status': status})
     assert response.status_code == 302
     assert plan.status == status
     assert plan.owner_id == user.id
@@ -48,10 +48,10 @@ def test_plan_status_actions_preserve_partial_items_and_transaction_links(
     assert plan.items[0].transaction_id == transaction.id
     assert transaction.amount == -25
     assert transaction.is_paid is True
-    dashboard = client.get('/dashboard').get_data(as_text=True)
+    dashboard = client.get('/finance/dashboard').get_data(as_text=True)
     assert ('Partially finished' in dashboard) == (status == 'active')
     if status != 'active':
-        assert client.post(f'/plans/{plan.id}/status', data={'status': 'active'}).status_code == 302
+        assert client.post(f'/finance/plans/{plan.id}/status', data={'status': 'active'}).status_code == 302
         assert plan.status == 'active'
 
 
@@ -61,7 +61,7 @@ def test_plan_status_actions_reject_invalid_status(app, family, user):
     db.session.commit()
     client = app.test_client()
     _login(client, user.id)
-    response = client.post(f'/plans/{plan.id}/status', data={'status': 'deleted'}, follow_redirects=True)
+    response = client.post(f'/finance/plans/{plan.id}/status', data={'status': 'deleted'}, follow_redirects=True)
     assert response.status_code == 200
     assert b'Choose Complete, Archive or Reopen.' in response.data
     assert plan.status == 'active'
@@ -76,13 +76,13 @@ def test_closed_plans_are_hidden_from_open_view_and_have_reopen_action(app, fami
     db.session.commit()
     client = app.test_client()
     _login(client, user.id)
-    html = client.get('/plans').get_data(as_text=True)
+    html = client.get('/finance/plans').get_data(as_text=True)
     assert '<span>Open plans</span><strong>2</strong>' in html
     assert 'data-status="completed" hidden' in html
     assert 'data-status="archived" hidden' in html
     assert 'data-status="active" hidden' not in html
     assert 'data-filter="completed"' in html
-    detail = client.get(f'/plans/{plans[2].id}').get_data(as_text=True)
+    detail = client.get(f'/finance/plans/{plans[2].id}').get_data(as_text=True)
     assert 'Reopen</button>' in detail
     assert 'Archive</button>' in detail
 
@@ -109,7 +109,7 @@ def test_plan_status_actions_cannot_change_hidden_plans(app, family, user, priva
     db.session.commit()
     client = app.test_client()
     _login(client, user.id)
-    assert client.post(f'/plans/{plan.id}/status', data={'status': 'archived'}).status_code == 404
+    assert client.post(f'/finance/plans/{plan.id}/status', data={'status': 'archived'}).status_code == 404
     assert plan.status == 'active'
 
 
@@ -121,7 +121,7 @@ def test_plan_status_action_requires_section_access(app, family, user):
     db.session.commit()
     client = app.test_client()
     _login(client, user.id)
-    assert client.post(f'/plans/{plan.id}/status', data={'status': 'completed'}).status_code == 403
+    assert client.post(f'/finance/plans/{plan.id}/status', data={'status': 'completed'}).status_code == 403
     assert plan.status == 'active'
 
 
@@ -208,7 +208,7 @@ def test_create_plan_and_add_item(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/plans/add', data={
+    response = client.post('/finance/plans/add', data={
         'title': 'Christmas 2026',
         'plan_type': 'occasion',
         'person': 'The kids',
@@ -218,9 +218,9 @@ def test_create_plan_and_add_item(app, family, user):
     plan = Plan.query.one()
 
     assert response.status_code == 302
-    assert response.headers['Location'].endswith(f'/plans/{plan.id}')
+    assert response.headers['Location'].endswith(f'/finance/plans/{plan.id}')
 
-    response = client.post(f'/plans/{plan.id}/items/add', data={
+    response = client.post(f'/finance/plans/{plan.id}/items/add', data={
         'title': 'Bike',
         'assigned_to': user.name,
         'estimated_cost': '150.00',
@@ -241,7 +241,7 @@ def test_add_item_rejects_unknown_assignee(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/plans/{plan.id}/items/add', data={
+    response = client.post(f'/finance/plans/{plan.id}/items/add', data={
         'title': 'Private gift',
         'assigned_to': 'Someone from another family',
         'status': 'idea',
@@ -286,7 +286,7 @@ def test_cannot_link_another_familys_transaction(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/plans/{plan.id}/items/add', data={
+    response = client.post(f'/finance/plans/{plan.id}/items/add', data={
         'title': 'Headphones',
         'transaction_id': str(transaction.id),
         'status': 'idea',
@@ -310,8 +310,8 @@ def test_plan_overview_and_detail_render(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    overview = client.get('/plans')
-    detail = client.get(f'/plans/{plan.id}')
+    overview = client.get('/finance/plans')
+    detail = client.get(f'/finance/plans/{plan.id}')
 
     assert overview.status_code == 200
     assert b'Holiday fund' in overview.data
@@ -341,7 +341,7 @@ def test_link_transaction_from_transaction_page_can_create_and_unlink_item(app, 
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/plans/transactions/{transaction.id}/link', data={
+    response = client.post(f'/finance/plans/transactions/{transaction.id}/link', data={
         'plan_id': str(plan.id),
         'new_item_title': 'Train set',
     })
@@ -353,7 +353,7 @@ def test_link_transaction_from_transaction_page_can_create_and_unlink_item(app, 
     assert item.estimated_cost == Decimal('39.95')
     assert item.assigned_to == user.name
 
-    response = client.post(f'/plans/transactions/{transaction.id}/link', data={})
+    response = client.post(f'/finance/plans/transactions/{transaction.id}/link', data={})
 
     assert response.status_code == 302
     assert item.transaction_id is None
@@ -386,7 +386,7 @@ def test_link_transaction_rejects_another_familys_plan_item(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/plans/transactions/{transaction.id}/link', data={
+    response = client.post(f'/finance/plans/transactions/{transaction.id}/link', data={
         'item_id': str(foreign_item.id),
     })
 
@@ -416,7 +416,7 @@ def test_transaction_index_renders_plan_link_action_and_existing_link(app, famil
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/transactions?is_paid=pending')
+    response = client.get('/finance/transactions?is_paid=pending')
 
     assert response.status_code == 200
     assert b'linkPlanModal' in response.data
@@ -457,7 +457,7 @@ def test_transaction_search_only_returns_current_family_matches(app, family, use
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.get('/plans/api/transactions?q=Unique')
+    response = client.get('/finance/plans/api/transactions?q=Unique')
     results = response.get_json()
 
     assert response.status_code == 200
@@ -484,8 +484,8 @@ def test_transaction_search_excludes_forecasts_and_income_and_matches_amount(app
     client = app.test_client()
     _login(client, user.id)
 
-    empty_response = client.get('/plans/api/transactions')
-    amount_response = client.get('/plans/api/transactions?q=42.50')
+    empty_response = client.get('/finance/plans/api/transactions')
+    amount_response = client.get('/finance/plans/api/transactions?q=42.50')
 
     assert empty_response.get_json() == []
     assert len(amount_response.get_json()) == 1
@@ -506,7 +506,7 @@ def test_plan_transaction_search_returns_typed_bank_and_card_results(app, family
     client = app.test_client()
     _login(client, user.id)
 
-    results = client.get('/plans/api/transactions?q=Shared').get_json()
+    results = client.get('/finance/plans/api/transactions?q=Shared').get_json()
 
     assert {result['id'] for result in results} == {
         f'bank:{bank_transaction.id}',
@@ -527,7 +527,7 @@ def test_plan_item_can_link_card_transaction_from_plan_form(app, family, user):
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post(f'/plans/{plan.id}/items/add', data={
+    response = client.post(f'/finance/plans/{plan.id}/items/add', data={
         'title': 'Train set', 'transaction_ref': f'card:{card_transaction.id}',
         'status': 'purchased', 'priority': 'normal',
     })
@@ -595,8 +595,8 @@ def test_savings_transaction_search_includes_incoming_transfer(app, family, user
     client = app.test_client()
     _login(client, user.id)
 
-    ordinary_results = client.get('/plans/api/transactions?q=Goal').get_json()
-    savings_results = client.get('/plans/api/transactions?plan_type=savings_goal&q=Goal').get_json()
+    ordinary_results = client.get('/finance/plans/api/transactions?q=Goal').get_json()
+    savings_results = client.get('/finance/plans/api/transactions?plan_type=savings_goal&q=Goal').get_json()
 
     assert ordinary_results == []
     assert len(savings_results) == 1
@@ -609,7 +609,7 @@ def test_private_plan_hidden_from_other_family_members(app, family, user, monkey
     client = app.test_client()
     _login(client, user.id)
 
-    response = client.post('/plans/add', data={
+    response = client.post('/finance/plans/add', data={
         'title': 'Surprise gift',
         'plan_type': 'occasion',
         'target_amount': '100.00',

@@ -8,7 +8,7 @@ Current notes on credit-card management, generated transactions, and linked bank
 ### Credit Card Management
 
 **Features:**
-- Card management interface at `/credit-cards`
+- Card management interface at `/finance/credit-cards`
 - Add/edit cards with promotional period tracking
 - View all cards with summary statistics
 - Individual card detail views with transaction history
@@ -23,21 +23,21 @@ Current notes on credit-card management, generated transactions, and linked bank
 - `templates/credit_cards/detail.html` - Card details
 
 **Routes:**
-- `GET /credit-cards` - List all cards
-- `GET /credit-cards/add` - Add new card form
-- `POST /credit-cards/add` - Create card
-- `GET /credit-cards/<id>/edit` - Edit card form
-- `POST /credit-cards/<id>/edit` - Update card
-- `POST /credit-cards/<id>/delete` - Delete card
-- `GET /credit-cards/<id>` - View card details
-- `POST /credit-cards/<id>/generate-future` - Regenerate future transactions for one card
-- `POST /credit-cards/generate-all-future` - Regenerate future transactions for all active cards
-- `GET /credit-cards/<id>/transaction/<txn_id>/edit` - Edit credit card transaction
-- `POST /credit-cards/<id>/transaction/<txn_id>/delete` - Delete transaction and clean up its linked records through the service
-- `POST /credit-cards/<id>/payment/<txn_id>/edit` - Edit a card payment
-- `POST /credit-cards/transaction/<txn_id>/toggle-paid` - Toggle paid status
-- `POST /credit-cards/transaction/<txn_id>/toggle-fixed` - Lock or unlock a transaction
-- `GET/POST /credit-cards/transfer` - Create a balance transfer
+- `GET /finance/credit-cards` - List all cards
+- `GET /finance/credit-cards/add` - Add new card form
+- `POST /finance/credit-cards/add` - Create card
+- `GET /finance/credit-cards/<id>/edit` - Edit card form
+- `POST /finance/credit-cards/<id>/edit` - Update card
+- `POST /finance/credit-cards/<id>/delete` - Delete card
+- `GET /finance/credit-cards/<id>` - View card details
+- `POST /finance/credit-cards/<id>/generate-future` - Regenerate future transactions for one card
+- `POST /finance/credit-cards/generate-all-future` - Regenerate future transactions for all active cards
+- `GET /finance/credit-cards/<id>/transaction/<txn_id>/edit` - Edit credit card transaction
+- `POST /finance/credit-cards/<id>/transaction/<txn_id>/delete` - Delete transaction and clean up its linked records through the service
+- `POST /finance/credit-cards/<id>/payment/<txn_id>/edit` - Edit a card payment
+- `POST /finance/credit-cards/transaction/<txn_id>/toggle-paid` - Toggle paid status
+- `POST /finance/credit-cards/transaction/<txn_id>/toggle-fixed` - Lock or unlock a transaction
+- `GET/POST /finance/credit-cards/transfer` - Create a balance transfer
 
 ---
 
@@ -251,7 +251,7 @@ Later refreshes retain that statement and payment and adjust subsequent payments
 ## Usage Guide
 
 ### 1. View Cards
-Navigate to: `http://localhost:5000/credit-cards`
+Navigate to: `http://localhost:5000/finance/credit-cards`
 
 You'll see:
 - Summary: Total limit, balance, available, payments, weighted APR

@@ -82,7 +82,7 @@ def test_adult_without_finance_access_publishes_with_attendees_and_feed(app, use
     assert activity.reviewer_membership_id == activity.creator_membership_id
     assert activity.reviewed_at is not None
     assert len(activity.attendees) == 1 and activity.attendees[0].family_id == activity.family_id
-    assert client.get('/dashboard').status_code == 403
+    assert client.get('/finance/dashboard').status_code == 403
     for path in (
         '/household/activities?week=2026-11-10',
         '/household/activities?view=month&month=2026-11',
@@ -236,7 +236,7 @@ def test_active_household_and_foreign_attendee_ids_are_scoped(app, user, family)
     response = client.post('/household/activities/new', data={**CONTENT, 'attendee_ids': [member.id]})
     assert b'Choose active attendees from this household' in response.data
     assert Activity.query.count() == 1
-    client.post('/family/select', data={'family_id': other.id})
+    client.post('/central/family/select', data={'family_id': other.id})
     for suffix in ('', '/delete', '/review'):
         path = f'/household/activities/{original.id}' + suffix
         response = client.post(path, data={'decision': 'approve'}) if suffix else client.get(path)
@@ -407,7 +407,7 @@ def test_member_departure_clears_attribution_and_attendance_without_deleting_ser
 def test_account_deletion_keeps_series_but_removes_attendance_and_attribution(app, user, people):
     adult, _, _ = people
     activity = create(app, adult, attendee_ids=[adult.get_active_household_membership().id])
-    response = client_for(app, adult).post('/account/security/delete', data={
+    response = client_for(app, adult).post('/central/account/security/delete', data={
         'password': 'TestPass1!', 'confirmation': 'DELETE MY ACCOUNT',
     })
     assert response.location.endswith('/login')

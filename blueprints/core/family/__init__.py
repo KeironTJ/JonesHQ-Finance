@@ -1,7 +1,7 @@
 """Family blueprint – multi-user family management."""
 from flask import Blueprint
 
-family_bp = Blueprint('family', __name__, url_prefix='/family',
+family_bp = Blueprint('family', __name__, url_prefix='/central/family',
                       template_folder='../../templates/family')
 
 # Note: no global @before_request login_required here because the

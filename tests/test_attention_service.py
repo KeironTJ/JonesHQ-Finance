@@ -251,19 +251,19 @@ def test_dashboard_renders_attention_and_action_links(app, family, user):
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get('/dashboard')
+    response = client.get('/finance/dashboard')
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert 'Needs attention' in html
     assert '&lt;Review plan&gt;' in html
-    assert f'href="/plans/{plan.id}"' in html
+    assert f'href="/finance/plans/{plan.id}"' in html
     assert 'Reminder window: 60 days' in html
 
 
 def test_dashboard_empty_attention_state(app, family, user):
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get('/dashboard')
+    response = client.get('/finance/dashboard')
     assert response.status_code == 200
     assert b'No items need attention in your accessible sections' in response.data
 
@@ -288,7 +288,7 @@ def test_attention_tiles_keep_explanation_and_snooze_controls_on_demand(app, fam
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    html = client.get('/dashboard?attention_kind=plan').get_data(as_text=True)
+    html = client.get('/finance/dashboard?attention_kind=plan').get_data(as_text=True)
     parser = DetailParser()
     parser.feed(html)
     row_details = [
@@ -319,7 +319,7 @@ def test_attention_starts_collapsed_but_stays_open_during_queue_navigation(
 ):
     client = app.test_client()
     login_client(client, user.id)
-    response = client.get(f'/dashboard{query}')
+    response = client.get(f'/finance/dashboard{query}')
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     expected_class = 'collapse show' if expanded else 'collapse'
@@ -481,14 +481,14 @@ def test_snooze_route_preserves_filters_and_handles_database_failure(app, family
         'key': key, 'days': '7', 'attention_kind': 'plan',
         'attention_page': '2', 'year': '2025',
     }
-    response = client.post('/dashboard/attention/snooze', data=data)
+    response = client.post('/finance/dashboard/attention/snooze', data=data)
     assert response.status_code == 302
     assert 'attention_kind=plan' in response.location
     assert 'year=2025' in response.location
     assert response.location.endswith('#needs-attention')
-    snoozed = client.get('/dashboard?attention_view=snoozed').get_data(as_text=True)
+    snoozed = client.get('/finance/dashboard?attention_view=snoozed').get_data(as_text=True)
     assert 'Restore reminder for Route reminder' in snoozed
-    response = client.post('/dashboard/attention/snooze', data={'key': key, 'days': '0'})
+    response = client.post('/finance/dashboard/attention/snooze', data={'key': key, 'days': '0'})
     assert response.status_code == 302
     assert user.preferences['dashboard.attention_snoozes'] == {}
 
@@ -496,7 +496,7 @@ def test_snooze_route_preserves_filters_and_handles_database_failure(app, family
         raise SQLAlchemyError('Test failure')
 
     monkeypatch.setattr(db.session, 'commit', fail_commit)
-    response = client.post('/dashboard/attention/snooze', data=data, follow_redirects=True)
+    response = client.post('/finance/dashboard/attention/snooze', data=data, follow_redirects=True)
     assert response.status_code == 200
     assert b'Unable to update your reminder. Please try again.' in response.data
     assert user.preferences['dashboard.attention_snoozes'] == {}
@@ -510,16 +510,16 @@ def test_dashboard_limits_rendered_reminders_and_filters_without_javascript(app,
     db.session.commit()
     client = app.test_client()
     login_client(client, user.id)
-    html = client.get('/dashboard').get_data(as_text=True)
+    html = client.get('/finance/dashboard').get_data(as_text=True)
     assert html.count('class="attention-item border-top"') == 10
     assert 'of 25 active reminders' in html
     assert 'Page 1 of 3' in html
     assert 'Reminder categories' in html
     assert 'Snooze duration for' in html
-    empty = client.get('/dashboard?attention_kind=transaction').get_data(as_text=True)
+    empty = client.get('/finance/dashboard?attention_kind=transaction').get_data(as_text=True)
     assert 'No reminders match this view.' in empty
     assert 'Clear filters' in empty
-    invalid = client.get('/dashboard?attention_page=bad', follow_redirects=True)
+    invalid = client.get('/finance/dashboard?attention_page=bad', follow_redirects=True)
     assert b'Choose a valid reminder page.' in invalid.data
 
 
@@ -574,12 +574,12 @@ def test_snooze_post_requires_login_and_csrf(app, family, user, monkeypatch):
 
     g.pop('_login_user', None)
     client = app.test_client()
-    response = client.post('/dashboard/attention/snooze', data={'key': 'anything', 'days': '7'})
+    response = client.post('/finance/dashboard/attention/snooze', data={'key': 'anything', 'days': '7'})
     assert response.status_code == 302
     assert response.location.startswith('/intro?next=')
     login_client(client, user.id)
     monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
-    assert client.post('/dashboard/attention/snooze', data={
+    assert client.post('/finance/dashboard/attention/snooze', data={
         'key': 'anything', 'days': '7',
     }).status_code == 400
     assert not user.preferences

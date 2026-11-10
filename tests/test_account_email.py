@@ -178,7 +178,7 @@ def test_forgot_password_redirects_signed_in_user(app, user):
     client = app.test_client()
     login_client(client, user.id)
     response = request(client, 'get', '/forgot-password')
-    assert response.headers['Location'].endswith('/account/security')
+    assert response.headers['Location'].endswith('/central/account/security')
 
 
 # ── Reset password ───────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ def test_reset_password_changes_password_and_signs_out_everywhere(app, user):
     assert user.locked_until is None
     assert user.email_verified_at is not None
     assert UserSession.query.filter_by(user_id=user.id, revoked_at=None).count() == 0
-    assert request(other, 'get', '/account/security').status_code == 302
+    assert request(other, 'get', '/central/account/security').status_code == 302
     assert 'password_reset' in event_types(user)
     with client.session_transaction() as session:
         assert 'password_reset_token' not in session
@@ -289,7 +289,7 @@ def test_reset_still_requires_two_factor(app, user):
 
     response = login(client, password=NEW_PASSWORD)
     assert response.headers['Location'].endswith('/login/two-factor')
-    assert request(client, 'get', '/account/security').status_code == 302
+    assert request(client, 'get', '/central/account/security').status_code == 302
 
 
 def test_reset_signs_out_current_browser(app, user):
@@ -298,7 +298,7 @@ def test_reset_signs_out_current_browser(app, user):
     token = PasswordResetService.create_token(user, 60)
     request(client, 'get', f'/reset-password/{token}')
     submit_new_password(client)
-    assert request(client, 'get', '/account/security').status_code == 302
+    assert request(client, 'get', '/central/account/security').status_code == 302
 
 
 # ── Admin reset link ─────────────────────────────────────────────────────────
@@ -378,7 +378,7 @@ def test_bad_verification_link_flashes_error(app, user):
     client = app.test_client()
     login_client(client, user.id)
     response = request(client, 'get', '/verify-email/garbage')
-    assert response.headers['Location'].endswith('/account/security')
+    assert response.headers['Location'].endswith('/central/account/security')
     db.session.refresh(user)
     assert user.email_verified_at is None
 
@@ -386,13 +386,13 @@ def test_bad_verification_link_flashes_error(app, user):
 def test_account_security_resend_verification(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    page = request(client, 'get', '/account/security')
+    page = request(client, 'get', '/central/account/security')
     assert b'Not confirmed' in page.data
     assert b'Send confirmation email' in page.data
-    response = request(client, 'post', '/account/security/verify-email')
+    response = request(client, 'post', '/central/account/security/verify-email')
     assert response.status_code == 302
     assert len(outbox()) == 1
-    statuses = [request(client, 'post', '/account/security/verify-email').status_code for _ in range(3)]
+    statuses = [request(client, 'post', '/central/account/security/verify-email').status_code for _ in range(3)]
     assert statuses[-1] == 429
 
 
@@ -427,13 +427,13 @@ def test_sign_in_from_new_browser_alerts_same_browser_does_not(app, user):
     message = alerts()[0]
     assert message['Subject'] == 'New sign-in to your Family HQ account'
     assert 'Safari on iPhone' in message.get_content()
-    assert 'https://finance.example.com/account/security' in message.get_content()
+    assert 'https://finance.example.com/central/account/security' in message.get_content()
 
 
 def test_password_change_alerts(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    request(client, 'post', '/account/security/password', data={
+    request(client, 'post', '/central/account/security/password', data={
         'current_password': 'TestPass1!', 'new_password': NEW_PASSWORD, 'confirm_password': NEW_PASSWORD})
     assert [message['Subject'] for message in alerts()] == ['Your Family HQ password was changed']
 
