@@ -102,7 +102,7 @@ def test_finance_dashboard_shortcuts_respect_member_permissions(app, user):
     parser = QuickNavigationParser()
     parser.feed(client.get('/dashboard').get_data(as_text=True))
     assert set(parser.links) == {
-        '/transactions', '/accounts', '/expenses', '/preferences/finance',
+        '/transactions', '/accounts', '/expenses', '/hub/settings/finance',
     }
 
 
@@ -150,6 +150,24 @@ def test_central_hub_uses_membership_instead_of_legacy_family_field(app, user):
 
     assert 'Household required' not in html
     assert 'Open Finance' in html
+    parser = NavigationParser()
+    parser.feed(html)
+    assert '/dashboard' in {link['href'] for link in parser.links}
+
+
+@pytest.mark.parametrize('role', ['admin', 'member'])
+def test_dashboard_settings_shortcut_uses_grouped_settings(app, user, role):
+    user.role = role
+    user.allowed_sections = '["accounts"]'
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+    parser = QuickNavigationParser()
+    parser.feed(client.get('/dashboard').get_data(as_text=True))
+    assert '/hub/settings/finance' in parser.links
+    assert '/settings' not in parser.links
+    assert '/preferences/finance' not in parser.links
+    assert client.get('/hub/settings/finance').status_code == 200
 
 
 def test_public_shell_has_no_household_navigation(app):

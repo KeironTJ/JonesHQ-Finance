@@ -22,8 +22,11 @@ Flask blueprints are grouped by their owning application layer, not by URL.
   `transactions/`, `vehicles/`, and `vendors/`.
 
 The application factory registers core once, then the platform registry registers
-available modules. Finance contributes its own settings navigation and identifies
-its blueprints to the shared shell. Existing URLs are unchanged; Python imports
+available modules. Each available module contributes its overview label, sidebar
+template, page labels and settings navigation, and identifies its blueprints to
+the shared shell. Finance owns `templates/finance/_navigation.html`; shared
+navigation renders the registry's available destinations and the active module's
+template. Existing URLs are unchanged; Python imports
 use the owning package directly, with no forwarding packages at the old paths.
 Templates retain their existing feature folders and shared base/design system.
 Household Hub is a planned module, distinct from core household identity.
@@ -62,6 +65,9 @@ SQLAlchemy database models
 - `vehicles.py` - Vehicle model
 - `vendors.py` - Vendor model
 - `family.py` / `users.py` - Family and user identity models
+- `family.py` also defines `HouseholdMembership`: per-household roles, display
+  names and Finance section permissions. `User.family_id` is the legacy default,
+  not the selected household used by `get_family_id()`.
 - `settings.py` / `tax_settings.py` - Household configuration; personal display
   preferences are stored in `User.preferences`
 - `site_settings.py` - Service-wide site settings
@@ -83,9 +89,11 @@ for the package map and compatibility-import policy.
 ### `/templates/`
 Jinja2 HTML templates
 - `base.html` - Shared workspace shell and public header. Grouped sidebar navigation
-  becomes a focus-trapped drawer below 992px. Owner-only Settings and Family links
-  live under "Your workspace"; personal preferences is available to every member.
+  becomes a focus-trapped drawer below 992px. One contextual Settings entry opens
+  Central or module settings; sub-settings retain personal and owner-only controls.
 - `shared/` - Permission-aware navigation, page search, UI macros and shared analytics chart setup
+- `central/` - Registry-driven module launcher
+- `finance/` - Finance-owned sidebar navigation
 - `email/` - Email templates
 - `errors/` - Error pages
 - `settings/` - Settings hub and independently saved household, credit-card,
@@ -183,3 +191,6 @@ Blueprints own HTTP routes and templates, models define persistence, services
 hold reusable domain workflows, and utilities hold cross-cutting helpers.
 Authentication and family permissions are enforced centrally while feature
 routes remain organized by blueprint.
+Services set `family_id` explicitly with `get_family_id()`. The request-only
+auto-stamp backstop uses the same selected-household resolution, leaves explicit
+IDs and global records unchanged, and does not infer a household outside requests.

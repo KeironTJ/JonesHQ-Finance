@@ -20,6 +20,7 @@ def settings_navigation():
         'household_memberships': HouseholdMembershipService.memberships_for(current_user),
         'active_household_id': get_family_id(),
         'active_module': ModuleRegistry.module_for_blueprint(request.blueprint),
+        'navigation_modules': ModuleRegistry.modules_for(current_user),
     })
     return context
 

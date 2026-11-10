@@ -1,0 +1,41 @@
+{% for label, links in [
+    ('Day to day', [
+        ('accounts.index', 'Accounts', 'wallet2', 'accounts', true),
+        ('transactions.index', 'Transactions', 'arrow-left-right', 'transactions', true),
+        ('transactions.subscriptions', 'Recurring bills', 'arrow-repeat', 'transactions', false),
+        ('expenses.index', 'Work expenses', 'receipt', 'expenses', false)
+    ]),
+    ('Build your future', [
+        ('income.index', 'Income', 'cash-coin', 'income', false),
+        ('credit_cards.index', 'Credit cards', 'credit-card-2-front', 'credit_cards', false),
+        ('loans.index', 'Loans', 'bank', 'loans', false),
+        ('mortgage.index', 'Home & mortgage', 'house-door', 'mortgage', false),
+        ('pensions.index', 'Pensions', 'sunrise', 'pensions', false),
+        ('networth.index', 'Net worth', 'graph-up-arrow', 'networth', false)
+    ]),
+    ('Household life', [
+        ('plans.index', 'Plans', 'journal-check', 'plans', false),
+        ('vehicles.index', 'Garage', 'car-front', 'vehicles', false),
+        ('childcare.index', 'Childcare', 'balloon', 'childcare', false)
+    ]),
+    ('Organise', [
+        ('categories.index', 'Categories', 'tags', 'categories', false),
+        ('vendors.index', 'Vendors', 'shop', 'vendors', false),
+        ('transactions.consolidated', 'Consolidated view', 'diagram-3', 'transactions', false)
+    ])
+] %}
+    {% set visible = namespace(value=false) %}
+    {% for endpoint, title, icon, section, exact in links %}
+        {% if can_access_section(section) %}{% set visible.value = true %}{% endif %}
+    {% endfor %}
+    {% if visible.value %}
+    <div class="nav-section-label">{{ label }}</div>
+    {% for endpoint, title, icon, section, exact in links %}
+        {% set active = none %}
+        {% if endpoint == 'transactions.index' %}
+            {% set active = request.blueprint == 'transactions' and not request.path.startswith('/transactions/subscriptions') and request.endpoint != 'transactions.consolidated' %}
+        {% endif %}
+        {{ nav_link(endpoint, title, icon, section, exact, active_override=false if settings_area else active) }}
+    {% endfor %}
+    {% endif %}
+{% endfor %}

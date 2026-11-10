@@ -2,10 +2,15 @@ import ast
 from pathlib import Path
 
 from flask import Flask, url_for
+from jinja2 import ChoiceLoader, DictLoader
 
 from blueprints.core import register_blueprints
+from extensions import db
+from models.family import Family, HouseholdMembership
 from services.platform.module_registry import ModuleRegistry
+from services.platform import module_registry
 from tests.auth_helpers import login_client
+from tests.test_workspace_ui import NavigationParser
 
 
 def test_core_registers_without_finance_blueprints(app):
@@ -67,3 +72,60 @@ def test_finance_owns_legacy_preference_post_but_not_appearance(app, user):
     for path in ('/preferences/finance', '/hub/settings/finance'):
         assert client.get(path).status_code == 200
     assert client.get('/income').status_code == 200
+
+
+def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, user, monkeypatch):
+    example = {
+        'key': 'example', 'title': 'Example module', 'overview_label': 'Example overview',
+        'icon': 'bi-calendar', 'home_endpoint': 'accounts.index',
+        'navigation_template': 'example/_navigation.html', 'status': 'available',
+        'requires_household': True, 'default_destination': False,
+        'settings_group': lambda user: {
+            'label': 'Example', 'endpoint': 'auth.account_security', 'pages': [],
+        },
+    }
+    monkeypatch.setattr(module_registry, '_MODULES', (*module_registry._MODULES, example))
+    monkeypatch.setitem(app.extensions['platform_modules'], 'accounts', example)
+    monkeypatch.setattr(app.jinja_env, 'loader', ChoiceLoader([
+        DictLoader({
+            'example/_navigation.html': "{{ nav_link('auth.help', 'Example guide', 'book') }}",
+        }),
+        app.jinja_env.loader,
+    ]))
+    client = app.test_client()
+    login_client(client, user.id)
+    html = client.get('/accounts').get_data(as_text=True)
+    assert '<strong id="workspaceNavLabel">Example module</strong>' in html
+    assert 'Example overview' in html
+    assert 'Example guide' in html
+    sidebar = NavigationParser()
+    sidebar.feed(html)
+    hrefs = {link['href'] for link in sidebar.links}
+    assert '/transactions' not in hrefs
+    assert '/account/security' in hrefs
+    assert '/dashboard' in hrefs
+    assert '/accounts' in hrefs
+    central = client.get('/hub').get_data(as_text=True)
+    assert 'Open Example module' in central
+
+
+def test_module_navigation_permissions_follow_selected_household(app, user):
+    second_family = Family(name='Restricted household')
+    db.session.add(second_family)
+    db.session.flush()
+    db.session.add(HouseholdMembership(
+        user_id=user.id, family_id=second_family.id, role='member',
+        allowed_sections='["accounts", "transactions"]',
+    ))
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+    client.post('/family/select', data={'family_id': second_family.id})
+    for path in ('/accounts', '/transactions/subscriptions', '/hub/settings/finance'):
+        html = client.get(path).get_data(as_text=True)
+        sidebar = NavigationParser()
+        sidebar.feed(html)
+        hrefs = {link['href'] for link in sidebar.links}
+        assert {'/accounts', '/transactions', '/transactions/subscriptions'} <= hrefs
+        assert not {'/income', '/vendors/', '/settings', '/family/'} & hrefs
+        assert len([link for link in sidebar.links if link.get('aria-current') == 'page']) == 1

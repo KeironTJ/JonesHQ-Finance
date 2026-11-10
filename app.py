@@ -190,18 +190,18 @@ def create_app(config_name=None):
     @_sa_event.listens_for(db.session, 'before_flush')
     def _auto_family_id(session, flush_context, instances):
         """Automatically stamp family_id on any new record that has the column
-        but no value, using the currently logged-in user's family."""
-        try:
-            from flask_login import current_user
-            if current_user and current_user.is_authenticated and current_user.family_id:
-                fid = current_user.family_id
-                for obj in session.new:
-                    if getattr(obj, '_global_record', False):
-                        continue
-                    if hasattr(obj, 'family_id') and obj.family_id is None:
-                        obj.family_id = fid
-        except RuntimeError:
-            pass  # outside request context (e.g. db.create_all() at startup)
+        but no value, using the selected household."""
+        if not has_request_context():
+            return
+        from utils.db_helpers import get_family_id
+        fid = get_family_id()
+        if fid is None:
+            return
+        for obj in session.new:
+            if getattr(obj, '_global_record', False):
+                continue
+            if hasattr(obj, 'family_id') and obj.family_id is None:
+                obj.family_id = fid
 
     # Registered after the auto-stamp so new records already have family_id.
     from utils.tenancy_guard import register_cross_family_guard

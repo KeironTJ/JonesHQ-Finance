@@ -7,7 +7,7 @@ recognisable without relying on colour alone. All assets and system fonts are lo
 ## Application-wide scope
 
 The existing Finance design system is the shared visual foundation for Central Hub,
-Finance, Family Hub and future workspaces. Reuse its layout, components, tokens
+Finance, Household Hub and future workspaces. Reuse its layout, components, tokens
 and appearance implementation rather than importing another application's styling
 or introducing separate theme controls. Personal palettes and Light, Dark and
 Follow device modes remain account-wide and consistent when switching workspaces.
@@ -73,7 +73,10 @@ action. Macro values remain autoescaped.
 ## Navigation and interactions
 
 - [Navigation](../templates/shared/_navigation.html) supplies the primary page-search
-  entries. Settings entries additionally come from the permission-filtered
+  entries through registry-driven module links and the active module's sidebar
+  template. Finance owns its [navigation template](../templates/finance/_navigation.html);
+  module descriptors supply overview labels, page labels and template paths.
+  Settings entries additionally come from the permission-filtered
   [settings navigation service](../services/platform/settings_navigation_service.py).
   Search must never expose links hidden from that user.
 - Keep one Settings entry in the main sidebar. Central and Finance settings share

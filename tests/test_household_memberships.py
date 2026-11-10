@@ -4,11 +4,52 @@ from flask import session
 from flask_login import login_user
 
 from extensions import db
+from models.accounts import Account
 from models.family import Family, HouseholdMembership
 from models.users import User
 from services.household.membership_service import HouseholdMembershipService
 from tests.auth_helpers import detach_user_from_households, login_client
 from utils.db_helpers import get_family_id
+
+
+@pytest.mark.parametrize('clear_default', [False, True])
+def test_auto_stamp_uses_selected_household_and_preserves_explicit_ids(app, user, family, clear_default):
+    second_family = Family(name='Selected Household')
+    db.session.add(second_family)
+    db.session.flush()
+    db.session.add(HouseholdMembership(
+        user_id=user.id, family_id=second_family.id, role='admin',
+    ))
+    if clear_default:
+        user.family_id = None
+    db.session.commit()
+
+    with app.test_request_context('/accounts'):
+        login_user(user)
+        HouseholdMembershipService.select(user, second_family.id)
+        implicit = Account(name='Implicit', account_type='Current')
+        explicit = Account(name='Explicit', account_type='Current', family_id=family.id)
+        global_record = Account(name='Global', account_type='Current')
+        global_record._global_record = True
+        db.session.add_all([implicit, explicit, global_record])
+        db.session.flush()
+        assert implicit.family_id == second_family.id
+        assert explicit.family_id == family.id
+        assert global_record.family_id is None
+
+
+def test_auto_stamp_does_not_invent_household_without_request_or_membership(app, user):
+    outside_request = Account(name='Outside request', account_type='Current')
+    db.session.add(outside_request)
+    db.session.flush()
+    assert outside_request.family_id is None
+    detach_user_from_households(user)
+    with app.test_request_context('/accounts'):
+        login_user(user)
+        detached = Account(name='Detached', account_type='Current')
+        db.session.add(detached)
+        db.session.flush()
+        assert detached.family_id is None
 
 
 def test_legacy_user_gets_household_membership(app, user, family):

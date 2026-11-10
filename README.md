@@ -24,8 +24,20 @@ enforce their normal permissions. Detached accounts default to Account security.
 Household registration and invitation acceptance still lead to Central Hub.
 
 The hub opens Finance at `/dashboard`; existing Finance URLs are unchanged.
-Family Hub is a non-interactive "Coming soon" preview, not an imported application.
+Household Hub is a non-interactive "Coming soon" preview, not an imported application.
 No billing or subscription entitlement enforcement is introduced.
+
+The shared sidebar discovers available modules through the platform registry.
+Each module owns its overview label, sidebar template and page labels; Finance
+navigation lives in `templates/finance/_navigation.html`. Planned modules do not
+appear as working sidebar destinations. Finance's dashboard Settings shortcut
+opens the same grouped landing page as its sidebar for both owners and members.
+
+Household-scoped reads and explicitly scoped service writes use the selected
+household. The automatic `family_id` backstop also resolves the selected household,
+including accounts whose legacy default household is unset. It does not replace
+explicit IDs or stamp global records, and it does not run outside requests.
+Services must still set `family_id` explicitly using `get_family_id()`.
 
 Account security, household membership and personal preferences use the central
 navigation shell. Finance retains its own section navigation and settings.

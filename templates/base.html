@@ -17,7 +17,6 @@
     {% endfor %}
     {% block extra_css %}{% endblock %}
 </head>
-{% set finance_preferences = request.blueprint == 'finance_preferences' %}
 {% set central_workspace = not active_module %}
 {% if settings_area %}{% set central_workspace = settings_area == 'central' %}{% endif %}
 <body class="{{ 'workspace' if current_user.is_authenticated else 'public-layout' }}">
@@ -35,7 +34,8 @@
                 </button>
                 <a class="workspace-home" href="{{ url_for(active_module.home_endpoint if active_module else 'central.hub') }}">{{ active_module.title if active_module else 'Central' }}</a>
                 <span class="topbar-divider" aria-hidden="true">/</span>
-                <span class="workspace-location">{{ settings_groups[settings_area].label ~ ' settings' if settings_area else ('Finance preferences' if finance_preferences else {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'dashboard': 'Finance overview', 'networth': 'Net worth', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title)) }}</span>
+                {% set page_labels = active_module.get('page_labels', {}) if active_module else {} %}
+                <span class="workspace-location">{{ settings_groups[settings_area].label ~ ' settings' if settings_area else (active_module.overview_label if active_module and request.endpoint == active_module.home_endpoint else page_labels.get(request.blueprint, {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title))) }}</span>
             </div>
             <div class="topbar-actions">
                 {% if household_memberships|length > 1 %}

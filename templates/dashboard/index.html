@@ -841,12 +841,12 @@
                 </div>
                 {% endif %}
                 <div class="col-md-3 col-sm-6 mb-3">
-                    <a href="{{ url_for('settings.index') if can_access_section('settings') else url_for('finance_preferences.index') }}" class="text-decoration-none">
+                    <a href="{{ url_for('settings.overview') }}" class="text-decoration-none">
                         <div class="card border-secondary h-100 hover-shadow">
                             <div class="card-body text-center">
                                 <i class="bi bi-gear display-4 text-secondary"></i>
-                                <h5 class="card-title mt-3">{{ 'Finance settings' if can_access_section('settings') else 'Finance preferences' }}</h5>
-                                <p class="card-text text-muted small">{{ 'Household configuration' if can_access_section('settings') else 'Your display and account defaults' }}</p>
+                                <h5 class="card-title mt-3">Finance settings</h5>
+                                <p class="card-text text-muted small">Your preferences and household configuration</p>
                             </div>
                         </div>
                     </a>
