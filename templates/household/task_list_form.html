@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Edit task list' if task_list else 'New task list' }}{% endblock %}
+{% block content %}
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.tasks', list_id=task_list.id) if task_list else url_for('household.tasks') }}">Back to tasks</a>
+<h1>{{ 'Edit task list' if task_list else 'New task list' }}</h1>
+<form class="card" method="POST"><div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3"><label class="form-label" for="list_title">List name</label><input class="form-control" id="list_title" name="title" maxlength="128" value="{{ submitted.get('title', task_list.title if task_list else '') }}" required></div>
+    {% if task_list %}
+    <p>Privacy: <strong>{{ 'Shared with household' if task_list.visibility == 'shared' else 'Personal' }}</strong>. Privacy cannot be changed after creation; use a separate list to avoid exposing existing tasks.</p>
+    {% else %}
+    <div class="mb-3"><label class="form-label" for="list_visibility">Privacy</label><select class="form-select" id="list_visibility" name="visibility">
+        <option value="personal"{% if submitted.get('visibility', 'personal') == 'personal' %} selected{% endif %}>Personal</option>
+        {% if not is_child %}<option value="shared"{% if submitted.get('visibility') == 'shared' %} selected{% endif %}>Shared with household</option>{% endif %}
+    </select></div>
+    {% endif %}
+    <p class="form-text">Adult personal lists are creator-only. A child's personal list can also be viewed by their designated guardian in this household; only the child manages it.</p>
+    <div class="row g-3">
+        <div class="col-md-6"><label class="form-label" for="list_icon">Icon</label><select class="form-select" id="list_icon" name="icon">{% for value, label in icons.items() %}<option value="{{ value }}"{% if submitted.get('icon', task_list.icon if task_list else 'list-check') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><label class="form-label" for="list_colour">Accent colour</label><select class="form-select" id="list_colour" name="colour">{% for value, label in colours.items() %}<option value="{{ value }}"{% if submitted.get('colour', task_list.colour if task_list else 'primary') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    </div>
+    <button class="btn btn-primary mt-3" type="submit">Save list</button>
+</div></form>
+{% endblock %}

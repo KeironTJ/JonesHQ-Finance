@@ -45,8 +45,16 @@ adult approval. Pending/rejected suggestions are visible only to their creator
 and household adults, and stay off the calendar. Recurring edits/deletions affect
 the entire series, including past dates; single-occurrence exceptions are not yet
 supported. Approved activities feed the calendar directly without duplicate events.
-Task feeds and external sharing remain future work; no old JonesHQ records or
-authentication are imported.
+Tasks & lists provides personal/shared checklists, priorities, household
+assignments, optional London due dates/times, completion attribution and
+active/today/overdue/completed/assigned-to-me filters. Adults manage shared work;
+children complete/reopen only shared tasks assigned to them, and manage their
+own personal lists. A child's personal list is also viewable by their designated
+guardian in the same household; adult personal lists remain creator-only.
+Incomplete dated tasks feed each viewer's calendar according to list privacy.
+List privacy is fixed at creation, and tasks cannot move between lists.
+Rewards, recurring tasks and external sharing remain future work; no old JonesHQ
+records or authentication are imported.
 No billing or subscription entitlement enforcement is introduced.
 
 The shared sidebar discovers available modules through the platform registry.

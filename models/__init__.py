@@ -2,6 +2,7 @@
 
 from models.accounts import Account
 from models.activities import Activity, ActivityAttendee
+from models.household_tasks import HouseholdTask, TaskList
 from models.balances import Balance
 from models.budgets import Budget
 from models.calendar_event import CalendarEvent
@@ -49,6 +50,8 @@ __all__ = [
     'Account',
     'Activity',
     'ActivityAttendee',
+    'HouseholdTask',
+    'TaskList',
     'Balance',
     'Budget',
     'CalendarEvent',

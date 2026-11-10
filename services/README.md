@@ -85,7 +85,8 @@ visibility is enforced by the scoped query helpers, including child/guardian
 visibility without an owner bypass. Creator links and selected grants use
 household membership IDs. Departing members' private events are deleted and
 shared events retained for owners; account and household deletion use reviewed
-lifecycle rules. It also reads meal-plan and approved activity source rows for month/agenda views;
+lifecycle rules. It also reads meal-plan, approved activity and visible incomplete
+dated-task source rows for month/agenda views;
 no duplicate events are written.
 
 `household/meal_service.py` manages the household-shared meal library, archive/
@@ -96,7 +97,7 @@ and copies editable title/description/source once; subsequent library edits do
 not change plans. Archive preserves plans and blocks new selections. Added-by
 attribution uses the active membership and is cleared on departure. Household
 deletion removes plans before meals; individual account deletion preserves both.
-Task feeds and external sharing are not implemented.
+External sharing is not implemented.
 
 `household/activity_service.py` owns date-first week/month activity planning,
 attendees, weekly recurrence and child suggestion reviews. Adults publish/manage;
@@ -109,6 +110,20 @@ apply to the whole series, including past dates. Member/account departure remove
 attendance and clears creator/reviewer attribution but preserves activities.
 `household/planner_helpers.py` supplies shared week/month periods and navigation
 for both activity and meal planners.
+
+`household/task_service.py` manages personal/shared lists, member assignments,
+priorities, due dates/times and explicit complete/reopen actions. Scoped helpers
+apply personal-list visibility to task rows and calendar feeds. A child's
+designated guardian can view their personal lists but only the creator manages
+personal work. Adults manage shared lists/tasks; children can complete/reopen
+only shared tasks assigned to them. Creator/assignee/completer links use selected
+household memberships. Completion stamps UTC time and actor on transitions;
+repeating the same action retains attribution, reopening clears it. Privacy is
+immutable and tasks cannot move lists, preventing accidental publication of
+private content. Date-based stats/filters use London today; optional due times
+must have dates and pass the calendar's DST validation. Personal lists/tasks
+are removed on member/account departure, shared work survives with membership
+links detached. No rewards or recurring tasks are implemented.
 
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods

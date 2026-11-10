@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Tasks &amp; lists{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div><h1>Tasks &amp; lists</h1><p class="text-muted mb-0">Personal checklists and shared household jobs. Children complete shared tasks assigned to them.</p></div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-primary" href="{{ url_for('household.create_task_list') }}">New list</a>
+        {% if active_list and task_service.can_manage_list(active_list) %}<a class="btn btn-primary" href="{{ url_for('household.create_task', list_id=active_list.id) }}">Add task</a>{% endif %}
+    </div>
+</div>
+<section class="card mb-3" aria-label="Your visible task totals"><div class="card-body d-flex flex-wrap gap-4">
+    {% for key, label in [('total', 'Total'), ('done', 'Done'), ('overdue', 'Overdue'), ('today', 'Today'), ('upcoming', 'Next 7 days')] %}<div><strong>{{ stats[key] }}</strong> <span class="text-muted">{{ label }}</span></div>{% endfor %}
+</div></section>
+{% if lists %}
+<nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Task lists">
+    {% for item in lists %}<a class="btn text-break btn-outline-{{ item.colour }}{{ ' active' if active_list and item.id == active_list.id }}" href="{{ url_for('household.tasks', list_id=item.id, filter=filt) }}"{% if active_list and item.id == active_list.id %} aria-current="page"{% endif %}><i class="bi bi-{{ item.icon }}" aria-hidden="true"></i> {{ item.title }} <span class="small">({{ 'Shared' if item.visibility == 'shared' else 'Personal' }})</span></a>{% endfor %}
+</nav>
+<section class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div><h2 class="h4 text-break">{{ active_list.title }}</h2><p class="text-muted mb-0">{{ 'Shared with household' if active_list.visibility == 'shared' else 'Personal: creator only, plus designated guardian for a child within this household' }}</p></div>
+        {% if task_service.can_manage_list(active_list) %}
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('household.edit_task_list', list_id=active_list.id) }}">Edit list</a>
+            <form method="POST" action="{{ url_for('household.delete_task_list', list_id=active_list.id) }}" onsubmit="return confirm('Delete this list and all its tasks?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger" type="submit">Delete list</button></form>
+        </div>
+        {% endif %}
+    </div>
+    <nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Task filters">{% for value, label in filters.items() %}<a class="btn btn-sm btn-{{ 'primary' if filt == value else 'outline-secondary' }}" href="{{ url_for('household.tasks', list_id=active_list.id, filter=value) }}"{% if filt == value %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
+    <ul class="list-group list-group-flush">
+    {% for task in tasks %}
+        <li class="list-group-item px-0 d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div class="min-w-0">
+                <a class="text-break{{ ' text-decoration-line-through' if task.completed }}" href="{{ url_for('household.task', task_id=task.id) }}">{{ task.title }}</a>
+                <span class="badge bg-{{ 'danger' if task.priority == 'urgent' else 'warning text-dark' if task.priority == 'high' else 'secondary' }}">{{ task.priority|title }}</span>
+                <div class="small text-muted text-break">
+                    {% if task.due_date %}Due {{ task.due_date.strftime('%d %b %Y') }}{% if task.due_time %} {{ task.due_time.strftime('%H:%M') }} Europe/London{% endif %}{% if not task.completed and task.due_date < today %} <span class="text-danger">Overdue</span>{% endif %} &middot; {% endif %}
+                    {{ 'Assigned to ' ~ task.assignee.user.name if task.assignee else 'Unassigned' }}
+                    {% if task.completed %} &middot; Completed by {{ task.completer.user.name if task.completer else 'a former member' }}{% endif %}
+                </div>
+            </div>
+            {% include 'household/_task_completion.html' %}
+        </li>
+    {% else %}<li class="list-group-item px-0 text-muted">No tasks match this filter.</li>{% endfor %}
+    </ul>
+</div></section>
+{% else %}
+<section class="card"><div class="card-body"><h2 class="h5">A fresh checklist</h2><p class="mb-0">Create a personal list to get started. Adults can also create a shared household list.</p></div></section>
+{% endif %}
+{% endblock %}

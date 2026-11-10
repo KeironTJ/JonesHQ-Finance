@@ -120,6 +120,28 @@ def _apply_visibility(model, query):
     if hasattr(model, 'owner_id'):
         conditions.append((model.owner_id.is_(None)) | (model.owner_id == uid))
 
+    if getattr(model, '__tablename__', None) == 'task_lists':
+        from models.family import HouseholdMembership
+        from models.users import User
+
+        creator_visible = HouseholdMembership.query.join(User).filter(
+            HouseholdMembership.id == model.creator_membership_id,
+            HouseholdMembership.family_id == model.family_id,
+            or_(
+                User.id == uid,
+                and_(User.account_type == 'child', User.guardian_id == uid),
+            ),
+        ).correlate(model).exists()
+        conditions.append(or_(model.visibility == 'shared', creator_visible))
+
+    if getattr(model, '__tablename__', None) == 'household_tasks':
+        from models.household_tasks import TaskList
+
+        visible_list = _apply_visibility(TaskList, TaskList.query.filter(
+            TaskList.id == model.list_id, TaskList.family_id == model.family_id,
+        )).correlate(model).exists()
+        conditions.append(visible_list)
+
     if getattr(model, '__tablename__', None) == 'activities' and getattr(current_user, 'is_managed_child', False):
         from models.family import HouseholdMembership
 

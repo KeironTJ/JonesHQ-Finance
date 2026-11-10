@@ -265,6 +265,8 @@ class CalendarService:
         planned_meals = MealService.plans_between(first, last)
         from services.household.activity_service import ActivityService
         activities = ActivityService.between(first, last)
+        from services.household.task_service import TaskService
+        tasks = TaskService.between(first, last)
         return dict(
             month=selected, weeks=weeks, days=days, view=view, today=today,
             meal_days={
@@ -274,6 +276,10 @@ class CalendarService:
             meal_slots=SLOTS,
             activity_days={
                 day: [row for row in activities if row.starts_on <= day <= row.ends_on]
+                for week in weeks for day in week
+            },
+            task_days={
+                day: [task for task in tasks if task.due_date == day]
                 for week in weeks for day in week
             },
             previous=(selected - timedelta(days=1)).strftime('%Y-%m') if selected.year > 1900 or selected.month > 1 else None,

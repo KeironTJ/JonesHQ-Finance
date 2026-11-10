@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}{{ task.title if task else 'Add task' }}{% endblock %}
+{% block content %}
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.tasks', list_id=task.list_id) if task else url_for('household.tasks') }}">Back to tasks</a>
+<h1 class="text-break">{{ task.title if task else 'Add task' }}</h1>
+{% if task %}
+<p class="text-muted">{{ task.task_list.title }} &middot; {{ 'Shared with household' if task.task_list.visibility == 'shared' else 'Personal list' }} &middot; {{ 'Completed' if task.completed else 'Active' }}</p>
+<p class="small text-muted">Added by {{ task.creator_membership.user.name if task.creator_membership else 'a former member' }}{% if task.completed %} &middot; Completed {{ task.completed_at.strftime('%d %b %Y %H:%M') }} UTC by {{ task.completer.user.name if task.completer else 'a former member' }}{% endif %}</p>
+<div class="mb-3">{% include 'household/_task_completion.html' %}</div>
+{% endif %}
+{% if can_manage and lists %}
+<form method="POST" class="card mb-3"><div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if task %}<p>List: {{ task.task_list.title }}. Tasks cannot be moved between lists.</p>{% else %}
+    <div class="mb-3"><label class="form-label" for="task_list_id">Task list</label><select class="form-select" id="task_list_id" name="list_id" required>{% for item in lists %}<option value="{{ item.id }}" data-visibility="{{ item.visibility }}" data-creator="{{ item.creator_membership_id }}"{% if submitted.get('list_id', '')|string == item.id|string %} selected{% endif %}>{{ item.title }} ({{ item.visibility }})</option>{% endfor %}</select></div>{% endif %}
+    <div class="mb-3"><label class="form-label" for="task_title">Task title</label><input class="form-control" id="task_title" name="title" maxlength="256" value="{{ submitted.get('title', task.title if task else '') }}" required></div>
+    <div class="mb-3"><label class="form-label" for="task_notes">Notes</label><textarea class="form-control" id="task_notes" name="notes" rows="3" maxlength="5000">{{ submitted.get('notes', task.notes if task else '') }}</textarea></div>
+    <div class="row g-3">
+        <div class="col-md-6"><label class="form-label" for="task_priority">Priority</label><select class="form-select" id="task_priority" name="priority">{% for value, label in priorities.items() %}<option value="{{ value }}"{% if submitted.get('priority', task.priority if task else 'medium') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><label class="form-label" for="task_assigned">Assign to (optional)</label><select class="form-select" id="task_assigned" name="assigned_membership_id"><option value="">Unassigned</option>{% for member in members %}<option value="{{ member.id }}"{% if submitted.get('assigned_membership_id', task.assigned_membership_id if task else '')|string == member.id|string %} selected{% endif %}>{{ member.user.name }}</option>{% endfor %}</select><div class="form-text">Personal tasks can only be assigned to their list creator. Shared tasks can be assigned to an active household member.</div></div>
+        <div class="col-md-6"><label class="form-label" for="task_due_date">Due date (optional)</label><input class="form-control" id="task_due_date" name="due_date" type="date" min="1900-01-01" max="2100-12-31" value="{{ submitted.get('due_date', task.due_date.isoformat() if task and task.due_date else '') }}"></div>
+        <div class="col-md-6"><label class="form-label" for="task_due_time">Due time (Europe/London, optional)</label><input class="form-control" id="task_due_time" name="due_time" type="time" value="{{ submitted.get('due_time', task.due_time.strftime('%H:%M') if task and task.due_time else '') }}"></div>
+    </div>
+    <p class="form-text mt-3">Incomplete dated tasks appear in your calendar, subject to list privacy. Completion removes them from the calendar; reopening restores them. Rewards and recurring tasks are not available yet.</p>
+    <button class="btn btn-primary mt-2" type="submit">Save task</button>
+</div></form>
+{% elif not task %}
+<p>Create a list you can manage before adding tasks.</p><a class="btn btn-primary" href="{{ url_for('household.create_task_list') }}">New list</a>
+{% else %}
+<section class="card"><div class="card-body">
+    <h2 class="h5">Notes</h2><p class="text-break" style="white-space: pre-wrap">{{ task.notes or 'No notes.' }}</p>
+    <p>Priority: {{ task.priority|title }}</p>
+    <p>{{ 'Assigned to ' ~ task.assignee.user.name if task.assignee else 'Unassigned' }}</p>
+    {% if task.due_date %}<p>Due {{ task.due_date.strftime('%d %b %Y') }}{% if task.due_time %} {{ task.due_time.strftime('%H:%M') }} Europe/London{% endif %}</p>{% endif %}
+    <p class="text-muted mb-0">{{ 'Only the list creator manages this personal task.' if task.task_list.visibility == 'personal' else 'Adults manage shared task details. Children complete or reopen only tasks assigned to them.' }}</p>
+</div></section>
+{% endif %}
+{% if task and can_manage %}
+<form method="POST" action="{{ url_for('household.delete_task', task_id=task.id) }}" onsubmit="return confirm('Delete this task?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-danger" type="submit">Delete task</button></form>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+{% if can_manage and lists %}
+<script>
+(() => {
+    const list = document.getElementById('task_list_id');
+    const assignee = document.getElementById('task_assigned');
+    function updateAssignees() {
+        const visibility = list ? list.selectedOptions[0].dataset.visibility : {{ (task.task_list.visibility if task else '')|tojson }};
+        const creator = list ? list.selectedOptions[0].dataset.creator : {{ ((task.task_list.creator_membership_id|string) if task else '')|tojson }};
+        for (const option of assignee.options) {
+            option.disabled = Boolean(option.value && visibility === 'personal' && option.value !== creator);
+        }
+        if (assignee.selectedOptions[0].disabled) assignee.value = '';
+    }
+    if (list) list.addEventListener('change', updateAssignees);
+    updateAssignees();
+})();
+</script>
+{% endif %}
+{% endblock %}

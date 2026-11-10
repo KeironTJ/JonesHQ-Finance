@@ -56,8 +56,8 @@ as the changes; a failed write saves neither.
 ## Household calendar (implemented)
 
 Household Hub opens at `/household/` with month and agenda views and manually
-created all-day/timed events in `Europe/London`. Meal plans and approved activities
-also contribute source-linked items; dated-task feeds are future work.
+created all-day/timed events in `Europe/London`. Meal plans, approved activities
+and visible incomplete dated tasks also contribute source-linked items.
 
 - Shared and private events have explicit visibility. Adult-private events are
   creator-only; child-private events are visibly labelled as accessible to the
@@ -135,12 +135,45 @@ also contribute source-linked items; dated-task feeds are future work.
   preventing reused membership IDs from inheriting attribution. Household deletion
   removes attendees before activities. No cross-household sharing is enabled.
 
-## Future feeds and external sharing (not implemented)
+## Tasks & lists (implemented)
+
+- Every list/task is scoped to the selected household, including personal lists.
+  Lists are either shared with household members who have Hub access or personal.
+  Adult personal lists are creator-only with no household-owner override. A
+  child's personal list is also visible to their designated guardian within the
+  same household, but only the child manages it. Tasks inherit list visibility
+  in scoped helpers, stats, details and calendar feeds.
+- Adults manage shared lists/tasks regardless of household role or Finance
+  access. Children cannot create/edit/delete shared lists or task details; they
+  can only complete or reopen shared tasks assigned to their own membership.
+  A corrupt owner role never overrides account-level child restrictions.
+  Children can create/manage their own personal lists/tasks.
+- Personal tasks can be assigned only to the list creator or left unassigned.
+  Shared tasks can be assigned to an active member of the selected household.
+  Assignment grants no visibility or additional permissions.
+- List privacy is immutable after creation; tasks cannot move between lists.
+  This intentionally differs from the original hub's mutable privacy to prevent
+  accidentally publishing private work. List deletion removes its tasks.
+- Completion is an explicit POST complete/reopen action, not an unsafe toggle.
+  Creator/completer and completion time are server-controlled. Repeating a
+  completion preserves its actor/time; reopening clears them. There are no
+  rewards or completion-approval mechanics yet.
+- Optional due dates are London calendar dates; due times require dates and
+  reject ambiguous/nonexistent DST times. Incomplete dated tasks appear directly
+  in each authorised viewer's month/agenda calendar, not duplicate manual events.
+  Completed tasks remain in the hub's completed/all filters; reopening restores
+  calendar visibility. Today/overdue filters are date-based, not time-based.
+- Membership/account departure deletes personal lists/tasks, retains shared
+  work and clears creator/assignee/completer links. Completion timestamps remain.
+  This prevents reused membership IDs inheriting assignments or attribution.
+  Household deletion removes tasks before lists and memberships.
+
+## Future rewards and external sharing (not implemented)
 
 Cross-household sharing will use invitations to specific items, with acceptance
 and revocation. It must not grant household membership, Finance access or access
 to unrelated records. Children will not administer external sharing.
 
-Task feeds and external sharing are not available. Existing Finance childcare records are unrelated
+Rewards, recurring tasks and external sharing are not available. Existing Finance childcare records are unrelated
 to managed-child sign-in accounts. The previous JonesHQ hub is a feature
 reference only; its test data, authentication and styling are not being imported.

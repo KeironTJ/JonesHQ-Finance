@@ -19,6 +19,7 @@ from models.expense_calendar import ExpenseCalendarEntry
 from models.calendar_event import CalendarEvent
 from models.meals import Meal, PlannedMeal
 from models.activities import Activity, ActivityAttendee
+from models.household_tasks import HouseholdTask, TaskList
 from services.platform.account_deletion_service import AccountDeletionService, OWNED_MODELS
 from services.platform.user_session_service import _now
 from tests.auth_helpers import detach_user_from_households, login_client
@@ -85,6 +86,12 @@ def make_domains(owner, family_id, prefix):
                    reviewer_membership_id=creator.id if creator else None)
     if creator:
         add(ActivityAttendee, family_id=family_id, activity_id=activity.id, membership_id=creator.id)
+    task_list = add(TaskList, family_id=family_id, title=prefix,
+                    visibility='personal' if creator else 'shared',
+                    creator_membership_id=creator.id if creator else None)
+    add(HouseholdTask, family_id=family_id, list_id=task_list.id, title=prefix,
+        creator_membership_id=creator.id if creator else None,
+        assigned_membership_id=creator.id if creator else None)
     expense = add(Expense, **common, date=TODAY, description=prefix,
                   expense_type='Hotel', cost=10, total_cost=10)
     category = add(Category, family_id=family_id, name='General', category_type='expense')

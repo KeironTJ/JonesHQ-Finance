@@ -15,9 +15,14 @@
     <h2 class="h5">Activities &amp; suggestions</h2>
     <p>Adults publish and manage shared household activities. Children can suggest activities, revise rejected/pending suggestions or withdraw their own suggestions. Only the creator and household adults can see suggestions until an adult explicitly approves them.</p>
     <p>Approved activities appear automatically in the calendar. Attendees are household members and gain no additional permissions. Weekly repeats keep London clock times through the selected last-start date. Editing or deleting changes the entire series, including past dates; individual occurrence exceptions are not available yet.</p>
-    <p>Activities survive member/account deletion; attendance and added-by/reviewer links are removed. External sharing and task feeds are not available yet.</p>
+    <p>Activities survive member/account deletion; attendance and added-by/reviewer links are removed.</p>
+    <h2 class="h5">Tasks &amp; personal lists</h2>
+    <p>Adults manage shared household lists and tasks. Children can complete/reopen only shared tasks assigned to them. All members can manage their own personal lists; a child's designated guardian can also view their personal lists within this household, but cannot change them. Adult personal lists are creator-only, even for household owners.</p>
+    <p>List privacy is fixed at creation and tasks cannot move lists. Personal lists/tasks are deleted on member/account departure; shared work remains with assignments and attribution detached. Incomplete dated tasks appear in each authorised viewer's calendar; completion removes them and reopening restores them. Today/overdue filters use the London date.</p>
+    <p>Rewards, recurring tasks and external sharing are not available yet.</p>
     <a class="btn btn-primary" href="{{ url_for('household.calendar') }}">Open calendar</a>
     <a class="btn btn-outline-primary" href="{{ url_for('household.meal_planner') }}">Open meal planner</a>
     <a class="btn btn-outline-primary" href="{{ url_for('household.activity_planner') }}">Open activity planner</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.tasks') }}">Open tasks</a>
 </div></section>
 {% endblock %}

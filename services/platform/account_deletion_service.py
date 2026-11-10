@@ -15,6 +15,7 @@ from models import (
 from models.family import HouseholdMembership
 from models.calendar_event import CalendarEvent
 from models.activities import ActivityAttendee
+from models.household_tasks import HouseholdTask, TaskList
 from models.expense_calendar import ExpenseCalendarEntry
 from models.passkeys import PasskeyChallenge, UserPasskey
 from models.settings import Settings
@@ -43,6 +44,7 @@ DOMAIN_CHILDREN = (
     (ExpenseCalendarEntry, Expense, 'expense_id'),
 )
 DELETE_ORDER = (
+    HouseholdTask, TaskList,
     ActivityAttendee,
     CalendarEvent,
     ExpenseCalendarEntry, PlanItem, Trip, TripSchedule, TripTemplate, FuelRecord, LoanTermChange, LoanPayment,
@@ -107,6 +109,20 @@ class AccountDeletionService:
             HouseholdMembership.user_id == user.id,
         ))
         plan[HouseholdMembership.__table__] = dict(memberships.all())
+        plan[TaskList.__table__] = dict(db.session.execute(select(
+            TaskList.id, TaskList.family_id,
+        ).where(
+            TaskList.creator_membership_id.in_(plan[HouseholdMembership.__table__]),
+            TaskList.visibility == 'personal',
+        )).all())
+        task_rows = db.session.execute(select(
+            HouseholdTask.id, HouseholdTask.family_id, HouseholdTask.list_id,
+        ).where(HouseholdTask.list_id.in_(plan[TaskList.__table__]))).all()
+        plan[HouseholdTask.__table__] = {}
+        for task_id, family_id, list_id in task_rows:
+            if family_id != plan[TaskList.__table__][list_id]:
+                raise ValueError('Linked household data is inconsistent. Contact the service operator before deletion.')
+            plan[HouseholdTask.__table__][task_id] = family_id
         plan[ActivityAttendee.__table__] = dict(db.session.execute(select(
             ActivityAttendee.id, ActivityAttendee.family_id,
         ).where(

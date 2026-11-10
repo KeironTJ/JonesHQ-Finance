@@ -127,6 +127,26 @@ account-owned records are not household financial data.
   lookup indexes. Household deletion removes attendees before activities and
   memberships. Activities do not create duplicate `calendar_events`.
 
+## Household Tasks
+
+- `task_lists` carries explicit `family_id`, title, allowlisted icon/colour,
+  immutable `personal`/`shared` visibility and a nullable creator-membership FK.
+  Personal visibility is creator-only, plus a child's designated guardian within
+  the same household. Shared lists survive creator departure; personal lists
+  are removed by the membership/account deletion services.
+- `household_tasks` carries explicit `family_id`, a required list FK, title,
+  notes, checked priority (`low`/`medium`/`high`/`urgent`), optional London due
+  date/time, completion flag and UTC completion timestamp. A due time requires a
+  date; completed rows require a timestamp, reopened rows clear completion metadata.
+- Creator, assignee and completer reference household memberships with `SET NULL`.
+  The list FK uses `CASCADE`. Services explicitly delete personal tasks before
+  lists and detach links from surviving shared work. Completion dates are retained
+  if the completer leaves. The tenancy guard checks list and membership references.
+- Scoped helpers apply list visibility to tasks; no `owner_id` is needed on
+  either table. Migration `b16c2e8a345f` creates only these two tables, named CHECK
+  constraints and lookup indexes. Calendar feeds read incomplete dated tasks
+  directly; rewards, recurrence and task movement are not implemented.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)

@@ -56,13 +56,18 @@
                 <i class="bi bi-people" aria-hidden="true"></i> {% if not occurrence.activity.all_day %}{{ calendar_service.local_time(occurrence.starts_at).strftime('%H:%M') }} {% endif %}{{ occurrence.activity.title }}
             </a>
             {% endfor %}
+            {% for task in task_days[day] %}
+            <a class="calendar-event" href="{{ url_for('household.task', task_id=task.id) }}" title="Task &middot; {{ 'Shared with household' if task.task_list.visibility == 'shared' else 'Personal list' }}">
+                <i class="bi bi-list-check" aria-hidden="true"></i> {% if task.due_time %}{{ task.due_time.strftime('%H:%M') }} {% endif %}{{ task.title }}
+            </a>
+            {% endfor %}
         </div>
         {% endfor %}{% endfor %}
     </div>
 </div></section>
 {% else %}
 {% set found = namespace(value=false) %}
-{% for day, events in days.items() %}{% if day.month == month.month and (events or meal_days[day] or activity_days[day]) %}
+{% for day, events in days.items() %}{% if day.month == month.month and (events or meal_days[day] or activity_days[day] or task_days[day]) %}
 {% set found.value = true %}
 <section class="card mb-3"><div class="card-body">
     <h3 class="h5">{{ day.strftime('%A %d %B') }}</h3>
@@ -85,6 +90,13 @@
             <a href="{{ url_for('household.activity', activity_id=occurrence.activity.id) }}">{{ occurrence.activity.title }}</a>
             <span class="text-muted">{{ 'All day' if occurrence.activity.all_day else calendar_service.local_time(occurrence.starts_at).strftime('%H:%M %Z') }}</span>
             <div class="small text-muted">Activity &middot; Shared with household</div>
+        </li>
+    {% endfor %}
+    {% for task in task_days[day] %}
+        <li class="py-2">
+            <a href="{{ url_for('household.task', task_id=task.id) }}">{{ task.title }}</a>
+            {% if task.due_time %}<span class="text-muted">{{ task.due_time.strftime('%H:%M') }} Europe/London</span>{% endif %}
+            <div class="small text-muted">Task &middot; {{ 'Shared with household' if task.task_list.visibility == 'shared' else 'Personal list' }}</div>
         </li>
     {% endfor %}
     </ul>
