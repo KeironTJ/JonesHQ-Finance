@@ -1,61 +1,78 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% from 'shared/_planner_navigation.html' import planner_navigation %}
 {% block title %}Activity planner{% endblock %}
 {% block extra_css %}
 <style>
-.activity-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .25rem; }
+.activity-month-scroll { overflow-x: auto; padding: .25rem; }
+.activity-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .4rem; min-width: 56rem; }
 .activity-day { min-width: 0; min-height: 8rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-surface); }
 .activity-day.today { border: 2px solid var(--brand); }
 .activity-day.outside { background: var(--bg-surface-2); }
-.activity-link { overflow-wrap: anywhere; }
+.activity-link { overflow-wrap: anywhere; font-weight: 600; }
 .activity-add { min-height: 44px; min-width: 44px; }
+.activity-week-row { display: grid; grid-template-columns: 10rem minmax(0, 1fr); margin-bottom: .75rem; }
+.activity-week-date { padding: 1.25rem; background: var(--bg-surface-2); border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
+.activity-week-content { min-width: 0; padding: 1rem 1.25rem; }
+.activity-week-today { border-color: var(--brand); }
+.activity-entry + .activity-entry { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--border-color); }
+.activity-day-action { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; font-size: .85rem; }
 @media (max-width: 767px) {
-    .activity-day { padding: .2rem; font-size: .75rem; }
-    .activity-add { min-width: 0; width: 100%; padding: .25rem; }
+    .activity-week-row { grid-template-columns: minmax(0, 1fr); }
+    .activity-week-date { border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: .85rem 1rem; }
+    .activity-week-content { padding: 1rem; }
 }
 </style>
 {% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-    <div><h1>Activity planner</h1><p class="text-muted mb-0">Household activities in Europe/London. Adults publish; children suggest for approval.</p></div>
+{% call page_header('Activity planner', 'Make time for days out, clubs and time together. See what is happening and who is coming along.', 'Household Hub') %}
     <a class="btn btn-primary" href="{{ url_for('household.create_activity', date=selected.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addActivityModal" data-activity-date="{{ selected.isoformat() }}">{{ 'Add activity' if can_manage else 'Suggest activity' }}</a>
-</div>
+{% endcall %}
+<p class="text-muted">{{ 'Published activities appear on the household calendar. Children can suggest ideas for an adult to review.' if can_manage else 'Have an idea? Suggest an activity. It stays off the calendar until an adult household member approves it.' }} All times are Europe/London.</p>
 {% if suggestions %}
 <section class="card mb-3"><div class="card-body">
-    <h2 class="h5">{{ 'Suggestions to review' if can_manage else 'Your suggestions' }}</h2>
-    <ul class="mb-0">{% for suggestion in suggestions %}<li><a href="{{ url_for('household.activity', activity_id=suggestion.id, view=view) }}">{{ suggestion.title }}</a> <span class="badge bg-secondary">{{ suggestion.status|title }}</span> <span class="small text-muted">{{ suggestion.starts_on.strftime('%d %b %Y') }}</span></li>{% endfor %}</ul>
+    <h2 class="h5">{{ 'Activity suggestions' if can_manage else 'Your suggestions' }}</h2>
+    <p class="small text-muted">Suggestions are separate from published plans. {{ 'Open a pending suggestion to approve or decline it.' if can_manage else 'Open a suggestion to view its status or revise it.' }}</p>
+    <ul class="list-unstyled mb-0">{% for suggestion in suggestions %}<li class="activity-entry"><a class="activity-link" href="{{ url_for('household.activity', activity_id=suggestion.id, view=view) }}">{{ suggestion.title }}</a> <span class="badge {{ 'bg-warning text-dark' if suggestion.status == 'pending' else 'bg-secondary' }}">{{ 'Awaiting review' if suggestion.status == 'pending' else 'Not approved' }}</span> <span class="d-block small text-muted">{{ suggestion.starts_on.strftime('%d %b %Y') }}</span></li>{% endfor %}</ul>
 </div></section>
 {% endif %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <h2 class="h5 mb-0">{{ selected.strftime('%B %Y') if view == 'month' else first.strftime('%d %b %Y') ~ ' - ' ~ last.strftime('%d %b %Y') }}</h2>
-    <div class="d-flex gap-2 flex-wrap">
-        {% if previous %}<a class="btn btn-outline-secondary" href="{{ url_for('household.activity_planner', **planner_values(previous, view)) }}">Previous {{ view }}</a>{% endif %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('household.activity_planner', view=view) }}">This {{ view }}</a>
-        {% if following %}<a class="btn btn-outline-secondary" href="{{ url_for('household.activity_planner', **planner_values(following, view)) }}">Next {{ view }}</a>{% endif %}
-    </div>
-</div>
-<div class="btn-group mb-3" aria-label="Activity planner view">
-    {% for mode in ['week', 'month'] %}<a class="btn btn-{{ 'primary' if view == mode else 'outline-primary' }}" href="{{ url_for('household.activity_planner', **planner_values(selected, mode)) }}"{% if view == mode %} aria-current="page"{% endif %}>{{ mode|title }}</a>{% endfor %}
-</div>
+{{ planner_navigation(
+    'household.activity_planner', selected, view, view, first, last,
+    url_for('household.activity_planner', **planner_values(previous, view)) if previous else none,
+    url_for('household.activity_planner', **planner_values(following, view)) if following else none,
+    [('week', url_for('household.activity_planner', **planner_values(selected, 'week'))),
+     ('month', url_for('household.activity_planner', **planner_values(selected, 'month')))],
+    'activityPlannerDate'
+) }}
 {% if view == 'month' %}
+<p class="small text-muted" id="activity-month-help">Scroll sideways to see the full week on smaller screens, or choose Week for a day-by-day list.</p>
+<div class="activity-month-scroll" role="region" tabindex="0" aria-label="Monthly activity planner" aria-describedby="activity-month-help">
 <section class="activity-grid" aria-label="{{ selected.strftime('%B %Y') }} activities">
     {% for name in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="text-center fw-bold">{{ name }}</div>{% endfor %}
     {% for day in days %}
     <div class="activity-day{{ ' today' if day == today }}{{ ' outside' if day.month != selected.month }}">
-        <time datetime="{{ day.isoformat() }}">{{ day.day }}</time>
+        <time datetime="{{ day.isoformat() }}"{% if day == today %} aria-current="date"{% endif %}>{{ day.day }}{% if day.month != selected.month %} {{ day.strftime('%b') }}{% endif %}</time>
+        {% if day == today %}<span class="badge bg-primary">Today</span>{% endif %}
         {% if 1900 <= day.year <= 2100 %}<a class="btn btn-outline-secondary btn-sm activity-add" href="{{ url_for('household.create_activity', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addActivityModal" data-activity-date="{{ day.isoformat() }}" aria-label="{{ 'Add' if can_manage else 'Suggest' }} activity on {{ day.isoformat() }}">+</a>{% endif %}
         {% for occurrence in activity_days[day] %}<div class="mt-2">{% include 'household/_activity_occurrence.html' %}</div>{% endfor %}
     </div>
     {% endfor %}
 </section>
+</div>
 {% else %}
-<div class="row g-3">{% for day in days %}
-<div class="col-md-6 col-xl-4"><section class="card h-100"><div class="card-body">
-    <div class="d-flex justify-content-between align-items-center gap-2">
-        <h2 class="h5 mb-0"><time datetime="{{ day.isoformat() }}">{{ day.strftime('%A %d %b') }}</time></h2>
-        {% if 1900 <= day.year <= 2100 %}<a class="btn btn-outline-primary activity-add" href="{{ url_for('household.create_activity', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addActivityModal" data-activity-date="{{ day.isoformat() }}" aria-label="{{ 'Add' if can_manage else 'Suggest' }} activity on {{ day.isoformat() }}">+</a>{% endif %}
+<div class="activity-week" aria-label="Weekly activities">{% for day in days %}
+<section class="card activity-week-row{{ ' activity-week-today' if day == today }}" aria-labelledby="activity-day-{{ day.isoformat() }}">
+    <header class="activity-week-date">
+        <h2 class="h6 mb-0" id="activity-day-{{ day.isoformat() }}"><time datetime="{{ day.isoformat() }}"{% if day == today %} aria-current="date"{% endif %}>{{ day.strftime('%A') }}<span class="d-block text-muted small mt-1">{{ day.strftime('%d %b') }}</span></time></h2>
+        {% if day == today %}<span class="badge bg-primary mt-2">Today</span>{% endif %}
+    </header>
+    <div class="activity-week-content">
+        <ul class="list-unstyled mb-0">
+        {% for occurrence in activity_days[day] %}<li class="activity-entry">{% include 'household/_activity_occurrence.html' %}</li>{% else %}<li class="text-muted small">No activities planned</li>{% endfor %}
+        </ul>
+        {% if 1900 <= day.year <= 2100 %}<a class="activity-day-action mt-1" href="{{ url_for('household.create_activity', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addActivityModal" data-activity-date="{{ day.isoformat() }}" aria-label="{{ 'Add' if can_manage else 'Suggest' }} activity on {{ day.isoformat() }}">+ {{ 'Add activity' if can_manage else 'Suggest activity' }}</a>{% endif %}
     </div>
-    {% for occurrence in activity_days[day] %}<div class="mt-3">{% include 'household/_activity_occurrence.html' %}</div>{% else %}<p class="text-muted mb-0 mt-3">No activities planned</p>{% endfor %}
-</div></section></div>
+</section>
 {% endfor %}</div>
 {% endif %}
 <div class="modal fade" id="addActivityModal" tabindex="-1" aria-labelledby="addActivityHeading" aria-hidden="true">

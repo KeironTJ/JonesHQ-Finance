@@ -1,16 +1,24 @@
 <article class="card reward-job"><div class="card-body">
     <div class="d-flex justify-content-between gap-3"><h3 class="h5 text-break">{{ job.title }}</h3><span class="badge bg-primary align-self-start text-nowrap">{{ job.points }} points</span></div>
     {% if not child_view %}<p>{{ job.member.user.name if job.member else 'Former member' }}</p>{% endif %}
+    {% if job.task and job.task.period_start %}<p class="small text-muted">Repeat interval: {{ job.task.period_start.strftime('%d %b %Y') }} &ndash; {{ job.task.due_date.strftime('%d %b %Y') }}</p>{% endif %}
     {% if job.task and job.task.notes %}<p class="text-break">{{ job.task.notes }}</p>{% endif %}
     {% if job.task and job.task.due_date %}<p class="small text-muted">Planned for {{ job.task.due_date.strftime('%a %d %b') }}{% if job.task.due_time %}, {{ job.task.due_time.strftime('%H:%M') }} London{% endif %}</p>{% endif %}
     {% if job.review_note %}<p class="alert alert-info text-break mb-3">{{ job.review_note }}</p>{% endif %}
     {% if child_view %}
-    <form method="POST" action="{{ url_for('household.reward_action', action='submit-job') }}">
+    {% if job.task and job.task.period_start and job.task.period_start > today %}
+    <p class="text-muted mb-0">Available from {{ job.task.period_start.strftime('%a %d %b') }}.</p>
+    {% else %}
+    {% set needs_claim = job.task and job.task.claim_required and not job.task.claimed_at %}
+    {% if job.task and job.task.claim_required %}<p class="small text-muted">{{ 'Optional: claim your own turn. Other children can still do theirs.' if needs_claim else 'Claimed by you. Ready when you are!' }}</p>{% endif %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='claim-job' if needs_claim else 'submit-job') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="job_id" value="{{ job.id }}">
         {% if return_to|default('') == 'my-day' %}<input type="hidden" name="return_to" value="my-day">{% endif %}
-        <button class="btn btn-primary w-100" type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> I've done it!</button>
+        <button class="btn btn-primary w-100" type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> {{ 'Claim this job' if needs_claim else "I've done it!" }}</button>
     </form>
+    {% endif %}
     {% else %}
+    {% if job.task and job.task.claim_required %}<p class="small text-muted">{{ 'Claimed' if job.task.claimed_at else 'Not claimed yet' }} &middot; optional for this child</p>{% endif %}
     <a class="btn btn-outline-primary" href="{{ url_for('household.task', task_id=job.task_id) }}">View task</a>
     <form method="POST" class="mt-2" action="{{ url_for('household.reward_action', action='review-job') }}" onsubmit="return confirm('Close this job without awarding points?');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="job_id" value="{{ job.id }}"><input type="hidden" name="action" value="close">

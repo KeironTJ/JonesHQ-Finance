@@ -192,6 +192,20 @@ and visible incomplete dated tasks also contribute source-linked items.
   large controls. They see only their own reward jobs, goals, balances, requests
   and point history through scoped helpers; no sibling/guardian visibility
   override applies to reward progress. The catalogue is household-shared.
+- Rewards opens on a reward-focused Overview for adults and children. Personal
+  milestones use lifetime approved-job awards (first job, 5 jobs, 10 jobs and
+  100 earned points); spending and pending reservations do not remove achievements.
+  Milestones are calculated from the ledger, not separate awards or bonus points.
+- The weekly leaderboard is off by default. Any adult with Household Hub
+  access can enable or disable it for the selected household in Setup & approvals.
+  When enabled, children see active household children's names, weekly earned
+  point totals, weekly approved-job counts, ranks and lifetime milestones only.
+  Weeks run Monday-Sunday in Europe/London using the award timestamp, not task
+  due/completion dates; ties share rank (1, 1, 3). Spending never lowers scores.
+  Balances, goals,
+  job details, request history and ledger entries keep their existing privacy.
+  Disabling sharing immediately restores personal-only child progress. Adults
+  can always see the household overview. No cross-household board is available.
 - Adults can add points to an unfinished shared task assigned to an active
   household child, or create a reward job from Rewards (the same shared-task
   domain, not a second chore system). Personal tasks cannot earn points.
@@ -204,7 +218,8 @@ and visible incomplete dated tasks also contribute source-linked items.
 - Current jobs exclude past-due jobs, shown separately under Earlier jobs.
   Approved/closed jobs live in progress history, not an overdue list. Adults can
   reschedule a task or explicitly close a job without points (also completing
-  the task so it leaves the calendar). Nothing repeats or expires automatically.
+  the task so it leaves the calendar). One-off jobs never repeat; recurring jobs
+  follow the interval and missed-task policies below.
 - Points are a household-local ledger, not money. Household row locking
   serializes balance checks and transitions on SQLite/PostgreSQL; database unique
   constraints prevent duplicate awards/reservations/refunds. A request reserves
@@ -219,12 +234,49 @@ and visible incomplete dated tasks also contribute source-linked items.
   unfinished reward job and detaches the task, retaining approved point history.
   Whole-household deletion removes all reward records child-first.
 
+## Recurring chores (implemented)
+
+- Reward job setup can select several active children, either automatically
+  assigning each their own task or offering each an optional claim. These are
+  independent per-child series, not a race for a single shared award. Each
+  child's turn has its own completion, approval, points and missed history.
+  Stopping one child's series does not stop another child's.
+- Optional jobs must be claimed by the eligible child before anyone can submit
+  their task for approval. Claiming is idempotent and awards no points. Repeats
+  require a fresh claim each interval; expired and future intervals cannot be
+  claimed. The selected missed-task policy also applies to unclaimed turns.
+  Adults cannot claim on behalf of a child, and siblings cannot claim each
+  other's turns. All transitions use the household reward lock and scoped queries.
+- Tasks & lists and reward jobs use the same daily/weekly recurrence. Existing
+  tasks remain one-off. Start with today or a future date; daily intervals follow
+  London calendar dates and weekly intervals run Monday-Sunday (due on Sunday).
+  An occurrence cannot be completed before its interval begins.
+- Each interval has its own persistent task and optional reward job, completion,
+  review and ledger award. Pending approval does not block the next interval and
+  can be approved later. Weekly scores use the approval date, not the chore date.
+- Choose the missed-task policy per series: record an unsubmitted interval as
+  not completed with no late points, or retain it for later completion. Nothing is
+  deducted for missed intervals. Submitted work is never silently expired.
+  Past no-late-point submissions can be approved or closed, not sent back.
+- Occurrences through the current interval are materialised when authorised
+  task, reward or calendar views are accessed, under the household reward lock.
+  Refreshing does not duplicate occurrences or award points; a unique series/date
+  constraint is a backstop. Future calendar occurrences are not pre-generated.
+- The original task controls stopping the series. Series details, assignee, points,
+  interval and missed-task policy are fixed to retain agreed history; stop and
+  create a new series to change them. Individual occurrence details can be edited
+  without changing future occurrences. Stopping is final: create a new series
+  to restart. Occurrences cannot be
+  individually deleted/recreated for extra points. Deleting a list removes its
+  tasks while retaining detached reward ledger history. A reward assignee leaving
+  stops future repeats.
+
 ## Future enhancements and external sharing (not implemented)
 
 Cross-household sharing will use invitations to specific items, with acceptance
 and revocation. It must not grant household membership, Finance access or access
 to unrelated records. Children will not administer external sharing.
 
-Behaviour ratings, streaks, achievements, recurring tasks and external sharing are not available. Existing Finance childcare records are unrelated
+Behaviour ratings, streaks, cash/pocket-money rewards and external sharing are not available. Existing Finance childcare records are unrelated
 to managed-child sign-in accounts. The previous JonesHQ hub is a feature
 reference only; its test data, authentication and styling are not being imported.

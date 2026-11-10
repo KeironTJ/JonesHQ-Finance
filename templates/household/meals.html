@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
 {% block title %}Meal library{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-    <div><h1>Meal library</h1><p class="text-muted mb-0">Household recipes and meal ideas. Adults manage meals; managed children can view.</p></div>
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.meal_planner') }}">Back to meal planner</a>
+{% call page_header('Meal library', 'Save household recipes and meal ideas to reuse in your meal planner. Adults manage the library; children can browse.', 'Meal planner') %}
     {% if can_manage %}<a class="btn btn-primary" href="{{ url_for('household.create_meal') }}">Add meal</a>{% endif %}
-</div>
+{% endcall %}
 <div class="d-flex gap-2 flex-wrap mb-3">
-    <a class="btn btn-outline-secondary" href="{{ url_for('household.meal_planner') }}">Weekly planner</a>
     {% for value in ['active', 'archived'] %}<a class="btn btn-{{ 'primary' if status == value else 'outline-primary' }}" href="{{ url_for('household.meals', status=value) }}"{% if status == value %} aria-current="page"{% endif %}>{{ value|title }}</a>{% endfor %}
 </div>
 <div class="row g-3">

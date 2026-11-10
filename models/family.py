@@ -22,6 +22,15 @@ class Family(db.Model):
         default=0,
         server_default='0',
     )
+    setup_progress = db.Column(
+        db.JSON,
+        nullable=False,
+        default=dict,
+        server_default='{}',
+    )
+    rewards_board_enabled = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false(),
+    )
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Relationships

@@ -12,6 +12,7 @@
     if (modal) modal.addEventListener('show.bs.modal', event => {
         const selected = event.relatedTarget?.dataset.mealDate;
         if (selected) document.getElementById('plan_date').value = selected;
+        document.getElementById('plan_slot').value = event.relatedTarget?.dataset.mealSlot || 'dinner';
     });
 })();
 </script>

@@ -1,0 +1,38 @@
+{% macro planner_navigation(endpoint, selected, view, period, first, last, previous_url, next_url, views, input_id, caption=none) -%}
+{% set month_mode = period == 'month' %}
+{% set date_label -%}
+{% if month_mode %}{{ selected.strftime('%B %Y') }}{% else %}{{ first.day }}{% if first.year != last.year %} {{ first.strftime('%b %Y') }}{% elif first.month != last.month %} {{ first.strftime('%b') }}{% endif %} &ndash; {{ last.day }} {{ last.strftime('%b %Y') }}{% endif %}
+{%- endset %}
+<section class="planner-navigation" aria-label="Date and view controls">
+    <div class="planner-period">
+        <div class="planner-arrows">
+            {% if previous_url %}<a class="planner-arrow" href="{{ previous_url }}" aria-label="Previous {{ period }}"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>{% else %}<span class="planner-arrow" aria-hidden="true"></span>{% endif %}
+            {% if next_url %}<a class="planner-arrow" href="{{ next_url }}" aria-label="Next {{ period }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>{% else %}<span class="planner-arrow" aria-hidden="true"></span>{% endif %}
+        </div>
+        <div class="planner-period-label">
+            <details class="planner-date-menu">
+                <summary title="Choose another {{ period }}">
+                    <h2>{{ date_label }}</h2>
+                    <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                    <span class="visually-hidden">Choose another {{ period }}</span>
+                </summary>
+                <form method="GET" action="{{ url_for(endpoint) }}" class="planner-date-form">
+                    <input type="hidden" name="view" value="{{ view }}">
+                    <label class="form-label" for="{{ input_id }}">{{ 'Choose a month' if month_mode else 'Choose any day in the week' }}</label>
+                    <div class="planner-date-fields">
+                        <input class="form-control" id="{{ input_id }}" type="{{ 'month' if month_mode else 'date' }}" name="{{ 'month' if month_mode else 'week' }}" value="{{ selected.strftime('%Y-%m') if month_mode else selected.isoformat() }}" min="{{ '1900-01' if month_mode else '1900-01-01' }}" max="{{ '2100-12' if month_mode else '2100-12-31' }}" required>
+                        <button class="btn btn-primary" type="submit">Go<span class="visually-hidden"> to {{ period }}</span></button>
+                    </div>
+                </form>
+            </details>
+            {% if caption %}<p class="planner-caption">{{ caption }}</p>{% endif %}
+        </div>
+    </div>
+    <div class="planner-view-controls">
+        <a class="planner-today" href="{{ url_for(endpoint, view=view) }}">Today</a>
+        {% if views %}<div class="planner-views" aria-label="Planner view">
+            {% for mode, href in views %}<a href="{{ href }}"{% if view == mode %} aria-current="page"{% endif %}>{{ mode|title }}</a>{% endfor %}
+        </div>{% endif %}
+    </div>
+</section>
+{%- endmacro %}

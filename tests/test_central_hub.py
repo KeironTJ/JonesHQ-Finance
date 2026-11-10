@@ -32,6 +32,20 @@ def test_root_opens_hub_and_finance_remains_separate(app, user):
     assert 'href="/finance/transactions"' in finance
 
 
+def test_central_hub_explains_family_hq_and_makes_available_cards_clickable(app, user):
+    client = app.test_client()
+    login_client(client, user.id)
+
+    html = client.get('/central/').get_data(as_text=True)
+
+    assert 'A clearer view of money and home life.' in html
+    assert 'Family HQ brings household finances and everyday planning together.' in html
+    assert 'Choose where to start' in html
+    assert 'class="stretched-link text-decoration-none" href="/finance/dashboard"' in html
+    assert 'class="stretched-link text-decoration-none" href="/household/"' in html
+    assert 'class="btn btn-primary" href="/finance/dashboard"' not in html
+
+
 @pytest.mark.parametrize('path', ['/central/', '/central/preferences', '/central/account/security', '/central/family/'])
 def test_shared_pages_have_central_navigation(app, user, path):
     client = app.test_client()
@@ -67,6 +81,7 @@ def test_detached_account_hub_has_no_finance_entry(app, user):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert 'Household required' in html
+    assert 'class="stretched-link text-decoration-none"' not in html
     assert 'href="/finance/dashboard"' not in html
     assert 'href="/central/family/"' not in html
 

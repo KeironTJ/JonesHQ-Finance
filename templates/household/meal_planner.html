@@ -1,47 +1,59 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% from 'shared/_planner_navigation.html' import planner_navigation %}
 {% block title %}Meal planner{% endblock %}
 {% block extra_css %}
 <style>
-.meal-slot { border-top: 1px solid var(--border-color); padding-top: .75rem; margin-top: .75rem; }
-.meal-plan-link { overflow-wrap: anywhere; }
-.meal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .25rem; }
+.meal-week-row { display: grid; grid-template-columns: 9rem repeat(3, minmax(0, 1fr)); margin-bottom: .75rem; }
+.meal-week-date { padding: 1.25rem; background: var(--bg-surface-2); border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
+.meal-slot { min-width: 0; padding: 1.25rem; border-left: 1px solid var(--border-color); }
+.meal-slot-heading { font-size: .75rem; color: var(--text-muted); letter-spacing: .04em; margin-bottom: .75rem; }
+.meal-plan-link { overflow-wrap: anywhere; font-weight: 600; }
+.meal-slot-add { display: inline-flex; align-items: center; min-height: 44px; font-size: .85rem; text-decoration: none; }
+.meal-month-scroll { overflow-x: auto; padding: .25rem; }
+.meal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .4rem; min-width: 49rem; }
 .meal-day { min-width: 0; min-height: 8rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-surface); }
 .meal-day.today { border: 2px solid var(--brand); }
 .meal-day.outside { background: var(--bg-surface-2); }
 .meal-day a { overflow-wrap: anywhere; }
 .meal-day-add { min-height: 44px; min-width: 44px; }
-@media (max-width: 767px) {
-    .meal-day { padding: .2rem; font-size: .75rem; }
-    .meal-month { gap: .15rem; }
-    .meal-day-add { min-width: 0; width: 100%; padding: .25rem; }
+.meal-week-today { border-color: var(--brand); }
+@media (max-width: 991px) {
+    .meal-week-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .meal-week-date { grid-column: 1 / -1; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: .85rem 1rem; }
+    .meal-slot { padding: 1rem; }
+    .meal-slot:first-of-type { border-left: 0; }
+}
+@media (max-width: 575px) {
+    .meal-week-row { grid-template-columns: minmax(0, 1fr); }
+    .meal-slot { border-left: 0; border-top: 1px solid var(--border-color); }
+    .meal-slot-heading { margin-bottom: .4rem; }
 }
 </style>
 {% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-    <div><h1>Meal planner</h1><p class="text-muted mb-0">Plan straight onto a date. Multiple meals per slot; the library is optional. Adults manage, children view.</p></div>
-    <div class="d-flex gap-2 flex-wrap">
+{% call page_header('Meal planner', 'Decide what is on the menu together. Add your own meals or choose a library recipe; every plan is shared with your household.', 'Household Hub') %}
         <a class="btn btn-outline-primary" href="{{ url_for('household.meals') }}">Meal library</a>
         {% if can_manage %}<a class="btn btn-primary" href="{{ url_for('household.add_planned_meal', date=selected.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addMealModal" data-meal-date="{{ selected.isoformat() }}">Add meal</a>{% endif %}
-    </div>
-</div>
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <h2 class="h5 mb-0">{{ selected.strftime('%B %Y') if view == 'month' else first.strftime('%d %b %Y') ~ ' - ' ~ last.strftime('%d %b %Y') }}</h2>
-    <div class="d-flex gap-2 flex-wrap">
-        {% if previous %}<a class="btn btn-outline-secondary" href="{{ url_for('household.meal_planner', **meal_service.planner_values(previous, view)) }}">Previous {{ view }}</a>{% endif %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('household.meal_planner', view=view) }}">This {{ view }}</a>
-        {% if following %}<a class="btn btn-outline-secondary" href="{{ url_for('household.meal_planner', **meal_service.planner_values(following, view)) }}">Next {{ view }}</a>{% endif %}
-    </div>
-</div>
-<div class="btn-group mb-3" aria-label="Meal planner view">
-    {% for mode in ['week', 'month'] %}<a class="btn btn-{{ 'primary' if view == mode else 'outline-primary' }}" href="{{ url_for('household.meal_planner', **meal_service.planner_values(selected, mode)) }}"{% if view == mode %} aria-current="page"{% endif %}>{{ mode|title }}</a>{% endfor %}
-</div>
+{% endcall %}
+<p class="text-muted">{{ 'Choose a breakfast, lunch or dinner slot to add a meal. You can plan more than one meal per slot.' if can_manage else 'See what is on the menu. An adult household member can add or change meals.' }}</p>
+{{ planner_navigation(
+    'household.meal_planner', selected, view, view, first, last,
+    url_for('household.meal_planner', **meal_service.planner_values(previous, view)) if previous else none,
+    url_for('household.meal_planner', **meal_service.planner_values(following, view)) if following else none,
+    [('week', url_for('household.meal_planner', **meal_service.planner_values(selected, 'week'))),
+     ('month', url_for('household.meal_planner', **meal_service.planner_values(selected, 'month')))],
+    'mealPlannerDate', planned_days ~ ' of ' ~ period_days ~ ' days planned'
+) }}
 {% if view == 'month' %}
+<p class="small text-muted" id="meal-month-help">Scroll sideways to see the full week on smaller screens, or choose Week for day cards.</p>
+<div class="meal-month-scroll" role="region" tabindex="0" aria-label="Monthly meal planner" aria-describedby="meal-month-help">
 <section class="meal-month" aria-label="{{ selected.strftime('%B %Y') }} meals">
     {% for name in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="text-center fw-bold">{{ name }}</div>{% endfor %}
     {% for day in days %}
     <div class="meal-day{{ ' today' if day == today }}{{ ' outside' if day.month != selected.month }}">
-        <time datetime="{{ day.isoformat() }}">{{ day.day }}</time>
+        <time datetime="{{ day.isoformat() }}"{% if day == today %} aria-current="date"{% endif %}>{{ day.day }}{% if day.month != selected.month %} {{ day.strftime('%b') }}{% endif %}</time>
+        {% if day == today %}<span class="badge bg-primary">Today</span>{% endif %}
         {% if can_manage and 1900 <= day.year <= 2100 %}<a class="btn btn-outline-secondary btn-sm meal-day-add" href="{{ url_for('household.add_planned_meal', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addMealModal" data-meal-date="{{ day.isoformat() }}" aria-label="Add meal on {{ day.isoformat() }}">+</a>{% endif %}
         {% for slot, label in slots.items() %}{% for entry in plans_by_slot[(day, slot)] %}
         <a class="d-block mt-2 meal-plan-link" href="{{ url_for('household.planned_meal', plan_id=entry.id, view=view) }}">{{ label }}: {{ entry.title }}</a>
@@ -49,25 +61,29 @@
     </div>
     {% endfor %}
 </section>
+</div>
 {% else %}
-<div class="row g-3">
+<div class="meal-week" aria-label="Weekly meals">
 {% for day in days %}
-<div class="col-md-6 col-xl-4"><section class="card h-100"><div class="card-body">
-    <div class="d-flex justify-content-between align-items-center gap-2">
-        <h2 class="h5 mb-0"><time datetime="{{ day.isoformat() }}">{{ day.strftime('%A %d %b') }}</time></h2>
-        {% if can_manage and 1900 <= day.year <= 2100 %}<a class="btn btn-outline-primary meal-day-add" href="{{ url_for('household.add_planned_meal', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addMealModal" data-meal-date="{{ day.isoformat() }}" aria-label="Add meal on {{ day.isoformat() }}">+</a>{% endif %}
-    </div>
+<section class="card meal-week-row{{ ' meal-week-today' if day == today }}" aria-labelledby="meal-day-{{ day.isoformat() }}">
+    <header class="meal-week-date">
+        <h2 class="h6 mb-0" id="meal-day-{{ day.isoformat() }}"><time datetime="{{ day.isoformat() }}"{% if day == today %} aria-current="date"{% endif %}>{{ day.strftime('%A') }}<span class="d-block text-muted small mt-1">{{ day.strftime('%d %b') }}</span></time></h2>
+        {% if day == today %}<span class="badge bg-primary mt-2">Today</span>{% endif %}
+    </header>
     {% for slot, label in slots.items() %}
     <div class="meal-slot">
-        <h3 class="h6">{{ label }}</h3>
+        <h3 class="meal-slot-heading">{{ label }}</h3>
         <ul class="list-unstyled mb-0">
         {% for entry in plans_by_slot[(day, slot)] %}
         <li class="mb-2"><a class="meal-plan-link" href="{{ url_for('household.planned_meal', plan_id=entry.id, view=view) }}">{{ entry.title }}</a>{% if entry.meal and entry.meal.is_archived %} <span class="badge bg-secondary">Archived meal</span>{% endif %}{% if entry.description %}<div class="small text-muted text-break">{{ entry.description|truncate(100) }}</div>{% endif %}</li>
-        {% else %}<li class="text-muted small">Nothing planned</li>{% endfor %}
+        {% else %}{% if not can_manage %}<li class="text-muted small">Nothing planned</li>{% endif %}{% endfor %}
         </ul>
+        {% if can_manage and 1900 <= day.year <= 2100 %}
+        <a class="meal-slot-add" href="{{ url_for('household.add_planned_meal', date=day.isoformat(), slot=slot, view=view) }}" data-bs-toggle="modal" data-bs-target="#addMealModal" data-meal-date="{{ day.isoformat() }}" data-meal-slot="{{ slot }}" aria-label="Add {{ label|lower }} on {{ day.isoformat() }}"><i class="bi bi-plus me-1" aria-hidden="true"></i>{{ 'Add another' if plans_by_slot[(day, slot)] else 'Plan ' ~ label|lower }}</a>
+        {% endif %}
     </div>
     {% endfor %}
-</div></section></div>
+</section>
 {% endfor %}
 </div>
 {% endif %}

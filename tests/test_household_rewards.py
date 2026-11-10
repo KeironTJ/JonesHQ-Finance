@@ -1,6 +1,6 @@
 import importlib.util
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Barrier
 from unittest.mock import Mock
@@ -85,6 +85,202 @@ def earn(app, adult, child):
     return job
 
 
+def test_reward_overview_is_default_and_reward_focused(app, user, people):
+    adult, child, _ = people
+    reward = reward_for(app, adult)
+    act(app, child, 'goal', reward_id=reward.id)
+    html = client_for(app, child).get('/household/rewards').get_data(as_text=True)
+    assert 'Your reward journey' in html and 'Saving for Movie night' in html
+    assert "Look how far you've come" in html
+    assert 'Something to aim for' in html
+    assert 'Weekly household leaderboard' not in html
+    assert 'Adult setup' not in html
+    html = client_for(app, adult).get('/household/rewards').get_data(as_text=True)
+    assert 'Little efforts. Proud moments.' in html
+    assert "This week's helping hands" in html
+    assert 'Sharing with children is off.' in html
+    assert 'id="job_title"' not in html
+
+
+def test_board_is_opt_in_and_revocable_without_exposing_private_details(app, user, family, people):
+    adult, child, sibling = people
+    earn(app, adult, sibling)
+    reward = reward_for(app, adult)
+    act(app, sibling, 'goal', reward_id=reward.id)
+    act(app, sibling, 'request', reward_id=reward.id, request_key=str(uuid4()))
+    assert not family.rewards_board_enabled
+    with app.test_request_context():
+        login_user(child)
+        context = RewardService.page_data('home')
+        assert [card['name'] for card in context['celebration']] == ['Child']
+    assert act(app, adult, 'set-board', enabled='yes', family_id='999').status_code == 302
+    assert family.rewards_board_enabled
+    with app.test_request_context():
+        login_user(child)
+        context = RewardService.page_data('home')
+        sibling_card = next(card for card in context['celebration'] if card['name'] == 'Sibling')
+        assert sibling_card['earned'] == 20 and sibling_card['jobs'] == 1
+        assert set(sibling_card) == {
+            'name', 'is_you', 'earned', 'jobs', 'milestones', 'week_points', 'week_jobs', 'rank',
+        }
+        assert context['balance'] == 0 and context['goal'] is None
+        assert context['entries'] == [] and context['requests'] == []
+        assert family_query(RewardJob).count() == 0
+    html = client_for(app, child).get('/household/rewards').get_data(as_text=True)
+    assert 'Weekly household leaderboard' in html and 'Sibling' in html
+    assert 'Feed the cat' not in html
+    assert act(app, adult, 'set-board', enabled='no').status_code == 302
+    with app.test_request_context():
+        login_user(child)
+        assert [card['name'] for card in RewardService.page_data('home')['celebration']] == ['Child']
+
+
+def test_milestones_use_all_earned_points_not_spendable_balance_or_history_limit(app, user, people):
+    _, child, _ = people
+    job = earn(app, user, child)
+    member = child.get_active_household_membership()
+    # Multiple historical awards exercise the aggregate independently of the 100-row UI history.
+    for index in range(100):
+        db.session.add(RewardPointEntry(
+            family_id=member.family_id, membership_id=member.id, kind='earned',
+            points=1, description=f'Historical approved job {index}', created_at=datetime.now(),
+        ))
+    db.session.commit()
+    reward = reward_for(app, user, cost=100)
+    act(app, child, 'request', reward_id=reward.id, request_key=str(uuid4()))
+    with app.test_request_context():
+        login_user(child)
+        context = RewardService.page_data('home')
+        assert context['balance'] == 20
+        assert context['personal']['earned'] == 120
+        assert context['personal']['jobs'] == 101
+        assert all(milestone[2] for milestone in context['personal']['milestones'])
+        assert len(context['entries']) == 100
+    assert act(app, user, 'review-job', job_id=job.id, action='approve').status_code == 302
+    assert RewardPointEntry.query.filter_by(job_id=job.id).count() == 1
+
+
+def test_board_only_shows_active_children_of_selected_household(app, user, family, people):
+    adult, child, sibling = people
+    earn(app, adult, sibling)
+    sibling.is_active = False
+    other_family = Family(name='Other household', rewards_board_enabled=True)
+    db.session.add(other_family)
+    db.session.flush()
+    outsider = User(family_id=other_family.id, role='member', name='Never on this board',
+                    email='other-child@example.com', password_hash=user.password_hash,
+                    account_type='child', guardian_id=user.id)
+    db.session.add(outsider)
+    db.session.commit()
+    act(app, adult, 'set-board', enabled='yes')
+    with app.test_request_context():
+        login_user(child)
+        cards = RewardService.page_data('home')['celebration']
+        assert [card['name'] for card in cards] == ['Child']
+
+
+def test_board_setting_validation_permissions_csrf_and_rollback(app, user, family, people, monkeypatch):
+    adult, child, _ = people
+    assert act(app, child, 'set-board', enabled='yes').status_code == 403
+    child.role = 'admin'
+    child.get_active_household_membership().role = 'admin'
+    db.session.commit()
+    assert act(app, child, 'set-board', enabled='yes').status_code == 403
+    response = act(app, adult, 'set-board', enabled='maybe')
+    assert response.status_code == 200 and b'alert-danger' in response.data
+    assert not family.rewards_board_enabled
+    with monkeypatch.context() as patch:
+        patch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
+        g.pop('csrf_valid', None)
+        assert act(app, adult, 'set-board', enabled='yes').status_code == 400
+    client = client_for(app, adult)
+    with monkeypatch.context() as patch:
+        patch.setattr(db.session, 'commit', Mock(side_effect=OperationalError('test', {}, RuntimeError('failed'))))
+        response = client.post('/household/rewards/actions/set-board', data={'enabled': 'yes'})
+        assert response.status_code == 200 and b'No changes were saved' in response.data
+    db.session.expire_all()
+    assert not family.rewards_board_enabled
+    adult.get_active_household_membership().allowed_modules = []
+    db.session.commit()
+    assert act(app, adult, 'set-board', enabled='yes').status_code == 403
+
+
+@pytest.mark.parametrize('now, start, end', [
+    (datetime(2026, 3, 29, 12, tzinfo=timezone.utc), datetime(2026, 3, 23), datetime(2026, 3, 29, 23)),
+    (datetime(2026, 10, 25, 12, tzinfo=timezone.utc), datetime(2026, 10, 18, 23), datetime(2026, 10, 26)),
+    (datetime(2026, 11, 9, 0, tzinfo=timezone.utc), datetime(2026, 11, 9), datetime(2026, 11, 16)),
+])
+def test_weekly_leaderboard_london_boundaries_ties_and_spending(app, user, family, people, monkeypatch, now, start, end):
+    adult, child, sibling = people
+    member = child.get_active_household_membership()
+    sibling_member = sibling.get_active_household_membership()
+    family.rewards_board_enabled = True
+    for who, points, timestamp in [
+        (member, 500, start - timedelta(seconds=1)),
+        (member, 10, start),
+        (member, 10, end - timedelta(seconds=1)),
+        (member, 500, end),
+        (sibling_member, 20, start),
+    ]:
+        db.session.add(RewardPointEntry(
+            family_id=family.id, membership_id=who.id, kind='earned', points=points,
+            description='Approved job', created_at=timestamp,
+        ))
+    db.session.add(RewardPointEntry(
+        family_id=family.id, membership_id=member.id, kind='reserved', points=-5,
+        description='Reward reservation', created_at=start,
+    ))
+    db.session.commit()
+    clock = Mock(wraps=datetime)
+    clock.now.return_value = now.astimezone(LONDON)
+    monkeypatch.setattr('services.household.reward_service.datetime', clock)
+    with app.test_request_context():
+        login_user(child)
+        context = RewardService.page_data('home')
+        cards = context['celebration']
+        assert [card['week_points'] for card in cards] == [20, 20]
+        assert [card['rank'] for card in cards] == [1, 1]
+        assert [card['week_jobs'] for card in cards] == [2, 1]
+        assert context['board_week_start'].weekday() == 0
+        assert context['board_week_end'].weekday() == 6
+        assert cards[0]['earned'] == 1020
+
+
+def test_leaderboard_rank_order_uses_earned_weekly_points_not_jobs(app, user, family, people):
+    adult, child, sibling = people
+    earn(app, adult, child)
+    earn(app, adult, sibling)
+    earn(app, adult, sibling)
+    family.rewards_board_enabled = True
+    db.session.commit()
+    with app.test_request_context():
+        login_user(child)
+        cards = RewardService.page_data('home')['celebration']
+        assert [card['name'] for card in cards] == ['Sibling', 'Child']
+        assert [card['rank'] for card in cards] == [1, 2]
+        assert [card['week_points'] for card in cards] == [40, 20]
+
+
+def test_board_migration_defaults_off_and_round_trips(app):
+    path = Path(app.root_path) / 'migrations' / 'versions' / 'a72d09c4e816_add_rewards_celebration_board.py'
+    spec = importlib.util.spec_from_file_location('reward_board_schema', path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = sa.create_engine('sqlite://')
+    with engine.begin() as connection:
+        connection.execute(sa.text('CREATE TABLE families (id INTEGER PRIMARY KEY)'))
+        connection.execute(sa.text('INSERT INTO families VALUES (1)'))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+            assert connection.execute(sa.text('SELECT rewards_board_enabled FROM families')).scalar_one() == 0
+            connection.execute(sa.text('INSERT INTO families (id) VALUES (2)'))
+            assert connection.execute(sa.text('SELECT SUM(rewards_board_enabled) FROM families')).scalar_one() == 0
+            migration.downgrade()
+            assert 'rewards_board_enabled' not in {col['name'] for col in sa.inspect(connection).get_columns('families')}
+            migration.upgrade()
+    engine.dispose()
+
+
 def test_empty_pages_do_not_mutate_and_child_has_simple_journey(app, user, people):
     adult, child, _ = people
     for actor in (adult, child):
@@ -106,7 +302,7 @@ def test_job_uses_shared_task_and_child_submission_needs_adult_approval(app, use
     adult, child, sibling = people
     job = job_for(app, adult, child)
     assert job.task.task_list.visibility == 'shared'
-    assert f'<option value="{job.task.list_id}" selected>'.encode() in client_for(app, adult).get('/household/rewards').data
+    assert f'<option value="{job.task.list_id}" selected>'.encode() in client_for(app, adult).get('/household/rewards?view=manage').data
     assert job.family_id == family.id and job.task.family_id == family.id
     assert job.task.creator_membership_id == adult.get_active_household_membership().id
     assert act(app, sibling, 'submit-job', job_id=job.id).status_code == 404
@@ -144,7 +340,7 @@ def test_send_back_requires_note_then_child_can_try_again_and_close_clears_old_w
     _, child, _ = people
     yesterday = (datetime.now(LONDON).date() - timedelta(days=1)).isoformat()
     job = job_for(app, user, child, due_date=yesterday)
-    response = client_for(app, child).get('/household/rewards')
+    response = client_for(app, child).get('/household/rewards?view=jobs')
     assert b'Earlier jobs (1)' in response.data and b'Overdue' not in response.data
     act(app, child, 'submit-job', job_id=job.id)
     response = act(app, user, 'review-job', job_id=job.id, action='return')
@@ -152,7 +348,7 @@ def test_send_back_requires_note_then_child_can_try_again_and_close_clears_old_w
     assert job.state == 'submitted'
     act(app, user, 'review-job', job_id=job.id, action='return', note='Please fill the water bowl too')
     assert job.state == 'open' and not job.task.completed
-    assert b'Please fill the water bowl too' in client_for(app, child).get('/household/rewards').data
+    assert b'Please fill the water bowl too' in client_for(app, child).get('/household/rewards?view=jobs').data
     act(app, user, 'review-job', job_id=job.id, action='close')
     assert job.state == 'closed' and job.task.completed
     assert b'Feed the cat' not in client_for(app, child).get('/household/rewards').data
@@ -315,7 +511,7 @@ def test_active_household_scoping_foreign_ids_and_write_guard(app, user, family,
     assert act(app, child, 'request', reward_id=foreign_reward.id, request_key=str(uuid4())).status_code == 404
     assert act(app, child, 'goal', reward_id=foreign_reward.id).status_code == 404
     assert b'SECRET' not in client_for(app, user).get('/household/rewards?view=progress').data
-    assert b'active assignee' in act(app, adult, 'create-job', title='Try', reward_points='10',
+    assert b'active child' in act(app, adult, 'create-job', title='Try', reward_points='10',
                                 assigned_membership_id=outsider.get_active_household_membership().id).data
     with app.test_request_context():
         login_user(user)

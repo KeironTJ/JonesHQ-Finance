@@ -128,12 +128,51 @@ def test_central_hub_modules_come_from_platform_registry(app, user):
     client = app.test_client()
     login_client(client, user.id)
     html = client.get('/central/').get_data(as_text=True)
-    assert 'Your modules' in html
+    assert 'Choose where to start' in html
     assert 'Open Finance' in html
     assert 'Household Hub' in html
     assert 'Organise household life with shared meals, activities and tasks.' in html
     assert 'Open Household Hub' in html
     assert 'No features or records from the other application have been imported.' not in html
+
+
+@pytest.mark.parametrize(
+    'role, expected_text',
+    [('admin', 'Manage member access'), ('member', 'Ask your household owner to enable this module for you.')],
+)
+def test_central_hub_explains_disabled_module_access(app, user, role, expected_text):
+    user.role = role
+    membership = user.get_active_household_membership()
+    membership.role = role
+    membership.allowed_modules = ['finance']
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+
+    html = client.get('/central/').get_data(as_text=True)
+
+    assert 'Access not enabled' in html
+    assert expected_text in html
+    if role == 'admin':
+        assert 'href="/central/settings/access"' in html
+    else:
+        assert 'href="/central/settings/access"' not in html
+
+
+def test_household_setup_highlights_existing_setup_state(app, user):
+    client = app.test_client()
+    login_client(client, user.id)
+
+    response = client.get('/central/setup')
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'A practical guide to getting your household started' in html
+    assert 'badge bg-success">Complete</span>' in html
+    assert 'badge bg-secondary">Optional</span>' in html
+    assert 'role="progressbar" aria-label="Household setup progress"' in html
+    assert 'name="action" value="review"' in html
+    assert 'name="action" value="skip"' in html
 
 
 def test_module_navigation_names_cross_workspace_transitions(app, user):

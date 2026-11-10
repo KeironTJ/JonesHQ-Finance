@@ -58,6 +58,26 @@ def household_setup():
     return render_template('central/setup.html', **HouseholdSetupService.page_data())
 
 
+@central_bp.route('/setup/progress', methods=['POST'])
+@login_required
+def update_household_setup_progress():
+    from services.household.setup_service import HouseholdSetupService
+    step = request.form.get('step', '')
+    try:
+        HouseholdSetupService.update_progress(dict(request.form))
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid household setup progress.', 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to update household setup progress')
+        flash('Unable to save household setup progress. No changes were saved.', 'danger')
+    else:
+        flash('Household setup progress updated.', 'success')
+    anchor = f'step-{step}' if step in ('people', 'access', 'jobs', 'rewards') else None
+    return redirect(url_for('central.household_setup', _anchor=anchor))
+
+
 @central_bp.route('/settings/children/new')
 @login_required
 def new_managed_child():

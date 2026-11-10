@@ -61,6 +61,132 @@ def people(family, user):
     return member, child, other_owner
 
 
+def test_month_caps_mixed_items_and_counts_only_visible_remainder(app, user, people):
+    from services.household.meal_service import MealService
+    from services.household.activity_service import ActivityService
+    from models.household_tasks import TaskList, HouseholdTask
+
+    member, _, _ = people
+    for index in range(4):
+        create_as(app, user, title=f'Visible event {index}')
+    create_as(app, member, title='Hidden private event', visibility='private')
+    with app.test_request_context():
+        login_user(user)
+        MealService.create_plan({'date': '2026-11-10', 'slot': 'dinner', 'title': 'Hidden by cap meal'})
+        ActivityService.create({**DATA, 'title': 'Hidden by cap activity'})
+        task_list = TaskList(family_id=user.family_id, title='Shared chores', visibility='shared')
+        task_list.tasks.append(HouseholdTask(family_id=user.family_id, title='Hidden by cap task',
+                                           due_date=date(2026, 11, 10)))
+        db.session.add(task_list)
+        db.session.commit()
+    client = client_for(app, user)
+    html = client.get('/household/?month=2026-11').get_data(as_text=True)
+    assert html.count('class="calendar-event"') == 3
+    assert '1 more event' in html and '1 more meal' in html
+    assert '1 more activity' in html and '1 more task' in html
+    assert 'Hidden private event' not in html
+    assert 'Hidden by cap' not in html
+    assert 'view=agenda&amp;day=2026-11-10#calendar-day-2026-11-10' in html
+    agenda = client.get('/household/?month=2026-11&view=agenda&day=2026-11-10').get_data(as_text=True)
+    for title in ['Visible event 3', 'Hidden by cap meal', 'Hidden by cap activity', 'Hidden by cap task']:
+        assert title in agenda
+    assert 'Hidden private event' not in agenda
+    assert 'id="calendar-day-2026-11-10"' in agenda
+
+
+@pytest.mark.parametrize('count', [0, 1, 3, 4, 6])
+def test_month_item_cap_exact_threshold(app, user, count):
+    for index in range(count):
+        create_as(app, user, title=f'Event {index}')
+    html = client_for(app, user).get('/household/?month=2026-11').get_data(as_text=True)
+    assert html.count('class="calendar-event"') == min(count, 3)
+    assert ('class="calendar-more"' in html) == (count > 3)
+    if count > 3:
+        assert f'{count - 3} more event' in html
+
+
+def test_empty_day_and_adjacent_month_links_have_agenda_targets(app, user):
+    client = client_for(app, user)
+    html = client.get('/household/?month=2026-11').get_data(as_text=True)
+    assert 'month=2026-10&amp;view=agenda&amp;day=2026-10-26#calendar-day-2026-10-26' in html
+    html = client.get('/household/?month=2026-10&view=agenda&day=2026-10-26').get_data(as_text=True)
+    assert 'id="calendar-day-2026-10-26"' in html
+    assert 'No plans visible to you on this day.' in html
+
+
+@pytest.mark.parametrize('day', ['bad', '2026-11-31', '2026-12-01'])
+def test_invalid_agenda_day_reports_error(app, user, day):
+    response = client_for(app, user).get('/household/?month=2026-11&view=agenda&day=' + day,
+                                        follow_redirects=True)
+    assert response.status_code == 200 and b'alert-danger' in response.data
+
+
+def test_events_list_is_month_scoped_and_lists_spanning_events_once(app, user):
+    spanning = create_as(app, user, title='Spanning event', starts_on='2026-10-31', ends_on='2026-11-02')
+    timed = create_as(app, user, title='Timed appointment', all_day='',
+                      starts_at='2026-11-10T09:00', ends_at='2026-11-10T10:30')
+    create_as(app, user, title='Outside selected month', starts_on='2026-12-01', ends_on='2026-12-01')
+    html = client_for(app, user).get('/household/events?month=2026-11').get_data(as_text=True)
+    assert html.count('Spanning event') == 1
+    assert 'Outside selected month' not in html
+    assert html.index('Spanning event') < html.index('Timed appointment')
+    assert '31 Oct 2026 &ndash; 02 Nov 2026' in html
+    assert '10 Nov 2026, 09:00 GMT &ndash; 10 Nov 2026, 10:30 GMT' in html
+    assert f'/household/events/{spanning.id}' in html
+    assert f'/household/events/{timed.id}' in html
+    assert 'id="eventsMonth"' in html
+    assert 'class="planner-views"' not in html
+    sidebar = html.split('<nav aria-label="Main navigation">', 1)[1].split('</nav>', 1)[0]
+    assert '>New event<' not in sidebar
+    assert 'class="workspace-nav-link active" href="/household/events"' in sidebar
+
+
+def test_events_list_preserves_private_event_visibility(app, user, people):
+    member, child, other_owner = people
+    create_as(app, member, title='Member private appointment', visibility='private')
+    create_as(app, child, title='Child private appointment', visibility='private')
+    for actor, expected in (
+        (member, ['Member private appointment']),
+        (child, ['Child private appointment']),
+        (user, ['Child private appointment']),
+        (other_owner, []),
+    ):
+        g.pop('_login_user', None)
+        html = client_for(app, actor).get('/household/events?month=2026-11').get_data(as_text=True)
+        for title in ['Member private appointment', 'Child private appointment']:
+            assert (title in html) == (title in expected)
+        assert ('No events visible to you' in html) == (not expected)
+
+
+def test_events_list_excludes_other_households(app, user):
+    other_family = Family(name='Other household')
+    db.session.add(other_family)
+    db.session.flush()
+    outsider = User(family_id=other_family.id, name='Outsider', email='outsider@example.com',
+                    role='admin', password_hash=user.password_hash)
+    db.session.add(outsider)
+    db.session.commit()
+    create_as(app, outsider, title='Other household event')
+    html = client_for(app, user).get('/household/events?month=2026-11').get_data(as_text=True)
+    assert 'Other household event' not in html
+    assert 'No events visible to you in November 2026.' in html
+
+
+@pytest.mark.parametrize('month', ['bad', '1899-12', '2101-01'])
+def test_events_invalid_month_is_reported(app, user, month):
+    response = client_for(app, user).get('/household/events?month=' + month, follow_redirects=True)
+    assert response.status_code == 200 and b'alert-danger' in response.data
+
+
+def test_events_list_requires_module_access(app, user, people):
+    member, _, _ = people
+    member.get_active_household_membership().allowed_modules = []
+    db.session.commit()
+    assert client_for(app, member).get('/household/events').status_code == 403
+    g.pop('_login_user', None)
+    assert app.test_client().get('/household/events').status_code == 302
+
+
 def test_month_agenda_event_forms_and_default_workspace(app, user):
     event = create_as(app, user, starts_on='2026-10-31', ends_on='2026-11-02')
     client = client_for(app, user)
@@ -82,6 +208,83 @@ def test_month_agenda_event_forms_and_default_workspace(app, user):
         assert event not in page['days'][date(2026, 11, 3)]
     client.post('/central/preferences/workspace', data={'default_workspace': 'household'})
     assert client.get('/').location == '/household/'
+
+
+@pytest.mark.parametrize('view', ['month', 'agenda'])
+def test_calendar_month_jump_and_empty_state(app, user, view):
+    from html.parser import HTMLParser
+
+    class MonthControlParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.month = None
+            self.in_jump_form = False
+            self.preserved_view = None
+            self.in_disclosure = False
+            self.submit_in_disclosure = False
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'details' and attrs.get('class') == 'planner-date-menu':
+                self.in_disclosure = True
+            if tag == 'form' and attrs.get('method') == 'GET':
+                self.in_jump_form = True
+                assert attrs['action'] == '/household/'
+            if self.in_jump_form and tag == 'input':
+                if attrs.get('name') == 'month':
+                    self.month = attrs
+                elif attrs.get('name') == 'view':
+                    self.preserved_view = attrs['value']
+            if tag == 'button' and self.in_jump_form and attrs.get('type') == 'submit':
+                self.submit_in_disclosure = self.in_disclosure
+
+        def handle_endtag(self, tag):
+            if tag == 'form':
+                self.in_jump_form = False
+            if tag == 'details':
+                self.in_disclosure = False
+
+    client = client_for(app, user)
+    html = client.get(f'/household/?month=2026-11&view={view}').get_data(as_text=True)
+    parser = MonthControlParser()
+    parser.feed(html)
+    assert parser.month['value'] == '2026-11'
+    assert parser.month['min'] == '1900-01'
+    assert parser.month['max'] == '2100-12'
+    assert parser.preserved_view == view
+    assert parser.submit_in_disclosure
+    assert '<details class="planner-date-menu">' in html
+    assert '<summary title="Choose another month">' in html
+    assert 'class="planner-navigation"' in html
+    assert '>Today</a>' in html
+    assert 'aria-label="Previous month"' in html
+    assert 'aria-label="Next month"' in html
+    assert f'month=2026-10&amp;view={view}' in html
+    assert f'month=2026-12&amp;view={view}' in html
+    assert 'No plans visible to you in November 2026.' in html
+    assert 'Only plans you can see are shown.' in html
+    if view == 'month':
+        assert 'role="region" tabindex="0"' in html
+    else:
+        assert 'calendar-scroll-help' not in html
+    assert client.get(f'/household/?month=2027-03&view={view}').status_code == 200
+
+
+@pytest.mark.parametrize('view', ['month', 'agenda'])
+def test_calendar_empty_state_uses_visible_plans_only(app, user, people, view):
+    member, _, _ = people
+    create_as(app, member, title='Hidden appointment', visibility='private')
+    client = client_for(app, user)
+    path = f'/household/?month=2026-11&view={view}'
+    html = client.get(path).get_data(as_text=True)
+    assert 'Hidden appointment' not in html
+    assert 'No plans visible to you in November 2026.' in html
+
+    create_as(app, user, title='Visible appointment')
+    html = client.get(path).get_data(as_text=True)
+    assert 'Visible appointment' in html
+    assert 'No plans visible to you in November 2026.' not in html
+    assert 'All day' in html
 
 
 def test_child_calendar_access_never_unlocks_finance(app, user, people):

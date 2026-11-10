@@ -1,7 +1,15 @@
-{% if task_service.can_complete(task) %}
+{% if task_service.can_complete(task) and not task.expired %}
+{% if task.claim_required and not task.claimed_at %}
+{% if current_user.is_managed_child %}
+<a href="{{ url_for('household.rewards', view='jobs') }}" class="btn btn-sm btn-outline-primary">Optional job &mdash; claim in Rewards</a>
+{% else %}
+<span class="text-muted">Waiting for {{ task.assignee.user.name if task.assignee else 'the eligible child' }} to claim this optional job.</span>
+{% endif %}
+{% else %}
 <form method="POST" action="{{ url_for('household.complete_task', task_id=task.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="filter" value="{{ filt|default('active') }}">
     <button class="btn btn-sm btn-outline-{{ 'secondary' if task.completed else 'success' }}" name="action" value="{{ 'reopen' if task.completed else 'complete' }}" type="submit">{{ 'Reopen' if task.completed else 'Submit for approval' if task.reward_job and task.reward_job.state == 'open' else 'Complete' }}</button>
 </form>
+{% endif %}
 {% endif %}

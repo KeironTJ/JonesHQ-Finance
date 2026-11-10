@@ -1,3 +1,34 @@
+.planner-navigation { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; padding: .5rem 0 1.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); }
+.planner-period, .planner-arrows, .planner-view-controls { display: flex; align-items: center; }
+.planner-period { gap: .75rem; min-width: 0; }
+.planner-arrow { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-sm); color: var(--text-secondary); text-decoration: none; }
+a.planner-arrow:hover, .planner-today:hover { background: var(--bg-surface-2); color: var(--brand); }
+.planner-period-label { min-width: 0; }
+.planner-date-menu { position: relative; }
+.planner-date-menu summary { display: flex; align-items: center; gap: .65rem; min-height: 44px; cursor: pointer; list-style: none; border-radius: var(--radius-sm); }
+.planner-date-menu summary::-webkit-details-marker { display: none; }
+.planner-date-menu summary:hover { color: var(--brand); }
+.planner-date-menu summary h2 { font-size: 1.15rem; font-weight: 650; letter-spacing: -.025em; margin: 0; }
+.planner-date-menu summary > .bi { font-size: .7rem; color: var(--text-muted); transition: transform var(--t-fast); }
+.planner-date-menu[open] summary > .bi { transform: rotate(180deg); }
+.planner-date-form { position: absolute; top: calc(100% + .5rem); left: 0; z-index: 20; width: min(20rem, calc(100vw - 8rem)); padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-surface); box-shadow: 0 8px 24px rgb(0 0 0 / 12%); }
+.planner-date-form .form-label { font-size: .8rem; }
+.planner-date-fields { display: flex; align-items: center; gap: .5rem; }
+.planner-date-fields input { min-width: 0; flex: 1; }
+.planner-caption { margin: -.1rem 0 0; font-size: .75rem; color: var(--text-muted); }
+.planner-view-controls { gap: 1rem; }
+.planner-today { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .4rem .8rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-secondary); text-decoration: none; font-size: .8rem; font-weight: 600; }
+.planner-views { display: inline-flex; padding: .25rem; border-radius: var(--radius-sm); background: var(--bg-surface-2); }
+.planner-views a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .4rem 1rem; border-radius: var(--radius-xs); color: var(--text-secondary); text-decoration: none; font-size: .8rem; font-weight: 600; }
+.planner-views a:hover { color: var(--brand); }
+.planner-views a[aria-current] { background: var(--bg-surface); color: var(--brand); box-shadow: 0 1px 4px rgb(0 0 0 / 8%); }
+@media (max-width: 575px) {
+  .planner-navigation { gap: .65rem; }
+  .planner-period { gap: .35rem; }
+  .planner-arrow { width: 36px; min-height: 44px; }
+  .planner-date-menu summary h2 { font-size: 1rem; }
+  .planner-view-controls { width: 100%; justify-content: space-between; }
+}
 .workspace-body { min-width: 0; min-height: 100vh; display: flex; flex-direction: column; }
 .workspace .workspace-body { margin-left: var(--sidebar-width); }
 .workspace-content { width: 100%; max-width: 1800px; margin-inline: auto; padding: 2rem clamp(1rem, 2.6vw, 3rem) 2.5rem; }

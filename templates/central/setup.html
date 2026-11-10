@@ -1,40 +1,154 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
 {% block title %}Household setup{% endblock %}
 {% block content %}
-<h1>Set up {{ family.name }}</h1>
-<p class="lead">One step at a time. Come back whenever you like &mdash; your people, access choices, jobs and rewards are saved on their own pages.</p>
-<p class="text-muted">Use the steps that fit your household. Adding children and using rewards are optional. This checklist never changes permissions or creates sample records.</p>
+{% call page_header('Set up ' ~ family.name, 'A practical guide to getting your household started. Your progress is shared with the owners of this household.', 'Household setup') %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('central.hub') }}">Back to Central Hub</a>
+{% endcall %}
+
+<section class="card mb-4" aria-labelledby="setup-progress-title">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-baseline gap-2 flex-wrap">
+            <h2 class="h5 mb-1" id="setup-progress-title">Your progress</h2>
+            <span class="fw-semibold">{{ addressed_steps }} of 5 steps addressed</span>
+        </div>
+        <div class="progress mt-3" role="progressbar" aria-label="Household setup progress" aria-valuenow="{{ addressed_steps }}" aria-valuemin="0" aria-valuemax="5">
+            <div class="progress-bar" style="width: {{ addressed_steps * 20 }}%"></div>
+        </div>
+        <p class="form-text mb-0 mt-2">Steps update automatically when setup is detected. Mark the access review when you have checked it; optional steps can be skipped. Skipped steps count as addressed. Progress is saved for this household.</p>
+    </div>
+</section>
+
 <ol class="list-unstyled">
-    <li class="card mb-3"><div class="card-body">
-        <h2 class="h5">1. Your household is ready</h2>
+    <li class="card mb-3" id="step-household"><div class="card-body">
+        <h2 class="h5 d-flex align-items-center gap-2 flex-wrap">1. Your household is ready <span class="badge bg-success">Complete</span></h2>
         <p>{{ family.name }} is the selected household. Use the household switcher if you belong to more than one.</p>
         <a class="btn btn-outline-primary" href="{{ url_for('family.index') }}">View household &amp; people</a>
     </div></li>
-    <li class="card mb-3"><div class="card-body">
-        <h2 class="h5">2. Add your people <span class="badge bg-secondary">Optional</span></h2>
+    <li class="card mb-3" id="step-people"><div class="card-body">
+        <h2 class="h5 d-flex align-items-center gap-2 flex-wrap">2. Add your people
+            {% if people_complete %}<span class="badge bg-success">Complete</span>
+            {% elif 'people' in skipped_steps %}<span class="badge bg-secondary">Skipped</span>
+            {% else %}<span class="badge bg-secondary">Optional</span>{% endif %}
+        </h2>
         <p>{{ adults }} adult account{{ '' if adults == 1 else 's' }}, {{ children }} child account{{ '' if children == 1 else 's' }} and {{ invites }} active invitation{{ '' if invites == 1 else 's' }}.</p>
         <p>Invite adults to use their own sign-ins, or create a child account you supervise. Children never receive Finance access.</p>
-        <div class="d-flex gap-2 flex-wrap"><a class="btn btn-primary" href="{{ url_for('family.index', _anchor='invite-adult') }}">Invite adult</a><a class="btn btn-outline-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a></div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-primary" href="{{ url_for('family.index', _anchor='invite-adult') }}">Invite adult</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a>
+            {% if 'people' in skipped_steps %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="people">
+                <input type="hidden" name="action" value="restore">
+                <button class="btn btn-outline-secondary" type="submit">Restore this step</button>
+            </form>
+            {% elif not people_complete %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="people">
+                <input type="hidden" name="action" value="skip">
+                <button class="btn btn-outline-secondary" type="submit">Skip this step</button>
+            </form>
+            {% endif %}
+        </div>
     </div></li>
-    <li class="card mb-3"><div class="card-body">
-        <h2 class="h5">3. Review what each person can open</h2>
-        <p>Check Household Hub and Finance access for each member. Finance section permissions are a separate detail, not needed to use household activities or rewards.</p>
-        <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Review member access</a>
+    <li class="card mb-3" id="step-access"><div class="card-body">
+        <h2 class="h5 d-flex align-items-center gap-2 flex-wrap">3. Review what each person can open
+            {% if access_reviewed %}<span class="badge bg-success">Reviewed</span>{% else %}<span class="badge bg-warning">Review needed</span>{% endif %}
+        </h2>
+        <p>Check Household Hub and Finance access for each member. Finance section permissions are separate and do not control household activities or rewards.</p>
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-primary" href="{{ url_for('central.household_access') }}">Review member access</a>
+            {% if access_reviewed %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="access">
+                <input type="hidden" name="action" value="reopen">
+                <button class="btn btn-outline-secondary" type="submit">Reopen review step</button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="access">
+                <input type="hidden" name="action" value="review">
+                <button class="btn btn-outline-primary" type="submit">Mark as reviewed</button>
+            </form>
+            {% endif %}
+        </div>
     </div></li>
-    <li class="card mb-3"><div class="card-body">
-        <h2 class="h5">4. Try your first shared job <span class="badge bg-secondary">Optional</span></h2>
+    <li class="card mb-3" id="step-jobs"><div class="card-body">
+        <h2 class="h5 d-flex align-items-center gap-2 flex-wrap">4. Try your first shared job
+            {% if has_jobs %}<span class="badge bg-success">Complete</span>
+            {% elif 'jobs' in skipped_steps %}<span class="badge bg-secondary">Skipped</span>
+            {% elif not hub_enabled %}<span class="badge bg-warning">Enable Household Hub</span>
+            {% else %}<span class="badge bg-secondary">Optional</span>{% endif %}
+        </h2>
         {% if hub_enabled %}
         <p>{{ 'Your household already has a shared task.' if has_jobs else 'Create a shared list and a task, or add a points job for a child from Rewards.' }}</p>
-        <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-primary" href="{{ url_for('household.tasks') }}">Open tasks &amp; lists</a>{% if children %}<a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='manage') }}">Add a reward job</a>{% endif %}</div>
-        {% else %}<p>Enable Household Hub for your account in member access before adding jobs.</p>{% endif %}
+        {% else %}
+        <p>Enable Household Hub for your account in member access before adding jobs.</p>
+        {% endif %}
+        <div class="d-flex gap-2 flex-wrap">
+            {% if hub_enabled %}
+            <a class="btn btn-outline-primary" href="{{ url_for('household.tasks') }}">Open tasks &amp; lists</a>
+            {% if children %}<a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='manage') }}">Add a reward job</a>{% endif %}
+            {% else %}
+            <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Manage member access</a>
+            {% endif %}
+            {% if 'jobs' in skipped_steps %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="jobs">
+                <input type="hidden" name="action" value="restore">
+                <button class="btn btn-outline-secondary" type="submit">Restore this step</button>
+            </form>
+            {% elif not has_jobs %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="jobs">
+                <input type="hidden" name="action" value="skip">
+                <button class="btn btn-outline-secondary" type="submit">Skip this step</button>
+            </form>
+            {% endif %}
+        </div>
     </div></li>
-    <li class="card mb-3"><div class="card-body">
-        <h2 class="h5">5. Give children something to work towards <span class="badge bg-secondary">Optional</span></h2>
+    <li class="card mb-3" id="step-rewards"><div class="card-body">
+        <h2 class="h5 d-flex align-items-center gap-2 flex-wrap">5. Give children something to work towards
+            {% if has_rewards %}<span class="badge bg-success">Complete</span>
+            {% elif 'rewards' in skipped_steps %}<span class="badge bg-secondary">Skipped</span>
+            {% elif not hub_enabled %}<span class="badge bg-warning">Enable Household Hub</span>
+            {% else %}<span class="badge bg-secondary">Optional</span>{% endif %}
+        </h2>
         {% if hub_enabled %}
         <p>{{ 'Your reward catalogue is started. Review it whenever plans change.' if has_rewards else 'Add a reward, choose the points needed, then approve jobs when they are done. Children can pick a goal from their own rewards page.' }}</p>
-        <a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='manage') }}">Set up rewards</a>
-        {% else %}<p>Rewards is part of Household Hub. Enable it for your account before setting up rewards.</p>{% endif %}
+        {% else %}
+        <p>Rewards is part of Household Hub. Enable it for your account before setting up rewards.</p>
+        {% endif %}
+        <div class="d-flex gap-2 flex-wrap">
+        {% if hub_enabled %}
+            <a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='manage') }}">Set up rewards</a>
+        {% else %}
+            <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Manage member access</a>
+        {% endif %}
+        {% if 'rewards' in skipped_steps %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="rewards">
+                <input type="hidden" name="action" value="restore">
+                <button class="btn btn-outline-secondary" type="submit">Restore this step</button>
+            </form>
+        {% elif not has_rewards %}
+            <form method="POST" action="{{ url_for('central.update_household_setup_progress') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="step" value="rewards">
+                <input type="hidden" name="action" value="skip">
+                <button class="btn btn-outline-secondary" type="submit">Skip this step</button>
+            </form>
+        {% endif %}
+        </div>
     </div></li>
 </ol>
-<div class="d-flex flex-wrap gap-2"><a class="btn btn-primary" href="{{ url_for('central.hub') }}">Back to home</a><a class="btn btn-outline-secondary" href="{{ url_for('central.settings') }}">Settings</a></div>
+
+<a class="btn btn-outline-secondary" href="{{ url_for('central.settings') }}">Central settings</a>
 {% endblock %}

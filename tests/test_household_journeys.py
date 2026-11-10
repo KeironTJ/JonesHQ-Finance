@@ -40,7 +40,7 @@ def test_settings_connect_people_access_and_focused_child_creation(app, user):
         assert response.status_code == 200
         assert b'href="/central/settings/children/new"' in response.data
     settings = client.get('/central/settings').get_data(as_text=True)
-    assert all(heading in settings for heading in ('Your account', 'Household &amp; people', 'Module settings'))
+    assert all(heading in settings for heading in ('Your account', 'Household &amp; people', 'Workspace settings'))
     assert b'id="invite-adult"' in client.get('/central/family/').data
     access = client.get('/central/settings/access').data
     assert b'action="/central/settings/children/create"' not in access
@@ -68,6 +68,50 @@ def test_child_form_escapes_retained_fields_and_never_echoes_password(app, user)
     assert b'Different2!' not in response.data
 
 
+def test_people_page_shows_member_cards_and_keeps_membership_changes_collapsed(app, user, people):
+    member, child, _ = people
+    html = client_for(app, user).get('/central/family/').get_data(as_text=True)
+
+    assert f'aria-labelledby="member-name-{member.id}"' in html
+    assert f'aria-labelledby="member-name-{child.id}"' in html
+    assert 'Adult member</span>' in html
+    assert 'Managed child</span>' in html
+    assert '<details class="border-top pt-3"><summary' in html
+    assert f'action="/central/family/members/{member.id}/role"' in html
+    assert f'action="/central/family/members/{member.id}/remove"' in html
+    assert f'action="/central/family/members/{user.id}/remove"' not in html
+    assert 'No active invite links. Create an invitation above' in html
+    assert 'no invitation email is sent automatically' in html
+
+
+def test_people_page_invite_copy_controls_only_offer_active_links(app, family, user):
+    from models.family import FamilyInvite
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    active = FamilyInvite(
+        family_id=family.id, member_name='<Sam>', created_by_id=user.id,
+        token='active-sharing-link', allowed_sections='[]',
+        expires_at=now + timedelta(days=1),
+    )
+    expired = FamilyInvite(
+        family_id=family.id, member_name='Expired invite', created_by_id=user.id,
+        token='expired-sharing-link', allowed_sections='[]',
+        expires_at=now - timedelta(days=1),
+    )
+    db.session.add_all([active, expired])
+    db.session.commit()
+
+    html = client_for(app, user).get('/central/family/').get_data(as_text=True)
+
+    assert f'data-copy-invite="{active.id}"' in html
+    assert f'data-copy-invite="{expired.id}"' not in html
+    assert 'aria-label="Copy invitation link for &lt;Sam&gt;"' in html
+    assert f'id="invite-copy-status-{active.id}" role="status"' in html
+    assert '/central/family/join/active-sharing-link' in html
+    assert '/central/family/join/expired-sharing-link' not in html
+    assert '<summary class="card-header">Recent used / expired invites</summary>' in html
+
+
 def test_owner_setup_is_read_only_scoped_and_honest_about_module_access(app, family, user, people):
     _, child, _ = people
     other = Family(name='Second household')
@@ -91,6 +135,7 @@ def test_owner_setup_is_read_only_scoped_and_honest_about_module_access(app, fam
     response = client.get('/central/setup')
     assert b'already has a shared task' in response.data
     assert b'Your reward catalogue is started' in response.data
+    assert b'4 of 5 steps addressed' in response.data
     client.post('/central/family/select', data={'family_id': other.id})
     response = client.get('/central/setup')
     assert b'Set up Second household' in response.data
@@ -108,12 +153,64 @@ def test_owner_setup_is_read_only_scoped_and_honest_about_module_access(app, fam
     assert child.family_id == family.id
 
 
+def test_setup_progress_is_shared_and_scoped_to_the_selected_household(app, family, user):
+    other = Family(name='Second household')
+    db.session.add(other)
+    db.session.flush()
+    db.session.add(HouseholdMembership(
+        family_id=other.id, user_id=user.id, role='admin', allowed_modules=[],
+    ))
+    db.session.commit()
+    client = client_for(app, user)
+
+    initial = client.get('/central/setup')
+    assert b'1 of 5 steps addressed' in initial.data
+    response = client.post('/central/setup/progress', data={
+        'step': 'access', 'action': 'review',
+    })
+    assert response.location.endswith('/central/setup#step-access')
+    assert family.setup_progress['access_reviewed'] is True
+
+    response = client.post('/central/setup/progress', data={
+        'step': 'jobs', 'action': 'skip',
+    })
+    assert response.location.endswith('/central/setup#step-jobs')
+    assert family.setup_progress['skipped_steps'] == ['jobs']
+    assert b'3 of 5 steps addressed' in client.get('/central/setup').data
+
+    client.post('/central/family/select', data={'family_id': other.id})
+    other_setup = client.get('/central/setup')
+    assert b'1 of 5 steps addressed' in other_setup.data
+    assert b'badge bg-secondary">Skipped</span>' not in other_setup.data
+    assert other.setup_progress == {}
+
+    client.post('/central/family/select', data={'family_id': family.id})
+    assert b'3 of 5 steps addressed' in client.get('/central/setup').data
+    client.post('/central/setup/progress', data={
+        'step': 'jobs', 'action': 'restore',
+    })
+    assert b'2 of 5 steps addressed' in client.get('/central/setup').data
+    client.post('/central/setup/progress', data={
+        'step': 'access', 'action': 'reopen',
+    })
+    assert b'1 of 5 steps addressed' in client.get('/central/setup').data
+
+    response = client.post('/central/setup/progress', data={
+        'step': 'household', 'action': 'skip',
+    })
+    assert response.status_code == 302
+    assert b'Choose a valid household setup step and action.' in client.get(response.location).data
+
+
 def test_owner_pages_reject_members_children_and_detached_accounts(app, user, people):
     member, child, _ = people
     for actor in (member, child):
         client = client_for(app, actor)
         for path in ('/central/setup', '/central/settings/children/new'):
             assert client.get(path).status_code == 403
+        assert client.post('/central/setup/progress', data={
+            'step': 'access', 'action': 'review',
+        }).status_code == 403
     child.get_active_household_membership().role = 'admin'
     db.session.commit()
     client = client_for(app, child)

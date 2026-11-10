@@ -1,8 +1,26 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
 {% block title %}Member access{% endblock %}
 {% block content %}
-<h1>Member access</h1>
+{% call page_header('Member access', 'Choose which workspaces each person can open in this household.', 'Household & people') %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('family.index') }}">Back to household &amp; people</a>
+{% endcall %}
 <p class="text-muted">These grants apply only to the selected household. Module access is separate from Finance section permissions and does not override private records.</p>
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <section class="card h-100 mb-0" aria-labelledby="finance-access-title"><div class="card-body">
+            <h2 class="h5" id="finance-access-title">Finance</h2>
+            <p class="mb-0" id="finance-access-help">Allows entry to financial tools. Finance section permissions still control what each adult can use, and private records stay private. Children cannot open Finance.</p>
+        </div></section>
+    </div>
+    <div class="col-md-6">
+        <section class="card h-100 mb-0" aria-labelledby="household-access-title"><div class="card-body">
+            <h2 class="h5" id="household-access-title">Household Hub</h2>
+            <p class="mb-0" id="household-access-help">Allows entry to calendars, meals, activities, tasks and rewards. Existing privacy and adult/child permissions still apply.</p>
+        </div></section>
+    </div>
+</div>
+<p class="small text-muted">Save each person's changes separately. Removing module access takes effect immediately; it does not delete records or remove household membership.</p>
 <div class="d-flex flex-wrap gap-2 mb-4"><a class="btn btn-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a><a class="btn btn-outline-primary" href="{{ url_for('family.index', _anchor='invite-adult') }}">Invite adult</a><a class="btn btn-outline-secondary" href="{{ url_for('central.household_setup') }}">Setup checklist</a></div>
 <div class="row g-3 mb-4">
     {% for membership in memberships %}
@@ -10,23 +28,55 @@
     <div class="col-md-6">
         <section class="card h-100">
             <div class="card-body">
-                <h2 class="h5">{{ member.name }} <span class="badge bg-secondary">{{ 'Managed child' if member.is_managed_child else ('Owner' if membership.role == 'admin' else 'Adult member') }}</span></h2>
-                <form method="POST" action="{{ url_for('central.update_module_access', member_id=member.id) }}">
+                <h2 class="h5 text-break">{{ member.name }} {% if member.id == current_user.id %}<span class="badge bg-info">You</span>{% endif %}<span class="badge bg-secondary">{{ 'Managed child' if member.is_managed_child else ('Owner' if membership.role == 'admin' else 'Adult member') }}</span></h2>
+                {% if member.id == current_user.id %}
+                <p class="small text-muted">These are your own permissions. Turning off a workspace removes your access to it too.</p>
+                {% endif %}
+                <form method="POST" action="{{ url_for('central.update_module_access', member_id=member.id) }}" data-member-access>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     {% for key, label in module_labels.items() %}
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="modules" value="{{ key }}" id="module-{{ member.id }}-{{ key }}"{% if key in membership.allowed_modules and not (member.is_managed_child and key == 'finance') %} checked{% endif %}{% if member.is_managed_child and key == 'finance' %} disabled{% endif %}>
+                        <input class="form-check-input" type="checkbox" name="modules" value="{{ key }}" id="module-{{ member.id }}-{{ key }}" aria-describedby="{{ key }}-access-help"{% if key in membership.allowed_modules and not (member.is_managed_child and key == 'finance') %} checked{% endif %}{% if member.is_managed_child and key == 'finance' %} disabled{% endif %}>
                         <label class="form-check-label" for="module-{{ member.id }}-{{ key }}">{{ label }}</label>
                     </div>
                     {% endfor %}
                     {% if member.is_managed_child %}
                     <p class="small text-muted mt-2">Finance and household administration are blocked in every household. Only the designated guardian can change child status.</p>
                     {% endif %}
-                    <button class="btn btn-outline-primary mt-3" type="submit">Save module access for {{ member.name }}</button>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                        <button class="btn btn-outline-primary" type="submit" data-access-save>Save module access for {{ member.name }}</button>
+                        <button class="btn btn-outline-secondary" type="button" data-access-reset hidden>Undo changes</button>
+                    </div>
+                    <p class="small text-muted mt-2 mb-0" role="status" aria-live="polite" data-access-status>Changes apply only after saving this person's access.</p>
                 </form>
             </div>
         </section>
     </div>
     {% endfor %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('[data-member-access]').forEach(function (form) {
+    const inputs = Array.from(form.querySelectorAll('input[name="modules"]:not(:disabled)'));
+    const saved = inputs.map(function (input) { return input.checked; });
+    const save = form.querySelector('[data-access-save]');
+    const reset = form.querySelector('[data-access-reset]');
+    const status = form.querySelector('[data-access-status]');
+    function update() {
+        const dirty = inputs.some(function (input, index) { return input.checked !== saved[index]; });
+        save.disabled = !dirty;
+        reset.hidden = !dirty;
+        status.textContent = dirty ? "Unsaved changes. Save this person's access to apply them." : 'No unsaved changes.';
+    }
+    inputs.forEach(function (input) { input.addEventListener('change', update); });
+    reset.addEventListener('click', function () {
+        inputs.forEach(function (input, index) { input.checked = saved[index]; });
+        update();
+    });
+    window.addEventListener('pageshow', update);
+    update();
+});
+</script>
 {% endblock %}

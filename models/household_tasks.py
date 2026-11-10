@@ -30,6 +30,9 @@ class HouseholdTask(db.Model):
             '(NOT completed AND completed_at IS NULL AND completed_by_membership_id IS NULL)',
             name='ck_household_task_completion',
         ),
+        db.CheckConstraint("recurrence IN ('none', 'daily', 'weekly')", name='ck_task_recurrence'),
+        db.CheckConstraint("missed_policy IN ('skip', 'backlog')", name='ck_task_missed_policy'),
+        db.UniqueConstraint('series_id', 'period_start', name='uq_task_series_period'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -57,4 +60,15 @@ class HouseholdTask(db.Model):
     due_time = db.Column(db.Time, nullable=True)
     completed = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     completed_at = db.Column(db.DateTime, nullable=True)
+    recurrence = db.Column(db.String(10), nullable=False, default='none', server_default='none')
+    missed_policy = db.Column(db.String(10), nullable=False, default='skip', server_default='skip')
+    repeat_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    series_id = db.Column(db.Integer, db.ForeignKey(
+        'household_tasks.id', name='fk_household_tasks_series_id', ondelete='SET NULL',
+    ), nullable=True, index=True)
+    period_start = db.Column(db.Date, nullable=True)
+    expired = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    claim_required = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    claimed_at = db.Column(db.DateTime, nullable=True)
+    series = db.relationship('HouseholdTask', remote_side=[id], foreign_keys=[series_id])
     reward_job = db.relationship('RewardJob', back_populates='task', uselist=False)

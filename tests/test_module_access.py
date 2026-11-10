@@ -118,6 +118,46 @@ def test_module_grants_are_household_scoped(app, family, user):
     assert client.get('/finance/dashboard').status_code == 200
 
 
+def test_member_access_explains_grants_and_progressively_enhances_forms(app, family, user):
+    from html.parser import HTMLParser
+
+    class AccessParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.inputs = {}
+            self.buttons = []
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'input' and attrs.get('name') == 'modules':
+                self.inputs[attrs['id']] = attrs
+            if tag == 'button' and 'data-access-save' in attrs:
+                self.buttons.append(attrs)
+
+    managed_child = child(family, user)
+    client = app.test_client()
+    login_client(client, user.id)
+    response = client.get('/central/settings/access')
+    html = response.get_data(as_text=True)
+    parser = AccessParser()
+    parser.feed(html)
+
+    assert response.status_code == 200
+    assert 'These are your own permissions.' in html
+    assert 'class="badge bg-info">You</span>' in html
+    assert "Save each person's changes separately." in html
+    assert 'Children cannot open Finance.' in html
+    assert 'data-access-reset hidden' in html
+    assert 'role="status" aria-live="polite" data-access-status' in html
+    assert len(parser.buttons) == 2
+    assert all('disabled' not in button for button in parser.buttons)
+    child_finance = parser.inputs[f'module-{managed_child.id}-finance']
+    assert 'disabled' in child_finance
+    assert 'checked' not in child_finance
+    assert child_finance['aria-describedby'] == 'finance-access-help'
+    assert 'disabled' not in parser.inputs[f'module-{managed_child.id}-household']
+
+
 def test_child_navigation_search_preferences_and_exports_do_not_offer_finance(app, family, user):
     member = child(family, user)
     member.preferences = {'default_workspace': 'finance'}

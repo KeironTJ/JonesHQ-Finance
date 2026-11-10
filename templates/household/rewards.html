@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
 {% block title %}{{ 'My rewards' if child_view else 'Household rewards' }}{% endblock %}
 {% block extra_css %}
 <style>
@@ -8,6 +9,31 @@
 .rewards-page .reward-job { height: 100%; }
 .rewards-page .reward-score { font-size: 2rem; font-weight: 700; }
 .rewards-page progress { width: 100%; height: 1.5rem; }
+.reward-welcome { padding: clamp(1.25rem, 3vw, 2rem); background: var(--brand-soft); border: 1px solid var(--border-color); border-radius: var(--radius-lg); }
+.reward-welcome .reward-score { font-size: clamp(2.5rem, 5vw, 3.5rem); line-height: 1.1; color: var(--brand); }
+.reward-stat { padding: 1rem; border-radius: var(--radius-md); background: var(--bg-surface); border: 1px solid var(--border-color); }
+.reward-stat strong { display: block; font-size: 1.5rem; }
+.reward-stat span { font-size: .8rem; color: var(--text-secondary); }
+.reward-tabs { border-bottom: 1px solid var(--border-color); margin-bottom: 1.5rem; }
+.reward-tabs a { display: inline-flex; align-items: center; gap: .4rem; min-height: 48px; padding: .6rem .9rem; color: var(--text-secondary); text-decoration: none; border-bottom: 3px solid transparent; }
+.reward-tabs a[aria-current] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 650; }
+.reward-milestones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.reward-milestone { padding: .85rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.reward-milestone.earned { background: var(--brand-soft); }
+.reward-milestone .bi { color: var(--brand); font-size: 1.3rem; }
+.reward-milestone strong, .reward-milestone small { display: block; overflow-wrap: anywhere; }
+.reward-milestone small { color: var(--text-secondary); }
+.reward-goal-progress { accent-color: var(--brand); }
+.reward-leaderboard { width: 100%; table-layout: fixed; margin: 0; }
+.reward-leaderboard th:first-child { width: 4rem; }
+.reward-leaderboard th:last-child { width: 5.5rem; }
+.reward-leaderboard td, .reward-leaderboard th { padding: 1rem .75rem; vertical-align: middle; }
+.reward-leaderboard .leader-name { font-weight: 650; overflow-wrap: anywhere; }
+.reward-leaderboard .leader-place { font-size: 1.25rem; font-weight: 750; color: var(--brand); }
+.reward-leaderboard .leader-points { font-size: 1.5rem; font-weight: 750; }
+.reward-leaderboard tr.is-you > * { background: var(--brand-soft); }
+.reward-leaderboard details { font-size: .8rem; margin-top: .5rem; }
+.reward-leaderboard .badge { white-space: normal; }
 </style>
 {% endblock %}
 {% macro reward_form(reward=none) %}
@@ -30,15 +56,16 @@
 {% endmacro %}
 {% block content %}
 <div class="rewards-page">
-<h1>{{ "You've got this!" if child_view else 'Household rewards' }}</h1>
-<p>{{ "Little jobs. Big smiles. Pick a job, give it a go, then tell an adult you're done." if child_view else 'Set up jobs and rewards, review finished work, and help children reach their goals.' }}</p>
-<nav class="d-flex gap-2 flex-wrap mb-3" aria-label="Rewards pages">
-    {% for key, label, icon in [('jobs', 'My jobs' if child_view else 'Jobs', 'check2-circle'), ('shop', 'My rewards' if child_view else 'Reward shop', 'gift'), ('progress', 'My progress' if child_view else 'Progress & history', 'star')] %}
-    <a class="btn btn-{{ 'primary' if view == key else 'outline-primary' }}" href="{{ url_for('household.rewards', view=key) }}"{% if view == key %} aria-current="page"{% endif %}><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ label }}</a>
+{% call page_header('My rewards' if child_view else 'Household rewards', 'Small efforts, things to look forward to. Earn points, choose a reward and celebrate your progress.' if child_view else 'Celebrate every child. Turn helpful jobs into rewards they can look forward to.', 'Household Hub') %}
+    {% if not child_view %}<a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='manage') }}">Setup &amp; approvals{% if submitted_jobs or pending %} <span class="badge bg-primary">{{ submitted_jobs|length + pending|length }}</span>{% endif %}</a>{% endif %}
+{% endcall %}
+<nav class="d-flex gap-1 flex-wrap reward-tabs" aria-label="Rewards pages">
+    {% for key, label, icon in [('home', 'Overview', 'stars'), ('shop', 'My rewards' if child_view else 'Reward shop', 'gift'), ('jobs', 'My jobs' if child_view else 'Jobs', 'check2-circle'), ('progress', 'My progress' if child_view else 'Progress & history', 'star')] %}
+    <a href="{{ url_for('household.rewards', view=key) }}"{% if view == key %} aria-current="page"{% endif %}><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ label }}</a>
     {% endfor %}
-    {% if not child_view %}<a class="btn btn-{{ 'primary' if view == 'manage' else 'outline-primary' }}" href="{{ url_for('household.rewards', view='manage') }}">Adult setup & approvals <span class="badge bg-secondary">{{ submitted_jobs|length + pending|length }}</span></a>{% endif %}
+    {% if not child_view and view == 'manage' %}<a href="{{ url_for('household.rewards', view='manage') }}" aria-current="page">Adult setup &amp; approvals</a>{% endif %}
 </nav>
-{% if child_view %}
+{% if child_view and view != 'home' %}
 <section class="card mb-4"><div class="card-body">
     <div class="reward-score"><i class="bi bi-star-fill text-warning" aria-hidden="true"></i> {{ balance }} <span class="h5">points ready to use</span></div>
     {% if goal %}
@@ -49,17 +76,102 @@
     {% if pending %}<p class="mt-2 mb-0">{{ pending|sum(attribute='points_cost') }} points held for reward requests. They come back if an adult says not this time.</p>{% endif %}
 </div></section>
 {% endif %}
-{% if view == 'jobs' %}
+{% if view == 'home' %}
+{% if not child_view or board_enabled %}
+<section class="mb-4" aria-label="Weekly household leaderboard">
+    <div class="d-flex align-items-center gap-2 mb-2"><i class="bi bi-trophy text-primary fs-3" aria-hidden="true"></i><h2 class="h3 mb-0">This week's helping hands</h2></div>
+    <p class="text-muted">{{ board_week_start.strftime('%d %b') }} &ndash; {{ board_week_end.strftime('%d %b %Y') }} &middot; A fresh leaderboard every Monday.</p>
+    {% if celebration %}
+    <div class="card overflow-hidden">
+        <table class="table reward-leaderboard">
+            <caption class="visually-hidden">Weekly household leaderboard, ranked by points approved this week. Ties share a place.</caption>
+            <thead><tr><th scope="col">Place</th><th scope="col">Helping hand</th><th scope="col" class="text-end">Points</th></tr></thead>
+            <tbody>{% for card in celebration %}
+            <tr{% if card.is_you %} class="is-you"{% endif %}>
+                <td><span class="leader-place" aria-label="Place {{ card.rank }}">#{{ card.rank }}</span>{% if card.rank == 1 and card.week_points %}<i class="bi bi-trophy-fill text-warning d-block" aria-hidden="true"></i>{% endif %}</td>
+                <th scope="row">
+                    <span class="leader-name">{{ card.name }}</span>{% if card.is_you %} <span class="badge bg-primary">You</span>{% endif %}
+                    <span class="d-block small text-muted fw-normal">{{ card.week_jobs }} approved {{ 'job' if card.week_jobs == 1 else 'jobs' }}</span>
+                    {% set earned_badges = card.milestones|selectattr('2')|list %}
+                    {% if earned_badges %}<details><summary>Lifetime milestones</summary>{% for title, description, achieved, icon in earned_badges %}<span class="badge bg-primary mt-1"><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ title }}</span> {% endfor %}</details>{% endif %}
+                </th>
+                <td class="text-end"><span class="leader-points">{{ card.week_points }}</span></td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% else %}<p>No children in this household yet. Add a child in <a href="{{ url_for('family.index') }}">Household &amp; people</a> to start their reward journey.</p>{% endif %}
+    <p class="small text-muted mt-2">Points approved this week, Monday to Sunday (Europe/London). Ties share a place. Spending points doesn't change your score.{{ ' Children can see names and earned progress here.' if board_enabled else ' Only adults can see this household overview. Sharing with children is off.' }}</p>
+</section>
+{% endif %}
+{% if child_view %}
+<section class="reward-welcome mb-4" aria-label="Your reward journey">
+    <div class="row g-4 align-items-center">
+        <div class="col-md-5">
+            <span class="eyebrow">You've earned this</span>
+            <div class="reward-score mt-2">{{ balance }} <span class="h5">points</span></div>
+            <p class="text-muted mt-2">Ready to spend on something you love.</p>
+            <a class="btn btn-primary" href="{{ url_for('household.rewards', view='shop') }}">Explore rewards</a>
+            {% if pending %}<p class="small mt-3 mb-0">{{ pending|sum(attribute='points_cost') }} points held for reward requests. Waiting for an adult.</p>{% endif %}
+        </div>
+        <div class="col-md-7">
+            {% if goal %}
+            <h2 class="h4 text-break"><i class="bi bi-{{ goal.icon }}" aria-hidden="true"></i> Saving for {{ goal.title }}</h2>
+            <p>{{ balance }} of {{ goal.points_cost }} points ready</p>
+            <progress class="reward-goal-progress" value="{{ [balance, goal.points_cost]|min }}" max="{{ goal.points_cost }}" aria-label="Points saved for {{ goal.title }}"></progress>
+            <p class="mb-0 mt-2">{{ (goal.points_cost - balance) ~ ' more points to go. You can do it!' if balance < goal.points_cost else 'Goal reached! Visit My rewards to ask for it.' }}</p>
+            {% else %}
+            <h2 class="h4">What are you looking forward to?</h2>
+            <p>Choose a reward to save for. Every approved job takes you a little closer.</p>
+            <a href="{{ url_for('household.rewards', view='shop') }}">Choose my goal <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% if personal %}
+<section class="mb-4" aria-label="Your achievements">
+    <h2 class="h4">Look how far you've come</h2>
+    <p class="text-muted">{{ personal.jobs }} approved jobs &middot; {{ personal.earned }} points earned in total. Spending points never takes away your achievements.</p>
+    <div class="reward-milestones">
+    {% for title, description, achieved, icon in personal.milestones %}
+        <div class="reward-milestone{{ ' earned' if achieved }}"><i class="bi bi-{{ icon }}" aria-hidden="true"></i><strong>{{ title }}</strong><small>{{ description }}</small><span class="small">{{ 'Achieved' if achieved else 'Something to aim for' }}</span></div>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"><h2 class="h4 mb-0">Your next small win</h2><a href="{{ url_for('household.rewards', view='jobs') }}">All my jobs{% if earlier_jobs %} ({{ earlier_jobs|length }} earlier){% endif %}</a></div>
+<div class="reward-grid mb-4">{% for job in jobs[:3] %}{% include 'household/_reward_job.html' %}{% else %}<section class="card"><div class="card-body"><h3 class="h5">Room for a new challenge</h3><p class="mb-0">No jobs ready right now. Ask an adult about your next helping hand.</p></div></section>{% endfor %}</div>
+{% if submitted_jobs %}<p class="alert alert-info"><a href="{{ url_for('household.rewards', view='jobs') }}">Waiting for an adult: {{ submitted_jobs|length }} finished {{ 'job' if submitted_jobs|length == 1 else 'jobs' }}</a>. Points arrive after approval.</p>{% endif %}
+{% else %}
+<section class="reward-welcome mb-4">
+    <h2 class="h3">Little efforts. Proud moments.</h2>
+    <p>Give children something to work towards, recognise their effort and celebrate each milestone at their own pace.</p>
+    <div class="reward-grid mb-3">
+        <div class="reward-stat"><strong>{{ members|length }}</strong><span>children on their reward journey</span></div>
+        <div class="reward-stat"><strong>{{ available_reward_count }}</strong><span>rewards to look forward to</span></div>
+        <div class="reward-stat"><strong>{{ submitted_jobs|length + pending|length }}</strong><span>jobs and reward requests awaiting your review</span></div>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('household.rewards', view='manage') }}">Review &amp; set up rewards</a>
+</section>
+{% endif %}
+<section class="mb-4" aria-label="Rewards to look forward to">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"><h2 class="h4 mb-0">Something to look forward to</h2><a href="{{ url_for('household.rewards', view='shop') }}">Browse all rewards</a></div>
+    <div class="reward-grid">
+    {% for reward in featured_rewards %}
+    <article class="card"><div class="card-body"><i class="bi bi-{{ reward.icon }} reward-icon text-primary" aria-hidden="true"></i><h3 class="h5 text-break">{{ reward.title }}</h3><p class="text-muted text-break">{{ reward.description }}</p><p class="mb-0"><strong>{{ reward.points_cost }} points</strong></p><a class="btn btn-outline-primary mt-3" href="{{ url_for('household.rewards', view='shop') }}">{{ 'Choose a reward' if child_view else 'View reward shop' }}</a></div></article>
+    {% else %}<section class="card"><div class="card-body"><h3 class="h5">Make room for something special</h3><p>{{ 'An adult can add rewards for you to work towards.' if child_view else 'Add a favourite treat, a family adventure or time doing something they love.' }}</p>{% if not child_view %}<a class="btn btn-primary" href="{{ url_for('household.rewards', view='manage') }}">Add your first reward</a>{% endif %}</div></section>{% endfor %}
+    </div>
+</section>
+{% elif view == 'jobs' %}
 <h2 class="h4">Ready to try</h2>
 <div class="reward-grid mb-4">{% for job in jobs %}{% include 'household/_reward_job.html' %}{% else %}<p>No jobs to do right now. {{ "Ask an adult to add one when you're ready." if child_view else 'Add a job from Adult setup, or put points on an existing shared task.' }}</p>{% endfor %}</div>
 {% if earlier_jobs %}
 <details class="card mb-4"><summary class="card-header">Earlier jobs ({{ earlier_jobs|length }}) &mdash; check what still needs doing</summary><div class="card-body">
-    <p class="text-muted">{{ 'Plans change. Ask an adult if these jobs are still needed.' if child_view else 'Reschedule the task or close jobs that are no longer needed. They do not repeat automatically.' }}</p>
+    <p class="text-muted">{{ 'Plans change. Ask an adult if these jobs are still needed.' if child_view else 'Reschedule one-off tasks or close jobs that are no longer needed. Recurring backlog jobs keep their original interval dates.' }}</p>
     <div class="reward-grid">{% for job in earlier_jobs %}{% include 'household/_reward_job.html' %}{% endfor %}</div>
 </div></details>
 {% endif %}
 <h2 class="h4">Waiting for an adult</h2>
-{% for job in submitted_jobs %}<div class="card mb-2"><div class="card-body text-break"><i class="bi bi-hourglass-split" aria-hidden="true"></i> {{ job.title }} &mdash; {{ job.points }} points after approval</div></div>{% else %}<p>Nothing waiting. Completed jobs will appear here until checked.</p>{% endfor %}
+{% for job in submitted_jobs %}<div class="card mb-2"><div class="card-body text-break"><i class="bi bi-hourglass-split" aria-hidden="true"></i> {{ job.title }} &mdash; {{ job.points }} points after approval{% if job.task.period_start %}<div class="small text-muted">Interval: {{ job.task.period_start.strftime('%d %b %Y') }} &ndash; {{ job.task.due_date.strftime('%d %b %Y') }}</div>{% endif %}</div></div>{% else %}<p>Nothing waiting. Completed jobs will appear here until checked.</p>{% endfor %}
 {% elif view == 'shop' %}
 <h2 class="h4">{{ 'What would you like to work towards?' if child_view else 'Household reward shop' }}</h2>
 <div class="reward-grid">
@@ -85,11 +197,21 @@
 {% else %}<p>{{ 'An adult can add rewards here. Come back soon!' if child_view else 'No rewards yet. Add one in Adult setup.' }}</p>{% endfor %}
 </div>
 {% elif view == 'manage' %}
+<details class="card mb-4"{% if failed_action|default('') == 'set-board' %} open{% endif %}><summary class="card-header">Weekly leaderboard sharing: {{ 'on' if board_enabled else 'off' }}</summary><div class="card-body">
+    <p>Off by default. When enabled, children in this household can see each other's names, weekly rankings, points and approved-job totals, plus lifetime milestones. Weeks run Monday to Sunday in Europe/London; ties share a place. Balances, goals, job details, requests and spending history remain private.</p>
+    <form method="POST" action="{{ url_for('household.reward_action', action='set-board') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label" for="board_enabled">Share the weekly leaderboard with children?</label>
+        <select class="form-select mb-3" id="board_enabled" name="enabled"><option value="no"{% if not board_enabled %} selected{% endif %}>No - personal progress only</option><option value="yes"{% if board_enabled %} selected{% endif %}>Yes - share the weekly leaderboard and milestones</option></select>
+        <button class="btn btn-primary" type="submit">Save board sharing</button>
+    </form>
+</div></details>
 <h2 class="h4">Approval inbox</h2>
-<p>Any adult with Household Hub access can review. Personal lists never earn points. Each one-off job earns points once.</p>
+<p>Any adult with Household Hub access can review. Personal lists never earn points. Each job occurrence earns points once.</p>
 {% for job in submitted_jobs %}
 <section class="card mb-3"><div class="card-body">
     <h3 class="h5 text-break">{{ job.title }} &mdash; {{ job.points }} points</h3><p>{{ job.member.user.name if job.member else 'Former member' }} says this is done. <a href="{{ url_for('household.task', task_id=job.task_id) }}">View task</a></p>
+    {% if job.task.period_start %}<p class="small text-muted">Interval: {{ job.task.period_start.strftime('%d %b %Y') }} &ndash; {{ job.task.due_date.strftime('%d %b %Y') }}</p>{% endif %}
     <form method="POST" action="{{ url_for('household.reward_action', action='review-job') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="job_id" value="{{ job.id }}">
         <label class="form-label" for="job_note_{{ job.id }}">Helpful note (required to send back)</label><input class="form-control mb-2" id="job_note_{{ job.id }}" name="note" maxlength="500" value="{{ submitted.get('note', '') if failed_action|default('') == 'review-job' and submitted.get('job_id')|string == job.id|string else '' }}">
@@ -109,15 +231,22 @@
 {% endfor %}
 {% if not submitted_jobs and not pending %}<p>All caught up &mdash; nothing waiting for approval.</p>{% endif %}
 <details class="card mb-3"{% if failed_action|default('') == 'create-job' %} open{% endif %}><summary class="card-header">Add a reward job</summary><div class="card-body">
-    <p>This creates a normal shared task with points attached. You can also add points to an existing shared task in Tasks &amp; lists.</p>
+    <p>Choose one or more children. Each gets their own task, completion and points &mdash; one child finishing never takes the job away from another.</p>
     {% set values = submitted if failed_action|default('') == 'create-job' else {} %}
     <form method="POST" action="{{ url_for('household.reward_action', action='create-job') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="form-label" for="job_title">Job name</label><input class="form-control mb-2" id="job_title" name="title" maxlength="256" value="{{ values.get('title', '') }}" required>
         <label class="form-label" for="job_notes">What needs doing?</label><textarea class="form-control mb-2" id="job_notes" name="notes" maxlength="5000">{{ values.get('notes', '') }}</textarea>
-        <label class="form-label" for="job_member">Who is it for?</label><select class="form-select mb-2" id="job_member" name="assigned_membership_id" required><option value="">Choose a child</option>{% for member in members %}<option value="{{ member.id }}"{% if values.get('assigned_membership_id', '')|string == member.id|string %} selected{% endif %}>{{ member.user.name }}</option>{% endfor %}</select>
-        <label class="form-label" for="job_points">Points after approval</label><input class="form-control mb-2" id="job_points" name="reward_points" type="number" min="1" max="1000" value="{{ values.get('reward_points', '10') }}" required>
+        {% set selected_children = (values.getlist('assigned_membership_ids') if values.getlist is defined else values.get('assigned_membership_ids', [])) or [values.get('assigned_membership_id', '')] %}
+        <fieldset class="mb-3"><legend class="fs-6">Who can do this job?</legend>
+            <div class="d-flex flex-wrap gap-3">{% for member in members %}<div class="form-check"><input class="form-check-input" type="checkbox" name="assigned_membership_ids" id="job_member_{{ member.id }}" value="{{ member.id }}"{% if member.id|string in selected_children|map('string')|list %} checked{% endif %}><label class="form-check-label" for="job_member_{{ member.id }}">{{ member.user.name }}</label></div>{% else %}<p class="text-muted">Add a child in Household &amp; people first.</p>{% endfor %}</div>
+        </fieldset>
+        <label class="form-label" for="job_assignment">How do they get the job?</label>
+        <select class="form-select mb-2" id="job_assignment" name="assignment_mode"><option value="assigned"{% if values.get('assignment_mode', 'assigned') == 'assigned' %} selected{% endif %}>Assign automatically to each child</option><option value="claim"{% if values.get('assignment_mode') == 'claim' %} selected{% endif %}>Optional &mdash; each child claims their own turn</option></select>
+        <p class="form-text">For repeats, each child gets a fresh turn every interval. Optional jobs must be claimed again each time.</p>
+        <label class="form-label" for="job_points">Points per child, per completion after approval</label><input class="form-control mb-2" id="job_points" name="reward_points" type="number" min="1" max="1000" value="{{ values.get('reward_points', '10') }}" required>
         <label class="form-label" for="job_date">Planned date (optional)</label><input class="form-control mb-2" id="job_date" name="due_date" type="date" min="1900-01-01" max="2100-12-31" value="{{ values.get('due_date', '') }}">
+        {% set task = none %}{% with submitted=values %}{% include 'household/_task_recurrence.html' %}{% endwith %}
         {% set selected_list = values.get('list_id', lists[0].id if lists else '') %}
         <label class="form-label" for="job_list">Shared task list</label><select class="form-select mb-2" id="job_list" name="list_id"><option value=""{% if selected_list|string == '' %} selected{% endif %}>Create a new list</option>{% for item in lists %}<option value="{{ item.id }}"{% if selected_list|string == item.id|string %} selected{% endif %}>{{ item.title }}</option>{% endfor %}</select>
         <label class="form-label" for="job_list_title">New list name (only when creating a list)</label><input class="form-control mb-3" id="job_list_title" name="list_title" maxlength="128" value="{{ values.get('list_title', 'Reward jobs') }}">
@@ -142,7 +271,7 @@
     {% if item.review_note %}<p class="text-break mb-0">{{ item.review_note }}</p>{% endif %}
 </div></article>{% else %}<p>No reward requests yet.</p>{% endfor %}
 <details class="card mb-3"><summary class="card-header">Finished jobs ({{ job_history|length }})</summary><ul class="list-group list-group-flush">
-{% for job in job_history %}<li class="list-group-item text-break">{{ job.title }} &mdash; {{ 'Well done! +' ~ job.points ~ ' points' if job.state == 'approved' else 'Closed - no points awarded' }}{% if not child_view %} ({{ job.member.user.name if job.member else 'Former member' }}){% endif %}{% if job.review_note %}<p class="small mb-0">{{ job.review_note }}</p>{% endif %}</li>{% else %}<li class="list-group-item">Your finished jobs will appear here.</li>{% endfor %}
+{% for job in job_history %}<li class="list-group-item text-break">{{ job.title }} &mdash; {{ 'Well done! +' ~ job.points ~ ' points' if job.state == 'approved' else 'Not completed in its interval' if job.task and job.task.expired else 'Closed - no points awarded' }}{% if not child_view %} ({{ job.member.user.name if job.member else 'Former member' }}){% endif %}{% if job.task and job.task.period_start %}<p class="small text-muted mb-0">Interval: {{ job.task.period_start.strftime('%d %b %Y') }} &ndash; {{ job.task.due_date.strftime('%d %b %Y') }}</p>{% endif %}{% if job.review_note %}<p class="small mb-0">{{ job.review_note }}</p>{% endif %}</li>{% else %}<li class="list-group-item">Your finished jobs will appear here.</li>{% endfor %}
 </ul></details>
 <details class="card"><summary class="card-header">Points history (latest 100 entries)</summary><ul class="list-group list-group-flush">
 {% for entry in entries %}<li class="list-group-item text-break">{% if not child_view %}{{ entry.member.user.name if entry.member else 'Former member' }}: {% endif %}{{ '+' if entry.points > 0 else '' }}{{ entry.points }} &mdash; {{ entry.description }} <span class="text-muted">({{ 'earned' if entry.kind == 'earned' else 'held for a request' if entry.kind == 'reserved' else 'returned' }} &middot; {{ entry.created_at.strftime('%d %b %Y') }} UTC)</span></li>{% else %}<li class="list-group-item">Points will appear here after an adult approves a job.</li>{% endfor %}

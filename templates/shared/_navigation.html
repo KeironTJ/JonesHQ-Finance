@@ -1,13 +1,16 @@
-{% macro nav_link(endpoint, label, icon, section=none, exact=false, values=none, active_override=none) -%}
+{% macro nav_link(endpoint, label, icon, section=none, exact=false, values=none, active_override=none, child_active=false) -%}
     {% if not section or can_access_section(section) %}
         {% set href = url_for(endpoint, **(values or {})) %}
         {% set active = request.path.rstrip('/') == href.rstrip('/') if exact else (request.path.rstrip('/') == href.rstrip('/') or request.path.startswith(href.rstrip('/') ~ '/')) %}
+        {% if child_active %}
+            {% set active = true %}
+        {% endif %}
         {% if active_override is not none %}
             {% set active = active_override %}
         {% elif settings_area %}
             {% set active = false %}
         {% endif %}
-        <a class="workspace-nav-link{{ ' active' if active else '' }}" href="{{ href }}"{% if active %} aria-current="page"{% endif %} data-nav-search>
+        <a class="workspace-nav-link{{ ' active' if active else '' }}" href="{{ href }}"{% if active %} aria-current="{{ 'location' if child_active else 'page' }}"{% endif %} data-nav-search>
             <i class="bi bi-{{ icon }}" aria-hidden="true"></i><span>{{ label }}</span>
         </a>
     {% endif %}
@@ -26,6 +29,7 @@
             {% if can_open_household %}
             {{ nav_link('household.my_day', 'My day', 'house-heart', exact=true) }}
             {{ nav_link('household.calendar', 'Calendar', 'calendar3', exact=true) }}
+            {{ nav_link('household.events', 'Events', 'calendar-event') }}
             {{ nav_link('household.tasks', 'My tasks & lists', 'list-check') }}
             {{ nav_link('household.rewards', 'My rewards', 'gift') }}
             {% else %}

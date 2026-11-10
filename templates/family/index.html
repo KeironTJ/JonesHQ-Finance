@@ -5,30 +5,36 @@
 <div class="container-fluid">
     {% call page_header('Household & people', 'Add people, manage membership and choose what they can open.', 'Settings') %}
         <span class="badge bg-secondary">{{ family.name }}</span>
-        <a class="btn btn-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a>
-        <a class="btn btn-outline-primary" href="#invite-adult">Invite adult</a>
-        <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Member access</a>
-        <a class="btn btn-outline-secondary" href="{{ url_for('central.household_setup') }}">Setup checklist</a>
+        <a class="btn btn-primary" href="#invite-adult">Invite adult</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a>
     {% endcall %}
-    <p class="text-muted">Owners manage invitations, membership and module access here. Only a child's designated guardian can change child status. Finance access stays blocked for children.</p>
-    <p><a href="{{ url_for('central.managed_children') }}">Children you supervise</a>{% if can_access_section('settings') %} &middot; <a href="{{ url_for('settings.finance_access') }}">Detailed Finance permissions &amp; assignment</a>{% endif %}</p>
-    <section class="card mb-4">
-        <div class="card-body">
-            <h2 class="h5">Members</h2>
-            <div class="table-responsive">
-                <table class="table mb-0">
-                    <thead><tr><th>Name</th><th>Email</th><th>Household role</th><th>Joined</th><th>Actions</th></tr></thead>
-                    <tbody>
+    <nav class="d-flex gap-3 flex-wrap mb-4" aria-label="Related household settings">
+        <a href="{{ url_for('central.household_setup') }}">Setup checklist</a>
+        {% if can_access_section('settings') %}<a href="{{ url_for('settings.finance_access') }}">Detailed Finance permissions &amp; assignment</a>{% endif %}
+    </nav>
+    <section class="mb-4" aria-labelledby="members-title">
+        <h2 class="h4" id="members-title">Members <span class="badge bg-secondary">{{ memberships|length }}</span></h2>
+        <p class="text-muted">Owners manage people and access. Adults use their own sign-ins; children have a designated guardian and cannot open Finance.</p>
+        <div class="row g-3">
                         {% for membership in memberships %}
                         {% set member = membership.user %}
-                        <tr>
-                            <td class="text-break">{{ member.name }}{% if member.id == current_user.id %} <span class="badge bg-secondary">You</span>{% endif %}{% if member.is_managed_child %} <span class="badge bg-secondary">Managed child</span>{% if member.guardian_id == current_user.id %}<p class="mb-0"><a href="{{ url_for('central.managed_children', _anchor='child-' ~ member.id) }}">Manage child account</a></p>{% else %}<p class="small mb-0">Managed by their designated guardian</p>{% endif %}{% endif %}</td>
-                            <td class="text-break">{{ member.email }}</td>
-                            <td>{{ 'Owner' if membership.role == 'admin' else 'Member' }}</td>
-                            <td>{{ membership.created_at.strftime('%d %b %Y') }}</td>
-                            <td>
+                        <div class="col-md-6">
+                            <article class="card h-100 mb-0" aria-labelledby="member-name-{{ member.id }}">
+                            <div class="card-body">
+                                <div class="d-flex align-items-baseline gap-2 flex-wrap mb-2">
+                                    <h3 class="h5 mb-0 text-break" id="member-name-{{ member.id }}">{{ member.name }}</h3>
+                                    {% if member.id == current_user.id %}<span class="badge bg-secondary">You</span>{% endif %}
+                                    <span class="badge bg-secondary">{{ 'Managed child' if member.is_managed_child else 'Owner' if membership.role == 'admin' else 'Adult member' }}</span>
+                                </div>
+                                <p class="text-break mb-1">{{ member.email }}</p>
+                                <p class="small text-muted">Joined {{ membership.created_at.strftime('%d %b %Y') }}</p>
+                                {% if member.is_managed_child %}
+                                    {% if member.guardian_id == current_user.id %}
+                                    <p><a href="{{ url_for('central.managed_children', _anchor='child-' ~ member.id) }}">Manage child account</a></p>
+                                    {% else %}<p class="small">Managed by their designated guardian</p>{% endif %}
+                                {% endif %}
                                 {% if member.id != current_user.id %}
-                                <details><summary class="mb-2">Role &amp; membership changes</summary>
+                                <details class="border-top pt-3"><summary class="mb-2">Role &amp; membership changes</summary>
                                 <form method="POST" action="{{ url_for('family.update_role', member_id=member.id) }}" class="mb-2">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <label class="form-label small" for="role-{{ member.id }}">Household role for {{ member.name }}</label>
@@ -44,27 +50,27 @@
                                 </form>
                                 </details>
                                 {% endif %}
-                            </td>
-                        </tr>
+                            </div>
+                            </article>
+                        </div>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
         </div>
     </section>
     <section class="card mb-4" id="invite-adult">
         <div class="card-body">
             <h2 class="h5">Invite an adult</h2>
-            <p>Create a link for an adult to use their own sign-in. To give a child access, use <a href="{{ url_for('central.new_managed_child') }}">Add child</a> instead.</p>
+            <p>Create a link, then share it privately with the person you want to invite. They will use it to create their own sign-in; no invitation email is sent automatically.</p>
+            <p class="small text-muted">For a child, use <a href="{{ url_for('central.new_managed_child') }}">Add child</a> instead. Their designated guardian manages the account.</p>
             <form method="POST" action="{{ url_for('family.create_invite') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label class="form-label" for="inviteName">Member name</label>
                 <input class="form-control mb-3" id="inviteName" name="member_name" required>
                 <label class="form-label" for="inviteRole">Household role</label>
-                <select class="form-select mb-3" name="role" id="inviteRole">
+                <select class="form-select mb-2" name="role" id="inviteRole" aria-describedby="inviteRoleHelp">
                     <option value="member">Member</option>
                     <option value="admin">Owner (full household and Finance section access)</option>
                 </select>
+                <p class="form-text" id="inviteRoleHelp">Members use the access you grant. Owners can also manage household people, invitations and permissions.</p>
                 <details class="mb-3">
                     <summary>Initial Finance permissions for this invitation</summary>
                     <p class="text-muted mt-2">As before, new member invitations select all Finance sections initially. Review before creating the link. Owners always have all sections. After joining, manage financial permissions in Finance access &amp; assignment.</p>
@@ -88,7 +94,8 @@
     </section>
     <section class="card mb-4">
         <div class="card-body">
-            <h2 class="h5">Active invite links</h2>
+            <h2 class="h5">Active invite links <span class="badge bg-secondary">{{ active_invites|length }}</span></h2>
+            {% if active_invites %}<p class="text-muted">Share each link only with the named person. It can be used once, before its expiry date.</p>{% endif %}
             {% for invite in active_invites %}
             <div class="border-top py-3">
                 <h3 class="h6">{{ invite.member_name }} &middot; {{ 'Owner' if invite.role == 'admin' else 'Member' }}</h3>
@@ -98,24 +105,28 @@
                     {% endif %}
                 </p>
                 <label class="form-label" for="invite-link-{{ invite.id }}">Invitation link for {{ invite.member_name }}</label>
-                <input class="form-control mb-2" id="invite-link-{{ invite.id }}" value="{{ request.host_url.rstrip('/') }}{{ url_for('family.join', token=invite.token) }}" readonly>
+                <div class="d-flex gap-2 flex-wrap align-items-start mb-2">
+                    <input class="form-control" id="invite-link-{{ invite.id }}" value="{{ request.host_url.rstrip('/') }}{{ url_for('family.join', token=invite.token) }}" readonly>
+                    <button class="btn btn-outline-primary" type="button" data-copy-invite="{{ invite.id }}" aria-label="Copy invitation link for {{ invite.member_name }}" hidden>Copy link</button>
+                </div>
+                <p class="small text-muted" id="invite-copy-status-{{ invite.id }}" role="status" aria-live="polite">Select and copy the link to share it.</p>
                 <form method="POST" action="{{ url_for('family.revoke_invite', invite_id=invite.id) }}" onsubmit="return confirm('Revoke this invite?');">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="btn btn-outline-danger btn-sm" type="submit">Revoke invite for {{ invite.member_name }}</button>
                 </form>
             </div>
             {% else %}
-            <p class="text-muted">No active invite links.</p>
+            <p class="text-muted">No active invite links. Create an invitation above, then share the link with your adult household member.</p>
             {% endfor %}
         </div>
     </section>
     {% if expired_invites %}
-    <section class="card mb-4">
+    <details class="card mb-4">
+        <summary class="card-header">Recent used / expired invites</summary>
         <div class="card-body">
-            <h2 class="h5">Recent used / expired invites</h2>
             <ul>{% for invite in expired_invites %}<li>{{ invite.member_name }} &middot; {{ 'Used' if invite.used_at else 'Expired' }}</li>{% endfor %}</ul>
         </div>
-    </section>
+    </details>
     {% endif %}
     <details class="card border-danger mb-4">
         <summary class="card-header">Advanced: delete this household</summary>
@@ -126,4 +137,31 @@
         </div>
     </details>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('[data-copy-invite]').forEach(function (button) {
+    const input = document.getElementById('invite-link-' + button.dataset.copyInvite);
+    const status = document.getElementById('invite-copy-status-' + button.dataset.copyInvite);
+    button.hidden = false;
+    button.addEventListener('click', async function () {
+        input.focus();
+        input.select();
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+            status.textContent = 'Automatic copying is unavailable. The link is selected; copy it using your browser or keyboard.';
+            return;
+        }
+        button.disabled = true;
+        try {
+            await navigator.clipboard.writeText(input.value);
+            status.textContent = 'Invitation link copied. Share it privately with the person you invited.';
+        } catch (error) {
+            status.textContent = 'Could not copy the invitation link. The link is selected; copy it using your browser or keyboard.';
+        } finally {
+            button.disabled = false;
+        }
+    });
+});
+</script>
 {% endblock %}

@@ -20,6 +20,7 @@ class MyDayService:
         today = rewards['today']
         tasks = family_query(HouseholdTask).join(TaskList).filter(
             HouseholdTask.completed.is_(False),
+            HouseholdTask.expired.is_(False),
             ~HouseholdTask.reward_job.has(),
             or_(
                 HouseholdTask.assigned_membership_id == membership.id,
@@ -31,11 +32,15 @@ class MyDayService:
             events=family_query(CalendarEvent).filter(
                 CalendarEvent.starts_on <= today, CalendarEvent.ends_on >= today,
             ).order_by(CalendarEvent.starts_at, CalendarEvent.id).all(),
-            tasks=[task for task in tasks if task.due_date is None or task.due_date == today],
+            tasks=[task for task in tasks if task.due_date is None or task.due_date == today
+                   or task.period_start and task.period_start <= today <= task.due_date],
             earlier_tasks=[task for task in tasks if task.due_date is not None and task.due_date < today],
-            later_tasks=[task for task in tasks if task.due_date is not None and task.due_date > today],
-            reward_jobs=[job for job in rewards['jobs'] if job.task.due_date is None or job.task.due_date == today],
-            later_jobs=[job for job in rewards['jobs'] if job.task.due_date is not None and job.task.due_date > today],
+            later_tasks=[task for task in tasks if task.due_date is not None and task.due_date > today
+                         and not (task.period_start and task.period_start <= today)],
+            reward_jobs=[job for job in rewards['jobs'] if job.task.due_date is None or job.task.due_date == today
+                         or job.task.period_start and job.task.period_start <= today <= job.task.due_date],
+            later_jobs=[job for job in rewards['jobs'] if job.task.due_date is not None and job.task.due_date > today
+                        and not (job.task.period_start and job.task.period_start <= today)],
             earlier_jobs=rewards['earlier_jobs'], submitted_jobs=rewards['submitted_jobs'],
             balance=rewards['balance'], goal=rewards['goal'],
             pending_points=sum(row.points_cost for row in rewards['pending']),

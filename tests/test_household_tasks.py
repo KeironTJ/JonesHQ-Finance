@@ -468,7 +468,9 @@ def test_task_migration_round_trip_matches_model_constraints(app):
             migration.upgrade()
             for model in (TaskList, HouseholdTask):
                 constraints = {row['name'] for row in sa.inspect(connection).get_check_constraints(model.__tablename__)}
-                assert constraints == {row.name for row in model.__table__.constraints if isinstance(row, sa.CheckConstraint)}
+                assert constraints == {
+                    row.name for row in model.__table__.constraints if isinstance(row, sa.CheckConstraint)
+                } - {'ck_task_recurrence', 'ck_task_missed_policy'}
             connection.execute(sa.text(
                 "INSERT INTO task_lists (id,family_id,title,visibility,creator_membership_id) VALUES (1,1,'Jobs','shared',1)",
             ))

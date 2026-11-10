@@ -82,6 +82,9 @@ action. Macro values remain autoescaped.
 - Keep one Settings entry in the main sidebar. Central and Finance settings share
   workspace tabs, sub-navigation, breadcrumbs and personal/household scope labels.
   Settings must reuse the existing Finance theme and components.
+- Central settings groups full-card links into account, household/people and
+  workspace settings. Cards use permission-filtered settings navigation entries;
+  personal, selected-household and guardian scopes must remain distinct.
 - At desktop widths the sidebar is independently scrollable. Below 992px it uses
   Bootstrap's offcanvas focus management, backdrop, Escape handling and scroll lock.
 - The search button or **Ctrl/Cmd+K** opens page search. Arrow keys browse results;
@@ -93,8 +96,67 @@ action. Macro values remain autoescaped.
 - Tables retain their real tabular structure. Wrap wide tables in `.table-responsive`;
   overflowing wrappers receive keyboard focus and a scroll hint. Existing mobile
   card layouts for transaction and credit-card tables remain in their domain CSS.
+- Household calendar keeps month columns readable inside a labelled, keyboard-focusable
+  horizontal scroll region. Agenda provides a day-by-day alternative. Month jumps
+  preserve the selected view, item types have text labels, and empty states reflect
+  only plans visible to the current user.
+  Date controls use the shared slim planner navigation described below.
+  Month day cards link to the corresponding Agenda date, including empty days
+  and adjacent-month dates. Individual item links remain independent. Show at most
+  three items per card, in the existing event/meal/activity/task order; summarise
+  remaining visible items by type. Agenda keeps the full visible list.
+- Events is the sidebar destination for calendar events; New event remains a page
+  action rather than navigation. The events-only monthly list shows each event
+  once, including events spanning the month boundary, and respects the same
+  household and private-event visibility as Calendar. Event details link back to
+  Events and offer an Open calendar action.
+- Rewards starts with an Overview centred on available rewards, personal savings
+  goals and earned milestones, not setup forms. Use the existing theme tokens,
+  soft brand welcome panel, labelled achievement cards and secondary setup link.
+  Lead with the opt-in weekly leaderboard: a ranked table with places, names,
+  weekly points, approved jobs and a highlighted current-user row. Ties share a
+  place; lifetime milestones expand within each row. Never show sibling balances,
+  goals or spending history. Existing jobs, shop and history remain tabs.
+  Reward job setup uses labelled child checkboxes and distinguishes automatic
+  assignment from optional claiming. Explain that points are per child, per
+  occurrence. Optional job cards show Claim this job before the completion action.
+- Recurrence controls are shared by task creation/editing and reward-job setup.
+  Use explicit Daily/Weekly labels and explain the missed-interval policy.
+  Recurring cards and approval/history rows identify their interval dates;
+  missed intervals say "Not completed", not "Completed" or a points penalty.
+- Meal planner uses slot-specific add links that preselect both date and meal type
+  in the modal and the no-JavaScript form. Its summary counts days with meals in
+  the selected period, not individual meals; empty slots are not treated as overdue
+  work. Week uses chronological day rows with aligned meal-slot columns on desktop
+  and stacked slots on phones. The day count is a muted caption below the date.
+  Month columns use horizontal scrolling, with Week as the responsive alternative.
+- Meal library is a subpage of Meal planner, not a separate sidebar destination.
+  Open it from the planner; library, recipe and recipe-edit pages retain the
+  planner's active navigation state and show its parent link in the top bar.
+  Existing library URLs remain valid.
+- Activity planner uses chronological day rows with a separate date column on
+  desktop and stacked dates on phones. Time ranges, multi-day dates, locations and
+  attendees stay with each activity. Suggestions remain separate from published
+  plans, with explicit review statuses. Date navigation matches Meal planner.
+  Jumps preserve the selected view;
+  month columns use a labelled, keyboard-focusable horizontal scroll region.
+- Calendar, Meal planner and Activity planner share
+  [planner navigation](../templates/shared/_planner_navigation.html) and its styles
+  in [workspace CSS](../static/css/system/workspace.css). This is an unboxed header
+  with arrows beside the date, a Today shortcut and a segmented view switch.
+  The date itself opens a native disclosure containing a labelled date picker and
+  submit button; it works without JavaScript. Controls wrap into two rows on phones.
 - Password fields opt into a labelled visibility toggle with `data-password-toggle`.
   Server-rendered invalid feedback remains outside the generated wrapper.
+- Household & people uses responsive member cards, with role and removal forms
+  inside collapsed details. Shared settings navigation owns the member-access and
+  supervised-children links; do not repeat them in the page's related links.
+  Invitation links remain selectable without JavaScript;
+  enhanced copy controls report success or failure in a live status message and
+  leave the link selected for manual copying when clipboard access is unavailable.
+- Member access saves each person's grants independently. With JavaScript, unchanged
+  forms disable Save and changed forms show an unsaved status and Undo changes.
+  Without JavaScript, the original server-submitted forms remain usable.
 - [Theme bootstrap](../static/js/theme-init.js) runs before styles to avoid a theme
   flash. [ThemeManager](../static/js/main.js) synchronises both theme attributes,
   appearance radios and system preference changes. Signed-in appearance is rendered

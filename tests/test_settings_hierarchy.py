@@ -19,6 +19,99 @@ class SettingsParser(HTMLParser):
             self.links.append(attrs['href'])
 
 
+class SettingsCardParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.cards = []
+        self.in_card = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'a' and 'settings-link' in attrs.get('class', '').split():
+            assert not self.in_card
+            self.in_card = True
+            self.cards.append(attrs['href'])
+        elif self.in_card:
+            assert tag not in ('a', 'button', 'input', 'select')
+
+    def handle_endtag(self, tag):
+        if tag == 'a':
+            self.in_card = False
+
+
+def test_people_page_does_not_repeat_shared_settings_links(app, user):
+    class MainLinksParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.in_main = False
+            self.links = []
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'main':
+                self.in_main = True
+            elif tag == 'a' and self.in_main:
+                self.links.append(attrs.get('href'))
+
+        def handle_endtag(self, tag):
+            if tag == 'main':
+                self.in_main = False
+
+    client = app.test_client()
+    login_client(client, user.id)
+    response = client.get('/central/family/')
+    assert response.status_code == 200
+    parser = MainLinksParser()
+    parser.feed(response.get_data(as_text=True))
+    for path in (
+        '/central/settings/access', '/central/account/children',
+        '/central/setup', '/finance/settings/access',
+    ):
+        assert parser.links.count(path) == 1
+    assert '#invite-adult' in parser.links
+    assert '/central/settings/children/new' in parser.links
+
+
+@pytest.mark.parametrize('kind', ['owner', 'member', 'detached', 'child'])
+def test_central_settings_cards_respect_access_and_show_scope(app, family, user, kind):
+    if kind == 'member':
+        user.role = 'member'
+        db.session.commit()
+    elif kind == 'detached':
+        detach_user_from_households(user)
+    elif kind == 'child':
+        from tests.test_module_access import child
+        user = child(family, user)
+    client = app.test_client()
+    login_client(client, user.id)
+
+    response = client.get('/central/settings')
+    html = response.get_data(as_text=True)
+    parser = SettingsCardParser()
+    parser.feed(html)
+
+    assert response.status_code == 200
+    expected = {'/central/preferences', '/central/account/security'}
+    if kind != 'child':
+        expected.add('/central/account/children')
+        assert 'Children you supervise - Guardian only' in html
+    if kind in ('owner', 'member'):
+        expected.update(('/finance/settings/overview', '/household/settings'))
+    if kind == 'owner':
+        expected.update((
+            '/central/family/', '/central/settings/access',
+            '/central/settings/children/new', '/central/setup',
+        ))
+        assert 'Selected household - Owner only' in html
+    else:
+        assert 'Selected household - Owner only' not in html
+    assert set(parser.cards) == expected
+    assert len(parser.cards) == len(expected)
+    assert 'Only affects you' in html
+    for path in parser.cards:
+        assert client.get(path).status_code == 200
+
+
 @pytest.mark.parametrize('path, area, page', [
     ('/central/settings', 'Central', None),
     ('/finance/settings/overview', 'Finance', None),

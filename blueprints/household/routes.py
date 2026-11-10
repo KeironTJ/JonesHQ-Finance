@@ -39,6 +39,17 @@ def settings():
     return render_template('household/settings.html')
 
 
+@household_bp.route('/events')
+@login_required
+def events():
+    try:
+        context = CalendarService.events_data(request.args)
+    except (ValueError, TypeError) as error:
+        flash(str(error) or 'Invalid events month.', 'danger')
+        return redirect(url_for('household.events'))
+    return render_template('household/events.html', **context)
+
+
 @household_bp.route('/events/new', methods=['GET', 'POST'])
 @login_required
 def create_event():

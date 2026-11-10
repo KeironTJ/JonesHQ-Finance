@@ -272,7 +272,8 @@ def family_query(model, *, include_private=False):
     Also excludes records that are private to another family member (see
     ``_apply_visibility``). ``include_private`` is only for household-wide
     internal quotas and deletion lifecycle operations, never for returning
-    another member's private records.
+    another member's private records. RewardService also uses it for opt-in
+    earned-point aggregates; no ledger rows or spending data are exposed.
 
     Examples::
 

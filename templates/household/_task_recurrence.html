@@ -1,0 +1,29 @@
+<div class="row g-3 mt-1">
+    <div class="col-md-6">
+        <label class="form-label" for="task_recurrence">Repeat</label>
+        <select class="form-select" id="task_recurrence" name="recurrence">
+            {% for value, label in [('none', 'One-off'), ('daily', 'Daily'), ('weekly', 'Weekly (Monday to Sunday)')] %}
+            <option value="{{ value }}"{% if submitted.get('recurrence', task.recurrence if task else 'none') == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <p class="form-text">For repeats, choose today or a future date as the first interval's start. Weekly occurrences are due on Sunday.</p>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="task_missed_policy">If an interval is missed</label>
+        <select class="form-select" id="task_missed_policy" name="missed_policy">
+            <option value="skip"{% if submitted.get('missed_policy', task.missed_policy if task else 'skip') == 'skip' %} selected{% endif %}>Record as not completed; no late points</option>
+            <option value="backlog"{% if submitted.get('missed_policy', task.missed_policy if task else 'skip') == 'backlog' %} selected{% endif %}>Keep available for completion later</option>
+        </select>
+        <p class="form-text">Pending approval is never treated as missed. A new interval can be completed while an earlier one awaits approval.</p>
+    </div>
+    {% if task and task.period_start %}
+    <div class="col-12">
+        <label class="form-label" for="task_repeat_active">Future occurrences</label>
+        <select class="form-select" id="task_repeat_active" name="repeat_active">
+            {% if task.repeat_active %}<option value="yes" selected>Keep repeating</option>{% endif %}
+            <option value="no"{% if not task.repeat_active %} selected{% endif %}>Stop repeating (keep history)</option>
+        </select>
+        <p class="form-text">The interval and missed-task policy are fixed once started. To change them, stop repeating and create a new task.</p>
+    </div>
+    {% endif %}
+</div>

@@ -417,6 +417,103 @@ def test_account_deletion_keeps_series_but_removes_attendance_and_attribution(ap
     assert ActivityAttendee.query.count() == 0
 
 
+@pytest.mark.parametrize('view, query', [
+    ('week', 'week=2026-11-10'),
+    ('month', 'view=month&month=2026-11'),
+])
+def test_planner_readable_layout_and_date_navigation(app, user, view, query):
+    create(app, user, all_day='', starts_at='2026-11-10T09:00', ends_at='2026-11-10T10:30')
+    response = client_for(app, user).get(f'/household/activities?{query}')
+    assert response.status_code == 200
+    html = response.data.decode()
+    assert '09:00 &ndash; 10:30 GMT' in html
+    assert 'Local park' in html
+    assert 'class="planner-navigation"' in html
+    assert f'name="view" value="{view}"' in html
+    assert f'Go<span class="visually-hidden"> to {view}</span>' in html
+    if view == 'week':
+        assert html.count('class="card activity-week-row') == 7
+        assert 'aria-labelledby="activity-day-2026-11-10"' in html
+        assert 'name="week" value="2026-11-10"' in html
+        assert html.count('class="activity-day-action mt-1"') == 7
+    else:
+        assert 'aria-label="Monthly activity planner"' in html
+        assert 'aria-describedby="activity-month-help"' in html
+        assert 'name="month" value="2026-11"' in html
+        assert 'Scroll sideways' in html
+
+
+@pytest.mark.parametrize('query, heading', [
+    ('week=2026-11-10', '9 &ndash; 15 Nov 2026'),
+    ('week=2026-11-30', '30 Nov &ndash; 6 Dec 2026'),
+    ('week=2026-12-31', '28 Dec 2026 &ndash; 3 Jan 2027'),
+    ('view=month&month=2026-11', 'November 2026'),
+])
+def test_compact_activity_toolbar_keeps_dates_and_controls_clear(app, user, query, heading):
+    from html.parser import HTMLParser
+
+    class JumpParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.in_details = False
+            self.in_form = False
+            self.submit_in_disclosure = False
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'details' and attrs.get('class') == 'planner-date-menu':
+                self.in_details = True
+            if tag == 'form' and attrs.get('class') == 'planner-date-form':
+                self.in_form = True
+            if tag == 'button' and self.in_form and attrs.get('type') == 'submit':
+                self.submit_in_disclosure = self.in_details
+
+        def handle_endtag(self, tag):
+            if tag == 'details':
+                self.in_details = False
+            if tag == 'form':
+                self.in_form = False
+
+    html = client_for(app, user).get('/household/activities?' + query).get_data(as_text=True)
+    parser = JumpParser()
+    parser.feed(html)
+    assert parser.submit_in_disclosure
+    view = 'month' if 'view=month' in query else 'week'
+    assert heading in html
+    assert f'aria-label="Previous {view}"' in html
+    assert f'aria-label="Next {view}"' in html
+    assert '<details class="planner-date-menu">' in html
+    assert f'<summary title="Choose another {view}">' in html
+    assert ('Choose a month' if view == 'month' else 'Choose any day in the week') in html
+    assert 'Week containing' not in html
+
+
+def test_planner_shows_full_dates_for_overnight_and_all_day_activities(app, user):
+    create(app, user, all_day='', starts_at='2026-11-10T23:00', ends_at='2026-11-11T00:00')
+    create(app, user, title='Weekend trip', ends_on='2026-11-12')
+    html = client_for(app, user).get('/household/activities?week=2026-11-10').data.decode()
+    assert '10 Nov 2026, 23:00 &ndash; 11 Nov 2026, 00:00 GMT' in html
+    assert '10 Nov 2026 &ndash; 12 Nov 2026' in html
+
+
+def test_planner_suggestion_guidance_and_child_actions(app, user, people):
+    _, child, _ = people
+    suggestion = create(app, child, title='Child outing idea')
+    child_client = client_for(app, child)
+    html = child_client.get('/household/activities?week=2026-11-10').data.decode()
+    assert 'Your suggestions' in html and 'Awaiting review' in html
+    assert html.count('class="activity-day-action mt-1"') == 7
+    assert 'Suggest activity on 2026-11-10' in html
+    assert 'until an adult household member approves it' in html
+    assert html.count('Child outing idea') == 1
+    adult_client = client_for(app, user)
+    html = adult_client.get('/household/activities?week=2026-11-10').data.decode()
+    assert 'Open a pending suggestion to approve or decline it.' in html
+    adult_client.post(f'/household/activities/{suggestion.id}/review', data={'decision': 'reject'})
+    html = adult_client.get('/household/activities?week=2026-11-10').data.decode()
+    assert 'Not approved' in html and 'Awaiting review' not in html
+
+
 def test_activity_migration_round_trip_with_foreign_keys(app):
     path = Path(app.root_path) / 'migrations' / 'versions' / 'a05b1d7f234e_add_household_activities.py'
     spec = importlib.util.spec_from_file_location('activity_schema', path)

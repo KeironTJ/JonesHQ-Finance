@@ -33,7 +33,9 @@
                 <a class="text-break{{ ' text-decoration-line-through' if task.completed }}" href="{{ url_for('household.task', task_id=task.id) }}">{{ task.title }}</a>
                 <span class="badge bg-{{ 'danger' if task.priority == 'urgent' else 'warning text-dark' if task.priority == 'high' else 'secondary' }}">{{ task.priority|title }}</span>
                 <div class="small text-muted text-break">
-                    {% if task.due_date %}Due {{ task.due_date.strftime('%d %b %Y') }}{% if task.due_time %} {{ task.due_time.strftime('%H:%M') }} Europe/London{% endif %}{% if not task.completed and task.due_date < today %} <span class="text-danger">Overdue</span>{% endif %} &middot; {% endif %}
+                    {% if task.period_start %}Repeat: {{ task.period_start.strftime('%d %b') }} &ndash; {{ task.due_date.strftime('%d %b') }} &middot; {% endif %}
+                    {% if task.expired %}<span>Not completed in its interval</span> &middot; {% endif %}
+                    {% if task.due_date %}Due {{ task.due_date.strftime('%d %b %Y') }}{% if task.due_time %} {{ task.due_time.strftime('%H:%M') }} Europe/London{% endif %}{% if not task.completed and not task.expired and task.due_date < today %} <span class="text-danger">Overdue</span>{% endif %} &middot; {% endif %}
                     {{ 'Assigned to ' ~ task.assignee.user.name if task.assignee else 'Unassigned' }}
                     {% if task.completed %} &middot; Completed by {{ task.completer.user.name if task.completer else 'a former member' }}{% endif %}
                     {% if task.reward_job %} &middot; {{ task.reward_job.points }} reward points ({{ 'waiting for approval' if task.reward_job.state == 'submitted' else task.reward_job.state }}){% endif %}

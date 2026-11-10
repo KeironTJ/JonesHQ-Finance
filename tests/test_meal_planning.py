@@ -83,6 +83,38 @@ def test_adult_member_can_manage_library_without_finance_or_owner_role(app, peop
     assert not meal.is_archived
 
 
+@pytest.mark.parametrize('path', [
+    '/household/meals',
+    '/household/meals?status=archived',
+    '/household/meals/new',
+    '/household/meals/{meal_id}',
+    '/household/meals/{meal_id}/edit',
+])
+def test_library_is_nested_under_planner_without_changing_urls(app, user, path):
+    meal = create_meal(app, user)
+    response = client_for(app, user).get(path.format(meal_id=meal.id))
+    assert response.status_code == 200
+    html = response.data.decode()
+    sidebar = html.split('<nav aria-label="Main navigation">', 1)[1].split('</nav>', 1)[0]
+    assert 'Meal library' not in sidebar
+    assert 'class="workspace-nav-link active" href="/household/meal-planner" aria-current="location"' in sidebar
+    topbar = html.split('<header class="workspace-topbar">', 1)[1].split('</header>', 1)[0]
+    assert '<a class="workspace-home" href="/household/meal-planner">Meal planner</a>' in topbar
+    assert '<span class="workspace-location">Meal library</span>' in topbar
+    if path == '/household/meals':
+        assert 'Back to meal planner' in html
+
+
+def test_child_can_reach_library_from_planner_and_return(app, people):
+    _, child = people
+    client = client_for(app, child)
+    html = client.get('/household/meal-planner').data.decode()
+    assert 'href="/household/meals">Meal library</a>' in html
+    html = client.get('/household/meals').data.decode()
+    assert 'Back to meal planner' in html
+    assert 'href="/household/meals/new"' not in html
+
+
 def test_multiple_meals_same_slot_weekly_views_and_source_calendar(app, user):
     first = create_meal(app, user)
     second = create_meal(app, user, name='Salad')
@@ -91,7 +123,7 @@ def test_multiple_meals_same_slot_weekly_views_and_source_calendar(app, user):
     create_plan(app, user, second, slot='lunch')
     client = client_for(app, user)
     html = client.get('/household/meal-planner?week=2026-11-10').data
-    assert b'09 Nov 2026' in html and b'15 Nov 2026' in html
+    assert b'9 &ndash; 15 Nov 2026' in html
     assert b'Pasta' in html and b'Salad' in html
     assert b'<span class="workspace-location">Meal planner</span>' in html
     assert b'<span class="workspace-location">Meal library</span>' in client.get('/household/meals').data
@@ -99,7 +131,13 @@ def test_multiple_meals_same_slot_weekly_views_and_source_calendar(app, user):
         assert f'/household/meal-planner/{plan.id}'.encode() in html
     for view in ('month', 'agenda'):
         html = client.get(f'/household/?month=2026-11&view={view}').data
-        assert b'Dinner: Pasta' in html and b'Dinner: Salad' in html
+        assert b'Dinner: Pasta' in html
+        if view == 'agenda':
+            assert b'Dinner: Salad' in html
+            assert f'/household/meal-planner/{plans[1].id}'.encode() in html
+        else:
+            assert b'Dinner: Salad' not in html
+            assert b'1 more meal' in html
         assert b'Breakfast: Pasta' in html and b'Lunch: Salad' in html
         assert f'/household/meal-planner/{plans[0].id}'.encode() in html
         assert b'A little space in the calendar' not in html
@@ -458,6 +496,77 @@ def test_month_view_day_add_links_and_navigation_stay_in_view(app, user):
         assert context['first'] == date(2026, 10, 26) and context['last'] == date(2026, 12, 6)
         assert MealService.planner({'view': 'month', 'month': '1900-01'})['previous'] is None
         assert MealService.planner({'view': 'month', 'month': '2100-12'})['following'] is None
+
+
+def test_planner_summary_counts_days_not_meals_or_adjacent_months(app, user):
+    meal = create_meal(app, user)
+    create_plan(app, user, meal)
+    create_plan(app, user, meal, slot='lunch')
+    create_plan(app, user, meal, date='2026-10-31')
+    client = client_for(app, user)
+    for query, total in (('week=2026-11-10', 7), ('view=month&month=2026-11', 30)):
+        html = client.get('/household/meal-planner?' + query).get_data(as_text=True)
+        assert f'1 of {total} days planned' in html
+        assert 'days have meals planned' not in html
+        assert 'id="mealPlannerDate"' in html
+    html = client.get('/household/meal-planner?week=2026-11-10').get_data(as_text=True)
+    assert 'data-meal-slot="breakfast"' in html
+    assert 'aria-label="Add lunch on 2026-11-10"' in html
+
+
+@pytest.mark.parametrize('query, heading', [
+    ('week=2026-11-10', '9 &ndash; 15 Nov 2026'),
+    ('week=2026-11-30', '30 Nov &ndash; 6 Dec 2026'),
+    ('week=2026-12-31', '28 Dec 2026 &ndash; 3 Jan 2027'),
+    ('view=month&month=2026-11', 'November 2026'),
+])
+def test_compact_planner_toolbar_keeps_dates_and_controls_clear(app, user, query, heading):
+    html = client_for(app, user).get('/household/meal-planner?' + query).get_data(as_text=True)
+    view = 'month' if 'view=month' in query else 'week'
+    assert heading in html
+    assert f'aria-label="Previous {view}"' in html
+    assert f'aria-label="Next {view}"' in html
+    assert '<details class="planner-date-menu">' in html
+    assert f'<summary title="Choose another {view}">' in html
+    assert ('Choose a month' if view == 'month' else 'Choose any day in the week') in html
+    assert f'0 of {30 if view == "month" else 7} days planned' in html
+
+
+def test_week_layout_has_one_day_row_and_three_slots_per_day(app, user):
+    meal = create_meal(app, user)
+    create_plan(app, user, meal)
+    html = client_for(app, user).get(
+        '/household/meal-planner?week=2026-11-10',
+    ).get_data(as_text=True)
+    assert html.count('<section class="card meal-week-row') == 7
+    assert html.count('<div class="meal-slot">') == 21
+    assert html.count('class="meal-slot-add"') == 21
+    assert 'class="planner-navigation"' in html
+    assert 'aria-labelledby="meal-day-2026-11-10"' in html
+    assert 'Plan breakfast</a>' in html
+    assert 'Add another</a>' in html
+    assert 'aria-label="Add meal on 2026-11-10"' not in html
+
+
+@pytest.mark.parametrize('slot', ['breakfast', 'lunch', 'dinner'])
+def test_slot_add_links_preselect_meal_type_without_javascript(app, user, slot):
+    html = client_for(app, user).get(
+        f'/household/meal-planner/add?date=2026-11-18&slot={slot}',
+    ).get_data(as_text=True)
+    assert f'<option value="{slot}" selected>' in html
+    assert 'value="2026-11-18"' in html
+
+
+def test_slot_add_rejects_invalid_slot_and_children_only_see_plans(app, user, people):
+    _, child = people
+    response = client_for(app, user).get(
+        '/household/meal-planner/add?date=2026-11-18&slot=invalid',
+        follow_redirects=True,
+    )
+    assert b'Choose breakfast, lunch or dinner.' in response.data
+    html = client_for(app, child).get('/household/meal-planner?week=2026-11-10').data
+    assert b'data-meal-slot=' not in html
+    assert b'An adult household member can add or change meals.' in html
 
 
 def test_departing_creator_attribution_detaches_but_plan_remains(app, user, family, people):

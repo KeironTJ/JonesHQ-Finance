@@ -28,9 +28,16 @@ MODULE = {
     'home_endpoint': 'household.calendar',
     'overview_label': 'Calendar',
     'navigation_template': 'household/_navigation.html',
+    'page_parents': {
+        f'household.{endpoint}': ('household.meal_planner', 'Meal planner')
+        for endpoint in ('meals', 'meal', 'create_meal', 'edit_meal', 'archive_meal')
+    },
     'page_labels': {
         'household.my_day': 'My day',
         'household': 'Calendar',
+        **{f'household.{endpoint}': 'Events' for endpoint in (
+            'events', 'event', 'create_event', 'edit_event', 'delete_event',
+        )},
         **{f'household.{endpoint}': 'Meal library' for endpoint in (
             'meals', 'meal', 'create_meal', 'edit_meal', 'archive_meal',
         )},

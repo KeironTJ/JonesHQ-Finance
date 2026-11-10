@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}{{ event.title }} - Household calendar{% endblock %}
 {% block content %}
-<a href="{{ url_for('household.calendar', month=event.starts_on.strftime('%Y-%m')) }}" class="btn btn-outline-secondary mb-3">Back to calendar</a>
+<a href="{{ url_for('household.events', month=event.starts_on.strftime('%Y-%m')) }}" class="btn btn-outline-secondary mb-3">Back to events</a>
 <section class="card"><div class="card-body">
     <h1>{{ event.title }}</h1>
     <p class="badge bg-secondary">{{ calendar_service.privacy_label(event) }}</p>
@@ -17,6 +17,7 @@
     {% if event.description %}<p class="text-break" style="white-space: pre-wrap">{{ event.description }}</p>{% endif %}
     <p class="small text-muted">{{ 'Created by ' ~ event.creator_membership.user.name if event.creator_membership else 'Creator no longer in household; household owners manage this shared event.' }}</p>
     <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('household.calendar', month=event.starts_on.strftime('%Y-%m')) }}">Open calendar</a>
         {% if calendar_service.can_act(event, 'edit') %}<a class="btn btn-primary" href="{{ url_for('household.edit_event', event_id=event.id) }}">Edit event</a>{% endif %}
         {% if calendar_service.can_act(event, 'delete') %}
         <form method="POST" action="{{ url_for('household.delete_event', event_id=event.id) }}" onsubmit="return confirm('Delete this calendar event?');">

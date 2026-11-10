@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header, empty_state %}
+{% from 'shared/_planner_navigation.html' import planner_navigation %}
+{% block title %}Events{% endblock %}
+{% block content %}
+{% call page_header('Events', 'Appointments, occasions and time together. Only events you can see are shown; meals, activities and tasks live in their own planners.', 'Household Hub') %}
+    <a class="btn btn-outline-primary" href="{{ url_for('household.calendar', month=month.strftime('%Y-%m')) }}">Open calendar</a>
+    <a class="btn btn-primary" href="{{ url_for('household.create_event') }}">New event</a>
+{% endcall %}
+{{ planner_navigation(
+    'household.events', month, 'month', 'month', month, month,
+    url_for('household.events', month=previous) if previous else none,
+    url_for('household.events', month=following) if following else none,
+    [], 'eventsMonth'
+) }}
+{% if events %}
+<section class="card" aria-label="Events in {{ month.strftime('%B %Y') }}"><div class="card-body">
+    <ul class="list-unstyled mb-0">
+    {% for event in events %}
+        <li class="{{ 'border-top pt-3 mt-3' if not loop.first }}">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <h2 class="h5 mb-1 text-break"><a href="{{ url_for('household.event', event_id=event.id) }}">{{ event.title }}</a></h2>
+                <span class="badge bg-secondary">{{ calendar_service.privacy_label(event) }}</span>
+            </div>
+            <p class="small mb-1">
+                {% if event.all_day %}
+                    {{ event.starts_on.strftime('%d %b %Y') }}{% if event.ends_on != event.starts_on %} &ndash; {{ event.ends_on.strftime('%d %b %Y') }}{% endif %} &middot; All day
+                {% else %}
+                    {{ calendar_service.local_time(event.starts_at).strftime('%d %b %Y, %H:%M %Z') }} &ndash; {{ calendar_service.local_time(event.ends_at).strftime('%d %b %Y, %H:%M %Z') }}
+                {% endif %}
+            </p>
+            {% if event.location %}<p class="small text-muted text-break mb-0">{{ event.location }}</p>{% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+</div></section>
+{% else %}
+<section class="card">
+    {% call empty_state('No events this month', 'No events visible to you in ' ~ month.strftime('%B %Y') ~ '. Add an event or browse another month.', 'calendar-event') %}
+        <a class="btn btn-primary" href="{{ url_for('household.create_event') }}">New event</a>
+    {% endcall %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,6 +1,12 @@
 <a class="activity-link" href="{{ url_for('household.activity', activity_id=occurrence.activity.id, view=view) }}">{{ occurrence.activity.title }}</a>
 <div class="small text-muted text-break">
-    {{ 'All day' if occurrence.activity.all_day else calendar_service.local_time(occurrence.starts_at).strftime('%H:%M %Z') }}
+    {% if occurrence.activity.all_day %}
+        All day{% if occurrence.starts_on != occurrence.ends_on %} &middot; {{ occurrence.starts_on.strftime('%d %b %Y') }} &ndash; {{ occurrence.ends_on.strftime('%d %b %Y') }}{% endif %}
+    {% else %}
+        {% set local_start = calendar_service.local_time(occurrence.starts_at) %}
+        {% set local_end = calendar_service.local_time(occurrence.ends_at) %}
+        {{ local_start.strftime('%d %b %Y, %H:%M') if local_start.date() != local_end.date() else local_start.strftime('%H:%M') }} &ndash; {{ local_end.strftime('%d %b %Y, %H:%M %Z') if local_start.date() != local_end.date() else local_end.strftime('%H:%M %Z') }}
+    {% endif %}
     {% if occurrence.activity.location %} &middot; {{ occurrence.activity.location }}{% endif %}
     {% if occurrence.activity.recurrence == 'weekly' %} &middot; Weekly{% endif %}
 </div>

@@ -7,6 +7,10 @@
 .hub-intro h1 { font-size: clamp(2rem, 5vw, 3rem); }
 .hub-modules .card { border-top: 4px solid var(--brand); }
 .hub-modules .hub-future { border-top-color: var(--border-color); }
+.hub-modules .hub-module-open { transition: border-color var(--t-fast), box-shadow var(--t-fast); }
+.hub-modules .hub-module-open:hover,
+.hub-modules .hub-module-open:focus-within { border-color: var(--brand); box-shadow: var(--shadow-md); }
+.hub-modules .hub-module-open h3 a { color: inherit; }
 .hub-module-icon { font-size: 2rem; color: var(--brand); margin-bottom: 1rem; }
 .hub-modules .card-body { display: flex; flex-direction: column; padding: 1.75rem; }
 .hub-modules .hub-action { margin-top: auto; padding-top: 1rem; }
@@ -15,9 +19,9 @@
 
 {% block content %}
 <section class="hub-intro" aria-labelledby="hub-title">
-    <span class="eyebrow">Central Hub</span>
-    <h1 id="hub-title">One home. Your modules.</h1>
-    <p class="lead text-muted">Choose a module. Your account, household and preferences stay with you across the platform.</p>
+    <span class="eyebrow">Family HQ</span>
+    <h1 id="hub-title">A clearer view of money and home life.</h1>
+    <p class="lead text-muted">Family HQ brings household finances and everyday planning together. Keep track of money in Finance, and organise calendars, meals, activities and tasks in Household Hub.</p>
 </section>
 
 {% if current_user.is_household_owner and active_household_id is not none %}
@@ -35,22 +39,37 @@
 {% endif %}
 
 <section aria-labelledby="modules-title">
-    <h2 class="h4 mb-3" id="modules-title">Your modules</h2>
+    <h2 class="h4 mb-2" id="modules-title">Choose where to start</h2>
+    <p class="text-muted mb-3">Each workspace has its own focused tools. Your account and household access carry across them.</p>
     <div class="row g-4 hub-modules">
         {% for module in modules %}
         <div class="col-md-6">
-            <article class="card h-100{% if module.status != 'available' %} hub-future{% endif %}">
+            <article class="card h-100{% if module.status != 'available' %} hub-future{% endif %}{% if module.can_open %} hub-module-open{% endif %}">
                 <div class="card-body">
                     <i class="bi {{ module.icon }} hub-module-icon" aria-hidden="true"></i>
-                    <h3 class="h4">{{ module.title }}</h3>
+                    <h3 class="h4">
+                        {% if module.can_open %}
+                        <a class="stretched-link text-decoration-none" href="{{ url_for(module.home_endpoint) }}">{{ module.title }}</a>
+                        {% else %}
+                        {{ module.title }}
+                        {% endif %}
+                    </h3>
                     <p class="text-muted">{{ module.description }}</p>
                     <div class="hub-action">
                         {% if module.can_open %}
-                        <a class="btn btn-primary" href="{{ url_for(module.home_endpoint) }}">Open {{ module.title }} <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+                        <span class="text-primary fw-semibold">Open {{ module.title }} <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></span>
                         {% elif module.status == 'planned' %}
                         <span class="badge bg-secondary">Coming soon</span>
+                        {% elif module.has_household %}
+                        <span class="badge bg-secondary">Access not enabled</span>
+                        {% if current_user.is_household_owner and active_household_id is not none %}
+                        <p class="small text-muted mt-2">Choose who can open this module in the selected household.</p>
+                        <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Manage member access</a>
                         {% else %}
-                        <span class="badge bg-secondary">{{ 'Access not enabled' if module.has_household else 'Household required' }}</span>
+                        <p class="small text-muted mt-2 mb-0">Ask your household owner to enable this module for you.</p>
+                        {% endif %}
+                        {% else %}
+                        <span class="badge bg-secondary">Household required</span>
                         {% endif %}
                     </div>
                 </div>

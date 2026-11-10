@@ -36,6 +36,11 @@
                 <span class="topbar-divider" aria-hidden="true">/</span>
                 {% set page_labels = active_module.get('page_labels', {}) if active_module else {} %}
                 {% set page_label = page_labels.get(request.endpoint, page_labels.get(request.blueprint, {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title))) %}
+                {% set page_parent = active_module.get('page_parents', {}).get(request.endpoint) if active_module else none %}
+                {% if page_parent and not settings_area %}
+                <a class="workspace-home" href="{{ url_for(page_parent[0]) }}">{{ page_parent[1] }}</a>
+                <span class="topbar-divider" aria-hidden="true">/</span>
+                {% endif %}
                 <span class="workspace-location">{{ settings_page.label if settings_page else 'Settings' if settings_area == 'central' else settings_groups[settings_area].label ~ ' settings' if settings_area else (active_module.overview_label if active_module and request.endpoint == active_module.home_endpoint else page_label) }}</span>
             </div>
             <div class="topbar-actions">

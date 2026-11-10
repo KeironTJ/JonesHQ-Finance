@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from uuid import UUID, uuid4
 
 from flask import abort
 from flask_login import current_user
-from sqlalchemy import update
+from sqlalchemy import case, update
 
 from extensions import db
 from models.family import Family, HouseholdMembership
@@ -107,6 +107,17 @@ class RewardService:
         from services.household.task_service import TaskService
         membership = RewardService.require_adult()
         RewardService._lock()
+        mode = data.get('assignment_mode', 'assigned')
+        if mode not in ('assigned', 'claim'):
+            raise ValueError('Choose automatic assignment or optional claiming.')
+        if hasattr(data, 'getlist'):
+            selected = data.getlist('assigned_membership_ids')
+        else:
+            selected = data.get('assigned_membership_ids', [])
+        if not isinstance(selected, (list, tuple)):
+            raise ValueError('Choose one or more eligible children.')
+        selected = selected or [data.get('assigned_membership_id')]
+        children = {RewardService._child(member_id).id for member_id in selected}
         task_list = family_get(TaskList, data.get('list_id')) if data.get('list_id') else None
         if data.get('list_id') and task_list is None:
             raise ValueError('Choose a shared task list in this household.')
@@ -120,16 +131,44 @@ class RewardService:
             db.session.flush()
         if task_list.visibility != 'shared':
             raise ValueError('Reward jobs need a shared task list.')
-        task = HouseholdTask(
-            family_id=membership.family_id, task_list=task_list,
-            creator_membership_id=membership.id, **TaskService._task_values(data, task_list),
-        )
-        db.session.add(task)
-        RewardService.configure_task(task, data)
-        if task.reward_job is None:
-            raise ValueError('Choose points for this reward job.')
+        tasks = []
+        for member_id in sorted(children):
+            values = dict(data)
+            values['assigned_membership_id'] = member_id
+            task = HouseholdTask(
+                family_id=membership.family_id, task_list=task_list,
+                creator_membership_id=membership.id, claim_required=mode == 'claim',
+                **TaskService._task_values(values, task_list),
+            )
+            db.session.add(task)
+            RewardService.configure_task(task, values)
+            TaskService.configure_recurrence(task, values)
+            if task.reward_job is None:
+                raise ValueError('Choose points for this reward job.')
+            tasks.append(task)
         db.session.commit()
-        return task
+        return tasks[0]
+
+    @staticmethod
+    def claim_job(job_id, data):
+        from services.household.task_service import TaskService
+        membership = CalendarService.require_access()
+        RewardService._lock()
+        TaskService.refresh_recurring(commit=False)
+        job = family_get_or_404(RewardJob, job_id)
+        if not current_user.is_managed_child or job.membership_id != membership.id:
+            abort(403)
+        task = job.task
+        if job.state != 'open' or task is None or task.expired:
+            raise ValueError('This job is no longer available to claim.')
+        if not task.claim_required:
+            raise ValueError('This job is already assigned to you.')
+        if task.period_start and task.period_start > datetime.now(LONDON).date():
+            raise ValueError('This repeat interval has not started yet.')
+        if task.claimed_at is None:
+            task.claimed_at = _now()
+        db.session.commit()
+        return job
 
     @staticmethod
     def completion_changed(task, completed):
@@ -185,6 +224,10 @@ class RewardService:
                 points=job.points, description=job.title, created_at=_now(),
             ))
         elif action == 'return':
+            if job.task and job.task.period_start:
+                root = job.task.series or job.task
+                if root.missed_policy == 'skip' and job.task.due_date < datetime.now(LONDON).date():
+                    raise ValueError('This interval has ended. Approve the submitted work or close it without points.')
             job.state = 'open'
             job.submitted_at = None
             if job.task:
@@ -307,13 +350,77 @@ class RewardService:
         db.session.commit()
 
     @staticmethod
+    def set_board(data):
+        membership = RewardService.require_adult()
+        enabled = data.get('enabled')
+        if enabled not in ('yes', 'no'):
+            raise ValueError('Choose whether to share the celebration board.')
+        RewardService._lock()
+        family = membership.family
+        family.rewards_board_enabled = enabled == 'yes'
+        db.session.commit()
+
+    @staticmethod
+    def celebration_data(membership):
+        family = membership.family
+        child = current_user.is_managed_child
+        members = [member for member in CalendarService.members() if member.user.is_managed_child]
+        if child and not family.rewards_board_enabled:
+            members = [member for member in members if member.id == membership.id]
+        ids = [member.id for member in members]
+        today = datetime.now(LONDON).date()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=7)
+        starts_at = datetime.combine(week_start, time.min, tzinfo=LONDON).astimezone(timezone.utc).replace(tzinfo=None)
+        ends_at = datetime.combine(week_end, time.min, tzinfo=LONDON).astimezone(timezone.utc).replace(tzinfo=None)
+        in_week = (RewardPointEntry.created_at >= starts_at) & (RewardPointEntry.created_at < ends_at)
+        # Opt-in sharing exposes earned totals only, never ledger rows or spending.
+        totals = family_query(RewardPointEntry, include_private=True).filter(
+            RewardPointEntry.membership_id.in_(ids), RewardPointEntry.kind == 'earned',
+        ).with_entities(
+            RewardPointEntry.membership_id,
+            db.func.sum(RewardPointEntry.points),
+            db.func.count(RewardPointEntry.id),
+            db.func.sum(case((in_week, RewardPointEntry.points), else_=0)),
+            db.func.sum(case((in_week, 1), else_=0)),
+        ).group_by(RewardPointEntry.membership_id).all() if ids else []
+        earned = {
+            member_id: (int(points), count, int(week_points), int(week_jobs))
+            for member_id, points, count, week_points, week_jobs in totals
+        }
+        cards = []
+        for member in members:
+            points, jobs, week_points, week_jobs = earned.get(member.id, (0, 0, 0, 0))
+            milestones = [
+                ('First step', 'Your first approved job', jobs >= 1, 'star'),
+                ('Helping hand', '5 approved jobs', jobs >= 5, 'hand-thumbs-up'),
+                ('Team player', '10 approved jobs', jobs >= 10, 'people'),
+                ('100-point milestone', '100 points earned in total', points >= 100, 'trophy'),
+            ]
+            cards.append(dict(
+                name=member.user.name, is_you=member.id == membership.id,
+                earned=points, jobs=jobs, milestones=milestones,
+                week_points=week_points, week_jobs=week_jobs,
+            ))
+        cards.sort(key=lambda card: (-card['week_points'], card['name'].casefold()))
+        rank, previous_points = 0, None
+        for index, card in enumerate(cards, start=1):
+            if card['week_points'] != previous_points:
+                rank = index
+            card['rank'] = rank
+            previous_points = card['week_points']
+        return family.rewards_board_enabled, cards, week_start, week_end - timedelta(days=1)
+
+    @staticmethod
     def page_data(view):
+        from services.household.task_service import TaskService
         membership = CalendarService.require_access()
-        if view not in ('jobs', 'shop', 'progress', 'manage'):
-            raise ValueError('Choose jobs, rewards or progress.')
+        if view not in ('home', 'jobs', 'shop', 'progress', 'manage'):
+            raise ValueError('Choose overview, jobs, rewards or progress.')
         child = current_user.is_managed_child
         if view == 'manage':
             RewardService.require_adult()
+        TaskService.refresh_recurring()
         today = datetime.now(LONDON).date()
         jobs = family_query(RewardJob).order_by(RewardJob.id.desc()).all()
         requests = family_query(RewardRequest).order_by(RewardRequest.id.desc()).all()
@@ -325,7 +432,17 @@ class RewardService:
         active = [job for job in jobs if job.state == 'open' and job.task and job.membership_id]
         current = [job for job in active if job.task.due_date is None or job.task.due_date >= today]
         earlier = [job for job in active if job.task.due_date is not None and job.task.due_date < today]
+        board_enabled = membership.family.rewards_board_enabled
+        celebration, week_start, week_end = [], None, None
+        if view == 'home':
+            board_enabled, celebration, week_start, week_end = RewardService.celebration_data(membership)
+        personal = next((card for card in celebration if card['is_you']), None)
+        active_rewards = [reward for reward in rewards if reward.available]
         return dict(
+            board_enabled=board_enabled, celebration=celebration, personal=personal,
+            board_week_start=week_start, board_week_end=week_end,
+            featured_rewards=active_rewards[:3],
+            available_reward_count=len(active_rewards),
             child_view=child, view=view, jobs=current, earlier_jobs=earlier,
             submitted_jobs=[job for job in jobs if job.state == 'submitted' and job.task and job.membership_id],
             job_history=[job for job in jobs if job.state in ('approved', 'closed')],

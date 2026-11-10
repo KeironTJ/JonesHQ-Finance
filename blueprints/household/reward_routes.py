@@ -10,7 +10,7 @@ from . import household_bp
 @household_bp.route('/rewards')
 @login_required
 def rewards():
-    view = request.args.get('view') or ('jobs' if current_user.is_managed_child else 'manage')
+    view = request.args.get('view') or 'home'
     try:
         context = RewardService.page_data(view)
     except (ValueError, TypeError) as error:
@@ -25,17 +25,19 @@ def reward_action(action):
     operations = {
         'create-job': (RewardService.create_job, 'Job added.', 'manage'),
         'submit-job': (RewardService.submit_job, 'Well done! Waiting for an adult to check.', 'jobs'),
+        'claim-job': (RewardService.claim_job, 'Job claimed! Complete it, then send it for approval.', 'jobs'),
         'review-job': (RewardService.review_job, 'Job reviewed.', 'manage'),
         'save-reward': (RewardService.save_reward, 'Reward saved.', 'manage'),
         'request': (RewardService.request_reward, 'Reward requested! Your points are held until an adult decides.', 'shop'),
         'review-request': (RewardService.review_request, 'Reward request reviewed.', 'manage'),
         'goal': (RewardService.set_goal, 'Your reward goal was updated.', 'shop'),
+        'set-board': (RewardService.set_board, 'Celebration board sharing updated.', 'manage'),
     }
     if action not in operations:
         abort(404)
     operation, message, view = operations[action]
     try:
-        if action in ('submit-job', 'review-job'):
+        if action in ('submit-job', 'review-job', 'claim-job'):
             operation(request.form.get('job_id'), request.form)
         elif action == 'save-reward':
             operation(request.form, request.form.get('reward_id') or None)

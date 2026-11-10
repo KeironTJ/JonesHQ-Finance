@@ -240,7 +240,7 @@ class CalendarService:
         return 'Private: creator only'
 
     @staticmethod
-    def page_data(data):
+    def _month_data(data):
         CalendarService.require_access()
         today = datetime.now(LONDON).date()
         try:
@@ -249,10 +249,40 @@ class CalendarService:
             raise ValueError('Choose a valid calendar month.') from error
         if not 1900 <= selected.year <= 2100:
             raise ValueError('Choose a month between 1900 and 2100.')
+        weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(selected.year, selected.month)
+        return dict(
+            month=selected, weeks=weeks, today=today,
+            previous=(selected - timedelta(days=1)).strftime('%Y-%m') if selected.year > 1900 or selected.month > 1 else None,
+            following=(selected.replace(day=calendar.monthrange(selected.year, selected.month)[1]) + timedelta(days=1)).strftime('%Y-%m')
+            if selected.year < 2100 or selected.month < 12 else None,
+            calendar_service=CalendarService,
+        )
+
+    @staticmethod
+    def events_data(data):
+        context = CalendarService._month_data(data)
+        first = context['month']
+        last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
+        context['events'] = family_query(CalendarEvent).filter(
+            CalendarEvent.starts_on <= last, CalendarEvent.ends_on >= first,
+        ).order_by(CalendarEvent.starts_on, CalendarEvent.starts_at, CalendarEvent.title, CalendarEvent.id).all()
+        return context
+
+    @staticmethod
+    def page_data(data):
+        context = CalendarService._month_data(data)
+        selected, weeks = context['month'], context['weeks']
         view = data.get('view') or 'month'
         if view not in ('month', 'agenda'):
             raise ValueError('Choose month or agenda view.')
-        weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(selected.year, selected.month)
+        selected_day = None
+        if data.get('day'):
+            try:
+                selected_day = date.fromisoformat(data.get('day'))
+            except (TypeError, ValueError) as error:
+                raise ValueError('Choose a valid calendar day.') from error
+            if selected_day.replace(day=1) != selected:
+                raise ValueError('Choose a day in the selected month.')
         first, last = weeks[0][0], weeks[-1][-1]
         events = family_query(CalendarEvent).filter(
             CalendarEvent.starts_on <= last, CalendarEvent.ends_on >= first,
@@ -267,8 +297,8 @@ class CalendarService:
         activities = ActivityService.between(first, last)
         from services.household.task_service import TaskService
         tasks = TaskService.between(first, last)
-        return dict(
-            month=selected, weeks=weeks, days=days, view=view, today=today,
+        context.update(
+            days=days, view=view, selected_day=selected_day,
             meal_days={
                 day: [plan for plan in planned_meals if plan.date == day]
                 for week in weeks for day in week
@@ -282,11 +312,8 @@ class CalendarService:
                 day: [task for task in tasks if task.due_date == day]
                 for week in weeks for day in week
             },
-            previous=(selected - timedelta(days=1)).strftime('%Y-%m') if selected.year > 1900 or selected.month > 1 else None,
-            following=(selected.replace(day=calendar.monthrange(selected.year, selected.month)[1]) + timedelta(days=1)).strftime('%Y-%m')
-            if selected.year < 2100 or selected.month < 12 else None,
-            calendar_service=CalendarService,
         )
+        return context
 
     @staticmethod
     def form_data(event=None):

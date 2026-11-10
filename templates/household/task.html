@@ -4,11 +4,26 @@
 <a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.tasks', list_id=task.list_id) if task else url_for('household.tasks') }}">Back to tasks</a>
 <h1 class="text-break">{{ task.title if task else 'Add task' }}</h1>
 {% if task %}
-<p class="text-muted">{{ task.task_list.title }} &middot; {{ 'Shared with household' if task.task_list.visibility == 'shared' else 'Personal list' }} &middot; {{ 'Completed' if task.completed else 'Active' }}</p>
+<p class="text-muted">{{ task.task_list.title }} &middot; {{ 'Shared with household' if task.task_list.visibility == 'shared' else 'Personal list' }} &middot; {{ 'Not completed in its interval' if task.expired else 'Completed' if task.completed else 'Active' }}</p>
 <p class="small text-muted">Added by {{ task.creator_membership.user.name if task.creator_membership else 'a former member' }}{% if task.completed %} &middot; Completed {{ task.completed_at.strftime('%d %b %Y %H:%M') }} UTC by {{ task.completer.user.name if task.completer else 'a former member' }}{% endif %}</p>
 <div class="mb-3">{% include 'household/_task_completion.html' %}</div>
+{% if task.period_start %}
+<p class="alert alert-info">Repeat interval: {{ task.period_start.strftime('%d %b %Y') }} to {{ task.due_date.strftime('%d %b %Y') }}. {% if task.expired %}Not completed in its interval.{% endif %} {% if task.series %}<a href="{{ url_for('household.task', task_id=task.series_id) }}">Manage the repeat schedule</a>. Changes here affect this occurrence only.{% else %}The series keeps its original details and points. Stop repeating and create a new task to change the schedule or details.{% endif %}</p>
 {% endif %}
-{% if can_manage and lists %}
+{% endif %}
+{% if task and task.recurrence != 'none' and can_manage %}
+<section class="card mb-3"><div class="card-body">
+    <h2 class="h5">Repeat schedule: {{ task.recurrence|title }}</h2>
+    <p>{{ 'Assigned to ' ~ task.assignee.user.name if task.assignee else 'Unassigned' }}</p>
+    <p>{{ 'Missed intervals stay available for later completion.' if task.missed_policy == 'backlog' else 'Missed intervals are recorded as not completed, with no late points.' }}</p>
+    <p class="text-break">{{ task.notes }}</p>
+    {% if task.repeat_active %}<form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="repeat_active" value="no">
+        <button class="btn btn-outline-secondary" type="submit">Stop future repeats</button>
+    </form>{% else %}<p class="mb-0">This series has stopped. Its history is kept; create a new task to start again.</p>{% endif %}
+</div></section>
+{% elif can_manage and lists %}
 <form method="POST" class="card mb-3"><div class="card-body">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if task %}<p>List: {{ task.task_list.title }}. Tasks cannot be moved between lists.</p>{% else %}
@@ -21,10 +36,13 @@
         <div class="col-md-6"><label class="form-label" for="task_due_date">Due date (optional)</label><input class="form-control" id="task_due_date" name="due_date" type="date" min="1900-01-01" max="2100-12-31" value="{{ submitted.get('due_date', task.due_date.isoformat() if task and task.due_date else '') }}"></div>
         <div class="col-md-6"><label class="form-label" for="task_due_time">Due time (Europe/London, optional)</label><input class="form-control" id="task_due_time" name="due_time" type="time" value="{{ submitted.get('due_time', task.due_time.strftime('%H:%M') if task and task.due_time else '') }}"></div>
     </div>
+    {% if not task or not task.series_id %}
+    {% include 'household/_task_recurrence.html' %}
+    {% endif %}
     {% if not current_user.is_managed_child %}
     <div class="mt-3"><label class="form-label" for="reward_points">Reward points (optional)</label><input class="form-control" id="reward_points" name="reward_points" type="number" min="0" max="1000" value="{{ submitted.get('reward_points', task.reward_job.points if task and task.reward_job else '') }}"><div class="form-text">For a shared task assigned to a child. Completion sends it for adult approval; each job earns points only once. Leave blank for an ordinary task. Existing reward jobs keep their points; close them from Rewards if no longer needed.</div></div>
     {% endif %}
-    <p class="form-text mt-3">Incomplete dated tasks appear in your calendar, subject to list privacy. Completion removes them; reopening restores them. Recurring tasks are not available yet.</p>
+    <p class="form-text mt-3">Incomplete dated tasks appear in your calendar, subject to list privacy. Daily repeats reset at London midnight; weekly repeats run Monday to Sunday. Each occurrence has its own completion and approval.</p>
     <button class="btn btn-primary mt-2" type="submit">Save task</button>
 </div></form>
 {% elif not task %}
@@ -39,12 +57,12 @@
 </div></section>
 {% endif %}
 {% if task and task.reward_job %}<p class="mt-3">Reward job: {{ task.reward_job.points }} points &middot; {{ task.reward_job.state|title }}. <a href="{{ url_for('household.rewards') }}">Open Rewards</a>. Approved jobs never earn points again when reopened.</p>{% endif %}
-{% if task and can_manage %}
+{% if task and can_manage and not task.period_start %}
 <form method="POST" action="{{ url_for('household.delete_task', task_id=task.id) }}" onsubmit="return confirm('Delete this task?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-danger" type="submit">Delete task</button></form>
 {% endif %}
 {% endblock %}
 {% block extra_js %}
-{% if can_manage and lists %}
+{% if can_manage and lists and (not task or task.recurrence == 'none') %}
 <script>
 (() => {
     const list = document.getElementById('task_list_id');

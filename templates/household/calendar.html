@@ -1,82 +1,113 @@
 {% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header, empty_state %}
+{% from 'shared/_planner_navigation.html' import planner_navigation %}
 {% block title %}Household calendar{% endblock %}
 {% block extra_css %}
 <style>
-.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .3rem; }
-.calendar-day { min-height: 8rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: .5rem; min-width: 0; background: var(--bg-surface); }
+.calendar-scroll { overflow-x: auto; padding: .25rem; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .4rem; min-width: 49rem; }
+.calendar-day { position: relative; min-height: 8rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: .5rem; min-width: 0; background: var(--bg-surface); }
+.calendar-day:hover, .calendar-day:focus-within { border-color: var(--brand); }
+.calendar-day-link { color: inherit; text-decoration: none; }
+.calendar-day-link::after { content: ''; position: absolute; inset: 0; border-radius: .5rem; }
+.calendar-day-link:focus-visible::after { outline: 2px solid var(--brand); outline-offset: 2px; }
+.calendar-day .calendar-event { position: relative; z-index: 1; }
+.calendar-more { margin: .5rem 0 0; font-size: .75rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.calendar-agenda-day { scroll-margin-top: calc(var(--nav-height) + 1rem); }
 .calendar-day.today { border: 2px solid var(--brand); }
-.calendar-day.outside { opacity: .65; }
-.calendar-event { display: block; overflow-wrap: anywhere; font-size: .85rem; margin-top: .5rem; }
+.calendar-day.outside { background: var(--bg-surface-2); }
+.calendar-day.outside > time { color: var(--text-muted); }
+.calendar-event { display: block; overflow-wrap: anywhere; font-size: .85rem; margin-top: .5rem; padding: .4rem; border-radius: var(--radius-xs); background: var(--brand-soft); }
+.calendar-item-type { display: block; font-size: .75rem; color: var(--text-secondary); }
+.calendar-agenda li { overflow-wrap: anywhere; }
+.calendar-agenda li + li { border-top: 1px solid var(--border-color); }
 .calendar-weekday { text-align: center; font-weight: 600; }
-@media (max-width: 767px) {
-    .calendar-day { min-height: 6rem; padding: .2rem; }
-    .calendar-event { font-size: .7rem; }
-    .calendar-grid { gap: .15rem; }
-}
 </style>
 {% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-    <div><h1>Household calendar</h1><p class="text-muted mb-0">Europe/London &middot; Shared household plans and your private events.</p></div>
+{% call page_header('Household calendar', 'Events, meals, activities and dated tasks together. Only plans you can see are shown. All times use Europe/London.', 'Household Hub') %}
     <a class="btn btn-primary" href="{{ url_for('household.create_event') }}"><i class="bi bi-calendar-plus me-1" aria-hidden="true"></i>New event</a>
-</div>
-<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-    <div class="d-flex gap-2 align-items-center">
-        {% if previous %}<a class="btn btn-outline-secondary" aria-label="Previous month" href="{{ url_for('household.calendar', month=previous, view=view) }}">&laquo;</a>{% endif %}
-        <h2 class="h4 mb-0">{{ month.strftime('%B %Y') }}</h2>
-        {% if following %}<a class="btn btn-outline-secondary" aria-label="Next month" href="{{ url_for('household.calendar', month=following, view=view) }}">&raquo;</a>{% endif %}
-    </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{{ url_for('household.calendar', view=view) }}">Today</a>
-        <div class="btn-group" aria-label="Calendar view">
-            {% for mode in ['month', 'agenda'] %}<a class="btn btn-{{ 'primary' if view == mode else 'outline-primary' }}" href="{{ url_for('household.calendar', month=month.strftime('%Y-%m'), view=mode) }}"{% if view == mode %} aria-current="page"{% endif %}>{{ mode|title }}</a>{% endfor %}
-        </div>
-    </div>
-</div>
+{% endcall %}
+{{ planner_navigation(
+    'household.calendar', month, view, 'month', month, month,
+    url_for('household.calendar', month=previous, view=view) if previous else none,
+    url_for('household.calendar', month=following, view=view) if following else none,
+    [('month', url_for('household.calendar', month=month.strftime('%Y-%m'), view='month')),
+     ('agenda', url_for('household.calendar', month=month.strftime('%Y-%m'), view='agenda'))],
+    'calendarMonth'
+) }}
+{% set visible = namespace(has_plans=false) %}
+{% for day, events in days.items() %}
+    {% if day.month == month.month and (events or meal_days[day] or activity_days[day] or task_days[day]) %}
+        {% set visible.has_plans = true %}
+    {% endif %}
+{% endfor %}
+{% if not visible.has_plans %}
+<section class="card" aria-label="No plans this month">
+    {% call empty_state('A little space in the calendar', 'No plans visible to you in ' ~ month.strftime('%B %Y') ~ '. Add an event, or choose another month.', 'calendar3') %}
+        <a class="btn btn-primary" href="{{ url_for('household.create_event') }}">Add an event</a>
+    {% endcall %}
+</section>
+{% endif %}
 {% if view == 'month' %}
 <section class="card"><div class="card-body p-2 p-md-3">
+    <p class="small text-muted" id="calendar-scroll-help">Scroll sideways to see the full week on smaller screens, or choose Agenda for a day-by-day list.</p>
+    <div class="calendar-scroll" role="region" tabindex="0" aria-label="{{ month.strftime('%B %Y') }} month calendar" aria-describedby="calendar-scroll-help">
     <div class="calendar-grid" aria-label="{{ month.strftime('%B %Y') }}">
         {% for name in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="calendar-weekday">{{ name }}</div>{% endfor %}
         {% for week in weeks %}{% for day in week %}
         <div class="calendar-day{{ ' today' if day == today }}{{ ' outside' if day.month != month.month }}">
-            <time datetime="{{ day.isoformat() }}" aria-label="{{ day.strftime('%A %d %B %Y') }}">{{ day.day }}</time>
-            {% for event in days[day] %}
+            {% if 1900 <= day.year <= 2100 %}<a class="calendar-day-link" href="{{ url_for('household.calendar', month=day.strftime('%Y-%m'), view='agenda', day=day.isoformat(), _anchor='calendar-day-' ~ day.isoformat()) }}" aria-label="View agenda for {{ day.strftime('%A %d %B %Y') }}">{% endif %}
+            <time datetime="{{ day.isoformat() }}" aria-label="{{ day.strftime('%A %d %B %Y') }}"{% if day == today %} aria-current="date"{% endif %}>{{ day.day }}{% if day.month != month.month %} {{ day.strftime('%b') }}{% endif %}</time>
+            {% if 1900 <= day.year <= 2100 %}</a>{% endif %}
+            {% if day == today %}<span class="badge bg-primary">Today</span>{% endif %}
+            {% set shown = namespace(count=0, events=0, meals=0, activities=0, tasks=0) %}
+            {% for event in days[day] %}{% if shown.count < 3 %}
+            {% set shown.count = shown.count + 1 %}
             <a class="calendar-event" href="{{ url_for('household.event', event_id=event.id) }}" title="{{ calendar_service.privacy_label(event) }}">
-                {% if event.visibility == 'private' %}<i class="bi bi-lock" aria-label="Private"></i>{% endif %}
-                {% if not event.all_day %}{{ calendar_service.local_time(event.starts_at).strftime('%H:%M') }} {% endif %}{{ event.title }}
+                <span class="calendar-item-type">Event &middot; {{ 'All day' if event.all_day else calendar_service.local_time(event.starts_at).strftime('%H:%M') }}{% if event.visibility == 'private' %} &middot; Private{% endif %}</span>
+                {{ event.title }}
             </a>
-            {% endfor %}
-            {% for plan in meal_days[day] %}
+            {% else %}{% set shown.events = shown.events + 1 %}{% endif %}{% endfor %}
+            {% for plan in meal_days[day] %}{% if shown.count < 3 %}
+            {% set shown.count = shown.count + 1 %}
             <a class="calendar-event" href="{{ url_for('household.planned_meal', plan_id=plan.id) }}" title="Meal plan &middot; Shared with household">
+                <span class="calendar-item-type">Meal plan</span>
                 <i class="bi bi-cup-hot" aria-hidden="true"></i> {{ meal_slots[plan.slot] }}: {{ plan.title }}
             </a>
-            {% endfor %}
-            {% for occurrence in activity_days[day] %}
+            {% else %}{% set shown.meals = shown.meals + 1 %}{% endif %}{% endfor %}
+            {% for occurrence in activity_days[day] %}{% if shown.count < 3 %}
+            {% set shown.count = shown.count + 1 %}
             <a class="calendar-event" href="{{ url_for('household.activity', activity_id=occurrence.activity.id) }}" title="Activity &middot; Shared with household">
-                <i class="bi bi-people" aria-hidden="true"></i> {% if not occurrence.activity.all_day %}{{ calendar_service.local_time(occurrence.starts_at).strftime('%H:%M') }} {% endif %}{{ occurrence.activity.title }}
+                <span class="calendar-item-type">Activity &middot; {{ 'All day' if occurrence.activity.all_day else calendar_service.local_time(occurrence.starts_at).strftime('%H:%M') }}</span>
+                {{ occurrence.activity.title }}
             </a>
-            {% endfor %}
-            {% for task in task_days[day] %}
+            {% else %}{% set shown.activities = shown.activities + 1 %}{% endif %}{% endfor %}
+            {% for task in task_days[day] %}{% if shown.count < 3 %}
+            {% set shown.count = shown.count + 1 %}
             <a class="calendar-event" href="{{ url_for('household.task', task_id=task.id) }}" title="Task &middot; {{ 'Shared with household' if task.task_list.visibility == 'shared' else 'Personal list' }}">
-                <i class="bi bi-list-check" aria-hidden="true"></i> {% if task.due_time %}{{ task.due_time.strftime('%H:%M') }} {% endif %}{{ task.title }}
+                <span class="calendar-item-type">Task{% if task.due_time %} &middot; {{ task.due_time.strftime('%H:%M') }}{% endif %}{% if task.task_list.visibility != 'shared' %} &middot; Personal{% endif %}</span>
+                {{ task.title }}
             </a>
-            {% endfor %}
+            {% else %}{% set shown.tasks = shown.tasks + 1 %}{% endif %}{% endfor %}
+            {% if shown.events or shown.meals or shown.activities or shown.tasks %}
+            <p class="calendar-more">{% set counts = namespace(separator='') %}{% for count, singular, plural in [(shown.events, 'event', 'events'), (shown.meals, 'meal', 'meals'), (shown.activities, 'activity', 'activities'), (shown.tasks, 'task', 'tasks')] %}{% if count %}{{ counts.separator }}{{ count }} more {{ singular if count == 1 else plural }}{% set counts.separator = ' · ' %}{% endif %}{% endfor %}</p>
+            {% endif %}
         </div>
         {% endfor %}{% endfor %}
     </div>
+    </div>
 </div></section>
 {% else %}
-{% set found = namespace(value=false) %}
-{% for day, events in days.items() %}{% if day.month == month.month and (events or meal_days[day] or activity_days[day] or task_days[day]) %}
-{% set found.value = true %}
-<section class="card mb-3"><div class="card-body">
-    <h3 class="h5">{{ day.strftime('%A %d %B') }}</h3>
-    <ul class="list-unstyled mb-0">
+{% for day, events in days.items() %}{% if day.month == month.month and (events or meal_days[day] or activity_days[day] or task_days[day] or day == selected_day) %}
+<section class="card mb-3 calendar-agenda-day" id="calendar-day-{{ day.isoformat() }}"><div class="card-body">
+    <h3 class="h5"><time datetime="{{ day.isoformat() }}"{% if day == today %} aria-current="date"{% endif %}>{{ day.strftime('%A %d %B') }}</time>{% if day == today %} <span class="badge bg-primary">Today</span>{% endif %}</h3>
+    <ul class="list-unstyled mb-0 calendar-agenda">
     {% for event in events %}
         <li class="py-2">
             <a href="{{ url_for('household.event', event_id=event.id) }}">{{ event.title }}</a>
             <span class="text-muted">{{ 'All day' if event.all_day else calendar_service.local_time(event.starts_at).strftime('%H:%M %Z') }}</span>
-            <div class="small text-muted">{{ calendar_service.privacy_label(event) }}</div>
+            <div class="small text-muted">Event &middot; {{ calendar_service.privacy_label(event) }}</div>
         </li>
     {% endfor %}
     {% for plan in meal_days[day] %}
@@ -100,8 +131,8 @@
         </li>
     {% endfor %}
     </ul>
+    {% if not (events or meal_days[day] or activity_days[day] or task_days[day]) %}<p class="text-muted mb-0">No plans visible to you on this day.</p>{% endif %}
 </div></section>
 {% endif %}{% endfor %}
-{% if not found.value %}<div class="card"><div class="card-body"><h3 class="h5">A little space in the calendar</h3><p class="mb-0">No events visible to you this month. Add an event to start planning.</p></div></div>{% endif %}
 {% endif %}
 {% endblock %}

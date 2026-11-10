@@ -201,8 +201,14 @@ class MealService:
         MealService.require_access()
         context = planner_period(data, MealService.parse_date)
         plans = MealService.plans_between(context['first'], context['last'])
+        period_days = [
+            day for day in context['days']
+            if context['view'] != 'month' or day.month == context['selected'].month
+        ]
         return dict(
             **context, slots=SLOTS,
+            planned_days=len({plan.date for plan in plans if plan.date in period_days}),
+            period_days=len(period_days),
             plans_by_slot={
                 (day, slot): [plan for plan in plans if plan.date == day and plan.slot == slot]
                 for day in context['days'] for slot in SLOTS
@@ -228,10 +234,13 @@ class MealService:
         selected = MealService.parse_date(
             data.get('date') or (plan.date.isoformat() if plan else datetime.now(LONDON).date().isoformat()),
         )
+        slot = data.get('slot') or (plan.slot if plan else 'dinner')
+        if slot not in SLOTS:
+            raise ValueError('Choose breakfast, lunch or dinner.')
         meals = family_query(Meal).filter(
             (Meal.is_archived.is_(False)) | (Meal.id == plan.meal_id if plan else False),
         ).order_by(Meal.name, Meal.id).all()
         return dict(
             plan=plan, meals=meals, slots=SLOTS, can_manage=MealService.can_manage(),
-            selected=selected, view=view, meal_service=MealService,
+            selected=selected, selected_slot=slot, view=view, meal_service=MealService,
         )
