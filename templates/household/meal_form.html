@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Edit' if meal else 'Add' }} meal{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if meal else 'Add' }} meal</h1>
+<p class="text-muted">An optional shortcut for future planning. Existing planned meals keep their own details.</p>
+<form method="POST" class="card"><div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3"><label class="form-label" for="name">Meal name</label><input class="form-control" id="name" name="name" maxlength="200" value="{{ submitted.get('name', meal.name if meal else '') }}" required></div>
+    {% for key, label in [('ingredients', 'Ingredients'), ('instructions', 'Instructions / notes')] %}
+    <div class="mb-3"><label class="form-label" for="{{ key }}">{{ label }}</label><textarea class="form-control" id="{{ key }}" name="{{ key }}" rows="5" maxlength="10000">{{ submitted.get(key, meal|attr(key) if meal else '') }}</textarea></div>
+    {% endfor %}
+    <div class="mb-3"><label class="form-label" for="source">Recipe source (link or book reference)</label><textarea class="form-control" id="source" name="source" rows="2" maxlength="500">{{ submitted.get('source', meal.source if meal else '') }}</textarea></div>
+    <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">Save meal</button><a class="btn btn-outline-secondary" href="{{ url_for('household.meal', meal_id=meal.id) if meal else url_for('household.meals') }}">Cancel</a></div>
+</div></form>
+{% endblock %}

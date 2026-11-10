@@ -35,7 +35,8 @@
                 <a class="workspace-home" href="{{ url_for(active_module.home_endpoint if active_module else 'central.hub') }}">{{ active_module.title if active_module else 'Central' }}</a>
                 <span class="topbar-divider" aria-hidden="true">/</span>
                 {% set page_labels = active_module.get('page_labels', {}) if active_module else {} %}
-                <span class="workspace-location">{{ settings_groups[settings_area].label ~ ' settings' if settings_area else (active_module.overview_label if active_module and request.endpoint == active_module.home_endpoint else page_labels.get(request.blueprint, {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title))) }}</span>
+                {% set page_label = page_labels.get(request.endpoint, page_labels.get(request.blueprint, {'central': 'Central Hub', 'auth': 'Account & support', 'family': 'Household & members', 'preferences': 'Personal preferences', 'site_admin': 'Site admin'}.get(request.blueprint, request.blueprint|default('Overview', true)|replace('_', ' ')|title))) %}
+                <span class="workspace-location">{{ settings_groups[settings_area].label ~ ' settings' if settings_area else (active_module.overview_label if active_module and request.endpoint == active_module.home_endpoint else page_label) }}</span>
             </div>
             <div class="topbar-actions">
                 {% if household_memberships|length > 1 %}

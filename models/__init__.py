@@ -4,6 +4,7 @@ from models.accounts import Account
 from models.balances import Balance
 from models.budgets import Budget
 from models.calendar_event import CalendarEvent
+from models.meals import Meal, PlannedMeal
 from models.categories import Category
 from models.childcare import ChildcareRecord
 from models.credit_cards import CreditCard, CreditCardPromotion
@@ -48,6 +49,8 @@ __all__ = [
     'Balance',
     'Budget',
     'CalendarEvent',
+    'Meal',
+    'PlannedMeal',
     'Category',
     'ChildcareRecord',
     'CreditCard',

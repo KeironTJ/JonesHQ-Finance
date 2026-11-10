@@ -5,7 +5,7 @@ household_bp = Blueprint('household', __name__, url_prefix='/household')
 
 
 def register_blueprints(app):
-    from . import routes
+    from . import routes, meal_routes
     app.register_blueprint(household_bp)
 
 
@@ -28,7 +28,15 @@ MODULE = {
     'home_endpoint': 'household.calendar',
     'overview_label': 'Calendar',
     'navigation_template': 'household/_navigation.html',
-    'page_labels': {'household': 'Calendar'},
+    'page_labels': {
+        'household': 'Calendar',
+        **{f'household.{endpoint}': 'Meal library' for endpoint in (
+            'meals', 'meal', 'create_meal', 'edit_meal', 'archive_meal',
+        )},
+        **{f'household.{endpoint}': 'Meal planner' for endpoint in (
+            'meal_planner', 'add_planned_meal', 'planned_meal', 'remove_planned_meal',
+        )},
+    },
     'status': 'available',
     'requires_household': True,
     'default_destination': True,

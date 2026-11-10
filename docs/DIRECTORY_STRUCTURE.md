@@ -20,7 +20,7 @@ Flask blueprints are grouped by their owning application layer, not by URL.
   `expenses/`, `income/`, `loans/`, `mortgage/`, `networth/`, `onboarding/`,
   `pensions/`, `plans/`, `preferences/` (Finance defaults), `settings/`,
   `transactions/`, `vehicles/`, and `vendors/`.
-- `household/` - Household Hub module descriptor, calendar and event routes,
+- `household/` - Household Hub module descriptor, calendar, event and meal routes,
   separate from Core membership administration and Finance childcare.
 
 The application factory registers core once, then the platform registry registers
@@ -41,6 +41,7 @@ SQLAlchemy database models
 - `budgets.py` - Budget model
 - `categories.py` - Category model
 - `calendar_event.py` - Household calendar dates, UTC times, visibility and action permissions
+- `meals.py` - Shared household meal library and multiple planned meals per date/slot
 - `childcare.py` - Childcare records and related entities
 - `credit_cards.py` - Credit card model
 - `credit_card_transactions.py` - Credit card transactions
@@ -82,7 +83,7 @@ SQLAlchemy database models
 Domain-oriented business logic layer. See [`services/README.md`](../services/README.md)
 for the package map and compatibility-import policy.
 - `finance/` - Accounts, categories, transactions, subscriptions, payday, balances, income, vendors, credit cards, and expenses
-- `household/` - Family, managed-child access, calendar and childcare workflows
+- `household/` - Family, managed-child access, calendar, meal planning and childcare workflows
 - `planning/` - Loans, mortgages, and pensions
 - `vehicles/` - Vehicles, fuel forecasting, and mileage
 - `platform/` - Authentication, shared appearance and module orchestration
@@ -97,7 +98,7 @@ Jinja2 HTML templates
 - `shared/` - Permission-aware navigation, page search, UI macros and shared analytics chart setup
 - `central/` - Registry-driven module launcher
 - `finance/` - Finance-owned sidebar navigation
-- `household/` - Month/agenda calendar, event forms and calendar/privacy settings
+- `household/` - Month/agenda calendar, event forms, meal library, date-first week/month planner and privacy settings
 - `email/` - Email templates
 - `errors/` - Error pages
 - `settings/` - Settings hub and independently saved household, credit-card,

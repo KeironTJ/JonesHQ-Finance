@@ -56,8 +56,8 @@ as the changes; a failed write saves neither.
 ## Household calendar (implemented)
 
 Household Hub opens at `/household/` with month and agenda views and manually
-created all-day/timed events in `Europe/London`. Later meal planning, activities
-and dated tasks can contribute items.
+created all-day/timed events in `Europe/London`. Meal plans also contribute
+source-linked items; activity and dated-task feeds are future work.
 
 - Shared and private events have explicit visibility. Adult-private events are
   creator-only; child-private events are visibly labelled as accessible to the
@@ -83,12 +83,37 @@ and dated tasks can contribute items.
   Nonexistent spring clock-change times and ambiguous autumn times are rejected
   with an explicit instruction to choose an unambiguous time.
 
+## Shared meal planning (implemented)
+
+- The household meal library stores names, ingredients, instructions and recipe sources.
+  Active adults with Household Hub access manage meals and plans, regardless of
+  household role or Finance permissions. Managed children can view only, including
+  when a corrupt household role says owner. These rules apply in services and routes.
+- The date-first week/month planner supports per-day quick-add and multiple meals
+  per breakfast, lunch or dinner slot. Each entry has its own title, description,
+  recipe source and optional planning notes. Library selection is optional and
+  copies details once. Plans use London calendar dates, not UTC timestamps, and
+  submitted meal IDs must be in the selected household.
+- Month and agenda calendars read plans directly, linking to their planner
+  entries. No manual `CalendarEvent` is generated. Planned-detail changes, moves
+  and removals are immediately reflected; calendar event permissions are not
+  used to bypass meal permissions.
+- Meals are archived rather than deleted. Existing plans remain visible and
+  editable; archived meals cannot be added to new plans until restored.
+  Updating a library meal never changes existing planned details. Editing one
+  planned meal changes neither other dates nor the library.
+- All meals and plans are shared household records. They survive individual
+  membership/account deletion and are removed child-first on household deletion.
+  Added-by attribution uses the active household membership; departing members'
+  attribution is cleared so a reused membership ID cannot claim old plans.
+  There is no private-meal mode, cross-household sharing or Finance integration.
+
 ## Future feeds and external sharing (not implemented)
 
 Cross-household sharing will use invitations to specific items, with acceptance
 and revocation. It must not grant household membership, Finance access or access
 to unrelated records. Children will not administer external sharing.
 
-Meal/activity/task feeds and external sharing are not available. Existing Finance childcare records are unrelated
+Activity/task feeds and external sharing are not available. Existing Finance childcare records are unrelated
 to managed-child sign-in accounts. The previous JonesHQ hub is a feature
 reference only; its test data, authentication and styling are not being imported.

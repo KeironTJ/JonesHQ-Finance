@@ -7,7 +7,13 @@
     <p>Timed events follow London daylight-saving changes. All-day dates stay on their chosen calendar dates. Repeated or nonexistent clock-change times must be replaced with an unambiguous time.</p>
     <h2 class="h5">Per-event permissions</h2>
     <p>Each event has independent edit and delete permissions. The creator and household owners manage shared events; owners never override private visibility. Adult-private events are creator-only; managed-child private events are visible to the child and designated guardian within the same household.</p>
-    <p>When a creator leaves, private events are removed and shared events remain for household owners to manage. External sharing, meals, activities and task feeds are not available yet.</p>
+    <p>When a creator leaves, private events are removed and shared events remain for household owners to manage.</p>
+    <h2 class="h5">Shared meal planning</h2>
+    <p>All members with Household Hub access can view meals and plans. Adults manage the shared meal library and planner; managed children view only. Breakfast, lunch and dinner can each contain multiple meals per day.</p>
+    <p>Use week or month view and add meals straight onto a date. Enter a title, description and recipe source, or optionally copy from the library. Each planned meal is independent: library edits never change existing plans.</p>
+    <p>Plans appear automatically in the calendar and link back to the planner. Archiving a meal keeps existing plans; restoring it allows new planning. Shared meals and plans remain when a member leaves or deletes their account; their added-by attribution is cleared.</p>
+    <p>External sharing, activity and task feeds are not available yet.</p>
     <a class="btn btn-primary" href="{{ url_for('household.calendar') }}">Open calendar</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.meal_planner') }}">Open meal planner</a>
 </div></section>
 {% endblock %}

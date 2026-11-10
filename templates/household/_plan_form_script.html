@@ -1,0 +1,17 @@
+<script>
+(() => {
+    const library = document.getElementById('plan_meal_id');
+    library.addEventListener('change', () => {
+        const option = library.selectedOptions[0];
+        if (!option.value) return;
+        for (const key of ['title', 'description', 'source']) {
+            document.getElementById('plan_' + key).value = option.dataset[key];
+        }
+    });
+    const modal = document.getElementById('addMealModal');
+    if (modal) modal.addEventListener('show.bs.modal', event => {
+        const selected = event.relatedTarget?.dataset.mealDate;
+        if (selected) document.getElementById('plan_date').value = selected;
+    });
+})();
+</script>

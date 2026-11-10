@@ -1,0 +1,18 @@
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="view" value="{{ view }}">
+<div class="row g-3">
+    <div class="col-md-6"><label class="form-label" for="plan_date">Date</label><input class="form-control" name="date" id="plan_date" type="date" min="1900-01-01" max="2100-12-31" value="{{ submitted.get('date', plan.date.isoformat() if plan else selected.isoformat()) }}" required></div>
+    <div class="col-md-6"><label class="form-label" for="plan_slot">Meal slot</label><select class="form-select" name="slot" id="plan_slot">{% for value, label in slots.items() %}<option value="{{ value }}"{% if submitted.get('slot', plan.slot if plan else 'dinner') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="col-12">
+        <label class="form-label" for="plan_meal_id">Start from the library (optional)</label>
+        <select class="form-select" name="meal_id" id="plan_meal_id">
+            <option value="">No library meal - enter details below</option>
+            {% for meal in meals %}<option value="{{ meal.id }}" data-title="{{ meal.name }}" data-description="{{ meal.instructions }}" data-source="{{ meal.source }}"{% if submitted.get('meal_id', plan.meal_id if plan else '')|string == meal.id|string %} selected{% endif %}>{{ meal.name }}{{ ' (archived)' if meal.is_archived }}</option>{% endfor %}
+        </select>
+        <div class="form-text">Selecting a recipe copies its details below. Edit them for this date without changing other plans or the library. You can also type a meal with no library entry.</div>
+    </div>
+    <div class="col-12"><label class="form-label" for="plan_title">Meal title</label><input class="form-control" id="plan_title" name="title" maxlength="200" value="{{ submitted.get('title', plan.title if plan else '') }}" required></div>
+    <div class="col-12"><label class="form-label" for="plan_description">Description</label><textarea class="form-control" id="plan_description" name="description" rows="3" maxlength="10000">{{ submitted.get('description', plan.description if plan else '') }}</textarea></div>
+    <div class="col-12"><label class="form-label" for="plan_source">Recipe source (link or book reference)</label><textarea class="form-control" id="plan_source" name="source" rows="2" maxlength="500">{{ submitted.get('source', plan.source if plan else '') }}</textarea></div>
+    <div class="col-12"><label class="form-label" for="plan_notes">Planning notes</label><textarea class="form-control" id="plan_notes" name="notes" rows="2" maxlength="2000">{{ submitted.get('notes', plan.notes if plan else '') }}</textarea></div>
+</div>

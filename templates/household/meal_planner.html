@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Meal planner{% endblock %}
+{% block extra_css %}
+<style>
+.meal-slot { border-top: 1px solid var(--border-color); padding-top: .75rem; margin-top: .75rem; }
+.meal-plan-link { overflow-wrap: anywhere; }
+.meal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .25rem; }
+.meal-day { min-width: 0; min-height: 8rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-surface); }
+.meal-day.today { border: 2px solid var(--brand); }
+.meal-day.outside { background: var(--bg-surface-2); }
+.meal-day a { overflow-wrap: anywhere; }
+.meal-day-add { min-height: 44px; min-width: 44px; }
+@media (max-width: 767px) {
+    .meal-day { padding: .2rem; font-size: .75rem; }
+    .meal-month { gap: .15rem; }
+    .meal-day-add { min-width: 0; width: 100%; padding: .25rem; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div><h1>Meal planner</h1><p class="text-muted mb-0">Plan straight onto a date. Multiple meals per slot; the library is optional. Adults manage, children view.</p></div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-primary" href="{{ url_for('household.meals') }}">Meal library</a>
+        {% if can_manage %}<a class="btn btn-primary" href="{{ url_for('household.add_planned_meal', date=selected.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addMealModal" data-meal-date="{{ selected.isoformat() }}">Add meal</a>{% endif %}
+    </div>
+</div>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h2 class="h5 mb-0">{{ selected.strftime('%B %Y') if view == 'month' else first.strftime('%d %b %Y') ~ ' - ' ~ last.strftime('%d %b %Y') }}</h2>
+    <div class="d-flex gap-2 flex-wrap">
+        {% if previous %}<a class="btn btn-outline-secondary" href="{{ url_for('household.meal_planner', **meal_service.planner_values(previous, view)) }}">Previous {{ view }}</a>{% endif %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('household.meal_planner', view=view) }}">This {{ view }}</a>
+        {% if following %}<a class="btn btn-outline-secondary" href="{{ url_for('household.meal_planner', **meal_service.planner_values(following, view)) }}">Next {{ view }}</a>{% endif %}
+    </div>
+</div>
+<div class="btn-group mb-3" aria-label="Meal planner view">
+    {% for mode in ['week', 'month'] %}<a class="btn btn-{{ 'primary' if view == mode else 'outline-primary' }}" href="{{ url_for('household.meal_planner', **meal_service.planner_values(selected, mode)) }}"{% if view == mode %} aria-current="page"{% endif %}>{{ mode|title }}</a>{% endfor %}
+</div>
+{% if view == 'month' %}
+<section class="meal-month" aria-label="{{ selected.strftime('%B %Y') }} meals">
+    {% for name in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="text-center fw-bold">{{ name }}</div>{% endfor %}
+    {% for day in days %}
+    <div class="meal-day{{ ' today' if day == today }}{{ ' outside' if day.month != selected.month }}">
+        <time datetime="{{ day.isoformat() }}">{{ day.day }}</time>
+        {% if can_manage and 1900 <= day.year <= 2100 %}<a class="btn btn-outline-secondary btn-sm meal-day-add" href="{{ url_for('household.add_planned_meal', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addMealModal" data-meal-date="{{ day.isoformat() }}" aria-label="Add meal on {{ day.isoformat() }}">+</a>{% endif %}
+        {% for slot, label in slots.items() %}{% for entry in plans_by_slot[(day, slot)] %}
+        <a class="d-block mt-2 meal-plan-link" href="{{ url_for('household.planned_meal', plan_id=entry.id, view=view) }}">{{ label }}: {{ entry.title }}</a>
+        {% endfor %}{% endfor %}
+    </div>
+    {% endfor %}
+</section>
+{% else %}
+<div class="row g-3">
+{% for day in days %}
+<div class="col-md-6 col-xl-4"><section class="card h-100"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center gap-2">
+        <h2 class="h5 mb-0"><time datetime="{{ day.isoformat() }}">{{ day.strftime('%A %d %b') }}</time></h2>
+        {% if can_manage and 1900 <= day.year <= 2100 %}<a class="btn btn-outline-primary meal-day-add" href="{{ url_for('household.add_planned_meal', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addMealModal" data-meal-date="{{ day.isoformat() }}" aria-label="Add meal on {{ day.isoformat() }}">+</a>{% endif %}
+    </div>
+    {% for slot, label in slots.items() %}
+    <div class="meal-slot">
+        <h3 class="h6">{{ label }}</h3>
+        <ul class="list-unstyled mb-0">
+        {% for entry in plans_by_slot[(day, slot)] %}
+        <li class="mb-2"><a class="meal-plan-link" href="{{ url_for('household.planned_meal', plan_id=entry.id, view=view) }}">{{ entry.title }}</a>{% if entry.meal and entry.meal.is_archived %} <span class="badge bg-secondary">Archived meal</span>{% endif %}{% if entry.description %}<div class="small text-muted text-break">{{ entry.description|truncate(100) }}</div>{% endif %}</li>
+        {% else %}<li class="text-muted small">Nothing planned</li>{% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div></section></div>
+{% endfor %}
+</div>
+{% endif %}
+{% if can_manage %}
+<div class="modal fade" id="addMealModal" tabindex="-1" aria-labelledby="addMealHeading" aria-hidden="true">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5" id="addMealHeading">Add meal to a date</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <form method="POST" action="{{ url_for('household.add_planned_meal') }}">
+            <div class="modal-body">{% include 'household/_plan_fields.html' %}</div>
+            <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit">Add planned meal</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+{% if can_manage %}{% include 'household/_plan_form_script.html' %}{% endif %}
+{% endblock %}

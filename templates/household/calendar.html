@@ -46,13 +46,18 @@
                 {% if not event.all_day %}{{ calendar_service.local_time(event.starts_at).strftime('%H:%M') }} {% endif %}{{ event.title }}
             </a>
             {% endfor %}
+            {% for plan in meal_days[day] %}
+            <a class="calendar-event" href="{{ url_for('household.planned_meal', plan_id=plan.id) }}" title="Meal plan &middot; Shared with household">
+                <i class="bi bi-cup-hot" aria-hidden="true"></i> {{ meal_slots[plan.slot] }}: {{ plan.title }}
+            </a>
+            {% endfor %}
         </div>
         {% endfor %}{% endfor %}
     </div>
 </div></section>
 {% else %}
 {% set found = namespace(value=false) %}
-{% for day, events in days.items() %}{% if day.month == month.month and events %}
+{% for day, events in days.items() %}{% if day.month == month.month and (events or meal_days[day]) %}
 {% set found.value = true %}
 <section class="card mb-3"><div class="card-body">
     <h3 class="h5">{{ day.strftime('%A %d %B') }}</h3>
@@ -62,6 +67,12 @@
             <a href="{{ url_for('household.event', event_id=event.id) }}">{{ event.title }}</a>
             <span class="text-muted">{{ 'All day' if event.all_day else calendar_service.local_time(event.starts_at).strftime('%H:%M %Z') }}</span>
             <div class="small text-muted">{{ calendar_service.privacy_label(event) }}</div>
+        </li>
+    {% endfor %}
+    {% for plan in meal_days[day] %}
+        <li class="py-2">
+            <a href="{{ url_for('household.planned_meal', plan_id=plan.id) }}">{{ meal_slots[plan.slot] }}: {{ plan.title }}</a>
+            <div class="small text-muted">Meal plan &middot; Shared with household</div>
         </li>
     {% endfor %}
     </ul>

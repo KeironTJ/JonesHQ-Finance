@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}{{ plan.title if plan else 'Add planned meal' }}{% endblock %}
+{% block content %}
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.meal_planner', **meal_service.planner_values(plan.date if plan else selected, view)) }}">Back to meal planner</a>
+<h1 class="text-break">{{ plan.title if plan else 'Add meal to a date' }}</h1>
+{% if plan %}
+<p class="text-muted">{{ slots[plan.slot] }} &middot; {{ plan.date.strftime('%d %b %Y') }} &middot; Shared with household</p>
+<p class="small text-muted">{{ 'Added by ' ~ plan.creator_membership.user.name if plan.creator_membership else 'Added by a former member or before attribution was available.' }}</p>
+{% if plan.meal_id %}<p><a href="{{ url_for('household.meal', meal_id=plan.meal_id) }}">View library recipe</a> <span class="text-muted small">(may differ from this planned meal)</span></p>{% endif %}
+{% endif %}
+{% if can_manage %}
+<form method="POST" class="card mb-3"><div class="card-body">
+    {% include 'household/_plan_fields.html' %}
+    <button class="btn btn-primary mt-3" type="submit">{{ 'Save planned meal' if plan else 'Add planned meal' }}</button>
+</div></form>
+{% if plan %}
+<form method="POST" action="{{ url_for('household.remove_planned_meal', plan_id=plan.id) }}" onsubmit="return confirm('Remove this planned meal? Any library recipe will be kept.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="view" value="{{ view }}"><button class="btn btn-outline-danger" type="submit">Remove from plan</button>
+</form>
+{% endif %}
+{% else %}
+<section class="card"><div class="card-body">
+    {% for key, label in [('description', 'Description'), ('source', 'Recipe source'), ('notes', 'Planning notes')] %}
+    <h2 class="h5">{{ label }}</h2><p class="text-break" style="white-space: pre-wrap">{{ plan|attr(key) or 'Not provided.' }}</p>
+    {% endfor %}
+    <p class="text-muted mb-0">An adult household member can change this plan.</p>
+</div></section>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+{% if can_manage %}{% include 'household/_plan_form_script.html' %}{% endif %}
+{% endblock %}

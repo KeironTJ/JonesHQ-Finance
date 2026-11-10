@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}{{ meal.name }} - Meal library{% endblock %}
+{% block content %}
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.meals') }}">Back to meal library</a>
+<section class="card"><div class="card-body">
+    <h1 class="text-break">{{ meal.name }}</h1>
+    <p class="text-muted">Shared with household{% if meal.is_archived %} &middot; Archived; existing plans are kept{% endif %}</p>
+    {% for key, label in [('ingredients', 'Ingredients'), ('instructions', 'Instructions / notes'), ('source', 'Recipe source')] %}
+    {% if meal|attr(key) %}<h2 class="h5">{{ label }}</h2><p class="text-break" style="white-space: pre-wrap">{{ meal|attr(key) }}</p>{% endif %}
+    {% endfor %}
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{{ url_for('household.meal_planner') }}">Open meal planner</a>
+        {% if can_manage %}
+        <a class="btn btn-primary" href="{{ url_for('household.edit_meal', meal_id=meal.id) }}">Edit meal</a>
+        <form method="POST" action="{{ url_for('household.archive_meal', meal_id=meal.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="{{ 'restore' if meal.is_archived else 'archive' }}">
+            <button type="submit" class="btn btn-outline-secondary">{{ 'Restore meal' if meal.is_archived else 'Archive meal' }}</button>
+        </form>
+        {% endif %}
+    </div>
+</div></section>
+{% endblock %}

@@ -85,7 +85,18 @@ visibility is enforced by the scoped query helpers, including child/guardian
 visibility without an owner bypass. Creator links and selected grants use
 household membership IDs. Departing members' private events are deleted and
 shared events retained for owners; account and household deletion use reviewed
-lifecycle rules. No meal/activity/task feed or external sharing is implemented.
+lifecycle rules. It also reads meal-plan source rows for month/agenda views;
+no duplicate events are written.
+
+`household/meal_service.py` manages the household-shared meal library, archive/
+restore lifecycle and date-first week/month planner with per-day quick-add.
+Adults with Household Hub access write; managed children read only. Multiple
+meals per breakfast/lunch/dinner slot are supported. A library selection is optional
+and copies editable title/description/source once; subsequent library edits do
+not change plans. Archive preserves plans and blocks new selections. Added-by
+attribution uses the active membership and is cleared on departure. Household
+deletion removes plans before meals; individual account deletion preserves both.
+Activity/task feeds and external sharing are not implemented.
 
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods

@@ -32,8 +32,14 @@ are removed. Adult-private events are creator-only; managed-child private events
 also allow the designated guardian within the same household. Owners manage
 shared events but never override private visibility. See
 [access policy](docs/ACCESS_POLICY.md) for module grants and child restrictions.
-Meals, activities, task feeds and external sharing remain future work; no old
-JonesHQ records or authentication are imported.
+The date-first meal planner has week/month views, per-day quick-add and multiple
+meals per breakfast/lunch/dinner slot. Enter a title, description and recipe source
+directly, or optionally copy them from the household meal library. Each date's
+details are independent: library edits never change existing plans. Adults manage
+meals and plans; managed children view only. Plans appear in month/agenda
+calendars as source links, not duplicate events. Archiving a meal keeps its plans.
+Activity/task feeds and external sharing remain future work; no old JonesHQ
+records or authentication are imported.
 No billing or subscription entitlement enforcement is introduced.
 
 The shared sidebar discovers available modules through the platform registry.

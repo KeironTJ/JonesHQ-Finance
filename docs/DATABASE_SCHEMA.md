@@ -86,6 +86,27 @@ account-owned records are not household financial data.
   Household deletion removes every event. Account/membership deletion removes
   private events and detaches the creator from surviving shared events.
 
+## Household Meal Planning
+
+- `meals` stores household-shared names, ingredients, instructions, sources and archive
+  status. It has no account owner and survives individual account deletion.
+- `planned_meals` optionally references `meals.id` and carries its own explicit
+  `family_id`, London calendar date, breakfast/lunch/dinner slot, independent
+  title/description/source and planning notes. A nullable `creator_membership_id`
+  references the active membership for added-by attribution (`SET NULL` on departure).
+  Multiple rows per date/slot are intentional; there is no unique-slot constraint.
+  The tenancy write guard rejects a meal reference from another household.
+- Migration `e83f9b5d012c` creates only these two tables, their lookup indexes
+  and the named slot constraint. Household deletion removes plans before meals.
+- Follow-up migration `f94a0c6e123d` makes library selection nullable, adds the
+  independent fields and creator FK, and copies existing same-household recipe
+  details into plans. Historical creators are not guessed. Downgrade creates
+  library entries to retain independent details (source appended to instructions).
+  Its native SQLite column removal requires SQLite 3.35 or later.
+- Calendar feeds read these source rows directly, not duplicated calendar events.
+  Archiving meals preserves plans. Shared records have no per-event ACL;
+  adults manage them and managed children can only view.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)
