@@ -1,8 +1,9 @@
 from tests.auth_helpers import login_client
 from extensions import db
 from models.accounts import Account
-from models.family import FamilyInvite
+from models.family import FamilyInvite, HouseholdMembership
 from models.settings import Settings
+from models.site_settings import SiteSettings
 from models.users import User
 from models.vendors import VendorType
 from services.finance.vendor_service import DEFAULT_VENDOR_TYPES
@@ -129,6 +130,48 @@ def test_registration_opens_hub_before_optional_finance_setup(app):
     assert created_user.family.onboarding_version == 0
 
 
+def test_public_intro_links_to_household_creation_when_registration_is_open(app):
+    from flask import g
+
+    g.pop('_login_user', None)
+    app.config['ALLOW_OPEN_REGISTRATION'] = True
+
+    client = app.test_client()
+    for path in ('/intro', '/login'):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert b'href="/register"' in response.data
+        assert b'Create your household' in response.data
+    assert b'New households can sign up' in client.get('/intro').data
+
+
+def test_public_intro_hides_household_creation_when_signups_are_paused(app):
+    from flask import g
+
+    g.pop('_login_user', None)
+    app.config['ALLOW_OPEN_REGISTRATION'] = True
+    db.session.add(SiteSettings(id=1, household_signups_paused=True))
+    db.session.commit()
+
+    client = app.test_client()
+    for path in ('/intro', '/login'):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert b'href="/register"' not in response.data
+        assert b'Create your household' not in response.data
+
+
+def test_authenticated_intro_links_to_central_hub(app, family, user):
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.get('/intro')
+
+    assert response.status_code == 200
+    assert b'href="/central/"' in response.data
+    assert b'Go to Central Hub' in response.data
+
+
 def test_invited_member_opens_hub_before_optional_finance_setup(app, family, user):
     from flask import g
 
@@ -158,3 +201,9 @@ def test_invited_member_opens_hub_before_optional_finance_setup(app, family, use
     invited_user = User.query.filter_by(email='invited@example.com').one()
     assert invited_user.onboarding_version == 0
     assert invited_user.family_id == family.id
+    membership = HouseholdMembership.query.filter_by(
+        user_id=invited_user.id, family_id=family.id,
+    ).one()
+    assert membership.role == 'member'
+    assert membership.allowed_modules == ['finance', 'household']
+    assert invited_user.get_allowed_sections() == {'accounts'}

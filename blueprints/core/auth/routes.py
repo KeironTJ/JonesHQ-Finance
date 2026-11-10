@@ -58,6 +58,13 @@ def _safe_next_page(default_endpoint='central.hub'):
     return LandingService.safe_next(request.args.get('next')) or url_for(default_endpoint)
 
 
+def _open_household_registration_available():
+    if not AuthService.registration_is_open():
+        return False
+    site_settings = SiteSettingsService.get_safely()
+    return site_settings is not None and not site_settings.household_signups_paused
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("10 per minute", methods=["POST"])
 @limiter.limit("20 per hour", key_func=_login_account_key, methods=["POST"])
@@ -91,7 +98,12 @@ def login():
             flash(f'Welcome back, {user.name}!', 'success')
             return redirect(LandingService.resolve(user, request.args.get('next')))
     
-    return render_template('auth/login.html', form=form, passkeys_configured=PasskeyService.is_configured())
+    return render_template(
+        'auth/login.html',
+        form=form,
+        passkeys_configured=PasskeyService.is_configured(),
+        can_create_household=_open_household_registration_available(),
+    )
 
 
 def _passkey_data():
@@ -637,7 +649,10 @@ def _clear_browser_login():
 @auth_bp.route('/intro')
 def intro():
     """Public introduction / landing page"""
-    return render_template('public/intro.html')
+    return render_template(
+        'public/intro.html',
+        can_create_household=_open_household_registration_available(),
+    )
 
 
 @auth_bp.route('/help')
