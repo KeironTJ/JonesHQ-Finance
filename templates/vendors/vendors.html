@@ -320,7 +320,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (collapseAllToggle) {
         collapseAllToggle.addEventListener('change', () => {
-            savePersonalPreference(collapseAllToggle, '{{ url_for("preferences.save_preference") }}',
+            savePersonalPreference(collapseAllToggle, '{{ url_for("finance_preferences.save_preference") }}',
                 'vendors.collapse_all_default', jsonHeaders);
         });
     }

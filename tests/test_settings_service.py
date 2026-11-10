@@ -8,7 +8,7 @@ from models.accounts import Account
 from models.family import Family
 from models.tax_settings import TaxSettings
 from models.settings import Settings
-from services.platform.settings_service import SettingsService
+from services.finance.settings_service import SettingsService
 
 
 def test_update_tax_settings_converts_percentages_and_preserves_family(
@@ -65,7 +65,7 @@ def test_clear_networth_start_date_removes_setting(app):
 def test_update_default_account_for_current_user(app, family, user, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.platform.settings_service.get_current_user_id', lambda: user.id
+        'services.finance.settings_service.get_current_user_id', lambda: user.id
     )
     account = Account(
         family_id=family.id,
@@ -88,7 +88,7 @@ def test_update_default_account_for_current_user(app, family, user, monkeypatch)
 def test_update_default_account_rejects_other_family(app, family, user, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.platform.settings_service.get_current_user_id', lambda: user.id
+        'services.finance.settings_service.get_current_user_id', lambda: user.id
     )
     other_family = Family(name='Other Family')
     db.session.add(other_family)

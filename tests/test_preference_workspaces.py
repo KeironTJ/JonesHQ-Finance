@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from models.accounts import Account
-from services.platform.preference_service import PreferenceService
+from services.finance.preference_service import FinancePreferenceService
 from tests.auth_helpers import detach_user_from_households, login_client
 from tests.test_workspace_ui import NavigationParser
 
@@ -13,7 +13,7 @@ def test_central_preferences_do_not_load_finance_data(app, user, monkeypatch):
     def unexpected_finance_query():
         pytest.fail('Central preferences must not load Finance page data.')
 
-    monkeypatch.setattr(PreferenceService, 'get_page_data', unexpected_finance_query)
+    monkeypatch.setattr(FinancePreferenceService, 'get_page_data', unexpected_finance_query)
     client = app.test_client()
     login_client(client, user.id)
     response = client.get('/preferences')

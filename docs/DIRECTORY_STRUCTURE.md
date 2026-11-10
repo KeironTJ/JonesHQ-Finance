@@ -11,30 +11,22 @@
 ## Core Directories
 
 ### `/blueprints/`
-Flask blueprints for modular route organization
-- `accounts/` - Bank account management
-- `categories/` - Transaction categories
-- `childcare/` - Childcare expense tracking
-- `credit_cards/` - Credit card management
-- `dashboard/` - Main dashboard
-- `loans/` - Loan tracking
-- `mortgage/` - Mortgage management
-- `networth/` - Net worth calculations
-- `pensions/` - Pension tracking
-- `transactions/` - Transaction management
-- `vehicles/` - Vehicle expense tracking
-- `vendors/` - Vendor management
-- `auth/` - Authentication and login
-- `expenses/` - General and work expense management
-- `family/` - Family membership and assignments
-- `income/` - Income and payslip tracking
-- `settings/` - Owner-only household settings hub, independent configuration pages,
-  and tax-year editing
-- `preferences/` - Personal display and default-account preferences for all signed-in users
-- `onboarding/` - Household onboarding
-- `plans/` - Financial plans and plan items
-- `site_admin/` - Service-operator administration
-- `central/` - Central Hub and shared platform settings
+Flask blueprints are grouped by their owning application layer, not by URL.
+
+- `core/` - Registers shared platform routes: `auth/`, `central/`, `family/`,
+  `preferences/` (appearance and starting point), and `site_admin/`.
+- `finance/` - Owns the Finance module descriptor and blueprint registration:
+  `accounts/`, `categories/`, `childcare/`, `credit_cards/`, `dashboard/`,
+  `expenses/`, `income/`, `loans/`, `mortgage/`, `networth/`, `onboarding/`,
+  `pensions/`, `plans/`, `preferences/` (Finance defaults), `settings/`,
+  `transactions/`, `vehicles/`, and `vendors/`.
+
+The application factory registers core once, then the platform registry registers
+available modules. Finance contributes its own settings navigation and identifies
+its blueprints to the shared shell. Existing URLs are unchanged; Python imports
+use the owning package directly, with no forwarding packages at the old paths.
+Templates retain their existing feature folders and shared base/design system.
+Household Hub is a planned module, distinct from core household identity.
 
 ### `/models/`
 SQLAlchemy database models
@@ -84,8 +76,8 @@ for the package map and compatibility-import policy.
 - `household/` - Family and childcare workflows
 - `planning/` - Loans, mortgages, and pensions
 - `vehicles/` - Vehicles, fuel forecasting, and mileage
-- `platform/` - Authentication and settings
-- `platform/module_registry.py` - Canonical module catalog and entry points
+- `platform/` - Authentication, shared appearance and module orchestration
+- `platform/module_registry.py` - Module registration, discovery and shared-shell integration
 - `analytics/` - Dashboard and net-worth read models
 
 ### `/templates/`

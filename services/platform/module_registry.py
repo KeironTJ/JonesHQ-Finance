@@ -1,17 +1,11 @@
+from flask import current_app
+
+from blueprints.finance import MODULE as FINANCE_MODULE
 from services.household.membership_service import HouseholdMembershipService
 
 
 _MODULES = (
-    {
-        'key': 'finance',
-        'title': 'Finance',
-        'description': 'A clear view of your money, from everyday banking and bills to borrowing and longer-term plans.',
-        'icon': 'bi-wallet2',
-        'home_endpoint': 'dashboard.index',
-        'status': 'available',
-        'requires_household': True,
-        'default_destination': True,
-    },
+    FINANCE_MODULE,
     {
         'key': 'household',
         'title': 'Household Hub',
@@ -29,6 +23,28 @@ _CENTRAL_DESTINATION = ('Central Hub', 'central.hub')
 
 class ModuleRegistry:
     """Canonical catalog of platform modules and their entry points."""
+
+    @staticmethod
+    def register_modules(app):
+        registered_modules = {}
+        for module in _MODULES:
+            if module['status'] == 'available':
+                previous_blueprints = set(app.blueprints)
+                module['register_blueprints'](app)
+                for name in set(app.blueprints) - previous_blueprints:
+                    registered_modules[name] = module
+        app.extensions['platform_modules'] = registered_modules
+
+    @staticmethod
+    def module_for_blueprint(name):
+        return current_app.extensions['platform_modules'].get(name)
+
+    @staticmethod
+    def settings_groups_for(user):
+        return {
+            module['key']: module['settings_group'](user)
+            for module in _MODULES if module['status'] == 'available'
+        }
 
     @staticmethod
     def has_active_household(user):

@@ -5,7 +5,7 @@
         {% if endpoint == 'transactions.index' %}
             {% set active = request.blueprint == 'transactions' and not request.path.startswith('/transactions/subscriptions') and request.endpoint != 'transactions.consolidated' %}
         {% endif %}
-        {% if endpoint in ('central.settings', 'central.finance_settings') %}
+        {% if endpoint in ('central.settings', 'settings.overview') %}
             {% set active = settings_area is not none %}
         {% elif settings_area %}
             {% set active = false %}
@@ -69,7 +69,7 @@
             {% endfor %}
             {% endif %}
             <div class="nav-section-label">Settings &amp; support</div>
-            {{ nav_link('central.settings' if central_workspace else 'central.finance_settings', 'Settings', 'gear', exact=true) }}
+            {{ nav_link('central.settings' if central_workspace else 'settings.overview', 'Settings', 'gear', exact=true) }}
             {{ nav_link('auth.help', 'Help & support', 'question-circle') }}
             {% if current_user.is_site_admin %}
                 <div class="nav-section-label">Service operator</div>

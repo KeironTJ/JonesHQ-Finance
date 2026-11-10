@@ -8,8 +8,8 @@ records. Every route requires a site admin with TOTP or a verified passkey sessi
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
-from blueprints.site_admin import site_admin_bp
-from blueprints.site_admin.forms import HouseholdInviteForm, SiteSettingsForm
+from blueprints.core.site_admin import site_admin_bp
+from blueprints.core.site_admin.forms import HouseholdInviteForm, SiteSettingsForm
 from extensions import login_manager
 from services.platform.household_invite_service import HouseholdInviteService
 from services.platform.security_event_service import SecurityEventService

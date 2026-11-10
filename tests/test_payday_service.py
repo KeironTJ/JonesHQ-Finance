@@ -131,7 +131,7 @@ def test_reperiod_requires_household(app, monkeypatch):
 
 
 def test_settings_payday_change_reperiods_transactions(app, family, monkeypatch):
-    from services.platform.settings_service import SettingsService
+    from services.finance.settings_service import SettingsService
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     account = Account(family_id=family.id, name='Joint', account_type='Joint', balance=0, is_active=True)
     category = Category(family_id=family.id, name='Misc', head_budget='Misc', sub_budget='Misc',

@@ -15,20 +15,21 @@
                 <table class="table mb-0">
                     <thead><tr><th>Name</th><th>Email</th><th>Household role</th><th>Joined</th><th>Actions</th></tr></thead>
                     <tbody>
-                        {% for member in members %}
+                        {% for membership in memberships %}
+                        {% set member = membership.user %}
                         <tr>
                             <td>{{ member.name }}{% if member.id == current_user.id %} <span class="badge bg-secondary">You</span>{% endif %}</td>
                             <td>{{ member.email }}</td>
-                            <td>{{ 'Owner' if member.is_household_owner else 'Member' }}</td>
-                            <td>{{ member.created_at.strftime('%d %b %Y') }}</td>
+                            <td>{{ 'Owner' if membership.role == 'admin' else 'Member' }}</td>
+                            <td>{{ membership.created_at.strftime('%d %b %Y') }}</td>
                             <td>
                                 {% if member.id != current_user.id %}
                                 <form method="POST" action="{{ url_for('family.update_role', member_id=member.id) }}" class="mb-2">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <label class="form-label small" for="role-{{ member.id }}">Household role for {{ member.name }}</label>
                                     <select class="form-select mb-2" name="role" id="role-{{ member.id }}">
-                                        <option value="member" {% if not member.is_household_owner %}selected{% endif %}>Member</option>
-                                        <option value="admin" {% if member.is_household_owner %}selected{% endif %}>Owner</option>
+                                        <option value="member" {% if membership.role != 'admin' %}selected{% endif %}>Member</option>
+                                        <option value="admin" {% if membership.role == 'admin' %}selected{% endif %}>Owner</option>
                                     </select>
                                     <button class="btn btn-outline-primary btn-sm" type="submit">Save role for {{ member.name }}</button>
                                 </form>

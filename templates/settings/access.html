@@ -4,7 +4,7 @@
 {% block content %}
 <div class="container-fluid">
     {% call page_header('Finance access & assignment', 'Financial section permissions and transaction display names for your household.', 'Finance') %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('central.finance_settings') }}">Finance settings</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('settings.overview') }}">Finance settings</a>
         <a class="btn btn-outline-secondary" href="{{ url_for('family.index') }}">Household &amp; members</a>
     {% endcall %}
     <div class="alert alert-info">

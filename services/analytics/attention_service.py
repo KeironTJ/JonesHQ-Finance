@@ -10,6 +10,7 @@ from models.subscriptions import Subscription
 from models.transactions import Transaction
 from services.finance.subscription_service import SubscriptionService
 from services.platform.preference_service import PreferenceService
+from services.finance.preference_service import FinancePreferenceService
 from utils.permissions import can_access_section
 from utils.db_helpers import family_query
 
@@ -27,7 +28,7 @@ class AttentionService:
     @staticmethod
     def get_data(today=None):
         today = today or date.today()
-        days = PreferenceService.get_value('dashboard.attention_days')
+        days = FinancePreferenceService.get_value('dashboard.attention_days')
         horizon = today + timedelta(days=days)
         items = []
 

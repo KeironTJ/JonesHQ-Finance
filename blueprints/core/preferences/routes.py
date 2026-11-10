@@ -6,13 +6,10 @@ from . import preferences_bp
 from extensions import db
 from services.platform.preference_service import PreferenceService
 from services.platform.landing_service import LandingService
-from services.platform.module_registry import ModuleRegistry
 
 
-@preferences_bp.route('', methods=['GET', 'POST'])
+@preferences_bp.route('', methods=['GET'])
 def index():
-    if request.method == 'POST':
-        return finance()
     return render_template(
         'preferences/index.html',
         default_workspace=LandingService.workspace_for(current_user),
@@ -34,49 +31,6 @@ def workspace():
     else:
         flash('Your default workspace has been saved.', 'success')
     return redirect(url_for('preferences.index', _anchor='workspace-card'))
-
-
-@preferences_bp.route('/finance', methods=['GET', 'POST'])
-def finance():
-    if not ModuleRegistry.has_active_household(current_user):
-        flash('Join a household before managing Finance preferences.', 'info')
-        return redirect(url_for('preferences.index'))
-    if request.method == 'POST':
-        try:
-            PreferenceService.update(request.form)
-            flash('Your Finance preferences have been saved.', 'success')
-            return redirect(url_for('preferences.finance'))
-        except (ValueError, TypeError) as error:
-            db.session.rollback()
-            flash(str(error) or 'Invalid preference value.', 'danger')
-        except SQLAlchemyError:
-            db.session.rollback()
-            current_app.logger.exception('Unable to save personal preferences')
-            flash('Unable to save your preferences. Please try again.', 'danger')
-    context = PreferenceService.get_page_data()
-    if request.method == 'POST':
-        context['preferences'] = {
-            key: (
-                request.form.get(key) == '1' if isinstance(default, bool)
-                else request.form.get(key, context['preferences'][key])
-            )
-            for key, default in PreferenceService.DEFAULTS.items()
-        }
-    return render_template('preferences/finance.html', **context)
-
-
-@preferences_bp.route('/save', methods=['POST'])
-def save_preference():
-    try:
-        PreferenceService.save_preference(request.get_json())
-    except (ValueError, TypeError) as error:
-        db.session.rollback()
-        return jsonify(success=False, error=str(error) or 'Invalid preference value.'), 400
-    except SQLAlchemyError:
-        db.session.rollback()
-        current_app.logger.exception('Unable to save a personal preference')
-        return jsonify(success=False, error='Unable to save your preference. Please try again.'), 500
-    return jsonify(success=True)
 
 
 @preferences_bp.route('/appearance', methods=['POST'])

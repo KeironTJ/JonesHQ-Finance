@@ -3,7 +3,7 @@
 ## Overview
 
 The bank transaction list, forms, and actions are implemented in
-`blueprints/transactions/routes.py`. Request parsing and redirects stay in the
+`blueprints/finance/transactions/routes.py`. Request parsing and redirects stay in the
 blueprint; reusable transaction operations live in
 `services/finance/transaction_service.py`.
 

@@ -4,7 +4,7 @@
 
 Expenses are household-scoped records with linked bank or credit-card activity,
 claim tracking, mileage reporting, calendar support, and configurable
-reimbursement workflows. The routes are in `blueprints/expenses/routes.py`;
+reimbursement workflows. The routes are in `blueprints/finance/expenses/routes.py`;
 business logic lives in `services/finance/expense_service.py`,
 `services/finance/expense_sync_service.py`, and the reimbursement-group
 service.

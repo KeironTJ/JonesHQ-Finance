@@ -6,7 +6,7 @@ from models.family import Family
 from models.settings import Settings
 from models.users import User
 from services.finance.vendor_service import VendorService
-from services.platform.settings_service import SettingsService
+from services.finance.settings_service import SettingsService
 from utils import db_helpers
 from utils.db_helpers import family_query
 

@@ -13,7 +13,7 @@
         </nav>
         <nav class="nav nav-pills gap-2" aria-label="Settings workspaces">
             {% for key, group in settings_groups.items() %}
-            {% if key == 'central' or current_user.family_id is not none %}
+            {% if key == 'central' or active_household_id is not none %}
             <a class="nav-link{{ ' active' if key == settings_area else '' }}" href="{{ url_for(group.endpoint) }}"{% if key == settings_area %} aria-current="true"{% endif %}>{{ group.label }} settings</a>
             {% endif %}
             {% endfor %}

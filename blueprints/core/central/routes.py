@@ -13,15 +13,13 @@ from . import central_bp
 def settings_navigation():
     if not has_request_context() or not current_user.is_authenticated:
         return {}
-    endpoint = request.endpoint
-    if endpoint == 'preferences.index' and request.method == 'POST':
-        endpoint = 'preferences.finance'
     context = SettingsNavigationService.get_context(
-        current_user, endpoint, request.view_args or {},
+        current_user, request.endpoint, request.view_args or {},
     )
     context.update({
         'household_memberships': HouseholdMembershipService.memberships_for(current_user),
         'active_household_id': get_family_id(),
+        'active_module': ModuleRegistry.module_for_blueprint(request.blueprint),
     })
     return context
 
@@ -45,10 +43,4 @@ def hub():
 @central_bp.route('/hub/settings')
 @login_required
 def settings():
-    return render_template('settings/overview.html')
-
-
-@central_bp.route('/hub/settings/finance')
-@login_required
-def finance_settings():
     return render_template('settings/overview.html')

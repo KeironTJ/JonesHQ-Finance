@@ -31,7 +31,7 @@ statistics.
   - Adds the `vendors` and `vendor_types` tables and `transactions.vendor_id`
 
 ### 2. Application Layer
-- **Vendors Blueprint** (`blueprints/vendors/`)
+- **Vendors Blueprint** (`blueprints/finance/vendors/`)
   - Registered in `app.py` with URL prefix `/vendors`
   - Routes (`routes.py`):
     - `GET /vendors/` - List all vendors with search and filter

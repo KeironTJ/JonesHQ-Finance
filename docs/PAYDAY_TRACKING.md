@@ -62,7 +62,7 @@ other households and does not report how many rows changed.
 
 - [PaydayService](../services/finance/payday_service.py) owns date calculations,
   dashboard summaries, and re-perioding.
-- [SettingsService](../services/platform/settings_service.py) validates household
+- [SettingsService](../services/finance/settings_service.py) validates household
   settings and refreshes transaction periods when payday changes.
 - [Regression tests](../tests/test_payday_service.py) cover forecast balances,
   input validation, settings-driven and private-account re-perioding, household

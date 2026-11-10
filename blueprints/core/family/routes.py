@@ -19,8 +19,8 @@ from flask import render_template, redirect, url_for, flash, request, abort, cur
 from flask_login import login_required, current_user
 from sqlalchemy.exc import SQLAlchemyError
 
-from blueprints.family import family_bp
-from blueprints.family.forms import DeleteHouseholdForm
+from blueprints.core.family import family_bp
+from blueprints.core.family.forms import DeleteHouseholdForm
 from extensions import db, limiter
 from models.family import Family, FamilyInvite
 from models.users import User
@@ -59,7 +59,7 @@ def index():
         current_user.family_id = family.id
         db.session.commit()
 
-    members = family.members.all()
+    memberships = family.memberships
     active_invites = (
         FamilyInvite.query
         .filter_by(family_id=family.id)
@@ -82,7 +82,7 @@ def index():
     return render_template(
         'family/index.html',
         family=family,
-        members=members,
+        memberships=memberships,
         active_invites=active_invites,
         expired_invites=expired_invites,
         section_groups=SECTION_GROUPS,
@@ -295,7 +295,7 @@ def delete_household():
                 session.pop(HouseholdMembershipService.SESSION_KEY, None)
                 flash('The household and its records have been deleted. Your other household access remains.', 'success')
                 return redirect(url_for('central.hub'))
-            from blueprints.auth.routes import _clear_browser_login
+            from blueprints.core.auth.routes import _clear_browser_login
             _clear_browser_login()
             flash('The household and its records have been deleted. Login accounts remain. Everyone without another household has been signed out.', 'success')
             return redirect(url_for('auth.login'))

@@ -11,7 +11,7 @@
         {% endif %}
         Each area saves independently.
     </p>
-    {% if settings_area == 'finance' and current_user.family_id is none %}
+    {% if settings_area == 'finance' and active_household_id is none %}
     <div class="alert alert-info">Join a household before managing Finance settings.</div>
     {% endif %}
     <div class="row g-3">
@@ -33,8 +33,8 @@
     <p class="text-muted mt-4">
         {% if settings_area == 'finance' %}
         Appearance, account security and household membership live in <a href="{{ url_for('central.settings') }}">Central settings</a>.
-        {% elif current_user.family_id is not none %}
-        Dashboard defaults and financial rules live in <a href="{{ url_for('central.finance_settings') }}">Finance settings</a>.
+        {% elif active_household_id is not none %}
+        Dashboard defaults and financial rules live in <a href="{{ url_for('settings.overview') }}">Finance settings</a>.
         {% endif %}
     </p>
 </div>

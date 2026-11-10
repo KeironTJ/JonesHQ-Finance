@@ -8,13 +8,18 @@ from utils.reauth import recent_auth_required
 from . import settings_bp
 from extensions import db
 from models.tax_settings import TaxSettings
-from services.platform.settings_service import SettingsService
+from services.finance.settings_service import SettingsService
 from utils.db_helpers import family_get_or_404, family_query
 
 
 @settings_bp.route('/settings')
 def index():
     return render_template('settings/index.html')
+
+
+@settings_bp.route('/hub/settings/finance')
+def overview():
+    return render_template('settings/overview.html')
 
 
 @settings_bp.route('/settings/access')
@@ -76,7 +81,7 @@ def update():
 @settings_bp.route('/settings/save_preference', methods=['POST'])
 def save_preference():
     # Preserve the legacy endpoint for existing clients; writes are now personal.
-    from blueprints.preferences.routes import save_preference as save_personal_preference
+    from blueprints.finance.preferences.routes import save_preference as save_personal_preference
     return save_personal_preference()
 
 

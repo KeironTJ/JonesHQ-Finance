@@ -33,7 +33,7 @@ def test_index_aggregate_has_no_row_ordering_and_counts_all_filtered_rows(app, f
         captured.update(context)
         return 'rendered'
 
-    monkeypatch.setattr('blueprints.transactions.routes.render_template', render)
+    monkeypatch.setattr('blueprints.finance.transactions.routes.render_template', render)
     client = app.test_client()
     _login(client, user.id)
     aggregates = []

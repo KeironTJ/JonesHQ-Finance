@@ -1,4 +1,3 @@
-from services.platform.settings_service import SettingsService
 from services.platform.module_registry import ModuleRegistry
 
 
@@ -6,7 +5,6 @@ class SettingsNavigationService:
     @staticmethod
     def get_context(user, endpoint, view_args):
         endpoint = {
-            'settings.edit_tax_settings': 'settings.tax_settings',
             'auth.two_factor_setup': 'auth.account_security',
             'auth.delete_account': 'auth.account_security',
         }.get(endpoint, endpoint)
@@ -26,9 +24,6 @@ class SettingsNavigationService:
                     },
                 ],
             },
-            'finance': {
-                'label': 'Finance', 'endpoint': 'central.finance_settings', 'pages': [],
-            },
         }
         has_household = ModuleRegistry.has_active_household(user)
         owner = user.is_household_owner and has_household
@@ -38,47 +33,17 @@ class SettingsNavigationService:
                 'values': {}, 'scope': 'owner',
                 'description': 'Household membership, roles and invitations across all workspaces.',
             })
-        if has_household:
-            groups['finance']['pages'].append({
-                'label': 'Your preferences', 'endpoint': 'preferences.finance',
-                'values': {}, 'scope': 'personal',
-                'description': 'Your dashboard, reminders, list display and default bank account.',
-            })
-        if owner:
-            groups['finance']['pages'].append({
-                'label': 'Access & assignment', 'endpoint': 'settings.finance_access',
-                'values': {}, 'scope': 'owner',
-                'description': 'Member Finance permissions, transaction display names and assignment labels.',
-            })
-            for section, (title, _) in SettingsService.SECTIONS.items():
-                groups['finance']['pages'].append({
-                    'label': title, 'endpoint': 'settings.module_settings',
-                    'values': {'section': section}, 'scope': 'owner',
-                    'description': f'Shared {title.lower()} rules and defaults for your household.',
-                })
-            groups['finance']['pages'].append({
-                'label': 'Tax & National Insurance', 'endpoint': 'settings.tax_settings',
-                'values': {}, 'scope': 'owner',
-                'description': 'Tax-year bands and rates used to estimate take-home pay.',
-            })
-        if has_household and user.can_access_section('vendors'):
-            groups['finance']['pages'].append({
-                'label': 'Vendor types', 'endpoint': 'vendors.types_index',
-                'values': {}, 'scope': 'household',
-                'description': 'Organise the vendor types used by your household in Finance.',
-            })
+        groups.update(ModuleRegistry.settings_groups_for(user))
 
         area, page = None, None
         for key, group in groups.items():
-            if endpoint == group['endpoint']:
+            if endpoint == group['endpoint'] or endpoint in group.get('aliases', ()):
                 area = key
             for candidate in group['pages']:
-                if endpoint == candidate['endpoint'] and all(
+                if (endpoint == candidate['endpoint'] or endpoint in candidate.get('aliases', ())) and all(
                     view_args.get(name) == value for name, value in candidate['values'].items()
                 ):
                     area, page = key, candidate
-        if endpoint == 'settings.index':
-            area = 'finance'
         return {
             'settings_groups': groups, 'settings_area': area, 'settings_page': page,
         }

@@ -101,52 +101,11 @@ def create_app(config_name=None):
     with app.app_context():
         import models
     
-    # Register blueprints
-    from blueprints.auth import auth_bp
-    from blueprints.dashboard import dashboard_bp
-    from blueprints.accounts import accounts_bp
-    from blueprints.transactions import transactions_bp
-    from blueprints.categories import bp as categories_bp
-    from blueprints.vendors import bp as vendors_bp
-    from blueprints.loans import loans_bp
-    from blueprints.credit_cards import credit_cards_bp
-    from blueprints.vehicles import vehicles_bp
-    from blueprints.childcare import childcare_bp
-    from blueprints.pensions import pensions_bp
-    from blueprints.income import income_bp
-    from blueprints.mortgage import mortgage_bp
-    from blueprints.networth import networth_bp
-    from blueprints.settings import settings_bp
-    from blueprints.preferences import preferences_bp
-    from blueprints.expenses import expenses_bp
-    from blueprints.family import family_bp
-    from blueprints.plans import plans_bp
-    from blueprints.onboarding import onboarding_bp
-    from blueprints.site_admin import site_admin_bp
-    from blueprints.central import central_bp
-    
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(accounts_bp)
-    app.register_blueprint(transactions_bp)
-    app.register_blueprint(categories_bp)
-    app.register_blueprint(vendors_bp)
-    app.register_blueprint(loans_bp, url_prefix='/loans')
-    app.register_blueprint(credit_cards_bp)
-    app.register_blueprint(vehicles_bp)
-    app.register_blueprint(childcare_bp)
-    app.register_blueprint(pensions_bp)
-    app.register_blueprint(income_bp)
-    app.register_blueprint(mortgage_bp)
-    app.register_blueprint(networth_bp)
-    app.register_blueprint(settings_bp)
-    app.register_blueprint(preferences_bp)
-    app.register_blueprint(expenses_bp)
-    app.register_blueprint(family_bp)
-    app.register_blueprint(plans_bp)
-    app.register_blueprint(onboarding_bp)
-    app.register_blueprint(site_admin_bp)
-    app.register_blueprint(central_bp)
+    from blueprints.core import register_blueprints
+    from services.platform.module_registry import ModuleRegistry
+
+    register_blueprints(app)
+    ModuleRegistry.register_modules(app)
 
     # ── Section-level access enforcement ──────────────────────────────────
     @app.before_request

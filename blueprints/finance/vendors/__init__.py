@@ -1,10 +1,10 @@
 """
-Categories blueprint for managing budget categories
+Vendors blueprint for managing vendors/merchants
 """
 from flask import Blueprint
 from flask_login import login_required
 
-bp = Blueprint('categories', __name__, url_prefix='/categories')
+bp = Blueprint('vendors', __name__, url_prefix='/vendors')
 
 # Require authentication for all routes in this blueprint
 @bp.before_request
@@ -12,4 +12,4 @@ bp = Blueprint('categories', __name__, url_prefix='/categories')
 def require_login():
     pass
 
-from blueprints.categories import routes
+from blueprints.finance.vendors import routes

@@ -60,7 +60,7 @@
                 <i class="bi bi-house-gear" aria-hidden="true"></i> Payday settings
             </a>
             {% endif %}
-            <a href="{{ url_for('preferences.finance') }}" class="btn btn-outline-secondary" aria-label="Finance preferences">
+            <a href="{{ url_for('finance_preferences.index') }}" class="btn btn-outline-secondary" aria-label="Finance preferences">
                 <i class="bi bi-sliders" aria-hidden="true"></i> Make it yours
             </a>
             {% if can_access_section('transactions') %}
@@ -841,7 +841,7 @@
                 </div>
                 {% endif %}
                 <div class="col-md-3 col-sm-6 mb-3">
-                    <a href="{{ url_for('settings.index') if can_access_section('settings') else url_for('preferences.finance') }}" class="text-decoration-none">
+                    <a href="{{ url_for('settings.index') if can_access_section('settings') else url_for('finance_preferences.index') }}" class="text-decoration-none">
                         <div class="card border-secondary h-100 hover-shadow">
                             <div class="card-body text-center">
                                 <i class="bi bi-gear display-4 text-secondary"></i>

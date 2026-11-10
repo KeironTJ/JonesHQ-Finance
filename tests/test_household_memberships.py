@@ -5,8 +5,9 @@ from flask_login import login_user
 
 from extensions import db
 from models.family import Family, HouseholdMembership
+from models.users import User
 from services.household.membership_service import HouseholdMembershipService
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 from utils.db_helpers import get_family_id
 
 
@@ -126,3 +127,47 @@ def test_household_scoped_user_lookup_uses_membership(app, user):
         from utils.db_helpers import family_get, family_query
         assert family_get(type(user), user.id) is user
         assert family_query(type(user)).all() == [user]
+
+
+def test_detached_member_owner_check_is_false(app, user):
+    detach_user_from_households(user)
+    assert user.is_household_owner is False
+
+
+def test_role_and_finance_edits_use_selected_household_not_targets_default(app, user, family):
+    other_family = Family(name='Other household')
+    db.session.add(other_family)
+    db.session.flush()
+    member = User(
+        family_id=other_family.id, email='multi-member@example.test',
+        name='Multi Member', role='admin', password_hash='unused',
+    )
+    db.session.add(member)
+    db.session.flush()
+    membership = HouseholdMembership(
+        user_id=member.id, family_id=family.id, role='member',
+        allowed_sections='["accounts"]',
+    )
+    db.session.add(membership)
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+
+    html = client.get('/family/').get_data(as_text=True)
+    assert '<option value="member" selected>Member</option>' in html
+    response = client.post(f'/settings/access/members/{member.id}', data={
+        'member_name': 'Local display', 'sections': ['transactions'],
+    })
+    assert response.status_code == 302
+    db.session.refresh(membership)
+    assert membership.allowed_sections == '["transactions"]'
+    assert member.role == 'admin'
+    response = client.post(f'/family/members/{member.id}/role', data={'role': 'admin'})
+    assert response.status_code == 302
+    db.session.refresh(membership)
+    assert membership.role == 'admin'
+    response = client.post(f'/family/members/{member.id}/role', data={'role': 'member'})
+    assert response.status_code == 302
+    db.session.refresh(membership)
+    assert membership.role == 'member'
+    assert member.role == 'admin'

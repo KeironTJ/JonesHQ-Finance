@@ -6,12 +6,13 @@ domain package rather than maintaining top-level redirect modules.
 ## Domains
 
 - `finance/` - accounts, categories, transactions, subscriptions, payday periods,
-  balances, income, vendors, credit cards, and expenses
+  balances, income, vendors, credit cards, expenses, Finance settings
+  (`SettingsService`) and Finance defaults (`FinancePreferenceService`)
 - `household/` - household memberships, family and childcare workflows
 - `planning/` - loans, mortgages, and pensions
 - `vehicles/` - vehicles, fuel forecasting, and mileage
-- `platform/` - authentication, household settings (`SettingsService`) and personal
-  display preferences (`PreferenceService`), plus the module catalog
+- `platform/` - authentication, account appearance/starting point
+  (`PreferenceService`), plus the module catalog and shared settings navigation
 - `analytics/` - dashboard and net-worth read models
 
 `analytics/attention_service.py` builds the dashboard's **Needs attention** list.
@@ -62,9 +63,12 @@ and Finance section access are household-specific; services must scope user
 lookups to the active household rather than assuming `User.family_id` is the
 only membership.
 
-`platform/module_registry.py` is the source of truth for platform module
-discovery, descriptions and entry points. The Central Hub renders this catalog;
-module-specific records and permissions stay with their owning module.
+`platform/module_registry.py` orchestrates module discovery and registration.
+Each available module supplies its descriptor, blueprint registrar and settings
+navigation contributor; Finance owns these in `blueprints/finance/__init__.py`.
+Core blueprints register separately in `blueprints/core/__init__.py`. The shared
+shell determines module identity from registered blueprint ownership, not a
+hard-coded list of core/Finance pages.
 
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods
@@ -168,8 +172,11 @@ fields through `SettingsService`; tax and vendor types keep their existing edito
 Modules link to the same editors rather than duplicating configuration forms.
 `/settings/update` rejects stale combined submissions with an explanatory message.
 
-`/preferences` is available to all signed-in users. `PreferenceService` stores
-dashboard/list display defaults on the authenticated `User`, not the household.
+`/preferences` is available to all signed-in users. Core `PreferenceService`
+owns appearance and starting point. `FinancePreferenceService` stores
+dashboard/list display defaults on the authenticated `User`, not the household,
+and owns `/preferences/finance`. The legacy `POST /preferences` is registered by
+Finance; the core preferences page is GET-only.
 The personal default-account selector uses the existing visibility-aware account
 validation. `/preferences/save` supports lightweight boolean updates; the legacy
 owner-only `/settings/save_preference` endpoint delegates to the same personal

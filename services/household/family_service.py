@@ -11,7 +11,7 @@ from models.users import User
 from services.finance.income_service import IncomeService
 from services.household.membership_service import HouseholdMembershipService
 from services.platform.security_event_service import SecurityEventService
-from utils.db_helpers import get_current_user_id, family_get_or_404
+from utils.db_helpers import get_current_user_id, get_family_id, family_get_or_404
 
 
 class FamilyService:
@@ -23,7 +23,7 @@ class FamilyService:
         role = data.get('role')
         if role not in ('admin', 'member'):
             raise ValueError('Choose Owner or Member as the household role.')
-        membership = HouseholdMembershipService.get_membership(member)
+        membership = HouseholdMembershipService.get_membership(member, get_family_id())
         if membership is None:
             raise ValueError('This member is no longer in the selected household.')
         membership.role = role

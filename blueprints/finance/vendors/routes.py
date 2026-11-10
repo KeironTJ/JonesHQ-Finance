@@ -2,10 +2,10 @@
 Routes for vendor management
 """
 from flask import render_template, request, redirect, url_for, flash, jsonify
-from blueprints.vendors import bp
+from blueprints.finance.vendors import bp
 from extensions import db
 from models import Vendor, Category, VendorType
-from services.platform.preference_service import PreferenceService
+from services.finance.preference_service import FinancePreferenceService
 from services.finance.payday_service import PaydayService
 from services.finance.vendor_service import DEFAULT_VENDOR_TYPES, VendorService
 from datetime import datetime, timedelta, timezone
@@ -24,7 +24,7 @@ def index():
     vendors = VendorService.list_vendors(vendor_type, search, sort_by)
     vendor_types = VendorService.list_types()
 
-    collapse_all_default = PreferenceService.get_value('vendors.collapse_all_default')
+    collapse_all_default = FinancePreferenceService.get_value('vendors.collapse_all_default')
     
     return render_template('vendors/vendors.html', 
                          vendors=vendors,

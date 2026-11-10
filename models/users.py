@@ -134,7 +134,7 @@ class User(UserMixin, db.Model):
     def is_household_owner(self):
         """True for a household owner (stored role 'admin'). Not the same as is_site_admin."""
         membership = self.get_active_household_membership()
-        return membership.role == 'admin' if membership else self.role
+        return membership.role == 'admin' if membership else self.role == 'admin'
 
     def get_active_household_membership(self):
         from services.household.membership_service import HouseholdMembershipService

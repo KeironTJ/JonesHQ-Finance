@@ -29,7 +29,7 @@ Relevant service methods include:
 The routes also support payment editing, paid/fixed toggles, manual
 transactions, balance transfers, and future statement/payment regeneration.
 Statement generation and regeneration are owned by
-`CreditCardStatementService`; see `blueprints/credit_cards/routes.py` for the
+`CreditCardStatementService`; see `blueprints/finance/credit_cards/routes.py` for the
 current route list.
 
 ## Other Linked Workflows
@@ -75,7 +75,7 @@ transfer, or expense records. Forecast regeneration preserves fixed records
 according to the owning domain's rules.
 
 The transaction list and consolidated view are implemented in
-`blueprints/transactions/routes.py`; the consolidated view is at
+`blueprints/finance/transactions/routes.py`; the consolidated view is at
 `GET /transactions/consolidated`. This page brings together bank, credit-card,
 and loan activity for review; it does not replace the underlying domain
 records.

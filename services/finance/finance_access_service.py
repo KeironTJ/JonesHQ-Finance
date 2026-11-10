@@ -37,7 +37,7 @@ class FinanceAccessService:
             not isinstance(section, str) or section not in SECTION_LABELS for section in sections
         ):
             raise ValueError('Choose supported Finance sections.')
-        if member.is_household_owner and sections:
+        if membership.role == 'admin' and sections:
             raise ValueError('Household owners already have access to all Finance sections.')
         previous_names = (membership.member_name, member.name)
         membership.member_name = (data.get('member_name') or '').strip() or member.name

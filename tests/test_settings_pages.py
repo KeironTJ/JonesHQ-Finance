@@ -14,8 +14,8 @@ from models.family import Family
 from models.settings import Settings
 from models.users import User
 from models.vendors import Vendor
-from services.platform.preference_service import PreferenceService
-from services.platform.settings_service import SettingsService
+from services.finance.preference_service import FinancePreferenceService
+from services.finance.settings_service import SettingsService
 from tests.auth_helpers import login_client
 
 
@@ -205,8 +205,8 @@ def test_dashboard_consumes_personal_not_household_display_preferences(app, fami
     with client:
         response = client.get('/dashboard')
         assert response.status_code == 200
-        assert PreferenceService.get_value('dashboard.networth_expanded') is False
-        assert PreferenceService.get_value('dashboard.quick_nav_expanded') is True
+        assert FinancePreferenceService.get_value('dashboard.networth_expanded') is False
+        assert FinancePreferenceService.get_value('dashboard.quick_nav_expanded') is True
     html = response.get_data(as_text=True)
     assert 'id="networthCollapse" class="collapse ">' in html
     assert 'id="paydayCollapse" class="collapse ">' in html

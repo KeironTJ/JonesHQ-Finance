@@ -16,8 +16,8 @@ Current notes on credit-card management, generated transactions, and linked bank
 - Auto-calculate monthly APR from annual APR
 
 **Relevant files:**
-- `blueprints/credit_cards/__init__.py` - Blueprint registration
-- `blueprints/credit_cards/routes.py` - All CRUD routes
+- `blueprints/finance/credit_cards/__init__.py` - Blueprint registration
+- `blueprints/finance/credit_cards/routes.py` - All CRUD routes
 - `templates/credit_cards/index.html` - Cards list
 - `templates/credit_cards/form.html` - Add/edit form
 - `templates/credit_cards/detail.html` - Card details
@@ -109,9 +109,9 @@ def calculate_actual_payment(self):
 - Print functionality
 
 **Relevant files:**
-- `blueprints/transactions/routes.py` - Consolidated route logic
+- `blueprints/finance/transactions/routes.py` - Consolidated route logic
 - `templates/transactions/consolidated.html` - UI template
-- Updated `blueprints/transactions/routes.py` - Added imports and route
+- Updated `blueprints/finance/transactions/routes.py` - Added imports and route
 - Updated `templates/base.html` - Navigation link
 
 **Route:**

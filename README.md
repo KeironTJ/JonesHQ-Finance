@@ -165,14 +165,8 @@ Family HQ/
 │   ├── platform/
 │   └── vehicles/
 ├── blueprints/            # Route blueprints
-│   ├── dashboard/
-│   ├── accounts/
-│   ├── transactions/
-│   ├── credit_cards/
-│   ├── expenses/
-│   ├── income/
-│   ├── plans/
-│   └── ...
+│   ├── core/             # Identity, households, Hub and shared preferences
+│   └── finance/          # Finance module descriptor and feature blueprints
 ├── templates/             # HTML templates
 │   ├── base.html
 │   ├── shared/

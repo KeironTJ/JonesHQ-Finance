@@ -15,7 +15,7 @@
                 {% endfor %}
             </select>
             <p class="form-text" id="defaultWorkspaceHelp">Used after sign-in and when opening the application's home address. Direct links still take you to the requested page. You can always return to Central Hub from navigation.</p>
-            {% if current_user.family_id is none %}
+            {% if active_household_id is none %}
             <p class="text-muted small">Until you join a household, sign-in will open Account security instead.</p>
             {% endif %}
             <button class="btn btn-primary" type="submit">Save starting point</button>
@@ -67,7 +67,7 @@
         <div class="card-body">
             <h2 class="h5">Looking for Finance defaults?</h2>
             <p>Dashboard layout, reminder windows, list display and your default bank account belong to Finance.</p>
-            <a class="btn btn-outline-primary" href="{{ url_for('preferences.finance') }}">Finance preferences</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('finance_preferences.index') }}">Finance preferences</a>
         </div>
     </section>
     {% endif %}

@@ -58,7 +58,7 @@ ended sources only contribute payslips actually saved.
 **Expense integration:** a source can fold reimbursable expenses into its payday
 (`fold_expenses`), as before.
 
-### Routes (`blueprints/income/routes.py`)
+### Routes (`blueprints/finance/income/routes.py`)
 
 | Route | Purpose |
 |---|---|
