@@ -1,6 +1,7 @@
 import ast
 from pathlib import Path
 
+import pytest
 from flask import Flask, url_for
 from jinja2 import ChoiceLoader, DictLoader
 
@@ -10,6 +11,7 @@ from models.family import Family, HouseholdMembership
 from services.platform.module_registry import ModuleRegistry
 from services.platform import module_registry
 from tests.auth_helpers import login_client
+from tests.test_settings_hierarchy import SettingsCardParser
 from tests.test_workspace_ui import NavigationParser
 
 
@@ -85,14 +87,17 @@ def test_finance_and_central_preferences_have_distinct_routes(app, user):
     assert client.get('/finance/income').status_code == 200
 
 
-def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, user, monkeypatch):
+@pytest.mark.parametrize('has_settings_pages', [True, False])
+def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, user, monkeypatch, has_settings_pages):
     example = {
         'key': 'example', 'title': 'Example module', 'overview_label': 'Example overview',
         'icon': 'bi-calendar', 'home_endpoint': 'accounts.index',
         'navigation_template': 'example/_navigation.html', 'status': 'available',
         'requires_household': True, 'default_destination': False,
         'settings_group': lambda user: {
-            'label': 'Example', 'endpoint': 'auth.account_security', 'pages': [],
+            'label': 'Example', 'endpoint': 'auth.account_security',
+            'pages': [{'label': 'Example preferences', 'endpoint': 'auth.account_security', 'values': {}}]
+            if has_settings_pages else [],
         },
     }
     monkeypatch.setattr(module_registry, '_MODULES', (*module_registry._MODULES, example))
@@ -123,8 +128,10 @@ def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, u
     central = client.get('/central/').get_data(as_text=True)
     assert 'Open Example module' in central
     settings = client.get('/central/settings').get_data(as_text=True)
-    assert 'Open Example settings' in settings
-    assert 'href="/central/account/security"' in settings
+    settings_cards = SettingsCardParser()
+    settings_cards.feed(settings)
+    assert settings_cards.cards.count('/central/account/security') == (2 if has_settings_pages else 1)
+    assert ('<h3 class="h5">Example settings</h3>' in settings) == has_settings_pages
 
 
 def test_module_navigation_permissions_follow_selected_household(app, user):
