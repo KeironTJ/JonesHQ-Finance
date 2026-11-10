@@ -120,6 +120,24 @@ def _apply_visibility(model, query):
     if hasattr(model, 'owner_id'):
         conditions.append((model.owner_id.is_(None)) | (model.owner_id == uid))
 
+    if getattr(model, '__tablename__', None) == 'activities' and getattr(current_user, 'is_managed_child', False):
+        from models.family import HouseholdMembership
+
+        own_suggestion = HouseholdMembership.query.filter(
+            HouseholdMembership.id == model.creator_membership_id,
+            HouseholdMembership.family_id == model.family_id,
+            HouseholdMembership.user_id == uid,
+        ).correlate(model).exists()
+        conditions.append(or_(model.status == 'approved', own_suggestion))
+
+    if getattr(model, '__tablename__', None) == 'activity_attendees':
+        from models.activities import Activity
+
+        visible_activity = _apply_visibility(Activity, Activity.query.filter(
+            Activity.id == model.activity_id, Activity.family_id == model.family_id,
+        )).correlate(model).exists()
+        conditions.append(visible_activity)
+
     if getattr(model, '__tablename__', None) == 'calendar_events':
         from models.family import HouseholdMembership
         from models.users import User

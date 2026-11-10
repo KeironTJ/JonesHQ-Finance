@@ -18,6 +18,7 @@ from models import (
 from models.expense_calendar import ExpenseCalendarEntry
 from models.calendar_event import CalendarEvent
 from models.meals import Meal, PlannedMeal
+from models.activities import Activity, ActivityAttendee
 from services.platform.account_deletion_service import AccountDeletionService, OWNED_MODELS
 from services.platform.user_session_service import _now
 from tests.auth_helpers import detach_user_from_households, login_client
@@ -79,6 +80,11 @@ def make_domains(owner, family_id, prefix):
     meal = add(Meal, family_id=family_id, name=prefix)
     add(PlannedMeal, family_id=family_id, meal_id=meal.id, title=prefix,
         creator_membership_id=creator.id if creator else None, date=TODAY, slot='dinner')
+    activity = add(Activity, family_id=family_id, title=prefix, starts_on=TODAY, ends_on=TODAY,
+                   status='approved', creator_membership_id=creator.id if creator else None,
+                   reviewer_membership_id=creator.id if creator else None)
+    if creator:
+        add(ActivityAttendee, family_id=family_id, activity_id=activity.id, membership_id=creator.id)
     expense = add(Expense, **common, date=TODAY, description=prefix,
                   expense_type='Hotel', cost=10, total_cost=10)
     category = add(Category, family_id=family_id, name='General', category_type='expense')

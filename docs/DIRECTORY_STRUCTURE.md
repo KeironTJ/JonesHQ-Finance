@@ -42,6 +42,7 @@ SQLAlchemy database models
 - `categories.py` - Category model
 - `calendar_event.py` - Household calendar dates, UTC times, visibility and action permissions
 - `meals.py` - Shared household meal library and multiple planned meals per date/slot
+- `activities.py` - Household activities, child suggestions/reviews and member attendance
 - `childcare.py` - Childcare records and related entities
 - `credit_cards.py` - Credit card model
 - `credit_card_transactions.py` - Credit card transactions
@@ -83,7 +84,8 @@ SQLAlchemy database models
 Domain-oriented business logic layer. See [`services/README.md`](../services/README.md)
 for the package map and compatibility-import policy.
 - `finance/` - Accounts, categories, transactions, subscriptions, payday, balances, income, vendors, credit cards, and expenses
-- `household/` - Family, managed-child access, calendar, meal planning and childcare workflows
+- `household/` - Family, managed-child access, calendar, meal/activity planning and childcare workflows
+- `household/planner_helpers.py` - Shared week/month date periods and navigation
 - `planning/` - Loans, mortgages, and pensions
 - `vehicles/` - Vehicles, fuel forecasting, and mileage
 - `platform/` - Authentication, shared appearance and module orchestration
@@ -98,7 +100,7 @@ Jinja2 HTML templates
 - `shared/` - Permission-aware navigation, page search, UI macros and shared analytics chart setup
 - `central/` - Registry-driven module launcher
 - `finance/` - Finance-owned sidebar navigation
-- `household/` - Month/agenda calendar, event forms, meal library, date-first week/month planner and privacy settings
+- `household/` - Month/agenda calendar, event forms, meal library, date-first week/month meal/activity planners and privacy settings
 - `email/` - Email templates
 - `errors/` - Error pages
 - `settings/` - Settings hub and independently saved household, credit-card,

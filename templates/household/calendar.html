@@ -51,13 +51,18 @@
                 <i class="bi bi-cup-hot" aria-hidden="true"></i> {{ meal_slots[plan.slot] }}: {{ plan.title }}
             </a>
             {% endfor %}
+            {% for occurrence in activity_days[day] %}
+            <a class="calendar-event" href="{{ url_for('household.activity', activity_id=occurrence.activity.id) }}" title="Activity &middot; Shared with household">
+                <i class="bi bi-people" aria-hidden="true"></i> {% if not occurrence.activity.all_day %}{{ calendar_service.local_time(occurrence.starts_at).strftime('%H:%M') }} {% endif %}{{ occurrence.activity.title }}
+            </a>
+            {% endfor %}
         </div>
         {% endfor %}{% endfor %}
     </div>
 </div></section>
 {% else %}
 {% set found = namespace(value=false) %}
-{% for day, events in days.items() %}{% if day.month == month.month and (events or meal_days[day]) %}
+{% for day, events in days.items() %}{% if day.month == month.month and (events or meal_days[day] or activity_days[day]) %}
 {% set found.value = true %}
 <section class="card mb-3"><div class="card-body">
     <h3 class="h5">{{ day.strftime('%A %d %B') }}</h3>
@@ -73,6 +78,13 @@
         <li class="py-2">
             <a href="{{ url_for('household.planned_meal', plan_id=plan.id) }}">{{ meal_slots[plan.slot] }}: {{ plan.title }}</a>
             <div class="small text-muted">Meal plan &middot; Shared with household</div>
+        </li>
+    {% endfor %}
+    {% for occurrence in activity_days[day] %}
+        <li class="py-2">
+            <a href="{{ url_for('household.activity', activity_id=occurrence.activity.id) }}">{{ occurrence.activity.title }}</a>
+            <span class="text-muted">{{ 'All day' if occurrence.activity.all_day else calendar_service.local_time(occurrence.starts_at).strftime('%H:%M %Z') }}</span>
+            <div class="small text-muted">Activity &middot; Shared with household</div>
         </li>
     {% endfor %}
     </ul>

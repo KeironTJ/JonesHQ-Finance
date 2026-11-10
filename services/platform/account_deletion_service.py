@@ -14,6 +14,7 @@ from models import (
 )
 from models.family import HouseholdMembership
 from models.calendar_event import CalendarEvent
+from models.activities import ActivityAttendee
 from models.expense_calendar import ExpenseCalendarEntry
 from models.passkeys import PasskeyChallenge, UserPasskey
 from models.settings import Settings
@@ -42,6 +43,7 @@ DOMAIN_CHILDREN = (
     (ExpenseCalendarEntry, Expense, 'expense_id'),
 )
 DELETE_ORDER = (
+    ActivityAttendee,
     CalendarEvent,
     ExpenseCalendarEntry, PlanItem, Trip, TripSchedule, TripTemplate, FuelRecord, LoanTermChange, LoanPayment,
     PensionSnapshot, CreditCardPromotion, Expense, Income, IncomeChange, CreditCardTransaction, Balance,
@@ -105,6 +107,11 @@ class AccountDeletionService:
             HouseholdMembership.user_id == user.id,
         ))
         plan[HouseholdMembership.__table__] = dict(memberships.all())
+        plan[ActivityAttendee.__table__] = dict(db.session.execute(select(
+            ActivityAttendee.id, ActivityAttendee.family_id,
+        ).where(
+            ActivityAttendee.membership_id.in_(plan[HouseholdMembership.__table__]),
+        )).all())
         plan[CalendarEvent.__table__] = dict(db.session.execute(select(
             CalendarEvent.id, CalendarEvent.family_id,
         ).where(

@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}{{ activity.title if activity else 'New activity' }}{% endblock %}
+{% block content %}
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.activity_planner', **planner_values(activity.starts_on if activity else selected, view)) }}">Back to activity planner</a>
+<h1 class="text-break">{{ activity.title if activity else ('Add activity' if can_manage else 'Suggest activity') }}</h1>
+{% if activity %}
+<p class="text-muted">{{ activity.starts_on.strftime('%d %b %Y') }} - {{ activity.ends_on.strftime('%d %b %Y') }} &middot; {{ 'All day' if activity.all_day else calendar_service.local_time(activity.starts_at).strftime('%H:%M %Z') ~ ' - ' ~ calendar_service.local_time(activity.ends_at).strftime('%d %b %H:%M %Z') }} &middot; {{ activity.status|title }}</p>
+<p class="small text-muted">{{ 'Added by ' ~ activity.creator_membership.user.name if activity.creator_membership else 'Added by a former member.' }}</p>
+{% if activity.recurrence == 'weekly' %}<p>Repeats weekly through {{ activity.repeat_until.strftime('%d %b %Y') }} (last start date). All changes apply to the entire series, including past dates.</p>{% endif %}
+{% if activity.reviewed_at %}<p class="small text-muted">{{ 'Published / approved' if activity.status == 'approved' else 'Rejected' }} by {{ activity.reviewer_membership.user.name if activity.reviewer_membership else 'a former member' }}.</p>{% endif %}
+{% endif %}
+{% if not can_manage and (not activity or activity.status != 'approved') %}<p class="alert alert-info">Only you and adult household members can see this suggestion until it is approved. Saving changes resubmits it for adult approval.</p>{% endif %}
+{% if activity and activity.status == 'pending' and can_manage %}
+<form class="card mb-3" method="POST" action="{{ url_for('household.review_activity', activity_id=activity.id) }}"><div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="view" value="{{ view }}">
+    <p>Review the saved details before publishing. Unsaved changes in the form below are not included.</p>
+    <button class="btn btn-success" name="decision" value="approve">Approve and publish entire series</button>
+    <button class="btn btn-outline-danger" name="decision" value="reject">Reject suggestion</button>
+</div></form>
+{% endif %}
+{% if can_edit %}
+<form class="card mb-3" method="POST"><div class="card-body">
+    {% include 'household/_activity_fields.html' %}
+    <button class="btn btn-primary mt-3" type="submit">{{ 'Save entire series' if activity and activity.recurrence == 'weekly' else 'Save activity' if can_manage else 'Send suggestion' }}</button>
+</div></form>
+{% else %}
+<section class="card"><div class="card-body">
+    {% for key, label in [('location', 'Location'), ('description', 'Description'), ('comments', 'Comments / planning notes')] %}<h2 class="h5">{{ label }}</h2><p class="text-break" style="white-space: pre-wrap">{{ activity|attr(key) or 'Not provided.' }}</p>{% endfor %}
+    <h2 class="h5">Attending</h2><ul>{% for attendee in activity.attendees %}<li>{{ attendee.membership.user.name }}</li>{% else %}<li>No attendees selected.</li>{% endfor %}</ul>
+    <p class="text-muted mb-0">An adult household member manages published activities.</p>
+</div></section>
+{% endif %}
+{% if activity and can_edit %}
+<form method="POST" action="{{ url_for('household.delete_activity', activity_id=activity.id) }}" onsubmit="return confirm('Delete this activity and its entire series, including past dates?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="view" value="{{ view }}">
+    <button class="btn btn-outline-danger" type="submit">{{ 'Delete entire series' if activity.recurrence == 'weekly' else 'Delete activity' }}</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block extra_js %}{% if can_edit %}{% include 'household/_activity_form_script.html' %}{% endif %}{% endblock %}

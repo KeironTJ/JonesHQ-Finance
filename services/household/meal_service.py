@@ -1,5 +1,4 @@
-import calendar
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from flask import abort
 from flask_login import current_user
@@ -10,6 +9,7 @@ from extensions import db
 from models.meals import Meal, PlannedMeal
 from services.household.calendar_service import LONDON
 from services.household.membership_service import HouseholdMembershipService
+from services.household.planner_helpers import planner_period, planner_values, planner_view
 from services.platform.module_access_service import ModuleAccessService
 from utils.db_helpers import family_get, family_get_or_404, family_query, get_family_id
 
@@ -199,47 +199,26 @@ class MealService:
     @staticmethod
     def planner(data):
         MealService.require_access()
-        today = datetime.now(LONDON).date()
-        view = MealService.planner_view(data)
-        if view == 'month':
-            selected = MealService.parse_date((data.get('month') or today.strftime('%Y-%m')) + '-01')
-            weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(selected.year, selected.month)
-            first, last = weeks[0][0], weeks[-1][-1]
-            previous = selected - timedelta(days=1) if selected > date(1900, 1, 1) else None
-            following = selected.replace(day=calendar.monthrange(selected.year, selected.month)[1]) + timedelta(days=1)
-            if following > date(2100, 12, 31):
-                following = None
-        else:
-            selected = MealService.parse_date(data.get('week') or today.isoformat())
-            first = selected - timedelta(days=selected.weekday())
-            last = first + timedelta(days=6)
-            weeks = [list(first + timedelta(days=index) for index in range(7))]
-            previous = first - timedelta(days=7) if first - timedelta(days=7) >= date(1900, 1, 1) else None
-            following = first + timedelta(days=7) if first + timedelta(days=7) <= date(2100, 12, 31) else None
-        plans = MealService.plans_between(first, last)
-        days = [day for week in weeks for day in week]
+        context = planner_period(data, MealService.parse_date)
+        plans = MealService.plans_between(context['first'], context['last'])
         return dict(
-            first=first, last=last, days=days, weeks=weeks, view=view, today=today, slots=SLOTS,
+            **context, slots=SLOTS,
             plans_by_slot={
                 (day, slot): [plan for plan in plans if plan.date == day and plan.slot == slot]
-                for day in days for slot in SLOTS
+                for day in context['days'] for slot in SLOTS
             },
             meals=family_query(Meal).filter_by(is_archived=False).order_by(Meal.name, Meal.id).all(),
-            selected=selected, can_manage=MealService.can_manage(),
-            previous=previous, following=following,
+            can_manage=MealService.can_manage(),
             meal_service=MealService, plan=None, submitted={},
         )
 
     @staticmethod
     def planner_view(data):
-        view = data.get('view') or 'week'
-        if view not in ('week', 'month'):
-            raise ValueError('Choose week or month meal view.')
-        return view
+        return planner_view(data)
 
     @staticmethod
     def planner_values(selected, view):
-        return {'view': view, 'month': selected.strftime('%Y-%m')} if view == 'month' else {'week': selected.isoformat()}
+        return planner_values(selected, view)
 
     @staticmethod
     def plan_form(plan=None, data=None):

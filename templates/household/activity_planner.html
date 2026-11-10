@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Activity planner{% endblock %}
+{% block extra_css %}
+<style>
+.activity-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .25rem; }
+.activity-day { min-width: 0; min-height: 8rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-surface); }
+.activity-day.today { border: 2px solid var(--brand); }
+.activity-day.outside { background: var(--bg-surface-2); }
+.activity-link { overflow-wrap: anywhere; }
+.activity-add { min-height: 44px; min-width: 44px; }
+@media (max-width: 767px) {
+    .activity-day { padding: .2rem; font-size: .75rem; }
+    .activity-add { min-width: 0; width: 100%; padding: .25rem; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div><h1>Activity planner</h1><p class="text-muted mb-0">Household activities in Europe/London. Adults publish; children suggest for approval.</p></div>
+    <a class="btn btn-primary" href="{{ url_for('household.create_activity', date=selected.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addActivityModal" data-activity-date="{{ selected.isoformat() }}">{{ 'Add activity' if can_manage else 'Suggest activity' }}</a>
+</div>
+{% if suggestions %}
+<section class="card mb-3"><div class="card-body">
+    <h2 class="h5">{{ 'Suggestions to review' if can_manage else 'Your suggestions' }}</h2>
+    <ul class="mb-0">{% for suggestion in suggestions %}<li><a href="{{ url_for('household.activity', activity_id=suggestion.id, view=view) }}">{{ suggestion.title }}</a> <span class="badge bg-secondary">{{ suggestion.status|title }}</span> <span class="small text-muted">{{ suggestion.starts_on.strftime('%d %b %Y') }}</span></li>{% endfor %}</ul>
+</div></section>
+{% endif %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h2 class="h5 mb-0">{{ selected.strftime('%B %Y') if view == 'month' else first.strftime('%d %b %Y') ~ ' - ' ~ last.strftime('%d %b %Y') }}</h2>
+    <div class="d-flex gap-2 flex-wrap">
+        {% if previous %}<a class="btn btn-outline-secondary" href="{{ url_for('household.activity_planner', **planner_values(previous, view)) }}">Previous {{ view }}</a>{% endif %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('household.activity_planner', view=view) }}">This {{ view }}</a>
+        {% if following %}<a class="btn btn-outline-secondary" href="{{ url_for('household.activity_planner', **planner_values(following, view)) }}">Next {{ view }}</a>{% endif %}
+    </div>
+</div>
+<div class="btn-group mb-3" aria-label="Activity planner view">
+    {% for mode in ['week', 'month'] %}<a class="btn btn-{{ 'primary' if view == mode else 'outline-primary' }}" href="{{ url_for('household.activity_planner', **planner_values(selected, mode)) }}"{% if view == mode %} aria-current="page"{% endif %}>{{ mode|title }}</a>{% endfor %}
+</div>
+{% if view == 'month' %}
+<section class="activity-grid" aria-label="{{ selected.strftime('%B %Y') }} activities">
+    {% for name in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="text-center fw-bold">{{ name }}</div>{% endfor %}
+    {% for day in days %}
+    <div class="activity-day{{ ' today' if day == today }}{{ ' outside' if day.month != selected.month }}">
+        <time datetime="{{ day.isoformat() }}">{{ day.day }}</time>
+        {% if 1900 <= day.year <= 2100 %}<a class="btn btn-outline-secondary btn-sm activity-add" href="{{ url_for('household.create_activity', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addActivityModal" data-activity-date="{{ day.isoformat() }}" aria-label="{{ 'Add' if can_manage else 'Suggest' }} activity on {{ day.isoformat() }}">+</a>{% endif %}
+        {% for occurrence in activity_days[day] %}<div class="mt-2">{% include 'household/_activity_occurrence.html' %}</div>{% endfor %}
+    </div>
+    {% endfor %}
+</section>
+{% else %}
+<div class="row g-3">{% for day in days %}
+<div class="col-md-6 col-xl-4"><section class="card h-100"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center gap-2">
+        <h2 class="h5 mb-0"><time datetime="{{ day.isoformat() }}">{{ day.strftime('%A %d %b') }}</time></h2>
+        {% if 1900 <= day.year <= 2100 %}<a class="btn btn-outline-primary activity-add" href="{{ url_for('household.create_activity', date=day.isoformat(), view=view) }}" data-bs-toggle="modal" data-bs-target="#addActivityModal" data-activity-date="{{ day.isoformat() }}" aria-label="{{ 'Add' if can_manage else 'Suggest' }} activity on {{ day.isoformat() }}">+</a>{% endif %}
+    </div>
+    {% for occurrence in activity_days[day] %}<div class="mt-3">{% include 'household/_activity_occurrence.html' %}</div>{% else %}<p class="text-muted mb-0 mt-3">No activities planned</p>{% endfor %}
+</div></section></div>
+{% endfor %}</div>
+{% endif %}
+<div class="modal fade" id="addActivityModal" tabindex="-1" aria-labelledby="addActivityHeading" aria-hidden="true">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title h5" id="addActivityHeading">{{ 'Add activity' if can_manage else 'Suggest activity' }}</h2><button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <form method="POST" action="{{ url_for('household.create_activity') }}">
+            <div class="modal-body">
+                {% if not can_manage %}<p>Your suggestion stays off the calendar until an adult household member approves it.</p>{% endif %}
+                {% include 'household/_activity_fields.html' %}
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="submit">{{ 'Publish activity' if can_manage else 'Send suggestion' }}</button></div>
+        </form>
+    </div></div>
+</div>
+{% endblock %}
+{% block extra_js %}{% include 'household/_activity_form_script.html' %}{% endblock %}

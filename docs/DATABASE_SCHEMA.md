@@ -107,6 +107,26 @@ account-owned records are not household financial data.
   Archiving meals preserves plans. Shared records have no per-event ACL;
   adults manage them and managed children can only view.
 
+## Household Activities
+
+- `activities` stores explicit `family_id`, title, description, comments, location,
+  inclusive London dates and optional UTC start/end times. It uses the same
+  midnight-end convention as manual calendar events.
+- `recurrence` is `none` or `weekly`; weekly series require `repeat_until` (the
+  inclusive last allowed start date). Occurrences are computed, not persisted.
+  Whole-series edits affect past and future displays; there is no exception table.
+- `status` is `pending`, `approved` or `rejected`. Creator/reviewer links reference
+  household memberships with `SET NULL`; `reviewed_at` records the UTC review time.
+  Adults create approved rows; children create pending suggestions regardless of
+  submitted status. Scoped helpers hide unapproved suggestions from other children.
+- `activity_attendees` stores its own explicit `family_id`, `activity_id` and
+  `membership_id`, with a named unique activity/membership pair and cascading FKs.
+  Visibility inherits the activity. The write guard rejects cross-household links.
+  Membership/account removal deletes attendance, not the activity.
+- Migration `a05b1d7f234e` creates only these two tables, named constraints and
+  lookup indexes. Household deletion removes attendees before activities and
+  memberships. Activities do not create duplicate `calendar_events`.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)

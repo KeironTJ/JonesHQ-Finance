@@ -14,6 +14,7 @@ from utils.db_helpers import get_current_user_id
 
 # Reviewed child-first order; new household tables must be explicitly included.
 HOUSEHOLD_TABLES = (
+    'activity_attendees', 'activities',
     'planned_meals', 'meals',
     'calendar_events',
     'expense_calendar_entries', 'plan_items', 'trips', 'trip_schedules', 'trip_templates', 'fuel_records',

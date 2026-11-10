@@ -1,0 +1,26 @@
+<script>
+(() => {
+    const allDay = document.getElementById('activity_all_day');
+    const recurrence = document.getElementById('activity_recurrence');
+    function updateFields() {
+        for (const selector of ['.activity-date', '.activity-time', '.activity-repeat']) {
+            const enabled = selector === '.activity-date' ? allDay.checked : selector === '.activity-time' ? !allDay.checked : recurrence.value === 'weekly';
+            document.querySelectorAll(selector).forEach(group => {
+                group.hidden = !enabled;
+                group.querySelectorAll('input').forEach(input => { input.required = enabled; });
+            });
+        }
+    }
+    allDay.addEventListener('change', updateFields);
+    recurrence.addEventListener('change', updateFields);
+    updateFields();
+    const modal = document.getElementById('addActivityModal');
+    if (modal) modal.addEventListener('show.bs.modal', event => {
+        const selected = event.relatedTarget?.dataset.activityDate;
+        if (!selected) return;
+        for (const key of ['starts_on', 'ends_on']) document.getElementById('activity_' + key).value = selected;
+        document.getElementById('activity_starts_at').value = selected + 'T09:00';
+        document.getElementById('activity_ends_at').value = selected + 'T10:00';
+    });
+})();
+</script>

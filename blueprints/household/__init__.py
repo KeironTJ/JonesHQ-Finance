@@ -5,7 +5,7 @@ household_bp = Blueprint('household', __name__, url_prefix='/household')
 
 
 def register_blueprints(app):
-    from . import routes, meal_routes
+    from . import routes, meal_routes, activity_routes
     app.register_blueprint(household_bp)
 
 
@@ -35,6 +35,9 @@ MODULE = {
         )},
         **{f'household.{endpoint}': 'Meal planner' for endpoint in (
             'meal_planner', 'add_planned_meal', 'planned_meal', 'remove_planned_meal',
+        )},
+        **{f'household.{endpoint}': 'Activity planner' for endpoint in (
+            'activity_planner', 'activity', 'create_activity', 'review_activity', 'delete_activity',
         )},
     },
     'status': 'available',

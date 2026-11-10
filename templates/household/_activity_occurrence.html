@@ -1,0 +1,7 @@
+<a class="activity-link" href="{{ url_for('household.activity', activity_id=occurrence.activity.id, view=view) }}">{{ occurrence.activity.title }}</a>
+<div class="small text-muted text-break">
+    {{ 'All day' if occurrence.activity.all_day else calendar_service.local_time(occurrence.starts_at).strftime('%H:%M %Z') }}
+    {% if occurrence.activity.location %} &middot; {{ occurrence.activity.location }}{% endif %}
+    {% if occurrence.activity.recurrence == 'weekly' %} &middot; Weekly{% endif %}
+</div>
+{% if occurrence.activity.attendees %}<div class="small text-muted text-break">Attending: {% for attendee in occurrence.activity.attendees %}{{ attendee.membership.user.name }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}

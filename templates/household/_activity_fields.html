@@ -1,0 +1,26 @@
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="view" value="{{ view }}">
+<div class="row g-3">
+    <div class="col-12"><label class="form-label" for="activity_title">Activity title</label><input class="form-control" id="activity_title" name="title" maxlength="200" value="{{ submitted.get('title', activity.title if activity else '') }}" required></div>
+    <div class="col-12 form-check ms-2">
+        <input class="form-check-input" id="activity_all_day" name="all_day" type="checkbox"{% if ((submitted.get('all_day') == 'on') if submitted else (activity.all_day if activity else true)) %} checked{% endif %}>
+        <label class="form-check-label" for="activity_all_day">All day</label>
+    </div>
+    <div class="col-md-6 activity-date"><label class="form-label" for="activity_starts_on">Start date</label><input class="form-control" id="activity_starts_on" name="starts_on" type="date" min="1900-01-01" max="2100-12-31" value="{{ submitted.get('starts_on', activity.starts_on.isoformat() if activity else selected.isoformat()) }}"></div>
+    <div class="col-md-6 activity-date"><label class="form-label" for="activity_ends_on">End date (inclusive)</label><input class="form-control" id="activity_ends_on" name="ends_on" type="date" min="1900-01-01" max="2100-12-31" value="{{ submitted.get('ends_on', activity.ends_on.isoformat() if activity else selected.isoformat()) }}"></div>
+    <div class="col-md-6 activity-time"><label class="form-label" for="activity_starts_at">Start (Europe/London)</label><input class="form-control" id="activity_starts_at" name="starts_at" type="datetime-local" value="{{ submitted.get('starts_at', calendar_service.local_time(activity.starts_at).strftime('%Y-%m-%dT%H:%M') if activity and activity.starts_at else selected.isoformat() ~ 'T09:00') }}"></div>
+    <div class="col-md-6 activity-time"><label class="form-label" for="activity_ends_at">End (Europe/London)</label><input class="form-control" id="activity_ends_at" name="ends_at" type="datetime-local" value="{{ submitted.get('ends_at', calendar_service.local_time(activity.ends_at).strftime('%Y-%m-%dT%H:%M') if activity and activity.ends_at else selected.isoformat() ~ 'T10:00') }}"></div>
+    <div class="col-md-6"><label class="form-label" for="activity_recurrence">Repeat</label><select class="form-select" id="activity_recurrence" name="recurrence">
+        {% for value, label in [('none', 'Does not repeat'), ('weekly', 'Weekly on the start weekday')] %}<option value="{{ value }}"{% if submitted.get('recurrence', activity.recurrence if activity else 'none') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></div>
+    <div class="col-md-6 activity-repeat"><label class="form-label" for="activity_repeat_until">Repeat through</label><input class="form-control" id="activity_repeat_until" name="repeat_until" type="date" min="1900-01-01" max="2100-12-31" value="{{ submitted.get('repeat_until', activity.repeat_until.isoformat() if activity and activity.repeat_until else '') }}"><div class="form-text">Last allowed occurrence start date, inclusive.</div></div>
+    <div class="col-12"><label class="form-label" for="activity_location">Location</label><input class="form-control" id="activity_location" name="location" maxlength="200" value="{{ submitted.get('location', activity.location if activity else '') }}"></div>
+    <div class="col-12"><label class="form-label" for="activity_description">Description</label><textarea class="form-control" id="activity_description" name="description" rows="3" maxlength="5000">{{ submitted.get('description', activity.description if activity else '') }}</textarea></div>
+    <div class="col-12"><label class="form-label" for="activity_comments">Comments / planning notes</label><textarea class="form-control" id="activity_comments" name="comments" rows="3" maxlength="5000">{{ submitted.get('comments', activity.comments if activity else '') }}</textarea></div>
+    <fieldset class="col-12"><legend class="h6">Who is attending?</legend>
+        <p class="form-text">Optional household members. Attendance grants no additional access or editing rights.</p>
+        {% set chosen = submitted.get('attendee_ids', activity.attendees|map(attribute='membership_id')|list if activity else [])|map('string')|list %}
+        {% for member in members %}<div class="form-check"><input class="form-check-input" name="attendee_ids" type="checkbox" id="activity_member_{{ member.id }}" value="{{ member.id }}"{% if member.id|string in chosen %} checked{% endif %}><label class="form-check-label" for="activity_member_{{ member.id }}">{{ member.user.name }}</label></div>{% endfor %}
+    </fieldset>
+</div>
+<p class="small text-muted mt-3 mb-0">Weekly repeats keep their London clock times. Editing or deleting changes the entire series, including past dates. Individual occurrence changes are not available yet.</p>

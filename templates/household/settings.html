@@ -12,8 +12,12 @@
     <p>All members with Household Hub access can view meals and plans. Adults manage the shared meal library and planner; managed children view only. Breakfast, lunch and dinner can each contain multiple meals per day.</p>
     <p>Use week or month view and add meals straight onto a date. Enter a title, description and recipe source, or optionally copy from the library. Each planned meal is independent: library edits never change existing plans.</p>
     <p>Plans appear automatically in the calendar and link back to the planner. Archiving a meal keeps existing plans; restoring it allows new planning. Shared meals and plans remain when a member leaves or deletes their account; their added-by attribution is cleared.</p>
-    <p>External sharing, activity and task feeds are not available yet.</p>
+    <h2 class="h5">Activities &amp; suggestions</h2>
+    <p>Adults publish and manage shared household activities. Children can suggest activities, revise rejected/pending suggestions or withdraw their own suggestions. Only the creator and household adults can see suggestions until an adult explicitly approves them.</p>
+    <p>Approved activities appear automatically in the calendar. Attendees are household members and gain no additional permissions. Weekly repeats keep London clock times through the selected last-start date. Editing or deleting changes the entire series, including past dates; individual occurrence exceptions are not available yet.</p>
+    <p>Activities survive member/account deletion; attendance and added-by/reviewer links are removed. External sharing and task feeds are not available yet.</p>
     <a class="btn btn-primary" href="{{ url_for('household.calendar') }}">Open calendar</a>
     <a class="btn btn-outline-primary" href="{{ url_for('household.meal_planner') }}">Open meal planner</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.activity_planner') }}">Open activity planner</a>
 </div></section>
 {% endblock %}

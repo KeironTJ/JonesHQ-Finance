@@ -263,6 +263,8 @@ class CalendarService:
         }
         from services.household.meal_service import MealService, SLOTS
         planned_meals = MealService.plans_between(first, last)
+        from services.household.activity_service import ActivityService
+        activities = ActivityService.between(first, last)
         return dict(
             month=selected, weeks=weeks, days=days, view=view, today=today,
             meal_days={
@@ -270,6 +272,10 @@ class CalendarService:
                 for week in weeks for day in week
             },
             meal_slots=SLOTS,
+            activity_days={
+                day: [row for row in activities if row.starts_on <= day <= row.ends_on]
+                for week in weeks for day in week
+            },
             previous=(selected - timedelta(days=1)).strftime('%Y-%m') if selected.year > 1900 or selected.month > 1 else None,
             following=(selected.replace(day=calendar.monthrange(selected.year, selected.month)[1]) + timedelta(days=1)).strftime('%Y-%m')
             if selected.year < 2100 or selected.month < 12 else None,

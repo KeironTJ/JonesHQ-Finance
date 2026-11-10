@@ -85,7 +85,7 @@ visibility is enforced by the scoped query helpers, including child/guardian
 visibility without an owner bypass. Creator links and selected grants use
 household membership IDs. Departing members' private events are deleted and
 shared events retained for owners; account and household deletion use reviewed
-lifecycle rules. It also reads meal-plan source rows for month/agenda views;
+lifecycle rules. It also reads meal-plan and approved activity source rows for month/agenda views;
 no duplicate events are written.
 
 `household/meal_service.py` manages the household-shared meal library, archive/
@@ -96,7 +96,19 @@ and copies editable title/description/source once; subsequent library edits do
 not change plans. Archive preserves plans and blocks new selections. Added-by
 attribution uses the active membership and is cleared on departure. Household
 deletion removes plans before meals; individual account deletion preserves both.
-Activity/task feeds and external sharing are not implemented.
+Task feeds and external sharing are not implemented.
+
+`household/activity_service.py` owns date-first week/month activity planning,
+attendees, weekly recurrence and child suggestion reviews. Adults publish/manage;
+children can create, revise/resubmit or withdraw their own unapproved suggestions.
+Scoped helpers hide unapproved suggestions (and their attendee rows) from other
+children. Only explicit adult approval publishes a suggestion. Weekly occurrences
+are expanded on read without storing calendar-event copies; every London wall
+time is validated on save, rejecting ambiguous/nonexistent DST times. Changes
+apply to the whole series, including past dates. Member/account departure removes
+attendance and clears creator/reviewer attribution but preserves activities.
+`household/planner_helpers.py` supplies shared week/month periods and navigation
+for both activity and meal planners.
 
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods

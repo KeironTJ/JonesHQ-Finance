@@ -37,7 +37,7 @@ ID_FIELDS = (
     'deposit_account_id', 'default_payment_account_id', 'fuel_account_id', 'property_id',
     'mortgage_id', 'mortgage_product_id', 'reimbursement_group_id', 'activity_type_id',
     'default_account_id', 'default_category_id', 'parent_id', 'group_id', 'member_id',
-    'meal_id',
+    'meal_id', 'activity_id', 'membership_id',
 )
 SKIP_ENDPOINT_PREFIXES = ('static', 'admin.', 'auth.', 'onboarding.')
 # Satisfy table CHECK constraints the generic seeder cannot infer.

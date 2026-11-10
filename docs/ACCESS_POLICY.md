@@ -56,8 +56,8 @@ as the changes; a failed write saves neither.
 ## Household calendar (implemented)
 
 Household Hub opens at `/household/` with month and agenda views and manually
-created all-day/timed events in `Europe/London`. Meal plans also contribute
-source-linked items; activity and dated-task feeds are future work.
+created all-day/timed events in `Europe/London`. Meal plans and approved activities
+also contribute source-linked items; dated-task feeds are future work.
 
 - Shared and private events have explicit visibility. Adult-private events are
   creator-only; child-private events are visibly labelled as accessible to the
@@ -108,12 +108,39 @@ source-linked items; activity and dated-task feeds are future work.
   attribution is cleared so a reused membership ID cannot claim old plans.
   There is no private-meal mode, cross-household sharing or Finance integration.
 
+## Household activities (implemented)
+
+- Published activities are shared with the selected household. Adults with
+  Household Hub access create, edit, delete and review activities, independent of
+  household role or Finance permissions. Attendance is descriptive, not an ACL.
+- Managed children can suggest activities and edit/resubmit or withdraw their own
+  pending/rejected suggestions. They cannot publish, approve/reject, or edit/delete
+  approved activities, including when a corrupt household role says owner.
+- Pending/rejected suggestions are visible only to the creator and household
+  adults with Hub access, including their attendees. They never enter the calendar.
+  An adult must explicitly approve; editing a pending suggestion alone does not
+  publish it. Child revisions clear previous review attribution and resubmit.
+- Activities support all-day or timed multi-day spans, location, description,
+  comments and optional active-household attendees. Submitted membership IDs are
+  scoped to the selected household; creator/reviewer/status cannot be spoofed.
+- Weekly repeats keep their Europe/London clock times through DST and require
+  an inclusive last-start date. All occurrence times are validated on save;
+  ambiguous/nonexistent wall times must be changed before publishing or suggesting.
+  Edits and deletions affect the whole series, including past dates. Individual
+  exceptions/cancellations are not implemented.
+- Approved occurrences feed the month/agenda calendar directly. No manual
+  calendar events or separate occurrence records are generated.
+- Activity series and suggestions survive individual membership/account deletion.
+  Attendance links are removed and creator/reviewer attribution cleared on departure,
+  preventing reused membership IDs from inheriting attribution. Household deletion
+  removes attendees before activities. No cross-household sharing is enabled.
+
 ## Future feeds and external sharing (not implemented)
 
 Cross-household sharing will use invitations to specific items, with acceptance
 and revocation. It must not grant household membership, Finance access or access
 to unrelated records. Children will not administer external sharing.
 
-Activity/task feeds and external sharing are not available. Existing Finance childcare records are unrelated
+Task feeds and external sharing are not available. Existing Finance childcare records are unrelated
 to managed-child sign-in accounts. The previous JonesHQ hub is a feature
 reference only; its test data, authentication and styling are not being imported.

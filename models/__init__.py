@@ -1,6 +1,7 @@
 # Models package - Import all models for Flask-SQLAlchemy
 
 from models.accounts import Account
+from models.activities import Activity, ActivityAttendee
 from models.balances import Balance
 from models.budgets import Budget
 from models.calendar_event import CalendarEvent
@@ -46,6 +47,8 @@ from models.vendors import Vendor, VendorType
 
 __all__ = [
     'Account',
+    'Activity',
+    'ActivityAttendee',
     'Balance',
     'Budget',
     'CalendarEvent',

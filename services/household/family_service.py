@@ -176,6 +176,8 @@ class FamilyService:
         name = member.name
         from services.household.calendar_service import CalendarService
         CalendarService.detach_membership(membership)
+        from services.household.activity_service import ActivityService
+        ActivityService.detach_membership(membership)
         from models.meals import PlannedMeal
         from utils.db_helpers import family_query
         family_query(PlannedMeal).filter_by(creator_membership_id=membership.id).update(

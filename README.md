@@ -38,8 +38,15 @@ directly, or optionally copy them from the household meal library. Each date's
 details are independent: library edits never change existing plans. Adults manage
 meals and plans; managed children view only. Plans appear in month/agenda
 calendars as source links, not duplicate events. Archiving a meal keeps its plans.
-Activity/task feeds and external sharing remain future work; no old JonesHQ
-records or authentication are imported.
+The activity planner also has week/month views and per-day quick-add, household
+attendees, all-day or timed multi-day activities, and weekly repeats through a
+chosen end date. Adults publish and manage activities; children suggest them for
+adult approval. Pending/rejected suggestions are visible only to their creator
+and household adults, and stay off the calendar. Recurring edits/deletions affect
+the entire series, including past dates; single-occurrence exceptions are not yet
+supported. Approved activities feed the calendar directly without duplicate events.
+Task feeds and external sharing remain future work; no old JonesHQ records or
+authentication are imported.
 No billing or subscription entitlement enforcement is introduced.
 
 The shared sidebar discovers available modules through the platform registry.
