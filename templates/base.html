@@ -18,7 +18,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 {% set central_workspace = not active_module %}
-{% if settings_area %}{% set central_workspace = settings_area == 'central' %}{% endif %}
+{% if settings_area %}{% set central_workspace = settings_area == 'central' or not active_module %}{% endif %}
 <body class="{{ 'workspace' if current_user.is_authenticated else 'public-layout' }}">
     <a class="skip-link" href="#main-content">Skip to content</a>
     {% if current_user.is_authenticated %}

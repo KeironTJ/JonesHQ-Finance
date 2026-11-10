@@ -34,7 +34,7 @@
             <div class="nav-section-label">Settings &amp; support</div>
             {{ nav_link('central.settings' if central_workspace else settings_groups[active_module.key].endpoint, 'Settings', 'gear', exact=true, active_override=settings_area is not none) }}
             {{ nav_link('auth.help', 'Help & support', 'question-circle') }}
-            {% if current_user.is_site_admin %}
+            {% if current_user.is_site_admin and not current_user.is_managed_child %}
                 <div class="nav-section-label">Service operator</div>
                 {{ nav_link('site_admin.index', 'Site admin area', 'shield-shaded') }}
             {% endif %}

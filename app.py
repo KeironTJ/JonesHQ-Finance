@@ -107,6 +107,11 @@ def create_app(config_name=None):
     register_blueprints(app)
     ModuleRegistry.register_modules(app)
 
+    @app.before_request
+    def enforce_module_access():
+        from services.platform.module_access_service import ModuleAccessService
+        ModuleAccessService.enforce_request()
+
     # ── Section-level access enforcement ──────────────────────────────────
     @app.before_request
     def enforce_section_access():
@@ -137,6 +142,7 @@ def create_app(config_name=None):
         if (
             current_user.is_authenticated
             and current_user.is_site_admin
+            and not current_user.is_managed_child
             and not UserSessionService.has_strong_authentication(current_user)
             and request.endpoint not in _two_factor_exempt_endpoints
         ):
@@ -352,6 +358,9 @@ def register_commands(app):
         user = User.query.filter_by(email=email).first()
         if not user:
             click.echo(f'ERROR: No user found with email "{email}"', err=True)
+            return
+        if user.is_managed_child:
+            click.echo('ERROR: Managed child accounts cannot be site admins.', err=True)
             return
         if user.is_site_admin:
             click.echo(f'"{user.name}" ({email}) already has site admin access.')

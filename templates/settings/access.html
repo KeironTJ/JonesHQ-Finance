@@ -16,7 +16,9 @@
     <section class="card mb-4">
         <div class="card-body">
             <h2 class="h5">{{ household_user.name }} <span class="badge bg-secondary">{{ 'Owner' if member.role == 'admin' else 'Member' }}</span></h2>
-            {% if household_user.id == current_user.id %}
+            {% if household_user.is_managed_child %}
+            <p class="text-muted">Managed child account: Finance is blocked across all households.</p>
+            {% elif household_user.id == current_user.id %}
             <p class="text-muted mb-0">{% if member.role == 'admin' %}All Finance sections{% else %}Your permitted Finance sections{% endif %}. Transaction display name: {{ member.member_name or household_user.name }}. Your own access cannot be edited here.</p>
             {% else %}
             <form method="POST" action="{{ url_for('settings.update_finance_access', member_id=household_user.id) }}">

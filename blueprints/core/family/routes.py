@@ -224,14 +224,14 @@ def update_member(member_id):
     member_name = request.form.get('member_name', '').strip()
     selected_sections = request.form.getlist('sections')
     role = request.form.get('role', 'member')
-    member = FamilyService.update_member(
-        member_id,
-        get_family_id(),
-        current_user.id,
-        role,
-        member_name,
-        selected_sections,
-    )
+    try:
+        member = FamilyService.update_member(
+            member_id, get_family_id(), current_user.id, role, member_name, selected_sections,
+        )
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid member permissions.', 'danger')
+        return redirect(url_for('family.index'))
     if member is None:
         flash('You cannot edit your own permissions here.', 'warning')
         return redirect(url_for('family.index'))

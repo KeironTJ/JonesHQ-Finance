@@ -24,6 +24,9 @@ class PreferenceService:
         if not isinstance(workspace, str) or workspace not in LandingService.WORKSPACES:
             raise ValueError('Choose Central Hub or Finance as your default workspace.')
         user = PreferenceService._user()
+        from services.platform.module_registry import ModuleRegistry
+        if workspace not in ModuleRegistry.destinations_for(user):
+            raise ValueError('This workspace is not enabled for your account in this household.')
         user.preferences = {**(user.preferences or {}), 'default_workspace': workspace}
         db.session.commit()
 

@@ -86,6 +86,9 @@ def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, u
     }
     monkeypatch.setattr(module_registry, '_MODULES', (*module_registry._MODULES, example))
     monkeypatch.setitem(app.extensions['platform_modules'], 'accounts', example)
+    membership = user.get_active_household_membership()
+    membership.allowed_modules = ['finance', 'household', 'example']
+    db.session.commit()
     monkeypatch.setattr(app.jinja_env, 'loader', ChoiceLoader([
         DictLoader({
             'example/_navigation.html': "{{ nav_link('auth.help', 'Example guide', 'book') }}",

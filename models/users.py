@@ -77,6 +77,13 @@ class User(UserMixin, db.Model):
     # NULL / empty means all sections (used automatically for admins)
     allowed_sections = db.Column(db.Text, nullable=True)
     preferences = db.Column(db.JSON, nullable=True)
+    account_type = db.Column(db.String(10), nullable=False, default='adult', server_default='adult')
+    guardian_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', name='fk_users_guardian_id_users', ondelete='RESTRICT'),
+        nullable=True,
+    )
+    guardian = db.relationship('User', remote_side=[id], foreign_keys=[guardian_id])
 
     # `family_id` remains the legacy default household for compatibility.
     # Household-specific roles and permissions live on HouseholdMembership.
@@ -131,8 +138,14 @@ class User(UserMixin, db.Model):
     # ------------------------------------------------------------------
 
     @property
+    def is_managed_child(self):
+        return self.account_type == 'child'
+
+    @property
     def is_household_owner(self):
         """True for a household owner (stored role 'admin'). Not the same as is_site_admin."""
+        if self.is_managed_child:
+            return False
         membership = self.get_active_household_membership()
         return membership.role == 'admin' if membership else self.role == 'admin'
 
@@ -156,6 +169,9 @@ class User(UserMixin, db.Model):
         Household owners always receive ``None`` (meaning: all sections allowed).
         Members receive a set parsed from the ``allowed_sections`` JSON column.
         """
+        from services.platform.module_access_service import ModuleAccessService
+        if not ModuleAccessService.can_access(self, 'finance'):
+            return set()
         membership = self.get_active_household_membership()
         role = membership.role if membership else self.role
         allowed_sections = membership.allowed_sections if membership else self.allowed_sections
@@ -174,6 +190,12 @@ class User(UserMixin, db.Model):
         Household owners can always access every section.
         Members need *section_key* listed in their ``allowed_sections``.
         """
+        if section_key in ('family', 'settings') and self.is_managed_child:
+            return False
+        if section_key != 'family':
+            from services.platform.module_access_service import ModuleAccessService
+            if not ModuleAccessService.can_access(self, 'finance'):
+                return False
         membership = self.get_active_household_membership()
         role = membership.role if membership else self.role
         if role == 'admin':

@@ -27,11 +27,22 @@ class SettingsNavigationService:
         }
         has_household = ModuleRegistry.has_active_household(user)
         owner = user.is_household_owner and has_household
+        if not user.is_managed_child:
+            groups['central']['pages'].append({
+                'label': 'Managed child accounts', 'endpoint': 'central.managed_children',
+                'values': {}, 'scope': 'guardian',
+                'description': 'Manage child status and designated guardianship for accounts you supervise.',
+            })
         if owner:
             groups['central']['pages'].append({
                 'label': 'Household & members', 'endpoint': 'family.index',
                 'values': {}, 'scope': 'owner',
                 'description': 'Household membership, roles and invitations across all workspaces.',
+            })
+            groups['central']['pages'].append({
+                'label': 'Module access', 'endpoint': 'central.household_access',
+                'values': {}, 'scope': 'owner',
+                'description': 'Control module access for adults and managed children in this household.',
             })
         groups.update(ModuleRegistry.settings_groups_for(user))
 

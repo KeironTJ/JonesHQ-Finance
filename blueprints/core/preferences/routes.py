@@ -6,6 +6,7 @@ from . import preferences_bp
 from extensions import db
 from services.platform.preference_service import PreferenceService
 from services.platform.landing_service import LandingService
+from services.platform.module_registry import ModuleRegistry
 
 
 @preferences_bp.route('', methods=['GET'])
@@ -13,7 +14,7 @@ def index():
     return render_template(
         'preferences/index.html',
         default_workspace=LandingService.workspace_for(current_user),
-        workspaces=LandingService.WORKSPACES,
+        workspaces=ModuleRegistry.destinations_for(current_user),
     )
 
 

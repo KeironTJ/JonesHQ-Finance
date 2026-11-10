@@ -57,6 +57,10 @@ class AccountDeletionService:
     def _check_user(user):
         if not user.is_authenticated or not user.is_active or user.id != get_current_user_id():
             raise ValueError('Sign in to delete your own account.')
+        if user.is_managed_child:
+            raise ValueError('Your guardian manages your account status.')
+        if User.query.filter_by(guardian_id=user.id, account_type='child').first() is not None:
+            raise ValueError('Transfer guardianship or release managed child accounts before deleting your account.')
         if user.is_site_admin:
             raise ValueError('Revoke your site-admin role using the server command before deleting your account.')
         owner_memberships = HouseholdMembership.query.filter_by(

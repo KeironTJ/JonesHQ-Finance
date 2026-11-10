@@ -10,7 +10,8 @@ class LandingService:
 
     @staticmethod
     def workspace_for(user):
-        return (user.preferences or {}).get('default_workspace', 'central')
+        workspace = (user.preferences or {}).get('default_workspace', 'central')
+        return workspace if workspace in ModuleRegistry.destinations_for(user) else 'central'
 
     @staticmethod
     def safe_next(target):

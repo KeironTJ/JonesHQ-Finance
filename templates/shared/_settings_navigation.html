@@ -24,7 +24,7 @@
             <a class="btn btn-sm {{ 'btn-primary' if settings_page == page else 'btn-outline-secondary' }}" href="{{ url_for(page.endpoint, **page['values']) }}"{% if settings_page == page %} aria-current="page"{% endif %}>{{ page.label }}</a>
             {% endfor %}
         </nav>
-        <p class="small text-muted mb-0 mt-3">{% if settings_page.scope == 'personal' %}Only affects you{% elif settings_page.scope == 'owner' %}Affects your household &middot; Owner only{% else %}Affects your household{% endif %}</p>
+        <p class="small text-muted mb-0 mt-3">{% if settings_page.scope == 'personal' %}Only affects you{% elif settings_page.scope == 'guardian' %}Designated guardian only{% elif settings_page.scope == 'owner' %}Affects your household &middot; Owner only{% else %}Affects your household{% endif %}</p>
         {% endif %}
     </div>
 </section>

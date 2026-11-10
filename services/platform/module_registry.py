@@ -41,9 +41,14 @@ class ModuleRegistry:
 
     @staticmethod
     def settings_groups_for(user):
+        from services.platform.module_access_service import ModuleAccessService
         return {
             module['key']: module['settings_group'](user)
             for module in _MODULES if module['status'] == 'available'
+            and (
+                ModuleAccessService.can_access(user, module['key'])
+                or not ModuleRegistry.has_active_household(user) and not user.is_managed_child
+            )
         }
 
     @staticmethod
@@ -52,6 +57,7 @@ class ModuleRegistry:
 
     @staticmethod
     def modules_for(user):
+        from services.platform.module_access_service import ModuleAccessService
         has_household = ModuleRegistry.has_active_household(user)
         modules = []
         for definition in _MODULES:
@@ -59,7 +65,9 @@ class ModuleRegistry:
             module['can_open'] = (
                 module['status'] == 'available'
                 and (not module['requires_household'] or has_household)
+                and ModuleAccessService.can_access(user, module['key'])
             )
+            module['has_household'] = has_household
             modules.append(module)
         return modules
 
@@ -72,3 +80,11 @@ class ModuleRegistry:
             if module['default_destination']
         })
         return destinations
+
+    @staticmethod
+    def destinations_for(user):
+        from services.platform.module_access_service import ModuleAccessService
+        return {
+            key: value for key, value in ModuleRegistry.default_destinations().items()
+            if key == 'central' or ModuleAccessService.can_access(user, key)
+        }

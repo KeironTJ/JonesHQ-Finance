@@ -5,9 +5,10 @@
 <div class="container-fluid">
     {% call page_header('Household & members', 'Membership, household roles and invitations across your workspaces.', 'Central') %}
         <span class="badge bg-secondary">{{ family.name }}</span>
-        <a class="btn btn-outline-primary" href="{{ url_for('settings.finance_access') }}">Finance access &amp; assignment</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Module access &amp; child accounts</a>
+        {% if can_access_section('settings') %}<a class="btn btn-outline-primary" href="{{ url_for('settings.finance_access') }}">Finance access &amp; assignment</a>{% endif %}
     {% endcall %}
-    <p class="text-muted">Owners manage the household and have full Finance section access. Members keep their individual Finance permissions and private-record visibility. Changing a role does not edit the member's saved Finance section choices.</p>
+    <p class="text-muted">Owners manage the household. Module grants are checked before Finance section permissions; ownership does not bypass a disabled module. Managed child accounts cannot become owners or access Finance. Changing a role does not edit saved Finance section choices.</p>
     <section class="card mb-4">
         <div class="card-body">
             <h2 class="h5">Members</h2>
@@ -18,7 +19,7 @@
                         {% for membership in memberships %}
                         {% set member = membership.user %}
                         <tr>
-                            <td>{{ member.name }}{% if member.id == current_user.id %} <span class="badge bg-secondary">You</span>{% endif %}</td>
+                            <td>{{ member.name }}{% if member.id == current_user.id %} <span class="badge bg-secondary">You</span>{% endif %}{% if member.is_managed_child %} <span class="badge bg-secondary">Managed child</span>{% endif %}</td>
                             <td>{{ member.email }}</td>
                             <td>{{ 'Owner' if membership.role == 'admin' else 'Member' }}</td>
                             <td>{{ membership.created_at.strftime('%d %b %Y') }}</td>
@@ -29,7 +30,7 @@
                                     <label class="form-label small" for="role-{{ member.id }}">Household role for {{ member.name }}</label>
                                     <select class="form-select mb-2" name="role" id="role-{{ member.id }}">
                                         <option value="member" {% if membership.role != 'admin' %}selected{% endif %}>Member</option>
-                                        <option value="admin" {% if membership.role == 'admin' %}selected{% endif %}>Owner</option>
+                                        {% if not member.is_managed_child %}<option value="admin" {% if membership.role == 'admin' %}selected{% endif %}>Owner</option>{% endif %}
                                     </select>
                                     <button class="btn btn-outline-primary btn-sm" type="submit">Save role for {{ member.name }}</button>
                                 </form>

@@ -59,6 +59,10 @@ class HouseholdMembership(db.Model):
     role = db.Column(db.String(20), nullable=False, default='member')
     member_name = db.Column(db.String(100), nullable=True)
     allowed_sections = db.Column(db.Text, nullable=True)
+    allowed_modules = db.Column(
+        db.JSON, nullable=False, default=lambda: ['finance', 'household'],
+        server_default='["finance", "household"]',
+    )
     created_at = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),

@@ -62,7 +62,7 @@
             </div>
         </div>
     </form>
-    {% if current_user.family_id is not none %}
+    {% if 'finance' in settings_groups and active_household_id is not none %}
     <section class="card">
         <div class="card-body">
             <h2 class="h5">Looking for Finance defaults?</h2>

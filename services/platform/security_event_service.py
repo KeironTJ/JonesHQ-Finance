@@ -9,6 +9,10 @@ from models.users import SecurityEvent
 
 
 EVENT_LABELS = {
+	'module_access_updated': 'Household module access changed',
+	'managed_child_created': 'Managed child account created',
+	'managed_child_released': 'Managed child account released',
+	'child_guardian_updated': 'Designated guardian changed',
 	'passkey_added': 'Passkey added',
 	'passkey_removed': 'Passkey removed',
 	'passkey_failed': 'Failed passkey verification',

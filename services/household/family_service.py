@@ -23,6 +23,8 @@ class FamilyService:
         role = data.get('role')
         if role not in ('admin', 'member'):
             raise ValueError('Choose Owner or Member as the household role.')
+        if member.is_managed_child and role == 'admin':
+            raise ValueError('Managed child accounts cannot become household owners.')
         membership = HouseholdMembershipService.get_membership(member, get_family_id())
         if membership is None:
             raise ValueError('This member is no longer in the selected household.')
@@ -37,6 +39,8 @@ class FamilyService:
     def join_existing(user, data):
         if not user.is_active or user.id != get_current_user_id():
             raise ValueError('Sign in to join with your own account.')
+        if user.is_managed_child:
+            raise ValueError('Your guardian manages your household membership.')
         try:
             invite = FamilyInvite.query.filter_by(token=data.get('token') or '').first()
             if invite is None or not invite.is_valid:
@@ -145,6 +149,8 @@ class FamilyService:
             return None
 
         role = role if role in ('admin', 'member') else 'member'
+        if member.is_managed_child and (role == 'admin' or sections):
+            raise ValueError('Managed child accounts cannot receive ownership or Finance permissions.')
         previous_names = (membership.member_name, member.name)
         membership.role = role
         membership.member_name = member_name or member.name

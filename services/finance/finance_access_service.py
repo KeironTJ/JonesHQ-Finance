@@ -32,6 +32,8 @@ class FinanceAccessService:
         ).first_or_404()
         if member.id == get_current_user_id():
             raise ValueError('You cannot edit your own Finance access here.')
+        if member.is_managed_child:
+            raise ValueError('Managed child accounts cannot receive Finance access.')
         sections = data.get('sections', [])
         if not isinstance(sections, list) or any(
             not isinstance(section, str) or section not in SECTION_LABELS for section in sections

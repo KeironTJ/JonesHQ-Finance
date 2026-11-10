@@ -117,6 +117,9 @@ class DataExportService:
             raise ValueError('Sign in to export your data.')
         if user.id != get_current_user_id() or not user.family_id or user.family_id != get_family_id():
             raise ValueError('An active household membership is required to export data.')
+        from services.platform.module_access_service import ModuleAccessService
+        if not ModuleAccessService.can_access(user, 'finance'):
+            raise ValueError('Finance access is required for a financial data export.')
 
         tables = {}
         sections = []

@@ -60,6 +60,14 @@ account-owned records are not household financial data.
 - Migration `f42b7a91c6d3` backfills one membership from each existing user's
   legacy household fields. Removing a membership or household preserves any
   other memberships and does not revoke sessions for users who retain access.
+- Migration `c81d4e6f9a20` adds per-membership `allowed_modules` JSON grants
+  and account-level `User.account_type` / nullable `guardian_id`. Existing
+  accounts remain adults and existing memberships retain Finance access.
+  The named self-referencing guardian foreign key restricts deleting a guardian
+  until responsibility has been transferred or the managed accounts released.
+- Module grants are independent of role, Finance sections and record privacy.
+  Managed-child accounts cannot access Finance or household administration,
+  regardless of grants or household role. See [access policy](ACCESS_POLICY.md).
 
 ## Core Financial Models
 

@@ -277,6 +277,7 @@
             </div>
         </div>
 
+        {% if 'finance' in settings_groups and active_household_id is not none %}
         <div class="card mb-4">
             <div class="card-body">
                 <h2 class="h5">Download your data</h2>
@@ -295,7 +296,9 @@
                     Limited to two downloads per hour.</div>
             </div>
         </div>
+        {% endif %}
 
+        {% if not current_user.is_managed_child %}
         <div class="card border-danger mb-4">
             <div class="card-body">
                 <h2 class="h5">Delete your account</h2>
@@ -306,6 +309,9 @@
                 </a>
             </div>
         </div>
+        {% else %}
+        <div class="alert alert-info">Your designated guardian manages your child-account status. Finance access and household administration are blocked in every household.</div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

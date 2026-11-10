@@ -42,7 +42,7 @@
                         {% elif module.status == 'planned' %}
                         <span class="badge bg-secondary">Coming soon</span>
                         {% else %}
-                        <span class="badge bg-secondary">Household required</span>
+                        <span class="badge bg-secondary">{{ 'Access not enabled' if module.has_household else 'Household required' }}</span>
                         {% endif %}
                     </div>
                 </div>

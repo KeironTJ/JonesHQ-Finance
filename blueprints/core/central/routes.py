@@ -1,10 +1,15 @@
-from flask import has_request_context, redirect, render_template, request, url_for
+from flask import current_app, flash, has_request_context, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.exc import SQLAlchemyError
+from extensions import db
+from services.household.household_access_service import HouseholdAccessService
 from services.platform.landing_service import LandingService
 from services.household.membership_service import HouseholdMembershipService
 from services.platform.settings_navigation_service import SettingsNavigationService
 from services.platform.module_registry import ModuleRegistry
+from services.platform.module_access_service import ModuleAccessService
 from utils.db_helpers import get_family_id
+from utils.reauth import recent_auth_required
 
 from . import central_bp
 
@@ -16,10 +21,13 @@ def settings_navigation():
     context = SettingsNavigationService.get_context(
         current_user, request.endpoint, request.view_args or {},
     )
+    active_module = ModuleRegistry.module_for_blueprint(request.blueprint)
+    if active_module and not ModuleAccessService.can_access(current_user, active_module['key']):
+        active_module = None
     context.update({
         'household_memberships': HouseholdMembershipService.memberships_for(current_user),
         'active_household_id': get_family_id(),
-        'active_module': ModuleRegistry.module_for_blueprint(request.blueprint),
+        'active_module': active_module,
         'navigation_modules': ModuleRegistry.modules_for(current_user),
     })
     return context
@@ -45,3 +53,73 @@ def hub():
 @login_required
 def settings():
     return render_template('settings/overview.html')
+
+
+@central_bp.route('/hub/settings/access')
+@login_required
+def household_access():
+    return render_template('central/access.html', **HouseholdAccessService.get_page_data())
+
+
+@central_bp.route('/hub/settings/access/members/<int:member_id>', methods=['POST'])
+@login_required
+@recent_auth_required
+def update_module_access(member_id):
+    try:
+        HouseholdAccessService.update_modules(member_id, {'modules': request.form.getlist('modules')})
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid module access.', 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to update household module access')
+        flash('Unable to update module access. No changes were saved.', 'danger')
+    else:
+        flash('Module access saved for this household.', 'success')
+    return redirect(url_for('central.household_access'))
+
+
+@central_bp.route('/hub/settings/children/create', methods=['POST'])
+@login_required
+@recent_auth_required
+def create_managed_child():
+    try:
+        HouseholdAccessService.create_child(dict(request.form))
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid child-account details.', 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to create managed child account')
+        flash('Unable to create the child account. No changes were saved.', 'danger')
+    else:
+        flash('Managed child account created. You are its designated guardian.', 'success')
+    return redirect(url_for('central.household_access'))
+
+
+@central_bp.route('/account/children')
+@login_required
+def managed_children():
+    children = HouseholdAccessService.managed_children()
+    return render_template(
+        'central/children.html', children=children,
+        guardians={child.id: HouseholdAccessService.guardians_for(child) for child in children},
+    )
+
+
+@central_bp.route('/account/children/<int:child_id>', methods=['POST'])
+@login_required
+@recent_auth_required
+def update_managed_child(child_id):
+    try:
+        HouseholdAccessService.update_child(child_id, dict(request.form))
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        flash(str(error) or 'Invalid child-account change.', 'danger')
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Unable to update managed child account')
+        flash('Unable to update the child account. No changes were saved.', 'danger')
+    else:
+        flash('Child-account management updated. Household module grants are unchanged.', 'success')
+    return redirect(url_for('central.managed_children'))

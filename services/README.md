@@ -70,6 +70,15 @@ Core blueprints register separately in `blueprints/core/__init__.py`. The shared
 shell determines module identity from registered blueprint ownership, not a
 hard-coded list of core/Finance pages.
 
+`platform/module_access_service.py` composes per-household module grants with
+account-level managed-child restrictions. Its request guard covers registered
+module blueprints and legacy Core financial entry points, including exports.
+Finance section permissions apply only after the module gate.
+`household/household_access_service.py` manages household-local grants and
+designated-guardian child creation, transfer and release, with atomic audit
+events. See [access policy](../docs/ACCESS_POLICY.md) for implemented boundaries
+and the future calendar/sharing design.
+
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods
 delegate to the service to preserve existing callers.

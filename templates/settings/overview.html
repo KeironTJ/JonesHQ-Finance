@@ -21,7 +21,7 @@
                 <div class="card-body">
                     <h2 class="h5">{{ page.label }}</h2>
                     <p class="small text-muted">
-                        {% if page.scope == 'personal' %}Only affects you{% elif page.scope == 'owner' %}Affects your household &middot; Owner only{% else %}Affects your household{% endif %}
+                        {% if page.scope == 'personal' %}Only affects you{% elif page.scope == 'guardian' %}Designated guardian only{% elif page.scope == 'owner' %}Affects your household &middot; Owner only{% else %}Affects your household{% endif %}
                     </p>
                     <p>{{ page.description }}</p>
                     <a class="btn btn-outline-primary" href="{{ url_for(page.endpoint, **page['values']) }}">Manage {{ page.label|lower }}</a>
@@ -33,7 +33,7 @@
     <p class="text-muted mt-4">
         {% if settings_area == 'finance' %}
         Appearance, account security and household membership live in <a href="{{ url_for('central.settings') }}">Central settings</a>.
-        {% elif active_household_id is not none %}
+        {% elif 'finance' in settings_groups and active_household_id is not none %}
         Dashboard defaults and financial rules live in <a href="{{ url_for('settings.overview') }}">Finance settings</a>.
         {% endif %}
     </p>
