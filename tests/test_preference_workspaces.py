@@ -40,8 +40,9 @@ def test_finance_preferences_use_finance_navigation_for_owners_and_members(app, 
     assert 'name="dashboard.attention_days"' in html
     parser = NavigationParser()
     parser.feed(html)
-    assert [link['href'] for link in parser.links if link.get('aria-current') == 'page'] == ['/hub/settings/finance']
-    assert sum(link['href'] == '/hub/settings/finance' for link in parser.links) == 1
+    assert [link['href'] for link in parser.links if link.get('aria-current') == 'page'] == ['/hub/settings']
+    assert sum(link['href'] == '/hub/settings' for link in parser.links) == 1
+    assert 'href="/hub/settings/finance" data-nav-search' in html
     assert ('href="/settings/access"' in html) == (role == 'admin')
 
 

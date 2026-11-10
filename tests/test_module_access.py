@@ -124,7 +124,7 @@ def test_child_navigation_search_preferences_and_exports_do_not_offer_finance(ap
     db.session.commit()
     client = app.test_client()
     login_client(client, member.id)
-    assert client.get('/').location.endswith('/hub')
+    assert client.get('/').location.endswith('/household/my-day')
     for path in ('/hub', '/preferences', '/hub/settings', '/account/security'):
         response = client.get(path)
         assert response.status_code == 200
@@ -181,7 +181,13 @@ def test_invalid_child_creation_reports_error_without_partial_account(app, user,
     login_client(client, user.id)
     values = {'password': 'TestPass1!', 'confirm_password': 'TestPass1!', **payload}
     response = client.post('/hub/settings/children/create', data=values)
-    assert response.status_code == 302
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'Add child' in html and 'alert-danger' in html
+    assert f'value="{values["name"]}"' in html
+    assert f'value="{values["email"]}"' in html
+    assert f'value="{values["password"]}"' not in html
+    assert f'value="{values["confirm_password"]}"' not in html
     assert User.query.count() == 1
     assert SecurityEvent.query.filter_by(event_type='managed_child_created').count() == 0
 
@@ -342,14 +348,15 @@ def test_access_write_failures_rollback_data_and_audit(app, family, user, monkey
         'guardian': (f'/account/children/{member.id}', {'action': 'release'}),
     }[kind]
     response = client.post(path, data=data)
-    assert response.status_code == 302
+    assert response.status_code == (200 if kind == 'create' else 302)
     assert member.is_managed_child
     assert member.get_active_household_membership().allowed_modules == ['household']
     assert User.query.filter_by(email='new@example.com').first() is None
     assert SecurityEvent.query.filter(SecurityEvent.event_type.in_([
         'module_access_updated', 'managed_child_released', 'managed_child_created',
     ])).count() == 0
-    assert b'No changes were saved.' in client.get(response.location).data
+    error_page = response if kind == 'create' else client.get(response.location)
+    assert b'No changes were saved.' in error_page.data
 
 
 def test_module_access_migration_preserves_existing_adults_and_grants(app):

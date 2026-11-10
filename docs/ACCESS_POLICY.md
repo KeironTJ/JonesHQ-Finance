@@ -9,7 +9,7 @@
    boundary between households.
 3. **Module access:** `HouseholdMembership.allowed_modules` grants `finance`
    and/or `household`. Household owners manage these under Central settings,
-   **Household module access**, independently for each membership.
+   **Household & people > Member access**, independently for each membership.
 4. **Feature permissions:** Finance sections further restrict a granted module.
    Removing module access preserves section choices, so restoring the module
    restores only previously permitted sections.
@@ -29,8 +29,8 @@ layer must compose with membership and account restrictions, not replace them.
 
 ## Managed child accounts
 
-An active household owner can create a **new** managed-child account from the
-module-access page, providing an account name, unique sign-in email and an
+An active household owner can create a **new** managed-child account through
+**Settings > Household & people > Add child**, providing an account name, unique sign-in email and an
 initial password meeting the normal password policy. The creating owner becomes
 the designated guardian. Existing adult accounts cannot be converted or taken
 over. Child creation does not bypass normal sign-in/email-verification controls.
@@ -39,10 +39,24 @@ Children start as members with Household Hub allowed, no Finance grant and no
 Finance sections. Finance, household administration, self-joining households,
 self-deletion and operator tools remain blocked across households even if a
 local role or module grant is incorrect. Children can use the Household Hub
-calendar, Central Hub, appearance and sign-in security.
+calendar, My day, appearance and sign-in security.
+
+Children with Household Hub access start at `/household/my-day` after sign-in
+and on `/`; `/hub` renders the same child page. Explicit safe destinations are
+preserved and still enforce access. My day uses London's current date, shows
+all approved household activities (not just those they attend), privacy-scoped
+manual events, their own actionable tasks/jobs and reward progress. Pending
+activity suggestions, siblings' work and private adult records stay hidden.
+Earlier work is separate; approval and point-reservation rules are unchanged.
+Revoking Hub access denies My day immediately. Detached accounts retain the
+Account security fallback.
+
+Owners have an optional read-only setup checklist at `/hub/setup`. It links
+the existing people, access, tasks and rewards editors and respects the selected
+household and module grants. It neither creates sample records nor grants access.
 
 Only the designated guardian can transfer guardianship or release the account
-into an adult account, under Central settings, **Managed child accounts**.
+into an adult account, under Settings, **Children you supervise**.
 A transfer target must be an active adult sharing one of the child's households.
 Other household owners control only their own module grants, not child status.
 Release preserves all module grants; it never enables Finance automatically.

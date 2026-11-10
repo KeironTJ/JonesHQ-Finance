@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Household setup{% endblock %}
+{% block content %}
+<h1>Set up {{ family.name }}</h1>
+<p class="lead">One step at a time. Come back whenever you like &mdash; your people, access choices, jobs and rewards are saved on their own pages.</p>
+<p class="text-muted">Use the steps that fit your household. Adding children and using rewards are optional. This checklist never changes permissions or creates sample records.</p>
+<ol class="list-unstyled">
+    <li class="card mb-3"><div class="card-body">
+        <h2 class="h5">1. Your household is ready</h2>
+        <p>{{ family.name }} is the selected household. Use the household switcher if you belong to more than one.</p>
+        <a class="btn btn-outline-primary" href="{{ url_for('family.index') }}">View household &amp; people</a>
+    </div></li>
+    <li class="card mb-3"><div class="card-body">
+        <h2 class="h5">2. Add your people <span class="badge bg-secondary">Optional</span></h2>
+        <p>{{ adults }} adult account{{ '' if adults == 1 else 's' }}, {{ children }} child account{{ '' if children == 1 else 's' }} and {{ invites }} active invitation{{ '' if invites == 1 else 's' }}.</p>
+        <p>Invite adults to use their own sign-ins, or create a child account you supervise. Children never receive Finance access.</p>
+        <div class="d-flex gap-2 flex-wrap"><a class="btn btn-primary" href="{{ url_for('family.index', _anchor='invite-adult') }}">Invite adult</a><a class="btn btn-outline-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a></div>
+    </div></li>
+    <li class="card mb-3"><div class="card-body">
+        <h2 class="h5">3. Review what each person can open</h2>
+        <p>Check Household Hub and Finance access for each member. Finance section permissions are a separate detail, not needed to use household activities or rewards.</p>
+        <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Review member access</a>
+    </div></li>
+    <li class="card mb-3"><div class="card-body">
+        <h2 class="h5">4. Try your first shared job <span class="badge bg-secondary">Optional</span></h2>
+        {% if hub_enabled %}
+        <p>{{ 'Your household already has a shared task.' if has_jobs else 'Create a shared list and a task, or add a points job for a child from Rewards.' }}</p>
+        <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-primary" href="{{ url_for('household.tasks') }}">Open tasks &amp; lists</a>{% if children %}<a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='manage') }}">Add a reward job</a>{% endif %}</div>
+        {% else %}<p>Enable Household Hub for your account in member access before adding jobs.</p>{% endif %}
+    </div></li>
+    <li class="card mb-3"><div class="card-body">
+        <h2 class="h5">5. Give children something to work towards <span class="badge bg-secondary">Optional</span></h2>
+        {% if hub_enabled %}
+        <p>{{ 'Your reward catalogue is started. Review it whenever plans change.' if has_rewards else 'Add a reward, choose the points needed, then approve jobs when they are done. Children can pick a goal from their own rewards page.' }}</p>
+        <a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='manage') }}">Set up rewards</a>
+        {% else %}<p>Rewards is part of Household Hub. Enable it for your account before setting up rewards.</p>{% endif %}
+    </div></li>
+</ol>
+<div class="d-flex flex-wrap gap-2"><a class="btn btn-primary" href="{{ url_for('central.hub') }}">Back to home</a><a class="btn btn-outline-secondary" href="{{ url_for('central.settings') }}">Settings</a></div>
+{% endblock %}

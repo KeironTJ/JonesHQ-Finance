@@ -22,7 +22,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from blueprints.core.family import family_bp
 from blueprints.core.family.forms import DeleteHouseholdForm
 from extensions import db, limiter
-from models.family import Family, FamilyInvite
+from models.family import Family, FamilyInvite, HouseholdMembership
 from models.users import User
 from utils.permissions import SECTION_GROUPS, SECTION_LABELS, OWNER_ONLY_SECTIONS
 from utils.db_helpers import family_query, get_family_id
@@ -59,7 +59,7 @@ def index():
         current_user.family_id = family.id
         db.session.commit()
 
-    memberships = family.memberships
+    memberships = family_query(HouseholdMembership).all()
     active_invites = (
         FamilyInvite.query
         .filter_by(family_id=family.id)

@@ -106,11 +106,15 @@ def test_shared_navigation_renders_module_descriptor_not_finance_defaults(app, u
     sidebar.feed(html)
     hrefs = {link['href'] for link in sidebar.links}
     assert '/transactions' not in hrefs
-    assert '/account/security' in hrefs
+    assert '/hub/settings' in hrefs
+    assert 'href="/account/security" data-nav-search>Example settings</a>' in html
     assert '/dashboard' in hrefs
     assert '/accounts' in hrefs
     central = client.get('/hub').get_data(as_text=True)
     assert 'Open Example module' in central
+    settings = client.get('/hub/settings').get_data(as_text=True)
+    assert 'Open Example settings' in settings
+    assert 'href="/account/security"' in settings
 
 
 def test_module_navigation_permissions_follow_selected_household(app, user):

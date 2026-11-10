@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}My day{% endblock %}
+{% block extra_css %}
+<style>
+.my-day .btn { min-height: 48px; }
+.my-day summary { min-height: 48px; padding: 0.9rem 1rem; }
+.my-day .day-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
+.my-day .day-points { font-size: 1.75rem; font-weight: 700; }
+.my-day progress { width: 100%; height: 1.5rem; }
+</style>
+{% endblock %}
+{% macro task_card(task) %}
+<article class="card"><div class="card-body">
+    <h3 class="h5 text-break"><a href="{{ url_for('household.task', task_id=task.id) }}">{{ task.title }}</a></h3>
+    {% if task.due_date %}<p class="text-muted">Planned for {{ task.due_date.strftime('%a %d %b') }}{% if task.due_time %}, {{ task.due_time.strftime('%H:%M') }} London{% endif %}</p>{% endif %}
+    <form method="POST" action="{{ url_for('household.complete_task', task_id=task.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="return_to" value="my-day">
+        <button class="btn btn-primary w-100" name="action" value="complete" type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> Done!</button>
+    </form>
+</div></article>
+{% endmacro %}
+{% block content %}
+<div class="my-day">
+<h1>My day</h1>
+<p class="lead text-break">Hi {{ current_user.name }}! Here's {{ today.strftime('%A %d %B') }}.</p>
+<nav class="d-flex flex-wrap gap-2 mb-4" aria-label="My day shortcuts">
+    <a class="btn btn-outline-primary" href="{{ url_for('household.calendar') }}"><i class="bi bi-calendar3" aria-hidden="true"></i> Calendar</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='shop') }}"><i class="bi bi-gift" aria-hidden="true"></i> My rewards</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='progress') }}"><i class="bi bi-star" aria-hidden="true"></i> My progress</a>
+</nav>
+<section class="card mb-4" aria-label="My reward progress"><div class="card-body">
+    <div class="day-points"><i class="bi bi-star-fill text-warning" aria-hidden="true"></i> {{ balance }} points ready to use</div>
+    {% if goal %}<h2 class="h5 mt-2 text-break">My goal: {{ goal.title }}</h2><progress value="{{ [balance, goal.points_cost]|min }}" max="{{ goal.points_cost }}" aria-label="Points saved for {{ goal.title }}"></progress><p>{{ [goal.points_cost - balance, 0]|max }} more points to reach your goal.</p>
+    {% else %}<p>Choose something to save for in <a href="{{ url_for('household.rewards', view='shop') }}">My rewards</a>.</p>{% endif %}
+    {% if pending_points %}<p>{{ pending_points }} points are held for reward requests until an adult decides.</p>{% endif %}
+    {% if submitted_jobs %}<p class="mb-0">{{ submitted_jobs|length }} job{{ '' if submitted_jobs|length == 1 else 's' }} waiting for an adult. <a href="{{ url_for('household.rewards', view='jobs') }}">See waiting jobs</a>.</p>{% endif %}
+</div></section>
+<section class="mb-4" aria-labelledby="day-activities-title">
+    <h2 class="h4" id="day-activities-title">What's happening today</h2>
+    <p class="text-muted">Approved household activities and the calendar events you can see.</p>
+    <div class="day-grid">
+    {% for occurrence in activities %}
+    <article class="card"><div class="card-body">
+        <h3 class="h5 text-break"><a href="{{ url_for('household.activity', activity_id=occurrence.activity.id) }}">{{ occurrence.activity.title }}</a></h3>
+        <p>{{ 'All day' if occurrence.activity.all_day else calendar_service.local_time(occurrence.starts_at).strftime('%H:%M') ~ ' London' }}{% if occurrence.starts_on < today %} &middot; Started {{ occurrence.starts_on.strftime('%d %b') }}{% endif %}</p>
+        {% if occurrence.activity.location %}<p class="text-break mb-0">{{ occurrence.activity.location }}</p>{% endif %}
+    </div></article>
+    {% endfor %}
+    {% for event in events %}
+    <article class="card"><div class="card-body"><h3 class="h5 text-break"><a href="{{ url_for('household.event', event_id=event.id) }}">{{ event.title }}</a></h3><p class="mb-0">{{ 'All day' if event.all_day else calendar_service.local_time(event.starts_at).strftime('%H:%M') ~ ' London' }} &middot; {{ calendar_service.privacy_label(event) }}</p></div></article>
+    {% endfor %}
+    {% if not activities and not events %}<p>Nothing planned today. Enjoy your day!</p>{% endif %}
+    </div>
+</section>
+<section class="mb-4" aria-labelledby="day-jobs-title">
+    <h2 class="h4" id="day-jobs-title">My jobs to try</h2>
+    <div class="day-grid">
+        {% for task in tasks %}{{ task_card(task) }}{% endfor %}
+        {% for job in reward_jobs %}{% with return_to='my-day' %}{% include 'household/_reward_job.html' %}{% endwith %}{% endfor %}
+        {% if not tasks and not reward_jobs %}<p>All clear for now! New jobs will appear here when you're ready.</p>{% endif %}
+    </div>
+</section>
+{% if earlier_tasks or earlier_jobs %}
+<details class="card mb-3"><summary class="card-header">Earlier jobs &mdash; check with an adult ({{ earlier_tasks|length + earlier_jobs|length }})</summary><div class="card-body">
+    <p>Plans change. Ask an adult if these jobs are still needed.</p>
+    <div class="day-grid">{% for task in earlier_tasks %}{{ task_card(task) }}{% endfor %}{% for job in earlier_jobs %}{% with return_to='my-day' %}{% include 'household/_reward_job.html' %}{% endwith %}{% endfor %}</div>
+</div></details>
+{% endif %}
+{% if later_tasks or later_jobs %}
+<details class="card mb-3"><summary class="card-header">Coming up ({{ later_tasks|length + later_jobs|length }})</summary><div class="card-body"><div class="day-grid">
+    {% for task in later_tasks %}{{ task_card(task) }}{% endfor %}
+    {% for job in later_jobs %}{% with return_to='my-day' %}{% include 'household/_reward_job.html' %}{% endwith %}{% endfor %}
+</div></div></details>
+{% endif %}
+</div>
+{% endblock %}

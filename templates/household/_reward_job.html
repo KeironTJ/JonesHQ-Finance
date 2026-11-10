@@ -7,6 +7,7 @@
     {% if child_view %}
     <form method="POST" action="{{ url_for('household.reward_action', action='submit-job') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="job_id" value="{{ job.id }}">
+        {% if return_to|default('') == 'my-day' %}<input type="hidden" name="return_to" value="my-day">{% endif %}
         <button class="btn btn-primary w-100" type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> I've done it!</button>
     </form>
     {% else %}

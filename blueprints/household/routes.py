@@ -4,7 +4,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from services.household.calendar_service import CalendarService
+from services.household.my_day_service import MyDayService
 from . import household_bp
+
+
+@household_bp.route('/my-day')
+@login_required
+def my_day():
+    return render_template('household/my_day.html', **MyDayService.page_data())
 
 
 def _event_data():

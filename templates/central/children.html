@@ -1,14 +1,19 @@
 {% extends 'base.html' %}
-{% block title %}Managed child accounts{% endblock %}
+{% block title %}Children you supervise{% endblock %}
 {% block content %}
-<h1>Managed child accounts</h1>
+<h1>Children you supervise</h1>
+{% if current_user.is_household_owner and active_household_id is not none %}
+<div class="d-flex flex-wrap gap-2 mb-3"><a class="btn btn-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a><a class="btn btn-outline-secondary" href="{{ url_for('family.index') }}">Household &amp; people</a></div>
+{% endif %}
 <p class="text-muted">Only you, as the designated guardian, can change these accounts' child status or transfer guardianship. Household owners control module grants only within their own household.</p>
 <div class="alert alert-info">Child-private calendar events are labelled as visible to the child and designated guardian within the same household. External sharing is not available yet.</div>
 {% for child in children %}
-<section class="card mb-3">
+<section class="card mb-3" id="child-{{ child.id }}">
     <div class="card-body">
         <h2 class="h4">{{ child.name }}</h2>
+        <p class="text-break">Sign-in: {{ child.email }}</p>
         <p>Finance and household administration are blocked across all households.</p>
+        <details><summary class="mb-3">Guardian &amp; account status changes</summary>
         <form method="POST" action="{{ url_for('central.update_managed_child', child_id=child.id) }}" class="mb-4">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="transfer">
@@ -27,9 +32,11 @@
             <p class="small text-muted">Release into an adult account only when appropriate. Existing household grants remain unchanged; Finance is not automatically enabled.</p>
             <button class="btn btn-outline-danger" type="submit">Release {{ child.name }} into an adult account</button>
         </form>
+        </details>
     </div>
 </section>
 {% else %}
 <p>No child accounts are currently managed by you.</p>
+{% if not current_user.is_household_owner %}<p>Your household owner can add a child account. Guardianship changes are managed here only by the designated guardian.</p>{% endif %}
 {% endfor %}
 {% endblock %}

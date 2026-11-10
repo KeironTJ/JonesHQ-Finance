@@ -139,6 +139,8 @@ def complete_task(task_id):
         flash('Job submitted. Points are awarded after adult approval.', 'success')
     else:
         flash('Task completed.' if task.completed else 'Task reopened.', 'success')
+    if current_user.is_managed_child and request.form.get('return_to') == 'my-day':
+        return redirect(url_for('household.my_day'))
     return redirect(url_for('household.tasks', list_id=task.list_id, filter=filt))
 
 

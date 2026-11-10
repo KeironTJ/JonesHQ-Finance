@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
-{% block title %}Household module access{% endblock %}
+{% block title %}Member access{% endblock %}
 {% block content %}
-<h1>Household module access</h1>
+<h1>Member access</h1>
 <p class="text-muted">These grants apply only to the selected household. Module access is separate from Finance section permissions and does not override private records.</p>
+<div class="d-flex flex-wrap gap-2 mb-4"><a class="btn btn-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a><a class="btn btn-outline-primary" href="{{ url_for('family.index', _anchor='invite-adult') }}">Invite adult</a><a class="btn btn-outline-secondary" href="{{ url_for('central.household_setup') }}">Setup checklist</a></div>
 <div class="row g-3 mb-4">
     {% for membership in memberships %}
     {% set member = membership.user %}
@@ -28,24 +29,4 @@
     </div>
     {% endfor %}
 </div>
-<section class="card">
-    <div class="card-body">
-        <h2 class="h4">Create a managed child account</h2>
-        <p>You become the designated guardian. The account starts with Household Hub allowed and Finance blocked. Existing adult accounts cannot be converted or taken over here.</p>
-        <p class="small text-muted">Child accounts can use the Household Hub calendar, Central Hub, appearance and sign-in security.</p>
-        <form method="POST" action="{{ url_for('central.create_managed_child') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label class="form-label" for="childName">Account name</label>
-            <input class="form-control mb-3" id="childName" name="name" maxlength="100" required>
-            <label class="form-label" for="childEmail">Sign-in email</label>
-            <input class="form-control mb-3" id="childEmail" name="email" type="email" maxlength="120" autocomplete="off" required>
-            <label class="form-label" for="childPassword">Initial password</label>
-            <input class="form-control mb-3" id="childPassword" name="password" type="password" autocomplete="new-password" data-password-toggle required>
-            <label class="form-label" for="childConfirmPassword">Confirm initial password</label>
-            <input class="form-control mb-3" id="childConfirmPassword" name="confirm_password" type="password" autocomplete="new-password" data-password-toggle required>
-            <button class="btn btn-primary" type="submit">Create managed child account</button>
-        </form>
-        <a class="btn btn-link mt-2" href="{{ url_for('central.managed_children') }}">Manage your child accounts</a>
-    </div>
-</section>
 {% endblock %}

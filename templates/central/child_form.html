@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Add child{% endblock %}
+{% block content %}
+<h1>Add child</h1>
+<p>Create a sign-in for a child in the selected household. You will be their designated guardian.</p>
+<div class="alert alert-info">The child starts with Household Hub access and opens My day after signing in. Finance and household administration stay blocked.</div>
+<form method="POST" action="{{ url_for('central.create_managed_child') }}" class="card">
+    <div class="card-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label" for="childName">Child's name</label>
+        <input class="form-control mb-3" id="childName" name="name" maxlength="100" value="{{ submitted.get('name', '') }}" autocomplete="off" required>
+        <label class="form-label" for="childEmail">Sign-in email</label>
+        <input class="form-control mb-2" id="childEmail" name="email" type="email" maxlength="120" value="{{ submitted.get('email', '') }}" autocomplete="off" required>
+        <p class="form-text">Use a unique email address for this sign-in. An existing adult account cannot be converted here.</p>
+        <label class="form-label" for="childPassword">Initial password</label>
+        <input class="form-control mb-2" id="childPassword" name="password" type="password" autocomplete="new-password" data-password-toggle required>
+        <p class="form-text">Use at least {{ config.PASSWORD_MIN_LENGTH }} characters{% if config.PASSWORD_REQUIRE_UPPERCASE %}, an uppercase letter{% endif %}{% if config.PASSWORD_REQUIRE_LOWERCASE %}, a lowercase letter{% endif %}{% if config.PASSWORD_REQUIRE_DIGIT %}, a number{% endif %}{% if config.PASSWORD_REQUIRE_SPECIAL %}, and a special character{% endif %}.</p>
+        <label class="form-label" for="childConfirmPassword">Confirm initial password</label>
+        <input class="form-control mb-3" id="childConfirmPassword" name="confirm_password" type="password" autocomplete="new-password" data-password-toggle required>
+        <p class="text-muted">Keep the initial sign-in details safe. You can review this child's household access from the people page, and their guardian settings under Children you supervise.</p>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" type="submit">Add child account</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('family.index') }}">Back to household &amp; people</a>
+        </div>
+    </div>
+</form>
+{% endblock %}

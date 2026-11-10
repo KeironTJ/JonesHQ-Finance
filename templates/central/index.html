@@ -20,6 +20,14 @@
     <p class="lead text-muted">Choose a module. Your account, household and preferences stay with you across the platform.</p>
 </section>
 
+{% if current_user.is_household_owner and active_household_id is not none %}
+<section class="card mb-4"><div class="card-body">
+    <h2 class="h4">Make this household yours</h2>
+    <p>Invite adults, add children, check access and try your first jobs and rewards. Continue at your own pace.</p>
+    <div class="d-flex gap-2 flex-wrap"><a class="btn btn-primary" href="{{ url_for('central.household_setup') }}">Household setup checklist</a><a class="btn btn-outline-primary" href="{{ url_for('family.index') }}">Household &amp; people</a></div>
+</div></section>
+{% endif %}
+
 {% if not household_memberships %}
 <div class="alert alert-info" role="status">
     Your account is not currently part of a household. You can manage account security or accept a household invitation before opening household modules.

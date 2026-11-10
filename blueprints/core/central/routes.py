@@ -29,6 +29,7 @@ def settings_navigation():
         'active_household_id': get_family_id(),
         'active_module': active_module,
         'navigation_modules': ModuleRegistry.modules_for(current_user),
+        'can_open_household': ModuleAccessService.can_access(current_user, 'household'),
     })
     return context
 
@@ -43,6 +44,9 @@ def index():
 @central_bp.route('/hub')
 @login_required
 def hub():
+    if current_user.is_managed_child and ModuleAccessService.can_access(current_user, 'household'):
+        from services.household.my_day_service import MyDayService
+        return render_template('household/my_day.html', **MyDayService.page_data())
     return render_template(
         'central/index.html',
         modules=ModuleRegistry.modules_for(current_user),
@@ -52,7 +56,21 @@ def hub():
 @central_bp.route('/hub/settings')
 @login_required
 def settings():
-    return render_template('settings/overview.html')
+    return render_template('central/settings.html')
+
+
+@central_bp.route('/hub/setup')
+@login_required
+def household_setup():
+    from services.household.setup_service import HouseholdSetupService
+    return render_template('central/setup.html', **HouseholdSetupService.page_data())
+
+
+@central_bp.route('/hub/settings/children/new')
+@login_required
+def new_managed_child():
+    HouseholdAccessService.require_owner()
+    return render_template('central/child_form.html', submitted={})
 
 
 @central_bp.route('/hub/settings/access')
@@ -83,6 +101,7 @@ def update_module_access(member_id):
 @login_required
 @recent_auth_required
 def create_managed_child():
+    HouseholdAccessService.require_owner()
     try:
         HouseholdAccessService.create_child(dict(request.form))
     except (ValueError, TypeError) as error:
@@ -94,7 +113,11 @@ def create_managed_child():
         flash('Unable to create the child account. No changes were saved.', 'danger')
     else:
         flash('Managed child account created. You are its designated guardian.', 'success')
-    return redirect(url_for('central.household_access'))
+        return redirect(url_for('family.index'))
+    return render_template(
+        'central/child_form.html',
+        submitted={key: request.form.get(key, '') for key in ('name', 'email')},
+    )
 
 
 @central_bp.route('/account/children')

@@ -35,6 +35,7 @@ class ModuleAccessService:
                     'central.household_access', 'central.update_module_access',
                     'central.create_managed_child', 'central.managed_children',
                     'central.update_managed_child',
+                    'central.new_managed_child', 'central.household_setup',
                 )
             ):
                 abort(403, description='Your guardian manages this action.')

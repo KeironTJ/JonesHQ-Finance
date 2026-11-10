@@ -40,7 +40,7 @@ def test_membership_and_finance_have_distinct_editors(app, family, user):
     assert 'private-record visibility' in finance
     parser = NavigationParser()
     parser.feed(finance)
-    assert [link['href'] for link in parser.links if link.get('aria-current') == 'page'] == ['/hub/settings/finance']
+    assert [link['href'] for link in parser.links if link.get('aria-current') == 'page'] == ['/hub/settings']
 
 
 def test_role_edit_preserves_finance_configuration_and_cannot_edit_self(app, family, user):

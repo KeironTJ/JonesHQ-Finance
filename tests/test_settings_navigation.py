@@ -18,10 +18,10 @@ def test_settings_link_is_in_workspace_navigation(app, user, path, active):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     navigation = html.split('id="workspaceNav"', 1)[1].split('</aside>', 1)[0]
-    assert navigation.count('href="/hub/settings/finance"') == 1
+    assert navigation.count('href="/hub/settings"') == 1
     assert 'href="/preferences/finance"' not in navigation
     assert 'href="/settings/access"' not in navigation
-    settings_link = navigation.split('href="/hub/settings/finance"', 1)
+    settings_link = navigation.split('href="/hub/settings"', 1)
     link_classes = settings_link[0].rsplit('<a class="', 1)[1].split('"', 1)[0]
     assert ('active' in link_classes.split()) is active
     assert ('aria-current="page"' in settings_link[1].split('>', 1)[0]) is active

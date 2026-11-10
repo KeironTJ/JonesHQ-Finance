@@ -23,6 +23,13 @@ Password, two-factor and passkey sign-in
 use the same landing rules. Explicit local destinations take precedence and still
 enforce their normal permissions. Detached accounts default to Account security.
 Household registration and invitation acceptance still lead to Central Hub.
+Managed children with Household Hub access instead start at **My day**
+(`/household/my-day`), regardless of saved workspace preferences; `/hub` shows
+the same child page. It uses London's date, all approved household activities,
+visible calendar events, their own assigned/personal tasks and reward progress.
+Earlier work stays separate, and completed jobs wait for adult approval.
+Explicit safe links still take precedence. Revoked Hub access falls back to
+Central; detached accounts still start at Account security.
 
 The hub opens Finance at `/dashboard`; existing Finance URLs are unchanged.
 Household Hub opens a manual calendar at `/household/`, with month and agenda
@@ -68,7 +75,7 @@ The shared sidebar discovers available modules through the platform registry.
 Each module owns its overview label, sidebar template and page labels; Finance
 navigation lives in `templates/finance/_navigation.html`. Planned modules do not
 appear as working sidebar destinations. Finance's dashboard Settings shortcut
-opens the same grouped landing page as its sidebar for both owners and members.
+opens Finance's grouped settings page for both owners and members.
 
 Household-scoped reads and explicitly scoped service writes use the selected
 household. The automatic `family_id` backstop also resolves the selected household,
@@ -78,9 +85,10 @@ Services must still set `family_id` explicitly using `get_family_id()`.
 
 Account security, household membership and personal preferences use the central
 navigation shell. Finance retains its own section navigation and settings.
-One Settings link opens Central settings (`/hub/settings`) from shared pages or
-Finance settings (`/hub/settings/finance`) from Finance, or Household Hub settings
-(`/household/settings`) from its calendar. These landing pages are
+One sidebar Settings link always opens `/hub/settings`, grouped into **Your
+account**, **Household & people** and **Module settings**. Finance settings
+(`/hub/settings/finance`) and Household Hub settings (`/household/settings`)
+remain linked from there. These landing pages are
 available to members; their cards and shared sub-navigation respect existing
 owner and section permissions. Central covers appearance, the starting workspace,
 account security and household membership. Finance groups personal defaults,
@@ -99,6 +107,14 @@ The starting-point form posts independently to `/preferences/workspace`; its
 schema migration. It does not change module permissions, financial defaults or themes.
 Existing POST requests to `/preferences` remain compatible with Finance preference
 saving. The appearance and single-preference endpoints and stored values are unchanged.
+Owners can open an optional **Household setup checklist** at `/hub/setup` from
+home, Settings or Household & people. It reflects existing people, shared tasks
+and rewards without writing records or marking optional features as required.
+**Add child** opens one focused form at `/hub/settings/children/new`, linked from
+Settings, Household & people, member access and guardian management. Failed
+submissions retain only name/email, never passwords. Invitations, module access
+and designated-guardian controls remain separate permissions but are connected
+from the people pages.
 Finance onboarding remains available from its dashboard and is not required to
 enter Central Hub. Existing onboarding completion markers are unchanged.
 

@@ -27,7 +27,11 @@ class SettingsParser(HTMLParser):
     ('/account/security', 'Central', 'Account &amp; security'),
     ('/account/security/two-factor/setup', 'Central', 'Account &amp; security'),
     ('/account/security/delete', 'Central', 'Account &amp; security'),
-    ('/family/', 'Central', 'Household &amp; members'),
+    ('/family/', 'Central', 'Household &amp; people'),
+    ('/hub/settings/access', 'Central', 'Member access'),
+    ('/hub/settings/children/new', 'Central', 'Add child'),
+    ('/account/children', 'Central', 'Children you supervise'),
+    ('/hub/setup', 'Central', 'Household setup'),
     ('/preferences/finance', 'Finance', 'Your preferences'),
     ('/settings/access', 'Finance', 'Access &amp; assignment'),
     ('/settings/modules/household', 'Finance', 'Payday &amp; budget periods'),
@@ -49,7 +53,7 @@ def test_settings_editors_share_workspace_and_sub_navigation(app, user, path, ar
         assert f'aria-current="page">{page}</li>' in html
     sidebar = NavigationParser()
     sidebar.feed(html)
-    expected = '/hub/settings' if area == 'Central' else '/hub/settings/finance'
+    expected = '/hub/settings'
     assert [link['href'] for link in sidebar.links if link.get('aria-current') == 'page'] == [expected]
     assert not {'/preferences', '/preferences/finance', '/settings', '/settings/access', '/family/'} & {
         link['href'] for link in sidebar.links

@@ -4,6 +4,9 @@
 <div class="container-fluid">
     <h1><i class="bi bi-sliders" aria-hidden="true"></i> Personal preferences</h1>
     <p class="text-muted">Your appearance applies across Central Hub, Finance and future workspaces. It affects only your account.</p>
+    {% if current_user.is_managed_child %}
+    <section class="card mb-4"><div class="card-body" id="workspace-card"><h2 class="h4">Your starting point</h2><p class="mb-0">My day opens after sign-in when Household Hub is enabled. Direct links still take you to the page you asked for.</p></div></section>
+    {% else %}
     <form method="POST" action="{{ url_for('preferences.workspace') }}" class="card mb-4">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-body" id="workspace-card">
@@ -21,6 +24,7 @@
             <button class="btn btn-primary" type="submit">Save starting point</button>
         </div>
     </form>
+    {% endif %}
     <form method="POST" action="{{ url_for('preferences.appearance') }}" id="appearanceForm" class="card mb-4">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-body" id="appearance-card">

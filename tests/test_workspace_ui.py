@@ -90,7 +90,7 @@ def test_navigation_search_source_respects_member_permissions(app, user):
     hrefs = {link['href'] for link in parser.links}
     assert {'/accounts', '/transactions', '/transactions/subscriptions'} <= hrefs
     assert not {'/settings', '/family/', '/income', '/credit-cards', '/site-admin/'} & hrefs
-    assert '/hub/settings/finance' in hrefs
+    assert '/hub/settings' in hrefs
 
 
 def test_finance_dashboard_shortcuts_respect_member_permissions(app, user):

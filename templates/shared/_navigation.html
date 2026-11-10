@@ -14,14 +14,24 @@
 {%- endmacro %}
 <aside class="workspace-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="workspaceNav" aria-labelledby="workspaceNavLabel">
     <div class="sidebar-brand">
-        <a href="{{ url_for('central.hub') }}" aria-label="Central Hub home">
+        <a href="{{ url_for('household.my_day' if current_user.is_managed_child and can_open_household else 'central.hub') }}" aria-label="{{ 'My day home' if current_user.is_managed_child and can_open_household else 'Central Hub home' }}">
             <span class="brand-mark"><i class="bi bi-house-heart" aria-hidden="true"></i></span>
-            <span><strong id="workspaceNavLabel">{{ 'Central Hub' if central_workspace else active_module.title }}</strong><small>Family HQ</small></span>
+            <span><strong id="workspaceNavLabel">{{ 'My household' if current_user.is_managed_child else 'Central Hub' if central_workspace else active_module.title }}</strong><small>Family HQ</small></span>
         </a>
         <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#workspaceNav" aria-label="Close navigation"></button>
     </div>
     <div class="offcanvas-body sidebar-body">
         <nav aria-label="Main navigation">
+            {% if current_user.is_managed_child %}
+            {% if can_open_household %}
+            {{ nav_link('household.my_day', 'My day', 'house-heart', exact=true) }}
+            {{ nav_link('household.calendar', 'Calendar', 'calendar3', exact=true) }}
+            {{ nav_link('household.tasks', 'My tasks & lists', 'list-check') }}
+            {{ nav_link('household.rewards', 'My rewards', 'gift') }}
+            {% else %}
+            {{ nav_link('central.hub', 'Home', 'house-heart', exact=true) }}
+            {% endif %}
+            {% else %}
             {{ nav_link('central.hub', 'Central Hub', 'grid', exact=true) }}
             {% for module in navigation_modules %}
             {% if module.can_open %}
@@ -31,8 +41,9 @@
             {% if not central_workspace and active_module %}
                 {% include active_module.navigation_template %}
             {% endif %}
+            {% endif %}
             <div class="nav-section-label">Settings &amp; support</div>
-            {{ nav_link('central.settings' if central_workspace else settings_groups[active_module.key].endpoint, 'Settings', 'gear', exact=true, active_override=settings_area is not none) }}
+            {{ nav_link('central.settings', 'Settings', 'gear', exact=true, active_override=settings_area is not none) }}
             {{ nav_link('auth.help', 'Help & support', 'question-circle') }}
             {% if current_user.is_site_admin and not current_user.is_managed_child %}
                 <div class="nav-section-label">Service operator</div>

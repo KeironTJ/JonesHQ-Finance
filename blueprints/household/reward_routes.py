@@ -54,6 +54,8 @@ def reward_action(action):
         flash('Unable to save the rewards change. No changes were saved.', 'danger')
     else:
         flash(message, 'success')
+        if current_user.is_managed_child and request.form.get('return_to') == 'my-day':
+            return redirect(url_for('household.my_day'))
         return redirect(url_for('household.rewards', view=view))
     context = RewardService.page_data(view)
     return render_template('household/rewards.html', **context, submitted=request.form, failed_action=action)

@@ -2,29 +2,38 @@
     <div class="card-body">
         <nav aria-label="Settings breadcrumb">
             <ol class="breadcrumb small mb-3">
+                {% if settings_area == 'central' and not settings_page %}
+                <li class="breadcrumb-item active" aria-current="page">Settings</li>
+                {% else %}
                 <li class="breadcrumb-item"><a href="{{ url_for('central.settings') }}">Settings</a></li>
                 {% if settings_page %}
+                {% if settings_area != 'central' %}
                 <li class="breadcrumb-item"><a href="{{ url_for(settings_groups[settings_area].endpoint) }}">{{ settings_groups[settings_area].label }}</a></li>
+                {% endif %}
                 <li class="breadcrumb-item active" aria-current="page">{{ settings_page.label }}</li>
                 {% else %}
                 <li class="breadcrumb-item active" aria-current="page">{{ settings_groups[settings_area].label }}</li>
                 {% endif %}
+                {% endif %}
             </ol>
         </nav>
-        <nav class="nav nav-pills gap-2" aria-label="Settings workspaces">
-            {% for key, group in settings_groups.items() %}
-            {% if key == 'central' or active_household_id is not none %}
-            <a class="nav-link{{ ' active' if key == settings_area else '' }}" href="{{ url_for(group.endpoint) }}"{% if key == settings_area %} aria-current="true"{% endif %}>{{ group.label }} settings</a>
-            {% endif %}
-            {% endfor %}
-        </nav>
-        {% if settings_page %}
+        {% if settings_page and settings_area != 'central' %}
         <nav class="d-flex flex-wrap gap-2 mt-3" aria-label="{{ settings_groups[settings_area].label }} sub-settings">
             {% for page in settings_groups[settings_area].pages %}
             <a class="btn btn-sm {{ 'btn-primary' if settings_page == page else 'btn-outline-secondary' }}" href="{{ url_for(page.endpoint, **page['values']) }}"{% if settings_page == page %} aria-current="page"{% endif %}>{{ page.label }}</a>
             {% endfor %}
         </nav>
-        <p class="small text-muted mb-0 mt-3">{% if settings_page.scope == 'personal' %}Only affects you{% elif settings_page.scope == 'guardian' %}Designated guardian only{% elif settings_page.scope == 'owner' %}Affects your household &middot; Owner only{% else %}Affects your household{% endif %}</p>
+        {% elif settings_page %}
+        <nav class="d-flex flex-wrap gap-2" aria-label="Central sub-settings">
+            {% if settings_page.get('category') == 'people' %}
+            {% if current_user.is_household_owner and active_household_id is not none %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('family.index') }}">Household &amp; people</a><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('central.household_access') }}">Member access</a>{% endif %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('central.managed_children') }}">Children you supervise</a>
+            {% else %}
+            {% for page in settings_groups.central.pages if page.get('category') == 'account' %}
+            <a class="btn btn-sm {{ 'btn-primary' if settings_page == page else 'btn-outline-secondary' }}" href="{{ url_for(page.endpoint) }}">{{ page.label }}</a>
+            {% endfor %}
+            {% endif %}
+        </nav>
         {% endif %}
     </div>
 </section>

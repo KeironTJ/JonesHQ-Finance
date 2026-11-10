@@ -79,6 +79,13 @@ designated-guardian child creation, transfer and release, with atomic audit
 events. See [access policy](../docs/ACCESS_POLICY.md) for implemented boundaries
 and the calendar/sharing design.
 
+`household/setup_service.py` reads selected-household people, active invitations,
+shared-task and reward availability for the optional owner setup checklist.
+`household/my_day_service.py` composes the managed-child landing page from scoped
+calendar events, all approved activity occurrences, their own actionable tasks,
+reward jobs and point progress. Both are read-only and use existing module and
+record-privacy checks; neither introduces onboarding state or billing grants.
+
 `household/calendar_service.py` owns manual event validation, London/UTC
 conversion, month/agenda data and independent edit/delete policies. Private
 visibility is enforced by the scoped query helpers, including child/guardian

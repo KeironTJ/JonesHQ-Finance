@@ -1,14 +1,17 @@
 {% extends 'base.html' %}
 {% from 'shared/_ui.html' import page_header %}
-{% block title %}Household & members{% endblock %}
+{% block title %}Household & people{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    {% call page_header('Household & members', 'Membership, household roles and invitations across your workspaces.', 'Central') %}
+    {% call page_header('Household & people', 'Add people, manage membership and choose what they can open.', 'Settings') %}
         <span class="badge bg-secondary">{{ family.name }}</span>
-        <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Module access &amp; child accounts</a>
-        {% if can_access_section('settings') %}<a class="btn btn-outline-primary" href="{{ url_for('settings.finance_access') }}">Finance access &amp; assignment</a>{% endif %}
+        <a class="btn btn-primary" href="{{ url_for('central.new_managed_child') }}">Add child</a>
+        <a class="btn btn-outline-primary" href="#invite-adult">Invite adult</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('central.household_access') }}">Member access</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('central.household_setup') }}">Setup checklist</a>
     {% endcall %}
-    <p class="text-muted">Owners manage the household. Module grants are checked before Finance section permissions; ownership does not bypass a disabled module. Managed child accounts cannot become owners or access Finance. Changing a role does not edit saved Finance section choices.</p>
+    <p class="text-muted">Owners manage invitations, membership and module access here. Only a child's designated guardian can change child status. Finance access stays blocked for children.</p>
+    <p><a href="{{ url_for('central.managed_children') }}">Children you supervise</a>{% if can_access_section('settings') %} &middot; <a href="{{ url_for('settings.finance_access') }}">Detailed Finance permissions &amp; assignment</a>{% endif %}</p>
     <section class="card mb-4">
         <div class="card-body">
             <h2 class="h5">Members</h2>
@@ -19,12 +22,13 @@
                         {% for membership in memberships %}
                         {% set member = membership.user %}
                         <tr>
-                            <td>{{ member.name }}{% if member.id == current_user.id %} <span class="badge bg-secondary">You</span>{% endif %}{% if member.is_managed_child %} <span class="badge bg-secondary">Managed child</span>{% endif %}</td>
-                            <td>{{ member.email }}</td>
+                            <td class="text-break">{{ member.name }}{% if member.id == current_user.id %} <span class="badge bg-secondary">You</span>{% endif %}{% if member.is_managed_child %} <span class="badge bg-secondary">Managed child</span>{% if member.guardian_id == current_user.id %}<p class="mb-0"><a href="{{ url_for('central.managed_children', _anchor='child-' ~ member.id) }}">Manage child account</a></p>{% else %}<p class="small mb-0">Managed by their designated guardian</p>{% endif %}{% endif %}</td>
+                            <td class="text-break">{{ member.email }}</td>
                             <td>{{ 'Owner' if membership.role == 'admin' else 'Member' }}</td>
                             <td>{{ membership.created_at.strftime('%d %b %Y') }}</td>
                             <td>
                                 {% if member.id != current_user.id %}
+                                <details><summary class="mb-2">Role &amp; membership changes</summary>
                                 <form method="POST" action="{{ url_for('family.update_role', member_id=member.id) }}" class="mb-2">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <label class="form-label small" for="role-{{ member.id }}">Household role for {{ member.name }}</label>
@@ -38,6 +42,7 @@
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button class="btn btn-outline-danger btn-sm" type="submit">Remove {{ member.name }} from household</button>
                                 </form>
+                                </details>
                                 {% endif %}
                             </td>
                         </tr>
@@ -47,9 +52,10 @@
             </div>
         </div>
     </section>
-    <section class="card mb-4">
+    <section class="card mb-4" id="invite-adult">
         <div class="card-body">
-            <h2 class="h5">Create invite link</h2>
+            <h2 class="h5">Invite an adult</h2>
+            <p>Create a link for an adult to use their own sign-in. To give a child access, use <a href="{{ url_for('central.new_managed_child') }}">Add child</a> instead.</p>
             <form method="POST" action="{{ url_for('family.create_invite') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label class="form-label" for="inviteName">Member name</label>
@@ -111,12 +117,13 @@
         </div>
     </section>
     {% endif %}
-    <section class="card border-danger mb-4">
+    <details class="card border-danger mb-4">
+        <summary class="card-header">Advanced: delete this household</summary>
         <div class="card-body">
             <h2 class="h5">Delete this household</h2>
             <p>Delete all shared and private household records, including other members' private records. Login accounts remain, but everyone loses household access.</p>
             <a class="btn btn-outline-danger" href="{{ url_for('family.delete_household') }}">Review household deletion</a>
         </div>
-    </section>
+    </details>
 </div>
 {% endblock %}

@@ -29,6 +29,7 @@ MODULE = {
     'overview_label': 'Calendar',
     'navigation_template': 'household/_navigation.html',
     'page_labels': {
+        'household.my_day': 'My day',
         'household': 'Calendar',
         **{f'household.{endpoint}': 'Meal library' for endpoint in (
             'meals', 'meal', 'create_meal', 'edit_meal', 'archive_meal',

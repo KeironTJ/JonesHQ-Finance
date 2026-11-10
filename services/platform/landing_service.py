@@ -40,4 +40,8 @@ class LandingService:
             return url_for('auth.account_security')
         if target:
             return target
+        if user.is_managed_child:
+            from services.platform.module_access_service import ModuleAccessService
+            if ModuleAccessService.can_access(user, 'household'):
+                return url_for('household.my_day')
         return url_for(LandingService.WORKSPACES[LandingService.workspace_for(user)][1])

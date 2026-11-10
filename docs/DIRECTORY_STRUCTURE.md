@@ -97,12 +97,13 @@ for the package map and compatibility-import policy.
 ### `/templates/`
 Jinja2 HTML templates
 - `base.html` - Shared workspace shell and public header. Grouped sidebar navigation
-  becomes a focus-trapped drawer below 992px. One contextual Settings entry opens
-  Central or module settings; sub-settings retain personal and owner-only controls.
+  becomes a focus-trapped drawer below 992px. One Settings entry opens the shared
+  account/people/module landing page; contextual sub-settings retain personal
+  and owner-only controls. Children have a shorter My day/calendar/tasks/rewards menu.
 - `shared/` - Permission-aware navigation, page search, UI macros and shared analytics chart setup
 - `central/` - Registry-driven module launcher
 - `finance/` - Finance-owned sidebar navigation
-- `household/` - Month/agenda calendar, event forms, meal library, week/month meal/activity planners, personal/shared tasks and privacy settings
+- `household/` - Child My day, month/agenda calendar, event forms, meal library, week/month meal/activity planners, personal/shared tasks and privacy settings
 - `email/` - Email templates
 - `errors/` - Error pages
 - `settings/` - Settings hub and independently saved household, credit-card,
