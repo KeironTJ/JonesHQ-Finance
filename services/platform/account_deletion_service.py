@@ -12,6 +12,7 @@ from models import (
     Plan, PlanItem, RecurringIncome, Subscription, Transaction, Trip, TripSchedule, TripTemplate,
     User, UserRecoveryCode, UserSession, Vehicle,
 )
+from models.family import HouseholdMembership
 from models.expense_calendar import ExpenseCalendarEntry
 from models.passkeys import PasskeyChallenge, UserPasskey
 from models.settings import Settings
@@ -44,7 +45,8 @@ DELETE_ORDER = (
     PensionSnapshot, CreditCardPromotion, Expense, Income, IncomeChange, CreditCardTransaction, Balance,
     MonthlyAccountBalance, Transaction, Subscription,
     RecurringIncome, Plan, Vehicle, Pension, Loan, CreditCard, Account,
-    FamilyInvite, UserSession, UserRecoveryCode, PasskeyChallenge, UserPasskey, User,
+    FamilyInvite, UserSession, UserRecoveryCode, PasskeyChallenge, UserPasskey,
+    HouseholdMembership, User,
 )
 
 
@@ -57,11 +59,20 @@ class AccountDeletionService:
             raise ValueError('Sign in to delete your own account.')
         if user.is_site_admin:
             raise ValueError('Revoke your site-admin role using the server command before deleting your account.')
-        if user.family_id is not None and user.role == 'admin':
-            replacement = db.session.execute(select(User.id).where(
-                User.family_id == user.family_id, User.id != user.id,
-                User.role == 'admin', User.is_active.is_(True),
-            )).first()
+        owner_memberships = HouseholdMembership.query.filter_by(
+            user_id=user.id, role='admin',
+        ).all()
+        for membership in owner_memberships:
+            replacement = db.session.execute(
+                select(HouseholdMembership.id)
+                .join(User, User.id == HouseholdMembership.user_id)
+                .where(
+                    HouseholdMembership.family_id == membership.family_id,
+                    HouseholdMembership.user_id != user.id,
+                    HouseholdMembership.role == 'admin',
+                    User.is_active.is_(True),
+                )
+            ).first()
             if replacement is None:
                 raise ValueError('Appoint another active household owner before deleting your account.')
 
@@ -84,6 +95,12 @@ class AccountDeletionService:
                 if family_id != parents[parent_id]:
                     raise ValueError('Linked household data is inconsistent. Contact the service operator before deletion.')
                 plan.setdefault(child.__table__, {})[row_id] = family_id
+        memberships = db.session.execute(select(HouseholdMembership.id).where(
+            HouseholdMembership.user_id == user.id,
+        ))
+        plan[HouseholdMembership.__table__] = {
+            row_id: None for row_id in memberships.scalars()
+        }
         for model, foreign_key in (
             (FamilyInvite, 'created_by_id'), (UserSession, 'user_id'), (UserRecoveryCode, 'user_id'),
             (PasskeyChallenge, 'user_id'), (UserPasskey, 'user_id'),
@@ -110,8 +127,13 @@ class AccountDeletionService:
             raise ValueError('Type DELETE MY ACCOUNT exactly to confirm.')
         try:
             # Serialize household self-deletions before checking the last-admin rule (also on SQLite).
-            if user.family_id is not None:
-                db.session.execute(update(Family).where(Family.id == user.family_id).values(id=Family.id))
+            family_ids = db.session.execute(select(HouseholdMembership.family_id).where(
+                HouseholdMembership.user_id == user.id,
+            )).scalars().all()
+            if family_ids:
+                db.session.execute(update(Family).where(
+                    Family.id.in_(family_ids),
+                ).values(id=Family.id))
             db.session.refresh(user)
             plan = AccountDeletionService._plan(user)
             if not user.check_password(data.get('password') or ''):

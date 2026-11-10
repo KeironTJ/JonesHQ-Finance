@@ -665,6 +665,7 @@
             <div class="card-body">
             <div class="row">
                 <!-- Row 1: Core Features -->
+                {% if can_access_section('transactions') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('transactions.index') }}" class="text-decoration-none">
                         <div class="card border-primary h-100 hover-shadow">
@@ -676,6 +677,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('accounts') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('accounts.index') }}" class="text-decoration-none">
                         <div class="card border-success h-100 hover-shadow">
@@ -687,6 +690,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('networth') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('networth.index') }}" class="text-decoration-none">
                         <div class="card border-primary h-100 hover-shadow">
@@ -698,8 +703,10 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
 
                 <!-- Row 2: Income & Expenses -->
+                {% if can_access_section('income') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('income.index') }}" class="text-decoration-none">
                         <div class="card border-success h-100 hover-shadow">
@@ -711,6 +718,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('expenses') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('expenses.index') }}" class="text-decoration-none">
                         <div class="card border-danger h-100 hover-shadow">
@@ -722,6 +731,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('categories') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('categories.index') }}" class="text-decoration-none">
                         <div class="card border-secondary h-100 hover-shadow">
@@ -733,6 +744,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('vendors') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('vendors.index') }}" class="text-decoration-none">
                         <div class="card border-dark h-100 hover-shadow">
@@ -744,8 +757,10 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
 
                 <!-- Row 3: Debt & Obligations -->
+                {% if can_access_section('credit_cards') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('credit_cards.index') }}" class="text-decoration-none">
                         <div class="card border-danger h-100 hover-shadow">
@@ -757,6 +772,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('loans') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('loans.index') }}" class="text-decoration-none">
                         <div class="card border-warning h-100 hover-shadow">
@@ -768,6 +785,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('mortgage') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('mortgage.index') }}" class="text-decoration-none">
                         <div class="card border-info h-100 hover-shadow">
@@ -779,6 +798,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('pensions') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('pensions.index') }}" class="text-decoration-none">
                         <div class="card border-success h-100 hover-shadow">
@@ -790,8 +811,10 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
 
                 <!-- Row 4: Other Features -->
+                {% if can_access_section('vehicles') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('vehicles.index') }}" class="text-decoration-none">
                         <div class="card border-primary h-100 hover-shadow">
@@ -803,6 +826,8 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
+                {% if can_access_section('childcare') %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('childcare.index') }}" class="text-decoration-none">
                         <div class="card border-warning h-100 hover-shadow">
@@ -814,6 +839,7 @@
                         </div>
                     </a>
                 </div>
+                {% endif %}
                 <div class="col-md-3 col-sm-6 mb-3">
                     <a href="{{ url_for('settings.index') if can_access_section('settings') else url_for('preferences.finance') }}" class="text-decoration-none">
                         <div class="card border-secondary h-100 hover-shadow">

@@ -1,4 +1,5 @@
 from services.platform.settings_service import SettingsService
+from services.platform.module_registry import ModuleRegistry
 
 
 class SettingsNavigationService:
@@ -29,7 +30,7 @@ class SettingsNavigationService:
                 'label': 'Finance', 'endpoint': 'central.finance_settings', 'pages': [],
             },
         }
-        has_household = user.family_id is not None
+        has_household = ModuleRegistry.has_active_household(user)
         owner = user.is_household_owner and has_household
         if owner:
             groups['central']['pages'].append({

@@ -18,7 +18,7 @@ from models import (
 from models.expense_calendar import ExpenseCalendarEntry
 from services.platform.account_deletion_service import AccountDeletionService, OWNED_MODELS
 from services.platform.user_session_service import _now
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 
 
 TODAY = date(2026, 10, 15)
@@ -246,9 +246,7 @@ def test_site_admin_must_revoke_role_first(app, deletion_user):
 
 def test_removed_member_can_delete_owned_records_in_former_household(app, deletion_user, graph):
     user, _ = deletion_user
-    user.family_id = None
-    user.role = 'member'
-    db.session.commit()
+    detach_user_from_households(user)
     user_id = user.id
     response = sign_in(app, user).post('/account/security/delete', data=VALID_DATA)
     assert response.status_code == 302

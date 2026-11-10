@@ -4,7 +4,7 @@ import pytest
 from flask import g
 
 from extensions import db
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 from tests.test_workspace_ui import NavigationParser
 
 
@@ -101,8 +101,7 @@ def test_vendor_type_discovery_preserves_existing_member_permission(app, user):
 
 
 def test_detached_account_settings_do_not_offer_household_editors(app, user):
-    user.family_id = None
-    db.session.commit()
+    detach_user_from_households(user)
     client = app.test_client()
     login_client(client, user.id)
     for path in ('/hub/settings', '/hub/settings/finance'):

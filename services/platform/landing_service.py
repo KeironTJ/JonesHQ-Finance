@@ -2,12 +2,11 @@ from urllib.parse import unquote, urlsplit
 
 from flask import url_for
 
+from services.platform.module_registry import ModuleRegistry
+
 
 class LandingService:
-    WORKSPACES = {
-        'central': ('Central Hub', 'central.hub'),
-        'finance': ('Finance', 'dashboard.index'),
-    }
+    WORKSPACES = ModuleRegistry.default_destinations()
 
     @staticmethod
     def workspace_for(user):
@@ -32,7 +31,7 @@ class LandingService:
     @staticmethod
     def resolve(user, target=None):
         target = LandingService.safe_next(target)
-        if user.family_id is None:
+        if not ModuleRegistry.has_active_household(user):
             if target and urlsplit(unquote(target)).path.rstrip('/') not in (
                 '', '/hub', '/dashboard',
             ):

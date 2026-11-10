@@ -12,17 +12,18 @@
         Household owners have all Finance sections; changing ownership belongs in Household &amp; members.
     </div>
     {% for member in members %}
+    {% set household_user = member.user %}
     <section class="card mb-4">
         <div class="card-body">
-            <h2 class="h5">{{ member.name }} <span class="badge bg-secondary">{{ 'Owner' if member.is_household_owner else 'Member' }}</span></h2>
-            {% if member.id == current_user.id %}
-            <p class="text-muted mb-0">All Finance sections. Transaction display name: {{ member.member_name or member.name }}. Your own access cannot be edited here.</p>
+            <h2 class="h5">{{ household_user.name }} <span class="badge bg-secondary">{{ 'Owner' if member.role == 'admin' else 'Member' }}</span></h2>
+            {% if household_user.id == current_user.id %}
+            <p class="text-muted mb-0">{% if member.role == 'admin' %}All Finance sections{% else %}Your permitted Finance sections{% endif %}. Transaction display name: {{ member.member_name or household_user.name }}. Your own access cannot be edited here.</p>
             {% else %}
-            <form method="POST" action="{{ url_for('settings.update_finance_access', member_id=member.id) }}">
+            <form method="POST" action="{{ url_for('settings.update_finance_access', member_id=household_user.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <label class="form-label" for="finance-name-{{ member.id }}">Transaction display name</label>
-                <input class="form-control mb-3" id="finance-name-{{ member.id }}" name="member_name" value="{{ member.member_name or member.name }}">
-                {% if member.is_household_owner %}
+                <label class="form-label" for="finance-name-{{ household_user.id }}">Transaction display name</label>
+                <input class="form-control mb-3" id="finance-name-{{ household_user.id }}" name="member_name" value="{{ member.member_name or household_user.name }}">
+                {% if member.role == 'admin' %}
                 <p class="text-muted">All Finance sections. Only the transaction display name can be changed here.</p>
                 {% else %}
                 <fieldset>
@@ -33,8 +34,8 @@
                             <h3 class="h6">{{ group }}</h3>
                             {% for key in keys %}
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="sections" value="{{ key }}" id="finance-{{ member.id }}-{{ key }}" {% if key in member.get_allowed_sections() %}checked{% endif %}>
-                                <label class="form-check-label" for="finance-{{ member.id }}-{{ key }}">{{ section_labels[key] }}</label>
+                                <input class="form-check-input" type="checkbox" name="sections" value="{{ key }}" id="finance-{{ household_user.id }}-{{ key }}" {% if key in member.get_allowed_sections() %}checked{% endif %}>
+                                <label class="form-check-label" for="finance-{{ household_user.id }}-{{ key }}">{{ section_labels[key] }}</label>
                             </div>
                             {% endfor %}
                         </div>
@@ -42,7 +43,7 @@
                     </div>
                 </fieldset>
                 {% endif %}
-                <button class="btn btn-primary mt-3" type="submit">Save Finance access for {{ member.name }}</button>
+                <button class="btn btn-primary mt-3" type="submit">Save Finance access for {{ household_user.name }}</button>
             </form>
             {% endif %}
         </div>

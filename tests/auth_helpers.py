@@ -16,3 +16,15 @@ def login_client(client, user_id, remember=False):
     # Tests share one app context, so drop any user Flask-Login cached from an earlier request.
     g.pop('_login_user', None)
     return token
+
+
+def detach_user_from_households(user):
+    """Make a user household-independent using the membership model."""
+    from models.family import HouseholdMembership
+
+    HouseholdMembership.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    user.family_id = None
+    user.role = 'member'
+    user.member_name = None
+    user.allowed_sections = None
+    db.session.commit()

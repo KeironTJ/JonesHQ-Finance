@@ -7,6 +7,10 @@ from extensions import db
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone
+from sqlalchemy import event, inspect
+from sqlalchemy.orm import Session
+
+from models.family import Family, HouseholdMembership
 
 
 class User(UserMixin, db.Model):
@@ -74,8 +78,20 @@ class User(UserMixin, db.Model):
     allowed_sections = db.Column(db.Text, nullable=True)
     preferences = db.Column(db.JSON, nullable=True)
 
-    # Relationship back to Family
-    family = db.relationship('Family', back_populates='members', foreign_keys=[family_id])
+    # `family_id` remains the legacy default household for compatibility.
+    # Household-specific roles and permissions live on HouseholdMembership.
+    family = db.relationship(
+        'Family', foreign_keys=[family_id],
+        overlaps='families,members,memberships,user',
+    )
+    families = db.relationship(
+        'Family', secondary='household_memberships', back_populates='members',
+        overlaps='family,memberships,user',
+    )
+    memberships = db.relationship(
+        'HouseholdMembership', back_populates='user',
+        cascade='all, delete-orphan', overlaps='families,members',
+    )
     
     def set_password(self, password):
         """Hash and set the user's password"""
@@ -117,7 +133,12 @@ class User(UserMixin, db.Model):
     @property
     def is_household_owner(self):
         """True for a household owner (stored role 'admin'). Not the same as is_site_admin."""
-        return self.role == 'admin'
+        membership = self.get_active_household_membership()
+        return membership.role == 'admin' if membership else self.role
+
+    def get_active_household_membership(self):
+        from services.household.membership_service import HouseholdMembershipService
+        return HouseholdMembershipService.get_membership(self)
 
     @property
     def two_factor_enabled(self):
@@ -135,12 +156,15 @@ class User(UserMixin, db.Model):
         Household owners always receive ``None`` (meaning: all sections allowed).
         Members receive a set parsed from the ``allowed_sections`` JSON column.
         """
-        if self.is_household_owner:
+        membership = self.get_active_household_membership()
+        role = membership.role if membership else self.role
+        allowed_sections = membership.allowed_sections if membership else self.allowed_sections
+        if role == 'admin':
             return None  # no restriction
-        if not self.allowed_sections:
+        if not allowed_sections:
             return set()
         try:
-            return set(json.loads(self.allowed_sections))
+            return set(json.loads(allowed_sections))
         except (ValueError, TypeError):
             return set()
 
@@ -150,7 +174,9 @@ class User(UserMixin, db.Model):
         Household owners can always access every section.
         Members need *section_key* listed in their ``allowed_sections``.
         """
-        if self.is_household_owner:
+        membership = self.get_active_household_membership()
+        role = membership.role if membership else self.role
+        if role == 'admin':
             return True
         sections = self.get_allowed_sections()
         return section_key in sections
@@ -161,6 +187,38 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.email}>'
+
+
+@event.listens_for(Session, 'before_flush')
+def _sync_legacy_household_membership(session, flush_context, instances):
+    """Keep the original single-household User fields represented as a membership."""
+    for user in session.new.union(session.dirty):
+        if not isinstance(user, User) or user.family_id is None:
+            continue
+        state = inspect(user)
+        if user not in session.new and not any(
+            state.attrs[name].history.has_changes()
+            for name in ('family_id', 'role', 'member_name', 'allowed_sections')
+        ):
+            continue
+        membership = next(
+            (
+                item for item in session.new
+                if isinstance(item, HouseholdMembership)
+                and item.user is user and item.family_id == user.family_id
+            ),
+            None,
+        )
+        if membership is None:
+            membership = session.query(HouseholdMembership).filter_by(
+                user_id=user.id, family_id=user.family_id,
+            ).first() if user.id is not None else None
+        if membership is None:
+            membership = HouseholdMembership(user=user, family_id=user.family_id)
+            session.add(membership)
+        membership.role = user.role
+        membership.member_name = user.member_name
+        membership.allowed_sections = user.allowed_sections
 
 
 class UserSession(db.Model):

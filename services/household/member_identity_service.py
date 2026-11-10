@@ -1,5 +1,7 @@
+from models.family import HouseholdMembership
 from models.users import User
-from utils.db_helpers import family_get, family_query
+from utils import db_helpers
+from utils.db_helpers import family_get
 
 UNSPECIFIED_MEMBER = object()
 
@@ -9,10 +11,12 @@ class MemberIdentityService:
     def member_id_for(person):
         key = (person or '').strip().lower()
         matches = {
-            member.id for member in family_query(User).all()
+            membership.user_id for membership in HouseholdMembership.query.filter_by(
+                family_id=db_helpers.get_family_id(),
+            ).all()
             if key and key in {
-                (member.member_name or '').strip().lower(),
-                (member.name or '').strip().lower(),
+                (membership.member_name or '').strip().lower(),
+                (membership.user.name or '').strip().lower(),
             }
         }
         return next(iter(matches)) if len(matches) == 1 else None
@@ -39,22 +43,35 @@ class MemberIdentityService:
         member = family_get(User, member_id)
         if member is None or (not member.is_active and (not record or record.member_id != member.id)):
             raise ValueError('Choose an active member of this household.')
-        return (member.member_name or member.name).strip()[:50], member.id
+        membership = HouseholdMembership.query.filter_by(
+            user_id=member.id, family_id=db_helpers.get_family_id(),
+        ).first()
+        if membership is None:
+            raise ValueError('Choose an active member of this household.')
+        return (membership.member_name or member.name).strip()[:50], member.id
 
     @staticmethod
     def options(record=None):
-        members = family_query(User).order_by(User.member_name, User.name, User.id).all()
+        members = HouseholdMembership.query.filter_by(
+            family_id=db_helpers.get_family_id(),
+        ).join(User).order_by(
+            HouseholdMembership.member_name, User.name, User.id,
+        ).all()
         return [
-            (member.id, (member.member_name or member.name).strip(), member.is_active)
-            for member in members
-            if member.is_active or (record and record.member_id == member.id)
+            (membership.user.id,
+             (membership.member_name or membership.user.name).strip(),
+             membership.user.is_active)
+            for membership in members
+            if membership.user.is_active or (record and record.member_id == membership.user.id)
         ]
 
     @staticmethod
     def label(person, member_id):
         count = sum(
-            (member.member_name or member.name).strip()[:50] == person
-            for member in family_query(User).all()
+            (membership.member_name or membership.user.name).strip()[:50] == person
+            for membership in HouseholdMembership.query.filter_by(
+                family_id=db_helpers.get_family_id(),
+            ).join(User).all()
         )
         if member_id is not None and count > 1:
             return f'{person} (member #{member_id})'

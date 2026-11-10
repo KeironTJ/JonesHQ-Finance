@@ -23,6 +23,7 @@ In any blueprint route or service function::
 
 from flask_login import current_user
 from sqlalchemy import and_, or_
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 
 # ---------------------------------------------------------------------------
@@ -30,17 +31,21 @@ from sqlalchemy import and_, or_
 # ---------------------------------------------------------------------------
 
 def get_family_id():
-    """Return ``current_user.family_id``, or ``None`` if not authenticated."""
+    """Return the active household ID, or ``None`` if it is unavailable."""
     if getattr(current_user, 'is_authenticated', False):
         try:
-            return current_user.family_id
-        except Exception:
+            from services.household.membership_service import HouseholdMembershipService
+            return HouseholdMembershipService.active_family_id(current_user)
+        except DetachedInstanceError:
             # current_user instance may have been detached from the session
             # (e.g. after db.session.remove()). Re-query to re-attach it.
             from extensions import db
             from models.users import User
             user = db.session.get(User, int(str(current_user.get_id()).split(':', 1)[0]))
-            return user.family_id if user else None
+            if user is None:
+                return None
+            from services.household.membership_service import HouseholdMembershipService
+            return HouseholdMembershipService.active_family_id(user)
     return None
 
 
@@ -221,7 +226,13 @@ def family_query(model, *, include_private=False):
     if fid is None:
         # Return a query that always yields zero rows rather than leaking data
         return model.query.filter(model.id == -1)
-    query = model.query.filter_by(family_id=fid)
+    if model.__name__ == 'User':
+        from models.family import HouseholdMembership
+        query = model.query.join(HouseholdMembership).filter(
+            HouseholdMembership.family_id == fid,
+        )
+    else:
+        query = model.query.filter_by(family_id=fid)
     return query if include_private else _apply_visibility(model, query)
 
 
@@ -242,7 +253,14 @@ def family_get(model, record_id):
     fid = get_family_id()
     if fid is None:
         return None
-    query = model.query.filter(model.id == _record_id(record_id), model.family_id == fid)
+    if model.__name__ == 'User':
+        from models.family import HouseholdMembership
+        query = model.query.join(HouseholdMembership).filter(
+            model.id == _record_id(record_id),
+            HouseholdMembership.family_id == fid,
+        )
+    else:
+        query = model.query.filter(model.id == _record_id(record_id), model.family_id == fid)
     return _apply_visibility(model, query).first()
 
 
@@ -257,7 +275,13 @@ def family_get_or_404(model, record_id):
     except ValueError:
         from flask import abort
         abort(404)
-    query = model.query.filter(model.id == record_id, model.family_id == fid)
+    if model.__name__ == 'User':
+        from models.family import HouseholdMembership
+        query = model.query.join(HouseholdMembership).filter(
+            model.id == record_id, HouseholdMembership.family_id == fid,
+        )
+    else:
+        query = model.query.filter(model.id == record_id, model.family_id == fid)
     return _apply_visibility(model, query).first_or_404()
 
 

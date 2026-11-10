@@ -48,6 +48,19 @@ account-owned records are not household financial data.
 - Migration `b9e4a7c1d6f2` adds these tables and column without changing financial
   records. User-account deletion explicitly removes credentials and challenges.
 
+## Household Membership and Active Context
+
+- `household_memberships` links a user to each household with a unique
+  `(user_id, family_id)` pair. Role, Finance section access and member display
+  name are stored on this association because they can differ by household.
+- `User.family_id`, `role`, `member_name` and `allowed_sections` remain the
+  compatibility/default-household fields. `active_household_id` in the signed
+  session selects the current membership; `family_query()` and related helpers
+  scope reads and writes to that household.
+- Migration `f42b7a91c6d3` backfills one membership from each existing user's
+  legacy household fields. Removing a membership or household preserves any
+  other memberships and does not revoke sessions for users who retain access.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)
@@ -506,7 +519,7 @@ columns, indexes, and constraints.
 | `subscriptions.py` | `Subscription` / `subscriptions`, `SubscriptionPriceChange` / `subscription_price_changes` |
 | `property.py`, `property_valuation_snapshot.py` | `Property` / `properties`, `PropertyValuationSnapshot` / `property_valuation_snapshots` |
 | `monthly_account_balance.py` | `MonthlyAccountBalance` / `monthly_account_balances` |
-| `family.py` | `Family` / `families`, `FamilyInvite` / `family_invites`, `HouseholdInvite` / `household_invites` |
+| `family.py` | `Family` / `families`, `HouseholdMembership` / `household_memberships`, `FamilyInvite` / `family_invites`, `HouseholdInvite` / `household_invites` |
 | `users.py` | `User` / `users`, `UserSession` / `user_sessions`, `SecurityEvent` / `security_events`, `UserRecoveryCode` / `user_recovery_codes` |
 | `passkeys.py` | `UserPasskey` / `user_passkeys`, `PasskeyChallenge` / `passkey_challenges` |
 | `family_assignment_labels.py` | `FamilyAssignmentLabel` / `family_assignment_labels` |

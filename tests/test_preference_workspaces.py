@@ -5,7 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from models.accounts import Account
 from services.platform.preference_service import PreferenceService
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 from tests.test_workspace_ui import NavigationParser
 
 
@@ -88,8 +88,7 @@ def test_finance_preferences_validate_and_report_write_failures(app, user, monke
 
 
 def test_detached_account_can_edit_appearance_but_not_finance_defaults(app, user):
-    user.family_id = None
-    db.session.commit()
+    detach_user_from_households(user)
     client = app.test_client()
     login_client(client, user.id)
     html = client.get('/preferences').get_data(as_text=True)

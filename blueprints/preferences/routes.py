@@ -6,6 +6,7 @@ from . import preferences_bp
 from extensions import db
 from services.platform.preference_service import PreferenceService
 from services.platform.landing_service import LandingService
+from services.platform.module_registry import ModuleRegistry
 
 
 @preferences_bp.route('', methods=['GET', 'POST'])
@@ -37,7 +38,7 @@ def workspace():
 
 @preferences_bp.route('/finance', methods=['GET', 'POST'])
 def finance():
-    if current_user.family_id is None:
+    if not ModuleRegistry.has_active_household(current_user):
         flash('Join a household before managing Finance preferences.', 'info')
         return redirect(url_for('preferences.index'))
     if request.method == 'POST':

@@ -5,7 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from extensions import db, limiter
 from models.users import User
 from services.platform.landing_service import LandingService
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 from tests.test_passkeys import ORIGIN, RP_ID, register
 from tests.test_two_factor import enable_two_factor, totp_code
 
@@ -135,7 +135,7 @@ def test_all_login_methods_use_same_workspace_and_deep_link_rules(
 
 @pytest.mark.parametrize('method', ['password', 'two_factor', 'passkey'])
 def test_detached_login_ignores_finance_default(app, user, monkeypatch, method):
-    user.family_id = None
+    detach_user_from_households(user)
     user.preferences = {'default_workspace': 'finance'}
     db.session.commit()
     client = app.test_client()
@@ -172,7 +172,6 @@ def test_member_default_workspace_does_not_grant_section_access(app, user):
 
 @pytest.mark.parametrize('target', [None, '/dashboard?year=2027', '/hub#workspaces', '/'])
 def test_detached_default_destinations_use_security(app, user, target):
-    user.family_id = None
-    db.session.commit()
+    detach_user_from_households(user)
     with app.test_request_context():
         assert LandingService.resolve(user, target) == '/account/security'

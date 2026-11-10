@@ -5,41 +5,42 @@
 <style>
 .hub-intro { max-width: 46rem; margin-bottom: 2rem; }
 .hub-intro h1 { font-size: clamp(2rem, 5vw, 3rem); }
-.hub-workspaces .card { border-top: 4px solid var(--brand); }
-.hub-workspaces .hub-future { border-top-color: var(--border-color); }
-.hub-workspace-icon { font-size: 2rem; color: var(--brand); margin-bottom: 1rem; }
-.hub-workspaces .card-body { display: flex; flex-direction: column; padding: 1.75rem; }
-.hub-workspaces .hub-action { margin-top: auto; padding-top: 1rem; }
+.hub-modules .card { border-top: 4px solid var(--brand); }
+.hub-modules .hub-future { border-top-color: var(--border-color); }
+.hub-module-icon { font-size: 2rem; color: var(--brand); margin-bottom: 1rem; }
+.hub-modules .card-body { display: flex; flex-direction: column; padding: 1.75rem; }
+.hub-modules .hub-action { margin-top: auto; padding-top: 1rem; }
 </style>
 {% endblock %}
 
 {% block content %}
 <section class="hub-intro" aria-labelledby="hub-title">
     <span class="eyebrow">Central Hub</span>
-    <h1 id="hub-title">One household. Your workspaces.</h1>
-    <p class="lead text-muted">Choose what you want to focus on. Your account and household stay with you as you move between workspaces.</p>
-    <p class="text-muted">Finance is ready to use. Family Hub is the next workspace planned for this platform.</p>
+    <h1 id="hub-title">One home. Your modules.</h1>
+    <p class="lead text-muted">Choose a module. Your account, household and preferences stay with you across the platform.</p>
 </section>
 
-{% if current_user.family_id is none %}
+{% if not household_memberships %}
 <div class="alert alert-info" role="status">
-    Your account is not currently part of a household. You can manage account security or accept a household invitation before opening Finance.
+    Your account is not currently part of a household. You can manage account security or accept a household invitation before opening household modules.
 </div>
 {% endif %}
 
-<section aria-labelledby="workspaces-title">
-    <h2 class="h4 mb-3" id="workspaces-title">Your workspaces</h2>
-    <div class="row g-4 hub-workspaces">
+<section aria-labelledby="modules-title">
+    <h2 class="h4 mb-3" id="modules-title">Your modules</h2>
+    <div class="row g-4 hub-modules">
+        {% for module in modules %}
         <div class="col-md-6">
-            <article class="card h-100">
+            <article class="card h-100{% if module.status != 'available' %} hub-future{% endif %}">
                 <div class="card-body">
-                    <i class="bi bi-wallet2 hub-workspace-icon" aria-hidden="true"></i>
-                    <h3 class="h4">Finance</h3>
-                    <p class="text-muted">A clear view of your money, from everyday banking and bills to borrowing and longer-term plans.</p>
-                    <p class="small text-muted">Your existing financial permissions and privacy settings still apply.</p>
+                    <i class="bi {{ module.icon }} hub-module-icon" aria-hidden="true"></i>
+                    <h3 class="h4">{{ module.title }}</h3>
+                    <p class="text-muted">{{ module.description }}</p>
                     <div class="hub-action">
-                        {% if current_user.family_id is not none %}
-                        <a class="btn btn-primary" href="{{ url_for('dashboard.index') }}">Open Finance <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+                        {% if module.can_open %}
+                        <a class="btn btn-primary" href="{{ url_for(module.home_endpoint) }}">Open {{ module.title }} <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+                        {% elif module.status == 'planned' %}
+                        <span class="badge bg-secondary">Coming soon</span>
                         {% else %}
                         <span class="badge bg-secondary">Household required</span>
                         {% endif %}
@@ -47,17 +48,7 @@
                 </div>
             </article>
         </div>
-        <div class="col-md-6">
-            <article class="card h-100 hub-future">
-                <div class="card-body">
-                    <i class="bi bi-house-heart hub-workspace-icon" aria-hidden="true"></i>
-                    <h3 class="h4">Family Hub</h3>
-                    <p class="text-muted">A future home for meal planning, activities and the tasks that keep family life moving.</p>
-                    <p class="small text-muted">Not connected yet. No features or records from the other application have been imported.</p>
-                    <div class="hub-action"><span class="badge bg-secondary">Coming soon</span></div>
-                </div>
-            </article>
-        </div>
+        {% endfor %}
     </div>
 </section>
 

@@ -15,9 +15,10 @@ from models import (
     UserSession, Vendor, VendorType,
 )
 from models.childcare import Child, ChildActivityType, DailyChildcareActivity, MonthlyChildcareSummary
+from models.family import HouseholdMembership
 from services.household.household_deletion_service import HOUSEHOLD_TABLES, HouseholdDeletionService
 from services.platform.user_session_service import _now
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 from tests.test_account_deletion import TODAY, add, make_domains
 
 
@@ -198,9 +199,7 @@ def test_member_and_detached_user_cannot_delete_household(app, user, family):
     db.session.commit()
     client = sign_in(app, user)
     assert client.post('/family/delete', data=VALID_DATA).status_code == 403
-    user.family_id = None
-    user.role = 'admin'
-    db.session.commit()
+    detach_user_from_households(user)
     g.pop('_login_user', None)
     assert client.post('/family/delete', data=VALID_DATA).status_code == 403
     assert db.session.get(Family, family.id) is not None
@@ -370,12 +369,49 @@ def test_retained_account_can_sign_in_and_join_a_new_household(app, user, graph)
     g.pop('_login_user', None)
     assert client.get('/account/security').status_code == 200
     g.pop('_login_user', None)
-    assert another_client.get('/account/security').status_code == 302
+    assert another_client.get('/account/security').status_code == 200
     g.pop('_login_user', None)
-    assert client.post(f'/family/join/{token}').status_code == 403
+    response = client.post(f'/family/join/{token}')
+    assert response.status_code == 302
+    assert HouseholdMembership.query.filter_by(
+        user_id=user_id, family_id=new_family_id,
+    ).count() == 1
 
 
-def test_join_existing_requires_recent_auth_and_cannot_move_an_existing_membership(app, user, family):
+def test_deleting_primary_household_preserves_other_membership_and_session(app, user, family):
+    other_family = add(Family, name='Other household')
+    db.session.add(HouseholdMembership(
+        user_id=user.id,
+        family_id=other_family.id,
+        role='member',
+        allowed_sections='["accounts"]',
+    ))
+    db.session.commit()
+    user_id, family_id = user.id, family.id
+    client = app.test_client()
+    login_client(client, user_id)
+
+    response = client.post('/family/delete', data=dict(
+        VALID_DATA, family_id=str(family_id),
+    ))
+
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/hub')
+    assert db.session.get(Family, family_id) is None
+    retained = db.session.get(User, user_id)
+    assert retained.family_id == other_family.id
+    assert retained.role == 'member'
+    assert HouseholdMembership.query.filter_by(
+        user_id=user_id, family_id=other_family.id,
+    ).one().allowed_sections == '["accounts"]'
+    assert UserSession.query.filter_by(user_id=user_id, revoked_at=None).count() == 1
+    with client:
+        client.get('/accounts')
+        from utils.db_helpers import get_family_id
+        assert get_family_id() == other_family.id
+
+
+def test_join_existing_adds_membership_without_moving_existing_household(app, user, family):
     foreign_family = add(Family, name='New household')
     invite = add(FamilyInvite, family_id=foreign_family.id, created_by_id=user.id,
                  member_name='New member')
@@ -385,16 +421,17 @@ def test_join_existing_requires_recent_auth_and_cannot_move_an_existing_membersh
     response = client.post(f'/family/join/{token}')
     assert response.status_code == 302
     assert db.session.get(User, user.id).family_id == family.id
-    assert FamilyInvite.query.filter_by(token=token).one().used_at is None
-    user.family_id = None
-    user.role = 'member'
-    UserSession.query.filter_by(user_id=user.id).update({
-        'reauthenticated_at': _now() - timedelta(hours=1)})
-    db.session.commit()
-    g.pop('_login_user', None)
-    response = client.get(f'/family/join/{token}')
-    assert '/account/confirm' in response.headers['Location']
-    assert FamilyInvite.query.filter_by(token=token).one().used_at is None
+    assert HouseholdMembership.query.filter_by(
+        user_id=user.id, family_id=family.id,
+    ).one().role == 'admin'
+    assert HouseholdMembership.query.filter_by(
+        user_id=user.id, family_id=foreign_family.id,
+    ).one().role == 'member'
+    assert FamilyInvite.query.filter_by(token=token).one().used_at is not None
+    with client:
+        client.get('/hub')
+        from utils.db_helpers import get_family_id
+        assert get_family_id() == foreign_family.id
 
 
 def test_changed_household_since_get_cannot_delete_the_new_household(app, user, family):
@@ -414,7 +451,7 @@ def test_changed_household_since_get_cannot_delete_the_new_household(app, user, 
 def test_detached_two_factor_login_still_lands_on_account_security(app, user):
     import pyotp
 
-    user.family_id = None
+    detach_user_from_households(user)
     user.role = 'member'
     user.totp_secret = 'JBSWY3DPEHPK3PXP'
     user.totp_enabled_at = _now()

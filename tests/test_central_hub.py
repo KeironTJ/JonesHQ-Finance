@@ -2,7 +2,7 @@ import pytest
 from flask import g
 
 from extensions import db
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 from tests.test_workspace_ui import NavigationParser
 
 
@@ -60,8 +60,7 @@ def test_member_can_enter_hub_without_receiving_finance_section_permissions(app,
 
 
 def test_detached_account_hub_has_no_finance_entry(app, user):
-    user.family_id = None
-    db.session.commit()
+    detach_user_from_households(user)
     client = app.test_client()
     login_client(client, user.id)
     response = client.get('/hub')

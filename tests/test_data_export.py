@@ -19,7 +19,7 @@ from models.transactions import Transaction
 from models.users import SecurityEvent, User, UserSession
 from services.platform.data_export_service import DataExportService, EXPORTS
 from services.platform.user_session_service import _now
-from tests.auth_helpers import login_client
+from tests.auth_helpers import detach_user_from_households, login_client
 
 
 @pytest.fixture(autouse=True)
@@ -244,8 +244,7 @@ def test_export_requires_csrf(app, user, monkeypatch):
 def test_export_rejects_removed_member(app, user):
     client = app.test_client()
     login_client(client, user.id)
-    user.family_id = None
-    db.session.commit()
+    detach_user_from_households(user)
     response = client.post('/account/security/export')
     assert response.status_code == 302
     assert SecurityEvent.query.filter_by(event_type='data_exported').count() == 0

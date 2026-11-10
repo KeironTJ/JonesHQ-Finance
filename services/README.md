@@ -7,11 +7,11 @@ domain package rather than maintaining top-level redirect modules.
 
 - `finance/` - accounts, categories, transactions, subscriptions, payday periods,
   balances, income, vendors, credit cards, and expenses
-- `household/` - family and childcare workflows
+- `household/` - household memberships, family and childcare workflows
 - `planning/` - loans, mortgages, and pensions
 - `vehicles/` - vehicles, fuel forecasting, and mileage
 - `platform/` - authentication, household settings (`SettingsService`) and personal
-  display preferences (`PreferenceService`)
+  display preferences (`PreferenceService`), plus the module catalog
 - `analytics/` - dashboard and net-worth read models
 
 `analytics/attention_service.py` builds the dashboard's **Needs attention** list.
@@ -55,6 +55,16 @@ Import from the domain package, for example:
 ```python
 from services.finance.transaction_service import TransactionService
 ```
+
+`household/membership_service.py` validates household membership, resolves the
+active household context and changes the selected household. Membership roles
+and Finance section access are household-specific; services must scope user
+lookups to the active household rather than assuming `User.family_id` is the
+only membership.
+
+`platform/module_registry.py` is the source of truth for platform module
+discovery, descriptions and entry points. The Central Hub renders this catalog;
+module-specific records and permissions stay with their owning module.
 
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods

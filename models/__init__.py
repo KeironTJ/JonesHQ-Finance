@@ -10,7 +10,7 @@ from models.credit_card_transactions import CreditCardTransaction
 from models.expenses import Expense
 from models.expense_reimbursement_group import ExpenseReimbursementGroup
 from models.expense_calendar import ExpenseCalendarEntry
-from models.family import Family, FamilyInvite, HouseholdInvite
+from models.family import Family, FamilyInvite, HouseholdInvite, HouseholdMembership
 from models.family_assignment_labels import FamilyAssignmentLabel
 from models.fuel import FuelRecord
 from models.income import Income
@@ -57,6 +57,7 @@ __all__ = [
     'Family',
     'FamilyAssignmentLabel',
     'FamilyInvite',
+    'HouseholdMembership',
     'FuelRecord',
     'Income',
     'IncomeChange',

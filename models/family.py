@@ -4,6 +4,7 @@ A Family groups users together into a shared data pool.
 FamilyInvites are token-based links that allow new members to join.
 """
 import hashlib
+import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from extensions import db
@@ -24,12 +25,61 @@ class Family(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Relationships
-    members = db.relationship('User', back_populates='family', lazy='dynamic')
+    members = db.relationship(
+        'User', secondary='household_memberships', back_populates='families',
+        lazy='dynamic', overlaps='memberships,family,user',
+    )
+    memberships = db.relationship(
+        'HouseholdMembership', back_populates='family',
+        cascade='all, delete-orphan',
+    )
     invites = db.relationship('FamilyInvite', back_populates='family',
                               lazy='dynamic', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Family {self.name}>'
+
+
+class HouseholdMembership(db.Model):
+    """A user's role and Finance permissions within one household."""
+    __tablename__ = 'household_memberships'
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'family_id', name='uq_household_membership_user_family'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    family_id = db.Column(
+        db.Integer, db.ForeignKey('families.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    role = db.Column(db.String(20), nullable=False, default='member')
+    member_name = db.Column(db.String(100), nullable=True)
+    allowed_sections = db.Column(db.Text, nullable=True)
+    created_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        nullable=False,
+    )
+
+    user = db.relationship('User', back_populates='memberships', overlaps='families,members')
+    family = db.relationship('Family', back_populates='memberships', overlaps='families,members')
+
+    def get_allowed_sections(self):
+        if self.role == 'admin':
+            return None
+        if not self.allowed_sections:
+            return set()
+        try:
+            return set(json.loads(self.allowed_sections))
+        except (ValueError, TypeError):
+            return set()
+
+    def __repr__(self):
+        return f'<HouseholdMembership user={self.user_id} family={self.family_id}>'
 
 
 class FamilyInvite(db.Model):

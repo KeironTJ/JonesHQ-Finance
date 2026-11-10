@@ -34,6 +34,7 @@ Flask blueprints for modular route organization
 - `onboarding/` - Household onboarding
 - `plans/` - Financial plans and plan items
 - `site_admin/` - Service-operator administration
+- `central/` - Central Hub and shared platform settings
 
 ### `/models/`
 SQLAlchemy database models
@@ -84,6 +85,7 @@ for the package map and compatibility-import policy.
 - `planning/` - Loans, mortgages, and pensions
 - `vehicles/` - Vehicles, fuel forecasting, and mileage
 - `platform/` - Authentication and settings
+- `platform/module_registry.py` - Canonical module catalog and entry points
 - `analytics/` - Dashboard and net-worth read models
 
 ### `/templates/`

@@ -17,6 +17,7 @@ from models.users import SecurityEvent, User
 from services.platform.passkey_service import PasskeyService
 from services.platform.account_deletion_service import AccountDeletionService
 from services.platform.user_session_service import UserSessionService
+from tests.auth_helpers import detach_user_from_households
 
 
 ORIGIN = 'https://finance.example.com'
@@ -420,8 +421,7 @@ def test_unattached_user_login_goes_to_security_and_safe_next_is_preserved(app, 
     options = client.post('/login/passkey/options?next=/accounts/', json={}).json
     assert client.post('/login/passkey/verify', json=authenticator.response(options)).json['redirect'] == '/accounts/'
     logout(client)
-    user.family_id = None
-    db.session.commit()
+    detach_user_from_households(user)
     assert sign_in(client, authenticator).json['redirect'] == '/account/security'
 
 

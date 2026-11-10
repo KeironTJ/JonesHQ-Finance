@@ -15,7 +15,7 @@ Public route (no login required):
 import json
 from datetime import datetime, timezone
 
-from flask import render_template, redirect, url_for, flash, request, abort, current_app
+from flask import render_template, redirect, url_for, flash, request, abort, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -28,6 +28,7 @@ from utils.permissions import SECTION_GROUPS, SECTION_LABELS, OWNER_ONLY_SECTION
 from utils.db_helpers import family_query, get_family_id
 from services.household.family_service import FamilyService
 from services.household.household_deletion_service import HouseholdDeletionService
+from services.household.membership_service import HouseholdMembershipService
 from services.platform.auth_service import AuthService
 from services.platform.email_verification_service import EmailVerificationService
 from services.platform.user_session_service import UserSessionService
@@ -49,7 +50,7 @@ def _require_household_owner():
 def index():
     _require_household_owner()
 
-    family = current_user.family
+    family = db.session.get(Family, get_family_id())
     if family is None:
         # Bootstrap: create a default family for this owner
         family = Family(name='My Family')
@@ -89,6 +90,19 @@ def index():
     )
 
 
+@family_bp.route('/select', methods=['POST'])
+@login_required
+def select_household():
+    family_id = request.form.get('family_id', type=int)
+    try:
+        membership = HouseholdMembershipService.select(current_user, family_id)
+    except ValueError as error:
+        flash(str(error) or 'Choose a household you belong to.', 'danger')
+    else:
+        flash(f'Switched to {membership.family.name}.', 'success')
+    return redirect(url_for('central.hub'))
+
+
 @family_bp.route('/members/<int:member_id>/role', methods=['POST'])
 @login_required
 @recent_auth_required
@@ -114,7 +128,7 @@ def create_assignment_label():
     """Create a custom family assignment label (e.g., child/non-login person)."""
     _require_household_owner()
 
-    family = current_user.family
+    family = db.session.get(Family, get_family_id())
     if family is None:
         flash('No family found. Please visit the Family page first.', 'danger')
         return redirect(url_for('settings.finance_access'))
@@ -146,7 +160,7 @@ def delete_assignment_label(label_id):
     _require_household_owner()
 
     try:
-        name = FamilyService.delete_assignment_label(label_id, current_user.family_id)
+        name = FamilyService.delete_assignment_label(label_id, get_family_id())
     except SQLAlchemyError:
         db.session.rollback()
         current_app.logger.exception('Unable to remove transaction assignment label')
@@ -162,7 +176,7 @@ def delete_assignment_label(label_id):
 def create_invite():
     _require_household_owner()
 
-    family = current_user.family
+    family = db.session.get(Family, get_family_id())
     if family is None:
         flash('No family found. Please visit the Family page first.', 'danger')
         return redirect(url_for('family.index'))
@@ -196,7 +210,7 @@ def create_invite():
 def revoke_invite(invite_id):
     _require_household_owner()
 
-    FamilyService.revoke_invite(invite_id, current_user.family_id)
+    FamilyService.revoke_invite(invite_id, get_family_id())
     flash('Invite revoked.', 'success')
     return redirect(url_for('family.index'))
 
@@ -212,7 +226,7 @@ def update_member(member_id):
     role = request.form.get('role', 'member')
     member = FamilyService.update_member(
         member_id,
-        current_user.family_id,
+        get_family_id(),
         current_user.id,
         role,
         member_name,
@@ -233,7 +247,7 @@ def remove_member(member_id):
 
     name = FamilyService.remove_member(
         member_id,
-        current_user.family_id,
+        get_family_id(),
         current_user.id,
     )
     if name is None:
@@ -250,11 +264,11 @@ def remove_member(member_id):
     "3 per 15 minutes", key_func=lambda: f"household-delete:{current_user.id}", methods=["POST"])
 def delete_household():
     _require_household_owner()
-    if current_user.family_id is None:
+    if get_family_id() is None:
         abort(403)
     form = DeleteHouseholdForm()
     if request.method == 'GET':
-        form.family_id.data = str(current_user.family_id)
+        form.family_id.data = str(get_family_id())
     preview = {}
     blocked_reason = None
     try:
@@ -277,9 +291,13 @@ def delete_household():
             current_app.logger.exception('Household deletion failed.')
             flash('Unable to delete this household. No deletion was committed. Please try again.', 'danger')
         else:
+            if HouseholdMembershipService.memberships_for(current_user):
+                session.pop(HouseholdMembershipService.SESSION_KEY, None)
+                flash('The household and its records have been deleted. Your other household access remains.', 'success')
+                return redirect(url_for('central.hub'))
             from blueprints.auth.routes import _clear_browser_login
             _clear_browser_login()
-            flash('The household and its records have been deleted. Login accounts remain. Everyone has been signed out.', 'success')
+            flash('The household and its records have been deleted. Login accounts remain. Everyone without another household has been signed out.', 'success')
             return redirect(url_for('auth.login'))
     return render_template(
         'family/delete_household.html', form=form, preview=preview, blocked_reason=blocked_reason)
@@ -290,9 +308,6 @@ def delete_household():
 @login_required
 @recent_auth_required
 def _join_existing(invite, token):
-    if current_user.family_id is not None:
-        flash('You already belong to a household.', 'danger')
-        return redirect(url_for('auth.account_security'))
     if request.method == 'POST':
         user = db.session.get(User, current_user.id)
         if user is None:
@@ -305,6 +320,7 @@ def _join_existing(invite, token):
             current_app.logger.exception('Joining a household with an existing account failed.')
             flash('Unable to join this household. Please try again.', 'danger')
         else:
+            HouseholdMembershipService.select(user, invite.family_id)
             UserSessionService.start(user, method='family invite')
             flash('You have joined the household using your existing account.', 'success')
             return redirect(url_for('central.hub'))

@@ -21,6 +21,7 @@ from sqlalchemy import and_, func, inspect, select
 # leaving, deletion). They are not household financial data.
 EXCLUDED_SOURCE_TABLES = frozenset({
     'users',
+    'household_memberships',
     'security_events',
     'family_invites',
     'household_invites',

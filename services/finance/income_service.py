@@ -194,14 +194,25 @@ class IncomeService:
 
         Called when someone joins the household or a member is renamed. Names
         shared with another member are never auto-linked."""
+        from models.family import HouseholdMembership
         from models.users import User
 
-        display = (member.member_name or member.name or '').strip()[:50]
+        membership = HouseholdMembership.query.filter_by(
+            user_id=member.id, family_id=family_id,
+        ).first()
+        member_name = membership.member_name if membership else member.member_name
+        display = (member_name or member.name or '').strip()[:50]
         if not family_id or not display:
             return
-        keys = {(name or '').strip().lower() for name in (member.member_name, member.name, *previous_names)} - {''}
-        for other in User.query.filter(User.family_id == family_id, User.id != member.id).all():
-            keys -= {(other.member_name or '').strip().lower(), (other.name or '').strip().lower()}
+        keys = {(name or '').strip().lower() for name in (member_name, member.name, *previous_names)} - {''}
+        others = HouseholdMembership.query.filter_by(family_id=family_id).join(User).filter(
+            User.id != member.id,
+        ).all()
+        for other_membership in others:
+            keys -= {
+                (other_membership.member_name or '').strip().lower(),
+                (other_membership.user.name or '').strip().lower(),
+            }
         from services.planning.retirement_service import RetirementService
         RetirementService.link_legacy(member, family_id, keys)
         for model in (RecurringIncome, Income, Pension):
@@ -238,8 +249,12 @@ class IncomeService:
             return member_id == user.id
         person_key = (person or '').strip().lower()
         member_names = set()
-        for member in family_query(User).all():
-            member_names |= {(member.member_name or '').strip().lower(), (member.name or '').strip().lower()}
+        from models.family import HouseholdMembership
+        for member in HouseholdMembership.query.filter_by(family_id=db_helpers.get_family_id()).join(User).all():
+            member_names |= {
+                (member.member_name or '').strip().lower(),
+                (member.user.name or '').strip().lower(),
+            }
         matched_member = IncomeService._member_id_for(person)
         return matched_member == uid or (person_key not in member_names and user.is_household_owner)
 

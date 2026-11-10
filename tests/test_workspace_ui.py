@@ -28,6 +28,27 @@ class NavigationParser(HTMLParser):
             self.in_sidebar = False
 
 
+class QuickNavigationParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.depth = 0
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'div':
+            if self.depth:
+                self.depth += 1
+            elif attrs.get('id') == 'quickNavCollapse':
+                self.depth = 1
+        elif self.depth and tag == 'a':
+            self.links.append(attrs.get('href'))
+
+    def handle_endtag(self, tag):
+        if tag == 'div' and self.depth:
+            self.depth -= 1
+
+
 @pytest.mark.parametrize('path', [
     '/hub', '/dashboard', '/accounts', '/transactions', '/transactions/create',
     '/transactions/subscriptions', '/transactions/consolidated',
@@ -70,6 +91,65 @@ def test_navigation_search_source_respects_member_permissions(app, user):
     assert {'/accounts', '/transactions', '/transactions/subscriptions'} <= hrefs
     assert not {'/settings', '/family/', '/income', '/credit-cards', '/site-admin/'} & hrefs
     assert '/hub/settings/finance' in hrefs
+
+
+def test_finance_dashboard_shortcuts_respect_member_permissions(app, user):
+    user.role = 'member'
+    user.allowed_sections = '["accounts", "transactions", "expenses"]'
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+    parser = QuickNavigationParser()
+    parser.feed(client.get('/dashboard').get_data(as_text=True))
+    assert set(parser.links) == {
+        '/transactions', '/accounts', '/expenses', '/preferences/finance',
+    }
+
+
+def test_workspace_navigation_switches_between_central_and_finance(app, user):
+    client = app.test_client()
+    login_client(client, user.id)
+    for path, target in [('/hub', '/dashboard'), ('/dashboard', '/hub')]:
+        parser = NavigationParser()
+        parser.feed(client.get(path).get_data(as_text=True))
+        assert target in {link['href'] for link in parser.links}
+
+
+def test_central_hub_modules_come_from_platform_registry(app, user):
+    client = app.test_client()
+    login_client(client, user.id)
+    html = client.get('/hub').get_data(as_text=True)
+    assert 'Your modules' in html
+    assert 'Open Finance' in html
+    assert 'Household Hub' in html
+    assert 'Organise household life with shared meals, activities and tasks.' in html
+    assert 'Coming soon' in html
+    assert 'No features or records from the other application have been imported.' not in html
+
+
+def test_central_hub_uses_membership_instead_of_legacy_family_field(app, user):
+    from models.family import Family, HouseholdMembership
+    from services.household.membership_service import HouseholdMembershipService
+
+    second_family = Family(name='Second Household')
+    db.session.add(second_family)
+    db.session.flush()
+    db.session.add(HouseholdMembership(
+        user_id=user.id, family_id=second_family.id, role='member',
+        allowed_sections='["accounts"]',
+    ))
+    user.family_id = None
+    user.role = 'member'
+    db.session.commit()
+    client = app.test_client()
+    login_client(client, user.id)
+    with client.session_transaction() as browser_session:
+        browser_session[HouseholdMembershipService.SESSION_KEY] = second_family.id
+
+    html = client.get('/hub').get_data(as_text=True)
+
+    assert 'Household required' not in html
+    assert 'Open Finance' in html
 
 
 def test_public_shell_has_no_household_navigation(app):
