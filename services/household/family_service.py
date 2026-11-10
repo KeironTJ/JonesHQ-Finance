@@ -174,6 +174,8 @@ class FamilyService:
             return None
 
         name = member.name
+        from services.household.calendar_service import CalendarService
+        CalendarService.detach_membership(membership)
         IncomeService.unlink_member(member.id, family_id)
         HouseholdMembership.query.filter_by(
             user_id=member.id, family_id=family_id,

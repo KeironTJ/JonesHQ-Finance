@@ -23,7 +23,7 @@ def test_root_opens_hub_and_finance_remains_separate(app, user):
     assert hub.status_code == 200
     html = hub.get_data(as_text=True)
     assert 'Open Finance' in html
-    assert 'Coming soon' in html
+    assert 'Open Household Hub' in html
     assert 'href="/dashboard"' in html
     assert 'href="/transactions"' not in html
     finance = client.get('/dashboard').get_data(as_text=True)

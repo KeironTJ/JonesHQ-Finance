@@ -7,6 +7,7 @@ Flask-Limiter[redis]==3.5.0
 Flask-Admin==2.0.2
 python-dotenv==1.0.0
 python-dateutil>=2.9.0
+tzdata>=2025.2
 holidays>=0.99
 SQLAlchemy>=2.0.35
 werkzeug==3.1.9

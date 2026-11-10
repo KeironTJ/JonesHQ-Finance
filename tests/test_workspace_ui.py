@@ -123,7 +123,7 @@ def test_central_hub_modules_come_from_platform_registry(app, user):
     assert 'Open Finance' in html
     assert 'Household Hub' in html
     assert 'Organise household life with shared meals, activities and tasks.' in html
-    assert 'Coming soon' in html
+    assert 'Open Household Hub' in html
     assert 'No features or records from the other application have been imported.' not in html
 
 

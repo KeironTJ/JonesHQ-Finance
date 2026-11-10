@@ -59,7 +59,8 @@ def test_every_finance_route_and_method_denied_without_module_access(app, family
     routes = []
     with app.test_request_context():
         for rule in app.url_map.iter_rules():
-            if ModuleRegistry.module_for_blueprint(rule.endpoint.rsplit('.', 1)[0]) is None:
+            module = ModuleRegistry.module_for_blueprint(rule.endpoint.rsplit('.', 1)[0])
+            if module is None or module['key'] != 'finance':
                 continue
             values = {
                 name: (1 if converter.__class__.__name__ == 'IntegerConverter' else 'household')

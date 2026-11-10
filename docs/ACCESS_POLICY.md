@@ -38,8 +38,8 @@ over. Child creation does not bypass normal sign-in/email-verification controls.
 Children start as members with Household Hub allowed, no Finance grant and no
 Finance sections. Finance, household administration, self-joining households,
 self-deletion and operator tools remain blocked across households even if a
-local role or module grant is incorrect. Household Hub is still coming soon;
-children can currently use Central Hub, appearance and sign-in security.
+local role or module grant is incorrect. Children can use the Household Hub
+calendar, Central Hub, appearance and sign-in security.
 
 Only the designated guardian can transfer guardianship or release the account
 into an adult account, under Central settings, **Managed child accounts**.
@@ -53,24 +53,42 @@ Grant changes, child creation, guardian transfer and release require recent
 authentication and CSRF protection. Audit events commit in the same transaction
 as the changes; a failed write saves neither.
 
-## Planned calendar and external sharing (not implemented)
+## Household calendar (implemented)
 
-The first Household Hub feature will be a manual calendar with month and agenda
-views, all-day/timed events and the `Europe/London` timezone. Later meal planning,
-activities and dated tasks can contribute items.
+Household Hub opens at `/household/` with month and agenda views and manually
+created all-day/timed events in `Europe/London`. Later meal planning, activities
+and dated tasks can contribute items.
 
 - Shared and private events have explicit visibility. Adult-private events are
   creator-only; child-private events are visibly labelled as accessible to the
-  child and designated guardian.
+  child and designated guardian **within the same household**. Guardianship does
+  not grant membership or bypass module access in another household.
 - Edit and delete permissions are separate: creator-only, selected members or
   all household members. Owners retain management of shared events, never an
   override of someone else's private items.
-- Cross-household sharing comes later through invitations to specific items,
-  with acceptance and revocation. It must not grant household membership,
-  Finance access or access to unrelated records. Children will not administer
-  external sharing.
+- Selected-member permissions use membership IDs, not account IDs. Rejoining a
+  household does not restore an old event grant: departure removes selected
+  grants so reused database IDs cannot inherit them. Private events can grant edit
+  or delete permission only to their creator or the child's designated guardian.
+- Only the creator or an owner of a shared event changes its visibility and
+  permission policies. Other editors change content only. Viewing a child-private
+  event does not automatically grant the guardian edit/delete permission.
+- A guardian transfer immediately removes the old guardian's private visibility;
+  the new guardian still needs household membership and Household Hub access.
+- When a creator leaves or deletes their account, private events are removed.
+  Shared events remain with the household, detached from their former creator,
+  and owners manage them. Existing other-member edit/delete grants remain.
+- All-day end dates are inclusive. Timed event input/display is London-local,
+  stored as UTC. Events ending exactly at midnight do not occupy the next day.
+  Nonexistent spring clock-change times and ambiguous autumn times are rejected
+  with an explicit instruction to choose an unambiguous time.
 
-No calendar records, guardian visibility into calendar content or external
-sharing exist in this release. Existing Finance childcare records are unrelated
+## Future feeds and external sharing (not implemented)
+
+Cross-household sharing will use invitations to specific items, with acceptance
+and revocation. It must not grant household membership, Finance access or access
+to unrelated records. Children will not administer external sharing.
+
+Meal/activity/task feeds and external sharing are not available. Existing Finance childcare records are unrelated
 to managed-child sign-in accounts. The previous JonesHQ hub is a feature
 reference only; its test data, authentication and styling are not being imported.

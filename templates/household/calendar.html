@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}Household calendar{% endblock %}
+{% block extra_css %}
+<style>
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .3rem; }
+.calendar-day { min-height: 8rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: .5rem; min-width: 0; background: var(--bg-surface); }
+.calendar-day.today { border: 2px solid var(--brand); }
+.calendar-day.outside { opacity: .65; }
+.calendar-event { display: block; overflow-wrap: anywhere; font-size: .85rem; margin-top: .5rem; }
+.calendar-weekday { text-align: center; font-weight: 600; }
+@media (max-width: 767px) {
+    .calendar-day { min-height: 6rem; padding: .2rem; }
+    .calendar-event { font-size: .7rem; }
+    .calendar-grid { gap: .15rem; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div><h1>Household calendar</h1><p class="text-muted mb-0">Europe/London &middot; Shared household plans and your private events.</p></div>
+    <a class="btn btn-primary" href="{{ url_for('household.create_event') }}"><i class="bi bi-calendar-plus me-1" aria-hidden="true"></i>New event</a>
+</div>
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div class="d-flex gap-2 align-items-center">
+        {% if previous %}<a class="btn btn-outline-secondary" aria-label="Previous month" href="{{ url_for('household.calendar', month=previous, view=view) }}">&laquo;</a>{% endif %}
+        <h2 class="h4 mb-0">{{ month.strftime('%B %Y') }}</h2>
+        {% if following %}<a class="btn btn-outline-secondary" aria-label="Next month" href="{{ url_for('household.calendar', month=following, view=view) }}">&raquo;</a>{% endif %}
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('household.calendar', view=view) }}">Today</a>
+        <div class="btn-group" aria-label="Calendar view">
+            {% for mode in ['month', 'agenda'] %}<a class="btn btn-{{ 'primary' if view == mode else 'outline-primary' }}" href="{{ url_for('household.calendar', month=month.strftime('%Y-%m'), view=mode) }}"{% if view == mode %} aria-current="page"{% endif %}>{{ mode|title }}</a>{% endfor %}
+        </div>
+    </div>
+</div>
+{% if view == 'month' %}
+<section class="card"><div class="card-body p-2 p-md-3">
+    <div class="calendar-grid" aria-label="{{ month.strftime('%B %Y') }}">
+        {% for name in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}<div class="calendar-weekday">{{ name }}</div>{% endfor %}
+        {% for week in weeks %}{% for day in week %}
+        <div class="calendar-day{{ ' today' if day == today }}{{ ' outside' if day.month != month.month }}">
+            <time datetime="{{ day.isoformat() }}" aria-label="{{ day.strftime('%A %d %B %Y') }}">{{ day.day }}</time>
+            {% for event in days[day] %}
+            <a class="calendar-event" href="{{ url_for('household.event', event_id=event.id) }}" title="{{ calendar_service.privacy_label(event) }}">
+                {% if event.visibility == 'private' %}<i class="bi bi-lock" aria-label="Private"></i>{% endif %}
+                {% if not event.all_day %}{{ calendar_service.local_time(event.starts_at).strftime('%H:%M') }} {% endif %}{{ event.title }}
+            </a>
+            {% endfor %}
+        </div>
+        {% endfor %}{% endfor %}
+    </div>
+</div></section>
+{% else %}
+{% set found = namespace(value=false) %}
+{% for day, events in days.items() %}{% if day.month == month.month and events %}
+{% set found.value = true %}
+<section class="card mb-3"><div class="card-body">
+    <h3 class="h5">{{ day.strftime('%A %d %B') }}</h3>
+    <ul class="list-unstyled mb-0">
+    {% for event in events %}
+        <li class="py-2">
+            <a href="{{ url_for('household.event', event_id=event.id) }}">{{ event.title }}</a>
+            <span class="text-muted">{{ 'All day' if event.all_day else calendar_service.local_time(event.starts_at).strftime('%H:%M %Z') }}</span>
+            <div class="small text-muted">{{ calendar_service.privacy_label(event) }}</div>
+        </li>
+    {% endfor %}
+    </ul>
+</div></section>
+{% endif %}{% endfor %}
+{% if not found.value %}<div class="card"><div class="card-body"><h3 class="h5">A little space in the calendar</h3><p class="mb-0">No events visible to you this month. Add an event to start planning.</p></div></div>{% endif %}
+{% endif %}
+{% endblock %}

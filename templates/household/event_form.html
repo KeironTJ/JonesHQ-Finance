@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Edit' if event else 'New' }} calendar event{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if event else 'New' }} calendar event</h1>
+<p class="text-muted">Times use Europe/London. All-day end dates are inclusive. Nonexistent or repeated clock-change times must be changed to an unambiguous time.</p>
+{% set form = submitted if submitted is not none else {} %}
+<form method="POST" class="card">
+<div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3"><label class="form-label" for="title">Title</label><input class="form-control" id="title" name="title" maxlength="200" value="{{ form.get('title', event.title if event else '') }}" required></div>
+    <div class="mb-3"><label class="form-label" for="location">Location</label><input class="form-control" id="location" name="location" maxlength="200" value="{{ form.get('location', event.location if event else '') }}"></div>
+    <div class="mb-3"><label class="form-label" for="description">Notes</label><textarea class="form-control" id="description" name="description" maxlength="5000" rows="3">{{ form.get('description', event.description if event else '') }}</textarea></div>
+    {% set all_day = form.get('all_day') == 'on' if submitted is not none else (event.all_day if event else true) %}
+    <div class="form-check mb-3"><input class="form-check-input" id="all_day" name="all_day" type="checkbox"{% if all_day %} checked{% endif %}><label class="form-check-label" for="all_day">All-day event</label></div>
+    <fieldset id="allDayFields" class="mb-3"><legend class="h6">All-day dates</legend><div class="row g-3">
+        {% for key, label in [('starts_on', 'Start date'), ('ends_on', 'End date (inclusive)')] %}
+        <div class="col-md-6"><label class="form-label" for="{{ key }}">{{ label }}</label><input class="form-control" id="{{ key }}" name="{{ key }}" type="date" min="1900-01-01" max="2100-12-31" value="{{ form.get(key, event|attr(key) if event else today) }}"></div>
+        {% endfor %}
+    </div></fieldset>
+    <fieldset id="timedFields" class="mb-3"><legend class="h6">London date and time</legend><div class="row g-3">
+        {% for key, label in [('starts_at', 'Start time'), ('ends_at', 'End time')] %}
+        <div class="col-md-6"><label class="form-label" for="{{ key }}">{{ label }}</label><input class="form-control" id="{{ key }}" name="{{ key }}" type="datetime-local" value="{{ form.get(key, calendar_service.local_time(event|attr(key)).strftime('%Y-%m-%dT%H:%M') if event and event|attr(key) else '') }}"></div>
+        {% endfor %}
+    </div></fieldset>
+    {% if can_manage %}
+    <div class="mb-3">
+        <label class="form-label" for="visibility">Visibility</label>
+        <select class="form-select" id="visibility" name="visibility">
+            {% for value, label in [('shared', 'Shared with household'), ('private', 'Private: creator only (managed children: child and designated guardian)')] %}
+            <option value="{{ value }}"{% if form.get('visibility', event.visibility if event else 'shared') == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <div class="form-text">Household owners manage shared events, but cannot override private visibility. Only the creator or an owner of a shared event can change permissions.</div>
+    </div>
+    <div class="row g-3">
+    {% for action, label in [('edit', 'Who can edit?'), ('delete', 'Who can delete?')] %}
+        <fieldset class="col-md-6 mb-3">
+            <legend class="h6">{{ label }}</legend>
+            <label class="visually-hidden" for="{{ action }}_policy">{{ label }}</label>
+            <select class="form-select mb-2" id="{{ action }}_policy" name="{{ action }}_policy">
+                {% for value, policy_label in policies.items() %}<option value="{{ value }}"{% if form.get(action ~ '_policy', event|attr(action ~ '_policy') if event else 'creator') == value %} selected{% endif %}>{{ policy_label }}</option>{% endfor %}
+            </select>
+            <p class="small text-muted">For selected members, tick below. Private events can select only the creator or the child's designated guardian in this household.</p>
+            {% set selected = form.get(action ~ '_members', event|attr(action ~ '_members') if event else [])|map('string')|list %}
+            {% for member in members %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="{{ action }}_members" id="{{ action }}-{{ member.id }}" value="{{ member.id }}"{% if member.id|string in selected %} checked{% endif %}>
+                <label class="form-check-label" for="{{ action }}-{{ member.id }}">{{ member.user.name }}</label>
+            </div>
+            {% endfor %}
+        </fieldset>
+    {% endfor %}
+    </div>
+    {% else %}<p class="text-muted">{{ calendar_service.privacy_label(event) }}. You can edit event details, not its permissions.</p>{% endif %}
+    <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">Save event</button><a class="btn btn-outline-secondary" href="{{ url_for('household.event', event_id=event.id) if event else url_for('household.calendar') }}">Cancel</a></div>
+</div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+    const allDay = document.getElementById('all_day');
+    const refresh = () => {
+        document.getElementById('allDayFields').hidden = !allDay.checked;
+        document.getElementById('timedFields').hidden = allDay.checked;
+    };
+    allDay.addEventListener('change', refresh);
+    refresh();
+})();
+</script>
+{% endblock %}

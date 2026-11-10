@@ -13,6 +13,7 @@ from models import (
     User, UserRecoveryCode, UserSession, Vehicle,
 )
 from models.family import HouseholdMembership
+from models.calendar_event import CalendarEvent
 from models.expense_calendar import ExpenseCalendarEntry
 from models.passkeys import PasskeyChallenge, UserPasskey
 from models.settings import Settings
@@ -41,6 +42,7 @@ DOMAIN_CHILDREN = (
     (ExpenseCalendarEntry, Expense, 'expense_id'),
 )
 DELETE_ORDER = (
+    CalendarEvent,
     ExpenseCalendarEntry, PlanItem, Trip, TripSchedule, TripTemplate, FuelRecord, LoanTermChange, LoanPayment,
     PensionSnapshot, CreditCardPromotion, Expense, Income, IncomeChange, CreditCardTransaction, Balance,
     MonthlyAccountBalance, Transaction, Subscription,
@@ -99,12 +101,16 @@ class AccountDeletionService:
                 if family_id != parents[parent_id]:
                     raise ValueError('Linked household data is inconsistent. Contact the service operator before deletion.')
                 plan.setdefault(child.__table__, {})[row_id] = family_id
-        memberships = db.session.execute(select(HouseholdMembership.id).where(
+        memberships = db.session.execute(select(HouseholdMembership.id, HouseholdMembership.family_id).where(
             HouseholdMembership.user_id == user.id,
         ))
-        plan[HouseholdMembership.__table__] = {
-            row_id: None for row_id in memberships.scalars()
-        }
+        plan[HouseholdMembership.__table__] = dict(memberships.all())
+        plan[CalendarEvent.__table__] = dict(db.session.execute(select(
+            CalendarEvent.id, CalendarEvent.family_id,
+        ).where(
+            CalendarEvent.creator_membership_id.in_(plan[HouseholdMembership.__table__]),
+            CalendarEvent.visibility == 'private',
+        )).all())
         for model, foreign_key in (
             (FamilyInvite, 'created_by_id'), (UserSession, 'user_id'), (UserRecoveryCode, 'user_id'),
             (PasskeyChallenge, 'user_id'), (UserPasskey, 'user_id'),
@@ -143,6 +149,8 @@ class AccountDeletionService:
             if not user.check_password(data.get('password') or ''):
                 raise ValueError('Your current password was not correct.')
             references = AccountDeletionService._references(plan)
+            from services.household.calendar_service import CalendarService
+            CalendarService.remove_membership_grants(plan[HouseholdMembership.__table__])
             counts = {table.name: len(ids) for table, ids in plan.items() if ids}
             # Deletion bypasses domain delete helpers: those can erase linked shared ledger entries.
             db.session.execute(update(HouseholdInvite).where(

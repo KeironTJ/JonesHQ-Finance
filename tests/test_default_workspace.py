@@ -19,7 +19,7 @@ def reset_login_state():
     limiter.reset()
 
 
-@pytest.mark.parametrize('workspace, destination', [('central', '/hub'), ('finance', '/dashboard')])
+@pytest.mark.parametrize('workspace, destination', [('central', '/hub'), ('finance', '/dashboard'), ('household', '/household/')])
 def test_workspace_is_personal_and_preserves_existing_preferences(app, family, user, workspace, destination):
     user.preferences = {
         'appearance.mode': 'auto', 'appearance.palette': 'purple',
@@ -60,7 +60,7 @@ def test_invalid_workspace_does_not_change_any_preferences(app, user, value):
     data = {} if value is None else {'default_workspace': value}
     response = client.post('/preferences/workspace', data=data, follow_redirects=True)
     assert response.status_code == 200
-    assert b'Choose Central Hub or Finance' in response.data
+    assert b'Choose an available default workspace.' in response.data
     assert user.preferences == {'default_workspace': 'finance', 'appearance.mode': 'dark'}
 
 

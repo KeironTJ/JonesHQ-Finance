@@ -77,7 +77,15 @@ Finance section permissions apply only after the module gate.
 `household/household_access_service.py` manages household-local grants and
 designated-guardian child creation, transfer and release, with atomic audit
 events. See [access policy](../docs/ACCESS_POLICY.md) for implemented boundaries
-and the future calendar/sharing design.
+and the calendar/sharing design.
+
+`household/calendar_service.py` owns manual event validation, London/UTC
+conversion, month/agenda data and independent edit/delete policies. Private
+visibility is enforced by the scoped query helpers, including child/guardian
+visibility without an owner bypass. Creator links and selected grants use
+household membership IDs. Departing members' private events are deleted and
+shared events retained for owners; account and household deletion use reviewed
+lifecycle rules. No meal/activity/task feed or external sharing is implemented.
 
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods

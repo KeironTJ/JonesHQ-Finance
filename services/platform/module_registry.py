@@ -1,21 +1,13 @@
 from flask import current_app
 
 from blueprints.finance import MODULE as FINANCE_MODULE
+from blueprints.household import MODULE as HOUSEHOLD_MODULE
 from services.household.membership_service import HouseholdMembershipService
 
 
 _MODULES = (
     FINANCE_MODULE,
-    {
-        'key': 'household',
-        'title': 'Household Hub',
-        'description': 'Organise household life with shared meals, activities and tasks.',
-        'icon': 'bi-house-heart',
-        'home_endpoint': None,
-        'status': 'planned',
-        'requires_household': True,
-        'default_destination': False,
-    },
+    HOUSEHOLD_MODULE,
 )
 
 _CENTRAL_DESTINATION = ('Central Hub', 'central.hub')
@@ -47,7 +39,8 @@ class ModuleRegistry:
             for module in _MODULES if module['status'] == 'available'
             and (
                 ModuleAccessService.can_access(user, module['key'])
-                or not ModuleRegistry.has_active_household(user) and not user.is_managed_child
+                or module['key'] == 'finance'
+                and not ModuleRegistry.has_active_household(user) and not user.is_managed_child
             )
         }
 

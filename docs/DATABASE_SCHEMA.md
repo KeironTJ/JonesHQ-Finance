@@ -69,6 +69,23 @@ account-owned records are not household financial data.
   Managed-child accounts cannot access Finance or household administration,
   regardless of grants or household role. See [access policy](ACCESS_POLICY.md).
 
+## Household Calendar
+
+- `calendar_events` is household-scoped. `creator_membership_id` references the
+  creator's membership, not their legacy/default household; a nullable `SET NULL`
+  foreign key lets shared events survive creator departure.
+- `starts_on` / `ends_on` are inclusive London calendar dates. All-day events
+  have no UTC timestamps; timed events also have UTC `starts_at` / `ends_at`,
+  with a strict positive duration. The end date excludes an exact midnight end.
+- Visibility is `shared` or `private`. Scoped query helpers include a private
+  event only for its creator or that managed child's designated guardian in the
+  same household. No owner override is applied.
+- Independent `edit_policy` / `delete_policy` values are `creator`, `selected`
+  or `household`; JSON member lists store selected membership IDs.
+- Migration `d72e8a4c901b` creates only this table and its two lookup indexes.
+  Household deletion removes every event. Account/membership deletion removes
+  private events and detaches the creator from surviving shared events.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)

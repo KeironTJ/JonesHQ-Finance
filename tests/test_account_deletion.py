@@ -16,6 +16,7 @@ from models import (
     TripSchedule, TripTemplate, User, UserRecoveryCode, UserSession, Vehicle,
 )
 from models.expense_calendar import ExpenseCalendarEntry
+from models.calendar_event import CalendarEvent
 from services.platform.account_deletion_service import AccountDeletionService, OWNED_MODELS
 from services.platform.user_session_service import _now
 from tests.auth_helpers import detach_user_from_households, login_client
@@ -68,6 +69,12 @@ def make_domains(owner, family_id, prefix):
                  gross_monthly_income=1000, take_home=900)
     recurring = add(RecurringIncome, **common, start_date=TODAY, pay_day=15,
                     gross_annual_income=12000, tax_code='1257L')
+    creator = owner.get_active_household_membership() if owner else None
+    if creator and creator.family_id != family_id:
+        creator = None
+    add(CalendarEvent, family_id=family_id, creator_membership_id=creator.id if creator else None,
+        title=prefix, starts_on=TODAY, ends_on=TODAY,
+        visibility='private' if creator else 'shared')
     expense = add(Expense, **common, date=TODAY, description=prefix,
                   expense_type='Hotel', cost=10, total_cost=10)
     category = add(Category, family_id=family_id, name='General', category_type='expense')

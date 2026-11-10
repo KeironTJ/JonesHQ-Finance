@@ -18,13 +18,22 @@ pensions, mortgages, subscriptions, and net worth.
 
 Signed-in visits to `/` and sign-in without a valid local `next` destination open
 the user's default workspace: Central Hub (`/hub`) unless Finance (`/dashboard`)
-is chosen under Personal preferences. Password, two-factor and passkey sign-in
+or Household Hub (`/household/`) is chosen under Personal preferences.
+Password, two-factor and passkey sign-in
 use the same landing rules. Explicit local destinations take precedence and still
 enforce their normal permissions. Detached accounts default to Account security.
 Household registration and invitation acceptance still lead to Central Hub.
 
 The hub opens Finance at `/dashboard`; existing Finance URLs are unchanged.
-Household Hub is a non-interactive "Coming soon" preview, not an imported application.
+Household Hub opens a manual calendar at `/household/`, with month and agenda
+views, all-day/timed events in Europe/London and separate edit/delete permissions.
+Shared events stay with the household when their creator leaves; private events
+are removed. Adult-private events are creator-only; managed-child private events
+also allow the designated guardian within the same household. Owners manage
+shared events but never override private visibility. See
+[access policy](docs/ACCESS_POLICY.md) for module grants and child restrictions.
+Meals, activities, task feeds and external sharing remain future work; no old
+JonesHQ records or authentication are imported.
 No billing or subscription entitlement enforcement is introduced.
 
 The shared sidebar discovers available modules through the platform registry.
@@ -42,7 +51,8 @@ Services must still set `family_id` explicitly using `get_family_id()`.
 Account security, household membership and personal preferences use the central
 navigation shell. Finance retains its own section navigation and settings.
 One Settings link opens Central settings (`/hub/settings`) from shared pages or
-Finance settings (`/hub/settings/finance`) from Finance. Both landing pages are
+Finance settings (`/hub/settings/finance`) from Finance, or Household Hub settings
+(`/household/settings`) from its calendar. These landing pages are
 available to members; their cards and shared sub-navigation respect existing
 owner and section permissions. Central covers appearance, the starting workspace,
 account security and household membership. Finance groups personal defaults,

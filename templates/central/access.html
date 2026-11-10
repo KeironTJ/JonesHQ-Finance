@@ -15,7 +15,7 @@
                     {% for key, label in module_labels.items() %}
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="modules" value="{{ key }}" id="module-{{ member.id }}-{{ key }}"{% if key in membership.allowed_modules and not (member.is_managed_child and key == 'finance') %} checked{% endif %}{% if member.is_managed_child and key == 'finance' %} disabled{% endif %}>
-                        <label class="form-check-label" for="module-{{ member.id }}-{{ key }}">{{ label }}{% if key == 'household' %} (coming soon){% endif %}</label>
+                        <label class="form-check-label" for="module-{{ member.id }}-{{ key }}">{{ label }}</label>
                     </div>
                     {% endfor %}
                     {% if member.is_managed_child %}
@@ -32,7 +32,7 @@
     <div class="card-body">
         <h2 class="h4">Create a managed child account</h2>
         <p>You become the designated guardian. The account starts with Household Hub allowed and Finance blocked. Existing adult accounts cannot be converted or taken over here.</p>
-        <p class="small text-muted">Household Hub is not available yet. Child accounts can currently sign in to Central Hub and manage their own appearance and sign-in security.</p>
+        <p class="small text-muted">Child accounts can use the Household Hub calendar, Central Hub, appearance and sign-in security.</p>
         <form method="POST" action="{{ url_for('central.create_managed_child') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label class="form-label" for="childName">Account name</label>

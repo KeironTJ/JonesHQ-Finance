@@ -120,6 +120,19 @@ def _apply_visibility(model, query):
     if hasattr(model, 'owner_id'):
         conditions.append((model.owner_id.is_(None)) | (model.owner_id == uid))
 
+    if getattr(model, '__tablename__', None) == 'calendar_events':
+        from models.family import HouseholdMembership
+        from models.users import User
+
+        creator_visible = HouseholdMembership.query.join(User).filter(
+            HouseholdMembership.id == model.creator_membership_id,
+            or_(
+                User.id == uid,
+                and_(User.account_type == 'child', User.guardian_id == uid),
+            ),
+        ).correlate(model).exists()
+        conditions.append(or_(model.visibility == 'shared', creator_visible))
+
     if getattr(model, '__tablename__', None) == 'subscriptions':
         from models.accounts import Account
         from models.credit_cards import CreditCard
@@ -208,7 +221,8 @@ def family_query(model, *, include_private=False):
 
     Also excludes records that are private to another family member (see
     ``_apply_visibility``). ``include_private`` is only for household-wide
-    internal quotas, never for returning another member's private records.
+    internal quotas and deletion lifecycle operations, never for returning
+    another member's private records.
 
     Examples::
 

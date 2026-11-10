@@ -30,8 +30,9 @@ def test_registry_owns_every_finance_blueprint(app):
         if blueprint.import_name.startswith('blueprints.finance.')
     }
     assert finance_blueprints
-    assert set(owners) == finance_blueprints
-    assert {module['key'] for module in owners.values()} == {'finance'}
+    assert {name for name, module in owners.items() if module['key'] == 'finance'} == finance_blueprints
+    assert {module['key'] for module in owners.values()} == {'finance', 'household'}
+    assert owners['household']['home_endpoint'] == 'household.calendar'
     assert not {'auth', 'central', 'family', 'preferences', 'site_admin'} & set(owners)
 
 
