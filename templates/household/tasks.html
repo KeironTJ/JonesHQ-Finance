@@ -36,6 +36,7 @@
                     {% if task.due_date %}Due {{ task.due_date.strftime('%d %b %Y') }}{% if task.due_time %} {{ task.due_time.strftime('%H:%M') }} Europe/London{% endif %}{% if not task.completed and task.due_date < today %} <span class="text-danger">Overdue</span>{% endif %} &middot; {% endif %}
                     {{ 'Assigned to ' ~ task.assignee.user.name if task.assignee else 'Unassigned' }}
                     {% if task.completed %} &middot; Completed by {{ task.completer.user.name if task.completer else 'a former member' }}{% endif %}
+                    {% if task.reward_job %} &middot; {{ task.reward_job.points }} reward points ({{ 'waiting for approval' if task.reward_job.state == 'submitted' else task.reward_job.state }}){% endif %}
                 </div>
             </div>
             {% include 'household/_task_completion.html' %}

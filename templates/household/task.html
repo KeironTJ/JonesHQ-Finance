@@ -21,7 +21,10 @@
         <div class="col-md-6"><label class="form-label" for="task_due_date">Due date (optional)</label><input class="form-control" id="task_due_date" name="due_date" type="date" min="1900-01-01" max="2100-12-31" value="{{ submitted.get('due_date', task.due_date.isoformat() if task and task.due_date else '') }}"></div>
         <div class="col-md-6"><label class="form-label" for="task_due_time">Due time (Europe/London, optional)</label><input class="form-control" id="task_due_time" name="due_time" type="time" value="{{ submitted.get('due_time', task.due_time.strftime('%H:%M') if task and task.due_time else '') }}"></div>
     </div>
-    <p class="form-text mt-3">Incomplete dated tasks appear in your calendar, subject to list privacy. Completion removes them from the calendar; reopening restores them. Rewards and recurring tasks are not available yet.</p>
+    {% if not current_user.is_managed_child %}
+    <div class="mt-3"><label class="form-label" for="reward_points">Reward points (optional)</label><input class="form-control" id="reward_points" name="reward_points" type="number" min="0" max="1000" value="{{ submitted.get('reward_points', task.reward_job.points if task and task.reward_job else '') }}"><div class="form-text">For a shared task assigned to a child. Completion sends it for adult approval; each job earns points only once. Leave blank for an ordinary task. Existing reward jobs keep their points; close them from Rewards if no longer needed.</div></div>
+    {% endif %}
+    <p class="form-text mt-3">Incomplete dated tasks appear in your calendar, subject to list privacy. Completion removes them; reopening restores them. Recurring tasks are not available yet.</p>
     <button class="btn btn-primary mt-2" type="submit">Save task</button>
 </div></form>
 {% elif not task %}
@@ -35,6 +38,7 @@
     <p class="text-muted mb-0">{{ 'Only the list creator manages this personal task.' if task.task_list.visibility == 'personal' else 'Adults manage shared task details. Children complete or reopen only tasks assigned to them.' }}</p>
 </div></section>
 {% endif %}
+{% if task and task.reward_job %}<p class="mt-3">Reward job: {{ task.reward_job.points }} points &middot; {{ task.reward_job.state|title }}. <a href="{{ url_for('household.rewards') }}">Open Rewards</a>. Approved jobs never earn points again when reopened.</p>{% endif %}
 {% if task and can_manage %}
 <form method="POST" action="{{ url_for('household.delete_task', task_id=task.id) }}" onsubmit="return confirm('Delete this task?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-danger" type="submit">Delete task</button></form>
 {% endif %}

@@ -44,6 +44,7 @@ SQLAlchemy database models
 - `meals.py` - Shared household meal library and multiple planned meals per date/slot
 - `activities.py` - Household activities, child suggestions/reviews and member attendance
 - `household_tasks.py` - Personal/shared task lists, member assignments and completion attribution
+- `rewards.py` - Shared-task reward jobs, reward catalogue/requests, point ledger and child goals
 - `childcare.py` - Childcare records and related entities
 - `credit_cards.py` - Credit card model
 - `credit_card_transactions.py` - Credit card transactions

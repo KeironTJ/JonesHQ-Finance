@@ -20,6 +20,7 @@ from models.calendar_event import CalendarEvent
 from models.meals import Meal, PlannedMeal
 from models.activities import Activity, ActivityAttendee
 from models.household_tasks import HouseholdTask, TaskList
+from models.rewards import Reward, RewardGoal, RewardJob, RewardPointEntry, RewardRequest
 from services.platform.account_deletion_service import AccountDeletionService, OWNED_MODELS
 from services.platform.user_session_service import _now
 from tests.auth_helpers import detach_user_from_households, login_client
@@ -89,9 +90,21 @@ def make_domains(owner, family_id, prefix):
     task_list = add(TaskList, family_id=family_id, title=prefix,
                     visibility='personal' if creator else 'shared',
                     creator_membership_id=creator.id if creator else None)
-    add(HouseholdTask, family_id=family_id, list_id=task_list.id, title=prefix,
+    task = add(HouseholdTask, family_id=family_id, list_id=task_list.id, title=prefix,
         creator_membership_id=creator.id if creator else None,
         assigned_membership_id=creator.id if creator else None)
+    member_id = creator.id if creator else None
+    reward = add(Reward, family_id=family_id, title=prefix, points_cost=1)
+    job = add(RewardJob, family_id=family_id, task_id=task.id, title=prefix, points=2,
+              membership_id=member_id, reviewer_membership_id=member_id, state='approved')
+    request = add(RewardRequest, family_id=family_id, reward_id=reward.id, title=prefix,
+                  points_cost=1, membership_id=member_id, reviewer_membership_id=member_id,
+                  created_at=_now(), request_key=prefix)
+    add(RewardPointEntry, family_id=family_id, job_id=job.id, membership_id=member_id,
+        actor_membership_id=member_id, kind='earned', points=2, description=prefix, created_at=_now())
+    add(RewardPointEntry, family_id=family_id, request_id=request.id, membership_id=member_id,
+        actor_membership_id=member_id, kind='reserved', points=-1, description=prefix, created_at=_now())
+    add(RewardGoal, family_id=family_id, membership_id=member_id, reward_id=reward.id)
     expense = add(Expense, **common, date=TODAY, description=prefix,
                   expense_type='Hotel', cost=10, total_cost=10)
     category = add(Category, family_id=family_id, name='General', category_type='expense')

@@ -1,0 +1,19 @@
+<article class="card reward-job"><div class="card-body">
+    <div class="d-flex justify-content-between gap-3"><h3 class="h5 text-break">{{ job.title }}</h3><span class="badge bg-primary align-self-start text-nowrap">{{ job.points }} points</span></div>
+    {% if not child_view %}<p>{{ job.member.user.name if job.member else 'Former member' }}</p>{% endif %}
+    {% if job.task and job.task.notes %}<p class="text-break">{{ job.task.notes }}</p>{% endif %}
+    {% if job.task and job.task.due_date %}<p class="small text-muted">Planned for {{ job.task.due_date.strftime('%a %d %b') }}{% if job.task.due_time %}, {{ job.task.due_time.strftime('%H:%M') }} London{% endif %}</p>{% endif %}
+    {% if job.review_note %}<p class="alert alert-info text-break mb-3">{{ job.review_note }}</p>{% endif %}
+    {% if child_view %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='submit-job') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="job_id" value="{{ job.id }}">
+        <button class="btn btn-primary w-100" type="submit"><i class="bi bi-check2-circle" aria-hidden="true"></i> I've done it!</button>
+    </form>
+    {% else %}
+    <a class="btn btn-outline-primary" href="{{ url_for('household.task', task_id=job.task_id) }}">View task</a>
+    <form method="POST" class="mt-2" action="{{ url_for('household.reward_action', action='review-job') }}" onsubmit="return confirm('Close this job without awarding points?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="job_id" value="{{ job.id }}"><input type="hidden" name="action" value="close">
+        <button class="btn btn-outline-secondary" type="submit">Close job (no points)</button>
+    </form>
+    {% endif %}
+</div></article>

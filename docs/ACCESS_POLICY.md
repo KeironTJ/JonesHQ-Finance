@@ -156,8 +156,8 @@ and visible incomplete dated tasks also contribute source-linked items.
   accidentally publishing private work. List deletion removes its tasks.
 - Completion is an explicit POST complete/reopen action, not an unsafe toggle.
   Creator/completer and completion time are server-controlled. Repeating a
-  completion preserves its actor/time; reopening clears them. There are no
-  rewards or completion-approval mechanics yet.
+  completion preserves its actor/time; reopening clears them. Ordinary tasks
+  have no approval step. Reward-bearing tasks submit separately for points approval.
 - Optional due dates are London calendar dates; due times require dates and
   reject ambiguous/nonexistent DST times. Incomplete dated tasks appear directly
   in each authorised viewer's month/agenda calendar, not duplicate manual events.
@@ -168,12 +168,49 @@ and visible incomplete dated tasks also contribute source-linked items.
   This prevents reused membership IDs inheriting assignments or attribution.
   Household deletion removes tasks before lists and memberships.
 
-## Future rewards and external sharing (not implemented)
+## Rewards (implemented)
+
+- Rewards belongs to Household Hub, never Finance. Any active adult with Hub
+  access can set up shared-task jobs/rewards, review a child's finished work and
+  approve/decline reward requests. This does not require household ownership or
+  designated guardianship. Child status is account-level, not a mutable role.
+- Children have My jobs, My rewards and My progress screens with labelled,
+  large controls. They see only their own reward jobs, goals, balances, requests
+  and point history through scoped helpers; no sibling/guardian visibility
+  override applies to reward progress. The catalogue is household-shared.
+- Adults can add points to an unfinished shared task assigned to an active
+  household child, or create a reward job from Rewards (the same shared-task
+  domain, not a second chore system). Personal tasks cannot earn points.
+  No open-job claiming is implemented; each job has a named child.
+- Completion from either Tasks or Rewards moves the job to waiting for approval.
+  An adult approves once or sends it back with a helpful note. Sending back
+  reopens the task. Reopening an approved task does not award points again.
+  Point/assignee changes are restricted once submitted; use a new task for a
+  different child or a new earning opportunity.
+- Current jobs exclude past-due jobs, shown separately under Earlier jobs.
+  Approved/closed jobs live in progress history, not an overdue list. Adults can
+  reschedule a task or explicitly close a job without points (also completing
+  the task so it leaves the calendar). Nothing repeats or expires automatically.
+- Points are a household-local ledger, not money. Household row locking
+  serializes balance checks and transitions on SQLite/PostgreSQL; database unique
+  constraints prevent duplicate awards/reservations/refunds. A request reserves
+  its snapshot cost immediately, approval consumes the reservation, and decline
+  with a helpful note returns it once. Double submission is idempotent.
+- Rewards can be paused/edited, not deleted through the UI. Requests retain their
+  original title/cost. Goals reference the current available reward and show
+  spendable points (pending reservations excluded).
+- Removing a member or deleting an account detaches membership attribution,
+  closes outstanding reward jobs and resolves pending requests; rejoining never
+  inherits the departed membership's points. Deleting a task/list closes its
+  unfinished reward job and detaches the task, retaining approved point history.
+  Whole-household deletion removes all reward records child-first.
+
+## Future enhancements and external sharing (not implemented)
 
 Cross-household sharing will use invitations to specific items, with acceptance
 and revocation. It must not grant household membership, Finance access or access
 to unrelated records. Children will not administer external sharing.
 
-Rewards, recurring tasks and external sharing are not available. Existing Finance childcare records are unrelated
+Behaviour ratings, streaks, achievements, recurring tasks and external sharing are not available. Existing Finance childcare records are unrelated
 to managed-child sign-in accounts. The previous JonesHQ hub is a feature
 reference only; its test data, authentication and styling are not being imported.

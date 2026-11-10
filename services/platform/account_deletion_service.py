@@ -16,6 +16,7 @@ from models.family import HouseholdMembership
 from models.calendar_event import CalendarEvent
 from models.activities import ActivityAttendee
 from models.household_tasks import HouseholdTask, TaskList
+from models.rewards import RewardGoal, RewardJob, RewardPointEntry, RewardRequest
 from models.expense_calendar import ExpenseCalendarEntry
 from models.passkeys import PasskeyChallenge, UserPasskey
 from models.settings import Settings
@@ -44,6 +45,7 @@ DOMAIN_CHILDREN = (
     (ExpenseCalendarEntry, Expense, 'expense_id'),
 )
 DELETE_ORDER = (
+    RewardPointEntry, RewardRequest, RewardGoal, RewardJob,
     HouseholdTask, TaskList,
     ActivityAttendee,
     CalendarEvent,
@@ -172,6 +174,30 @@ class AccountDeletionService:
             if not user.check_password(data.get('password') or ''):
                 raise ValueError('Your current password was not correct.')
             references = AccountDeletionService._references(plan)
+            for membership_id, family_id in plan[HouseholdMembership.__table__].items():
+                db.session.execute(update(RewardJob).where(
+                    RewardJob.family_id == family_id, RewardJob.membership_id == membership_id,
+                    RewardJob.state.in_(('open', 'submitted')),
+                ).values(state='closed', review_note='The member left the household.'))
+                pending = db.session.execute(select(RewardRequest).where(
+                    RewardRequest.family_id == family_id, RewardRequest.membership_id == membership_id,
+                    RewardRequest.state == 'pending',
+                )).scalars().all()
+                for reward_request in pending:
+                    reward_request.state = 'declined'
+                    reward_request.review_note = 'The member left the household.'
+                    reward_request.reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    db.session.add(RewardPointEntry(
+                        family_id=family_id, membership_id=None, request_id=reward_request.id,
+                        kind='returned', points=reward_request.points_cost,
+                        description=reward_request.title, created_at=reward_request.reviewed_at,
+                    ))
+            for task_id, family_id in plan[HouseholdTask.__table__].items():
+                db.session.execute(update(RewardJob).where(
+                    RewardJob.family_id == family_id, RewardJob.task_id == task_id,
+                    RewardJob.state.in_(('open', 'submitted')),
+                ).values(state='closed', review_note='The task was removed.'))
+            db.session.flush()
             from services.household.calendar_service import CalendarService
             CalendarService.remove_membership_grants(plan[HouseholdMembership.__table__])
             counts = {table.name: len(ids) for table, ids in plan.items() if ids}

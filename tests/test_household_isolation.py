@@ -38,10 +38,12 @@ ID_FIELDS = (
     'mortgage_id', 'mortgage_product_id', 'reimbursement_group_id', 'activity_type_id',
     'default_account_id', 'default_category_id', 'parent_id', 'group_id', 'member_id',
     'meal_id', 'activity_id', 'membership_id', 'list_id', 'task_id', 'assigned_membership_id',
+    'job_id', 'reward_id', 'request_id',
 )
 SKIP_ENDPOINT_PREFIXES = ('static', 'admin.', 'auth.', 'onboarding.')
 # Satisfy table CHECK constraints the generic seeder cannot infer.
 TABLE_OVERRIDES = {
+    'reward_points': {'kind': 'earned', 'points': 1},
     'subscriptions': {'amount': Decimal('-1'), 'account_id': FOREIGN_ID, 'credit_card_id': None},
     'subscription_price_changes': {
         'amount': Decimal('-1'),

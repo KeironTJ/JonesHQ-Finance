@@ -5,7 +5,7 @@ household_bp = Blueprint('household', __name__, url_prefix='/household')
 
 
 def register_blueprints(app):
-    from . import routes, meal_routes, activity_routes, task_routes
+    from . import routes, meal_routes, activity_routes, task_routes, reward_routes
     app.register_blueprint(household_bp)
 
 
@@ -43,6 +43,8 @@ MODULE = {
             'tasks', 'create_task_list', 'edit_task_list', 'delete_task_list',
             'create_task', 'task', 'complete_task', 'delete_task',
         )},
+        'household.rewards': 'Rewards',
+        'household.reward_action': 'Rewards',
     },
     'status': 'available',
     'requires_household': True,

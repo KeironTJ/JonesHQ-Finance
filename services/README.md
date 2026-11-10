@@ -123,7 +123,21 @@ immutable and tasks cannot move lists, preventing accidental publication of
 private content. Date-based stats/filters use London today; optional due times
 must have dates and pass the calendar's DST validation. Personal lists/tasks
 are removed on member/account departure, shared work survives with membership
-links detached. No rewards or recurring tasks are implemented.
+links detached. Reward-bearing shared tasks call `RewardService` before commit
+for configuration and completion transitions; ordinary task behaviour is unchanged.
+Recurring tasks are not implemented.
+
+`household/reward_service.py` supplies child jobs/rewards/progress and separate
+adult setup/approvals. Jobs reuse shared tasks; personal lists never participate.
+Household row locking covers task writes and reward transitions so concurrent
+reviews, reopen actions and balance checks serialize. Unique ledger constraints
+enforce once-only earnings, request reservation and refund. Reward requests
+snapshot title/cost and reserve spendable points until approved or declined.
+No Finance records, behaviour ratings, streaks or achievements are involved.
+Earlier unfinished jobs are grouped separately; explicit close completes the
+task without points, retaining history. Membership/task lifecycle helpers close
+outstanding work and detach attribution; account deletion performs the same
+reviewed transitions across all the account's memberships before detaching links.
 
 `finance/balance_service.py` owns account and credit-card balance
 recalculation. Routes use it after transaction workflows; legacy model methods

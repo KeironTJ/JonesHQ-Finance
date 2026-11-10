@@ -145,7 +145,28 @@ account-owned records are not household financial data.
 - Scoped helpers apply list visibility to tasks; no `owner_id` is needed on
   either table. Migration `b16c2e8a345f` creates only these two tables, named CHECK
   constraints and lookup indexes. Calendar feeds read incomplete dated tasks
-  directly; rewards, recurrence and task movement are not implemented.
+  directly; recurrence and task movement are not implemented.
+
+## Household Rewards
+
+Migration `c27d3f9b456a` adds five household-scoped tables only:
+
+- `household_rewards`: title, description, checked 1–10,000 point cost, icon and
+  availability. Pausing replaces destructive deletion.
+- `reward_jobs`: nullable unique shared-task FK, child membership, title snapshot,
+  1–1,000 points, open/submitted/approved/closed state, review actor/time/note.
+  Task deletion detaches its FK and closes unapproved work, retaining earned history.
+- `reward_requests`: nullable child/reward/reviewer FKs, title/cost snapshot,
+  pending/approved/declined state and timestamps/note. A membership/request UUID
+  unique constraint makes replayed submissions idempotent.
+- `reward_points`: append-only service ledger, signed integer points, checked
+  earned/reserved/returned kind, nullable job/request/member/actor references.
+  Unique job and request/kind constraints prevent duplicate credits/debits.
+  Spendable balance is SUM(points); pending requests already reserve their cost.
+- `reward_goals`: one nullable membership FK per child's selected reward goal.
+  Membership references use `SET NULL`; services explicitly detach before departure
+  to prevent SQLite ID reuse inheriting records. No rewards cross households or
+  link to Finance. Named constraints match the models for migration round trips.
 
 ## Core Financial Models
 

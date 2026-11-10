@@ -53,8 +53,15 @@ own personal lists. A child's personal list is also viewable by their designated
 guardian in the same household; adult personal lists remain creator-only.
 Incomplete dated tasks feed each viewer's calendar according to list privacy.
 List privacy is fixed at creation, and tasks cannot move between lists.
-Rewards, recurring tasks and external sharing remain future work; no old JonesHQ
-records or authentication are imported.
+Rewards offers child-friendly My jobs / My rewards / My progress pages and a
+separate adult setup/approval inbox. Adults can create a reward job directly or
+attach points to an existing shared task assigned to a child. Personal lists
+never earn points. Adult approval awards points once per job, even if reopened;
+reward requests hold points until approved or returned on decline. Optional
+reward goals show progress. Earlier jobs sit separately from current work;
+finished/closed jobs stay in history. Adults can reschedule or close old work.
+Behaviour ratings, streaks, achievements, recurring tasks and external sharing
+remain future work; no old JonesHQ records or authentication are imported.
 No billing or subscription entitlement enforcement is introduced.
 
 The shared sidebar discovers available modules through the platform registry.

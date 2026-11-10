@@ -19,10 +19,13 @@
     <h2 class="h5">Tasks &amp; personal lists</h2>
     <p>Adults manage shared household lists and tasks. Children can complete/reopen only shared tasks assigned to them. All members can manage their own personal lists; a child's designated guardian can also view their personal lists within this household, but cannot change them. Adult personal lists are creator-only, even for household owners.</p>
     <p>List privacy is fixed at creation and tasks cannot move lists. Personal lists/tasks are deleted on member/account departure; shared work remains with assignments and attribution detached. Incomplete dated tasks appear in each authorised viewer's calendar; completion removes them and reopening restores them. Today/overdue filters use the London date.</p>
-    <p>Rewards, recurring tasks and external sharing are not available yet.</p>
+    <h2 class="h5">Rewards</h2>
+    <p>Any adult with Household Hub access can set up shared-task reward jobs and approve points or reward requests. Children see their own jobs, progress and goals, not other children's point histories. Personal lists never earn points. Each job earns points once, even if reopened. Reward requests hold points until approved or returned on decline.</p>
+    <p>Earlier jobs are separate from current work. Adults can reschedule tasks or close jobs without awarding points; finished jobs stay in history. Behaviour ratings, streaks, achievements, recurring tasks and external sharing are not available yet.</p>
     <a class="btn btn-primary" href="{{ url_for('household.calendar') }}">Open calendar</a>
     <a class="btn btn-outline-primary" href="{{ url_for('household.meal_planner') }}">Open meal planner</a>
     <a class="btn btn-outline-primary" href="{{ url_for('household.activity_planner') }}">Open activity planner</a>
     <a class="btn btn-outline-primary" href="{{ url_for('household.tasks') }}">Open tasks</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.rewards') }}">Open rewards</a>
 </div></section>
 {% endblock %}

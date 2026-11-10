@@ -135,7 +135,10 @@ def complete_task(task_id):
         current_app.logger.exception('Unable to change household task completion')
         flash('Unable to change task completion. No changes were saved.', 'danger')
         return redirect(url_for('household.task', task_id=task_id))
-    flash('Task completed.' if task.completed else 'Task reopened.', 'success')
+    if task.reward_job and task.reward_job.state == 'submitted':
+        flash('Job submitted. Points are awarded after adult approval.', 'success')
+    else:
+        flash('Task completed.' if task.completed else 'Task reopened.', 'success')
     return redirect(url_for('household.tasks', list_id=task.list_id, filter=filt))
 
 

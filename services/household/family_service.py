@@ -178,6 +178,8 @@ class FamilyService:
         CalendarService.detach_membership(membership)
         from services.household.activity_service import ActivityService
         ActivityService.detach_membership(membership)
+        from services.household.reward_service import RewardService
+        RewardService.detach_membership(membership)
         from services.household.task_service import TaskService
         TaskService.detach_membership(membership)
         from models.meals import PlannedMeal

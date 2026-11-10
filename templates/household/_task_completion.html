@@ -2,6 +2,6 @@
 <form method="POST" action="{{ url_for('household.complete_task', task_id=task.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="filter" value="{{ filt|default('active') }}">
-    <button class="btn btn-sm btn-outline-{{ 'secondary' if task.completed else 'success' }}" name="action" value="{{ 'reopen' if task.completed else 'complete' }}" type="submit">{{ 'Reopen' if task.completed else 'Complete' }}</button>
+    <button class="btn btn-sm btn-outline-{{ 'secondary' if task.completed else 'success' }}" name="action" value="{{ 'reopen' if task.completed else 'complete' }}" type="submit">{{ 'Reopen' if task.completed else 'Submit for approval' if task.reward_job and task.reward_job.state == 'open' else 'Complete' }}</button>
 </form>
 {% endif %}

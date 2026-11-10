@@ -3,6 +3,7 @@
 from models.accounts import Account
 from models.activities import Activity, ActivityAttendee
 from models.household_tasks import HouseholdTask, TaskList
+from models.rewards import Reward, RewardGoal, RewardJob, RewardPointEntry, RewardRequest
 from models.balances import Balance
 from models.budgets import Budget
 from models.calendar_event import CalendarEvent
@@ -52,6 +53,11 @@ __all__ = [
     'ActivityAttendee',
     'HouseholdTask',
     'TaskList',
+    'Reward',
+    'RewardGoal',
+    'RewardJob',
+    'RewardPointEntry',
+    'RewardRequest',
     'Balance',
     'Budget',
     'CalendarEvent',

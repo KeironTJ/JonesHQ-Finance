@@ -69,7 +69,8 @@ class TaskService:
 
     @staticmethod
     def create_list(data):
-        membership = CalendarService.require_access()
+        from services.household.reward_service import RewardService
+        membership = RewardService._lock()
         task_list = TaskList(
             family_id=membership.family_id, creator_membership_id=membership.id,
             **TaskService._list_values(data),
@@ -80,6 +81,8 @@ class TaskService:
 
     @staticmethod
     def update_list(list_id, data):
+        from services.household.reward_service import RewardService
+        RewardService._lock()
         task_list = TaskService.get_list(list_id)
         if not TaskService.can_manage_list(task_list):
             abort(403)
@@ -91,9 +94,12 @@ class TaskService:
 
     @staticmethod
     def delete_list(list_id):
+        from services.household.reward_service import RewardService
+        RewardService._lock()
         task_list = TaskService.get_list(list_id)
         if not TaskService.can_manage_list(task_list):
             abort(403)
+        RewardService.detach_tasks(task_list.tasks)
         db.session.delete(task_list)
         db.session.commit()
 
@@ -143,7 +149,8 @@ class TaskService:
 
     @staticmethod
     def create_task(data):
-        membership = CalendarService.require_access()
+        from services.household.reward_service import RewardService
+        membership = RewardService._lock()
         try:
             task_list = family_get(TaskList, data.get('list_id'))
         except (TypeError, ValueError) as error:
@@ -153,15 +160,18 @@ class TaskService:
         if not TaskService.can_manage_list(task_list):
             abort(403)
         task = HouseholdTask(
-            family_id=membership.family_id, list_id=task_list.id,
+            family_id=membership.family_id, task_list=task_list,
             creator_membership_id=membership.id, **TaskService._task_values(data, task_list),
         )
         db.session.add(task)
+        RewardService.configure_task(task, data)
         db.session.commit()
         return task
 
     @staticmethod
     def update_task(task_id, data):
+        from services.household.reward_service import RewardService
+        RewardService._lock()
         task = TaskService.get_task(task_id)
         if not TaskService.can_manage_list(task.task_list):
             abort(403)
@@ -170,11 +180,14 @@ class TaskService:
         values = TaskService._task_values(data, task.task_list)
         for key, value in values.items():
             setattr(task, key, value)
+        RewardService.configure_task(task, data)
         db.session.commit()
         return task
 
     @staticmethod
     def set_completion(task_id, data):
+        from services.household.reward_service import RewardService
+        RewardService._lock()
         task = TaskService.get_task(task_id)
         if not TaskService.can_complete(task):
             abort(403)
@@ -186,15 +199,19 @@ class TaskService:
             task.completed = completed
             task.completed_at = datetime.now(timezone.utc).replace(tzinfo=None) if completed else None
             task.completed_by_membership_id = CalendarService.require_access().id if completed else None
+            RewardService.completion_changed(task, completed)
         db.session.commit()
         return task
 
     @staticmethod
     def delete_task(task_id):
+        from services.household.reward_service import RewardService
+        RewardService._lock()
         task = TaskService.get_task(task_id)
         if not TaskService.can_manage_list(task.task_list):
             abort(403)
         list_id = task.list_id
+        RewardService.detach_tasks([task])
         db.session.delete(task)
         db.session.commit()
         return list_id

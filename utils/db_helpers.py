@@ -117,6 +117,16 @@ def _apply_visibility(model, query):
     uid = get_current_user_id()
     conditions = []
 
+    if getattr(model, '__tablename__', None) in ('reward_jobs', 'reward_requests', 'reward_points', 'reward_goals'):
+        if getattr(current_user, 'is_managed_child', False):
+            from models.family import HouseholdMembership
+            own_membership = HouseholdMembership.query.filter(
+                HouseholdMembership.id == model.membership_id,
+                HouseholdMembership.family_id == model.family_id,
+                HouseholdMembership.user_id == uid,
+            ).correlate(model).exists()
+            conditions.append(own_membership)
+
     if hasattr(model, 'owner_id'):
         conditions.append((model.owner_id.is_(None)) | (model.owner_id == uid))
 

@@ -57,3 +57,4 @@ class HouseholdTask(db.Model):
     due_time = db.Column(db.Time, nullable=True)
     completed = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     completed_at = db.Column(db.DateTime, nullable=True)
+    reward_job = db.relationship('RewardJob', back_populates='task', uselist=False)
