@@ -6,7 +6,9 @@ from sqlalchemy import event
 from models.accounts import Account
 from models.categories import Category
 from models.expenses import Expense
+from models.trips import Trip
 from models.transactions import Transaction
+from models.vehicles import Vehicle
 from services.finance.expense_service import ExpenseService
 from services.finance.expense_sync_service import ExpenseSyncService
 
@@ -156,3 +158,80 @@ def test_shared_expense_visible_to_everyone(app, family, monkeypatch, user):
 
     monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id + 999)
     assert expense in family_query(Expense).all()
+
+
+def test_fuel_expense_trip_sync_tracks_vehicle_and_removes_stale_trip(
+    app, family, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr(
+        'services.vehicles.vehicle_service.VehicleService.calculate_trip_cost',
+        lambda vehicle_id, miles, trip_date: (
+            Decimal('2.00'), Decimal('1.00'), Decimal('10.00'),
+        ),
+    )
+    first_vehicle = Vehicle(
+        family_id=family.id, make='Example', model='One',
+        registration='AA11 AAA',
+    )
+    second_vehicle = Vehicle(
+        family_id=family.id, make='Example', model='Two',
+        registration='BB22 BBB',
+    )
+    db.session.add_all([first_vehicle, second_vehicle])
+    db.session.flush()
+    expense = Expense(
+        family_id=family.id, date=date(2026, 4, 15),
+        description='Fuel stop', expense_type='Fuel',
+        cost=Decimal('40.00'), total_cost=Decimal('40.00'),
+        covered_miles=20, vehicle_registration=first_vehicle.registration,
+    )
+    db.session.add(expense)
+    db.session.commit()
+
+    ExpenseSyncService.reconcile(expense.id)
+    trip = Trip.query.filter(
+        Trip.journey_description.like(f'Expense #{expense.id}: %'),
+    ).one()
+    trip_id = trip.id
+    assert trip.vehicle_id == first_vehicle.id
+
+    expense.vehicle_registration = second_vehicle.registration
+    expense.date = date(2026, 4, 16)
+    expense.covered_miles = 35
+    ExpenseSyncService.reconcile(expense.id)
+
+    trip = Trip.query.filter(
+        Trip.journey_description.like(f'Expense #{expense.id}: %'),
+    ).one()
+    assert trip.id == trip_id
+    assert trip.vehicle_id == second_vehicle.id
+    assert trip.date == date(2026, 4, 16)
+    assert trip.total_miles == 35
+    assert trip.fuel_cost == Decimal('40.00')
+
+    expense.vehicle_registration = None
+    ExpenseSyncService.reconcile(expense.id)
+    assert Trip.query.filter(
+        Trip.journey_description.like(f'Expense #{expense.id}: %'),
+    ).count() == 0
+
+    expense.vehicle_registration = second_vehicle.registration
+    ExpenseSyncService.reconcile(expense.id)
+    monkeypatch.setattr(
+        ExpenseSyncService, '_ensure_bank_payment', lambda _expense: None,
+    )
+    expense.expense_type = 'Mileage'
+    ExpenseSyncService.reconcile(expense.id)
+    assert Trip.query.filter(
+        Trip.journey_description.like(f'Expense #{expense.id}: %'),
+    ).count() == 0
+
+    expense.expense_type = 'Fuel'
+    expense.vehicle_registration = second_vehicle.registration
+    ExpenseSyncService.reconcile(expense.id)
+    ExpenseSyncService.delete_fuel_trip_for_expense(expense)
+    db.session.commit()
+    assert Trip.query.filter(
+        Trip.journey_description.like(f'Expense #{expense.id}: %'),
+    ).count() == 0

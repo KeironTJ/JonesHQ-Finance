@@ -80,6 +80,7 @@ jobs:
           tests/test_transaction_service.py
           tests/test_transaction_deletion_links.py
           tests/test_expense_service.py
+          tests/test_expense_routes.py
           tests/test_expense_reimbursement_lifecycle.py
           tests/test_expense_reimbursement_folding.py
           tests/test_income_service.py

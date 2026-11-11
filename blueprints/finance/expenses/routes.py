@@ -674,8 +674,11 @@ def add_expense():
         try:
             ExpenseSyncService.reconcile(expense.id)
             _period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None
-            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_period)
-            ExpenseSyncService.reconcile_credit_card_payments(year_month=_period)
+            if _period:
+                ExpenseSyncService.reconcile_periods([_period])
+            else:
+                ExpenseSyncService.reconcile_monthly_reimbursements()
+                ExpenseSyncService.reconcile_credit_card_payments()
         except Exception as sync_err:
             current_app.logger.exception(f'Sync failed after add for expense {expense.id}')
             flash('Expense saved but syncing linked transactions failed — check the server log.', 'warning')
@@ -690,13 +693,18 @@ def add_expense():
 @expenses_bp.route('/expenses/update/<int:expense_id>', methods=['POST'])
 def update_expense(expense_id):
     try:
+        original_expense = family_get_or_404(Expense, expense_id)
+        old_period = ExpenseSyncService.get_period_key_for_expense(original_expense)
         expense = ExpenseService.update_expense(expense_id, request.form)
         # Reconcile linked transaction, then run full period sync for this expense's period
         try:
             ExpenseSyncService.reconcile(expense.id)
-            _period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None
-            ExpenseSyncService.reconcile_monthly_reimbursements(year_month=_period)
-            ExpenseSyncService.reconcile_credit_card_payments(year_month=_period)
+            new_period = ExpenseSyncService.get_period_key_for_expense(expense)
+            if old_period or new_period:
+                ExpenseSyncService.reconcile_periods([old_period, new_period])
+            else:
+                ExpenseSyncService.reconcile_monthly_reimbursements()
+                ExpenseSyncService.reconcile_credit_card_payments()
         except Exception as sync_err:
             current_app.logger.exception(f'Sync failed after update for expense {expense.id}')
             flash('Expense updated but syncing linked transactions failed — check the server log.', 'warning')
@@ -734,6 +742,7 @@ def set_period(expense_id):
 def delete_expense(expense_id):
     try:
         expense = family_get_or_404(Expense, expense_id)
+        period_key = ExpenseSyncService.get_period_key_for_expense(expense)
         # Delete linked bank/CC transactions first
         try:
             ExpenseSyncService.bulk_delete_linked_transactions(expense_ids=[expense.id])
@@ -743,6 +752,16 @@ def delete_expense(expense_id):
         if expense.expense_type == 'Fuel':
             ExpenseSyncService.delete_fuel_trip_for_expense(expense)
         ExpenseService.delete_expense(expense_id)
+        try:
+            ExpenseSyncService.reconcile_periods([period_key])
+        except Exception:
+            current_app.logger.exception(
+                f'Reimbursement sync failed after deleting expense {expense_id}'
+            )
+            flash(
+                'Expense deleted but reimbursement syncing failed — check the server log.',
+                'warning',
+            )
         flash('Expense deleted', 'success')
     except Exception as e:
         db.session.rollback()
@@ -783,6 +802,10 @@ def bulk_delete_expenses():
             return redirect(request.form.get('return_url') or url_for('expenses.index'))
 
         expense_ids = [int(x) for x in expense_ids_str.split(',') if x]
+        period_keys = [
+            ExpenseSyncService.get_period_key_for_expense(expense)
+            for expense in family_query(Expense).filter(Expense.id.in_(expense_ids)).all()
+        ]
 
         # First remove any linked transactions for these expenses
         try:
@@ -791,6 +814,16 @@ def bulk_delete_expenses():
             current_app.logger.exception('Error deleting linked transactions before expense delete')
 
         deleted_count = ExpenseService.bulk_delete_expenses(expense_ids)
+        try:
+            ExpenseSyncService.reconcile_periods(period_keys)
+        except Exception:
+            current_app.logger.exception(
+                'Reimbursement sync failed after bulk deleting expenses'
+            )
+            flash(
+                'Expenses deleted but reimbursement syncing failed — check the server log.',
+                'warning',
+            )
         flash(f'Deleted {deleted_count} expense(s).', 'success')
     except Exception as e:
         db.session.rollback()

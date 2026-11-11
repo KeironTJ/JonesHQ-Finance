@@ -5,13 +5,61 @@ from decimal import Decimal
 from extensions import db
 from models.accounts import Account
 from models.categories import Category
+from models.credit_cards import CreditCard
+from models.credit_card_transactions import CreditCardTransaction
+from models.expense_reimbursement_group import ExpenseReimbursementGroup
 from models.expenses import Expense
 from models.income import Income
 from models.transactions import Transaction
+from services.finance.expense_sync_service import ExpenseSyncService
 
 
 def _login(client, user_id):
     login_client(client, user_id)
+
+
+def _create_reimbursement_fixture(family, expense_dates_and_amounts):
+    account = Account(
+        name='Current Account', account_type='Current', family_id=family.id,
+        balance=0,
+    )
+    category = Category(
+        name='Reimbursement', category_type='income', family_id=family.id,
+        head_budget='Income', sub_budget='Expense',
+    )
+    group = ExpenseReimbursementGroup(
+        family_id=family.id, name='Default', mode='separate', is_default=True,
+    )
+    db.session.add_all([account, category, group])
+    db.session.flush()
+    expenses = [
+        Expense(
+            family_id=family.id, date=expense_date,
+            description=f'Expense {index}', expense_type='Fuel',
+            cost=amount, total_cost=amount,
+            reimbursement_group_id=group.id,
+        )
+        for index, (expense_date, amount) in enumerate(expense_dates_and_amounts, start=1)
+    ]
+    db.session.add_all(expenses)
+    db.session.commit()
+    return group, expenses
+
+
+def _create_card_fixture(family, account):
+    card = CreditCard(
+        family_id=family.id, card_name='Travel Card',
+        annual_apr=Decimal('20.00'), monthly_apr=Decimal('1.67'),
+        credit_limit=Decimal('5000.00'),
+        default_payment_account_id=account.id,
+    )
+    card_category = Category(
+        family_id=family.id, name='Travel Card', category_type='expense',
+        head_budget='Credit Cards', sub_budget='Travel Card',
+    )
+    db.session.add_all([card, card_category])
+    db.session.flush()
+    return card
 
 
 def test_expense_index_route_loads_for_authenticated_family(app, family, user):
@@ -103,3 +151,235 @@ def test_delete_expense_with_linked_transaction(app, family, user):
     assert b'Expense deleted' in response.data
     assert db.session.get(Expense, expense_id) is None
     assert Transaction.query.filter_by(id=transaction_id).first() is None
+
+
+def test_update_expense_reconciles_old_and_new_periods(
+    app, family, user, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, expenses = _create_reimbursement_fixture(
+        family, [(date(2026, 4, 20), Decimal('10.00'))],
+    )
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        f'/finance/expenses/update/{expenses[0].id}',
+        data={
+            'date': '2026-05-20',
+            'description': 'Moved expense',
+            'expense_type': 'Fuel',
+            'total_cost': '10.00',
+            'reimbursement_group_id': str(group.id),
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    reimbursements = Transaction.query.filter_by(
+        payment_type='Expense Reimbursement',
+        reimbursement_group_id=group.id,
+    ).all()
+    assert [(row.year_month, row.amount) for row in reimbursements] == [
+        ('2026-05', Decimal('10.00')),
+    ]
+
+
+def test_delete_expense_reconciles_remaining_period_amount(
+    app, family, user, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, expenses = _create_reimbursement_fixture(
+        family, [
+            (date(2026, 4, 10), Decimal('10.00')),
+            (date(2026, 4, 20), Decimal('20.00')),
+        ],
+    )
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        f'/finance/expenses/delete/{expenses[0].id}',
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    reimbursement = Transaction.query.filter_by(
+        payment_type='Expense Reimbursement',
+        reimbursement_group_id=group.id,
+        year_month='2026-04',
+    ).one()
+    assert reimbursement.amount == Decimal('20.00')
+
+
+def test_bulk_delete_expenses_reconciles_period_amount(
+    app, family, user, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, expenses = _create_reimbursement_fixture(
+        family, [
+            (date(2026, 4, 10), Decimal('10.00')),
+            (date(2026, 4, 20), Decimal('20.00')),
+        ],
+    )
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        '/finance/expenses/bulk-delete-expenses',
+        data={'expense_ids': str(expenses[0].id)},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    reimbursement = Transaction.query.filter_by(
+        payment_type='Expense Reimbursement',
+        reimbursement_group_id=group.id,
+        year_month='2026-04',
+    ).one()
+    assert reimbursement.amount == Decimal('20.00')
+
+
+def test_deleting_last_expense_removes_unpaid_period_reimbursement(
+    app, family, user, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, expenses = _create_reimbursement_fixture(
+        family, [(date(2026, 4, 10), Decimal('10.00'))],
+    )
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        f'/finance/expenses/delete/{expenses[0].id}',
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert Transaction.query.filter_by(
+        payment_type='Expense Reimbursement',
+        reimbursement_group_id=group.id,
+        year_month='2026-04',
+    ).first() is None
+
+
+def test_deleting_last_card_expense_removes_generated_period_payoff(
+    app, family, user, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, _ = _create_reimbursement_fixture(family, [])
+    account = Account.query.filter_by(family_id=family.id).one()
+    card = _create_card_fixture(family, account)
+    expense = Expense(
+        family_id=family.id, date=date(2026, 4, 10),
+        description='Card travel expense', expense_type='Travel',
+        cost=Decimal('25.00'), total_cost=Decimal('25.00'),
+        credit_card_id=card.id, reimbursement_group_id=group.id,
+    )
+    db.session.add(expense)
+    db.session.commit()
+
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    ExpenseSyncService.reconcile_credit_card_payments(year_month='2026-04')
+    payment = CreditCardTransaction.query.filter_by(
+        credit_card_id=card.id,
+        transaction_type='Payment',
+    ).one()
+    bank_transaction_id = payment.bank_transaction_id
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        f'/finance/expenses/delete/{expense.id}',
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert db.session.get(CreditCardTransaction, payment.id) is None
+    assert db.session.get(Transaction, bank_transaction_id) is None
+
+
+def test_card_payoff_reconciliation_updates_amount_date_and_account_balance(
+    app, family, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, expenses = _create_reimbursement_fixture(
+        family, [
+            (date(2026, 4, 10), Decimal('25.00')),
+            (date(2026, 4, 20), Decimal('20.00')),
+        ],
+    )
+    account = Account.query.filter_by(family_id=family.id).one()
+    card = _create_card_fixture(family, account)
+    for expense in expenses:
+        expense.expense_type = 'Travel'
+        expense.credit_card_id = card.id
+    db.session.commit()
+
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    reimbursement = Transaction.query.filter_by(
+        payment_type='Expense Reimbursement',
+        reimbursement_group_id=group.id,
+        year_month='2026-04',
+    ).one()
+    ExpenseSyncService.reconcile_credit_card_payments(year_month='2026-04')
+    payment = CreditCardTransaction.query.filter_by(
+        credit_card_id=card.id,
+        transaction_type='Payment',
+    ).one()
+    bank_transaction = db.session.get(Transaction, payment.bank_transaction_id)
+    assert payment.amount == Decimal('45.00')
+
+    expenses[0].total_cost = Decimal('15.00')
+    expenses[0].cost = Decimal('15.00')
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    reimbursement.transaction_date = date(2026, 5, 4)
+    db.session.commit()
+    ExpenseSyncService.reconcile_credit_card_payments(year_month='2026-04')
+
+    assert reimbursement.amount == Decimal('35.00')
+    assert payment.amount == Decimal('35.00')
+    assert payment.date == date(2026, 5, 5)
+    assert bank_transaction.amount == Decimal('-35.00')
+    assert bank_transaction.transaction_date == date(2026, 5, 5)
+    assert account.balance == Decimal('0.00')
+
+
+def test_all_period_card_reconciliation_removes_payoff_without_reimbursement(
+    app, family, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, expenses = _create_reimbursement_fixture(
+        family, [(date(2026, 4, 10), Decimal('25.00'))],
+    )
+    account = Account.query.filter_by(family_id=family.id).one()
+    card = _create_card_fixture(family, account)
+    expense = expenses[0]
+    expense.expense_type = 'Travel'
+    expense.credit_card_id = card.id
+    db.session.commit()
+
+    ExpenseSyncService.reconcile_monthly_reimbursements(year_month='2026-04')
+    reimbursement = Transaction.query.filter_by(
+        payment_type='Expense Reimbursement',
+        reimbursement_group_id=group.id,
+        year_month='2026-04',
+    ).one()
+    ExpenseSyncService.reconcile_credit_card_payments(year_month='2026-04')
+    payment = CreditCardTransaction.query.filter_by(
+        credit_card_id=card.id,
+        transaction_type='Payment',
+    ).one()
+    bank_transaction_id = payment.bank_transaction_id
+
+    db.session.delete(reimbursement)
+    db.session.delete(expense)
+    db.session.commit()
+    ExpenseSyncService.reconcile_credit_card_payments()
+
+    assert db.session.get(CreditCardTransaction, payment.id) is None
+    assert db.session.get(Transaction, bank_transaction_id) is None

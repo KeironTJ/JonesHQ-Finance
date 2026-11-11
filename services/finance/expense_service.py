@@ -69,11 +69,18 @@ class ExpenseService:
 
     @staticmethod
     def update_expense(expense_id, data):
+        from services.finance.expense_sync_service import ExpenseSyncService
+
         expense = family_get_or_404(Expense, expense_id)
+        old_period = ExpenseSyncService.get_period_key_for_expense(expense)
         if data.get('date'):
             expense.date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+        new_period = ExpenseSyncService.get_period_key_for_expense(expense)
         for field, value in ExpenseService._date_fields(expense.date).items():
             setattr(expense, field, value)
+
+        if expense.claim_group == old_period and old_period != new_period:
+            expense.claim_group = new_period
 
         expense.description = data.get('description', expense.description)
         expense.expense_type = data.get('expense_type', expense.expense_type)
@@ -93,7 +100,6 @@ class ExpenseService:
             expense.reimbursement_group_id = int(data['reimbursement_group_id'])
         expense.owner_id = db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
 
-        from services.finance.expense_sync_service import ExpenseSyncService
         expense.payday_period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None
         db.session.commit()
         return expense

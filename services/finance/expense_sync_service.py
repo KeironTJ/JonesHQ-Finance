@@ -122,6 +122,8 @@ class ExpenseSyncService:
                 ExpenseSyncService._link_fuel_expense_to_trip(exp)
                 db.session.commit()
                 return
+
+            ExpenseSyncService.delete_fuel_trip_for_expense(exp)
             
             # Step 1: Create payment transaction (credit card OR bank account)
             if exp.credit_card_id:
@@ -238,6 +240,16 @@ class ExpenseSyncService:
             raise
 
     @staticmethod
+    def reconcile_periods(period_keys):
+        for period_key in sorted({key for key in period_keys if key}):
+            ExpenseSyncService.reconcile_monthly_reimbursements(
+                year_month=period_key,
+            )
+            ExpenseSyncService.reconcile_credit_card_payments(
+                year_month=period_key,
+            )
+
+    @staticmethod
     def _reconcile_group_period(period_key, group):
         if group.mode == 'folded':
             result = ExpenseSyncService._fold_group_period(group, period_key)
@@ -282,16 +294,34 @@ class ExpenseSyncService:
                 f'reconcile_credit_card_payments: start  year_month={year_month!r}  family_id={fid}'
             )
 
-            # Get reimbursement transactions
             if year_month:
                 reimburse_txns = family_query(Transaction).filter(
                     Transaction.payment_type == 'Expense Reimbursement',
                     Transaction.year_month == year_month
                 ).all()
+                period_keys = {year_month}
             else:
                 reimburse_txns = family_query(Transaction).filter(
                     Transaction.payment_type == 'Expense Reimbursement'
                 ).all()
+                period_keys = {
+                    transaction.year_month for transaction in reimburse_txns
+                    if transaction.year_month
+                }
+                existing_payments = family_query(CreditCardTransaction).filter(
+                    CreditCardTransaction.transaction_type == 'Payment',
+                    CreditCardTransaction.item.like(
+                        'Expense reimbursement payment %'
+                    ),
+                ).all()
+                payment_prefix = 'Expense reimbursement payment '
+                for payment in existing_payments:
+                    period_key = (payment.item or '')[len(payment_prefix):]
+                    try:
+                        datetime.strptime(period_key, '%Y-%m')
+                    except ValueError:
+                        continue
+                    period_keys.add(period_key)
 
             current_app.logger.info(
                 f'reconcile_credit_card_payments: found {len(reimburse_txns)} reimbursement txn(s): '
@@ -299,59 +329,110 @@ class ExpenseSyncService:
             )
 
             results = {}
-            for reimburse_txn in reimburse_txns:
-                payment_date = ExpenseSyncService._next_working_day(reimburse_txn.transaction_date)
-                period_key = reimburse_txn.year_month
-                current_app.logger.info(
-                    f'  reimburse_txn #{reimburse_txn.id}  period_key={period_key!r}'
-                    f'  payment_date={payment_date}'
-                )
-                if not period_key:
-                    current_app.logger.warning(f'  skipping: period_key is empty')
-                    continue
-
-                try:
-                    p_start, p_end = ExpenseSyncService._get_period_date_range(period_key)
-                except (ValueError, AttributeError) as exc:
-                    current_app.logger.warning(f'  skipping: _get_period_date_range failed: {exc}')
-                    continue
-
-                current_app.logger.info(f'  period range: {p_start} … {p_end}')
-
-                cc_expenses = family_query(Expense).filter(
-                    Expense.date >= p_start,
-                    Expense.date <= p_end,
-                    Expense.credit_card_id != None,  # noqa: E711
-                ).all()
-
-                current_app.logger.info(
-                    f'  cc_expenses found: {len(cc_expenses)}  '
-                    f'ids={[e.id for e in cc_expenses]}'
-                )
-
-                card_totals = {}
-                for exp in cc_expenses:
-                    if exp.credit_card_id not in card_totals:
-                        card_totals[exp.credit_card_id] = Decimal('0')
-                    card_totals[exp.credit_card_id] += (exp.total_cost or Decimal('0'))
-
-                current_app.logger.info(f'  card_totals: {dict(card_totals)}')
-
-                for card_id, total in card_totals.items():
-                    if total > 0:
-                        current_app.logger.info(
-                            f'  creating CC payment: card_id={card_id}  total={total}'
+            affected_card_ids = set()
+            affected_account_ids = set()
+            for period_key in sorted(period_keys):
+                period_reimbursements = [
+                    transaction for transaction in reimburse_txns
+                    if transaction.year_month == period_key
+                ]
+                active_card_ids = set()
+                if period_reimbursements:
+                    reimbursement_date = max(
+                        transaction.transaction_date
+                        for transaction in period_reimbursements
+                    )
+                    payment_date = ExpenseSyncService._next_working_day(
+                        reimbursement_date
+                    )
+                    try:
+                        p_start, p_end = ExpenseSyncService._get_period_date_range(
+                            period_key
                         )
+                    except (ValueError, AttributeError) as exc:
+                        current_app.logger.warning(
+                            f'  skipping period {period_key}: '
+                            f'_get_period_date_range failed: {exc}'
+                        )
+                        continue
+
+                    cc_expenses = family_query(Expense).filter(
+                        Expense.date >= p_start,
+                        Expense.date <= p_end,
+                        Expense.credit_card_id != None,  # noqa: E711
+                    ).all()
+                    card_totals = {}
+                    for expense in cc_expenses:
+                        card_totals[expense.credit_card_id] = (
+                            card_totals.get(expense.credit_card_id, Decimal('0'))
+                            + (expense.total_cost or Decimal('0'))
+                        )
+
+                    for card_id, total in card_totals.items():
+                        if total <= 0:
+                            continue
                         result = ExpenseSyncService._create_cc_payment_from_reimbursement(
                             card_id, total, payment_date, period_key
                         )
-                        if result:
-                            payment_txn_id, changed = result
-                            current_app.logger.info(f'  → payment_txn_id={payment_txn_id} changed={changed}')
-                            if changed:
-                                results[card_id] = payment_txn_id
+                        if not result:
+                            continue
+                        payment_txn_id, changed = result
+                        active_card_ids.add(card_id)
+                        if changed:
+                            results[card_id] = payment_txn_id
+                            affected_card_ids.add(card_id)
+                            payment = family_get(
+                                CreditCardTransaction, payment_txn_id
+                            )
+                            if payment and payment.bank_transaction_id:
+                                bank_transaction = family_get(
+                                    Transaction, payment.bank_transaction_id
+                                )
+                                if bank_transaction and bank_transaction.account_id:
+                                    affected_account_ids.add(
+                                        bank_transaction.account_id
+                                    )
 
-            CreditCardStatementService.refresh_after_changes(results)
+                payment_description = (
+                    f'Expense reimbursement payment {period_key}'
+                )
+                stale_payments = family_query(CreditCardTransaction).filter(
+                    CreditCardTransaction.transaction_type == 'Payment',
+                    CreditCardTransaction.item == payment_description,
+                ).all()
+                for payment in stale_payments:
+                    if payment.credit_card_id in active_card_ids or payment.is_paid:
+                        continue
+                    bank_transaction = (
+                        family_query(Transaction)
+                        .filter_by(id=payment.bank_transaction_id)
+                        .first()
+                        if payment.bank_transaction_id else None
+                    )
+                    if bank_transaction and bank_transaction.is_paid:
+                        continue
+
+                    affected_card_ids.add(payment.credit_card_id)
+                    if bank_transaction:
+                        from services.finance.transaction_service import TransactionService
+
+                        deleted_rows, card_ids = TransactionService._delete_with_links(
+                            [bank_transaction]
+                        )
+                        affected_card_ids.update(card_ids)
+                        affected_account_ids.update(
+                            row.account_id for row in deleted_rows if row.account_id
+                        )
+                    else:
+                        db.session.delete(payment)
+
+            from services.finance.balance_service import BalanceService
+            BalanceService.recalculate(
+                account_ids=affected_account_ids,
+                credit_card_ids=affected_card_ids,
+                commit=False,
+            )
+            CreditCardStatementService.refresh_after_changes(affected_card_ids)
             db.session.commit()
             current_app.logger.info(f'reconcile_credit_card_payments: done  results={results}')
             return results
@@ -1206,22 +1287,28 @@ class ExpenseSyncService:
             if existing.is_paid:
                 # Locked — do not modify a paid/reconciled CC payment
                 return existing.id, False
+            bank_txn = (
+                family_query(Transaction)
+                .filter_by(id=existing.bank_transaction_id)
+                .first()
+                if existing.bank_transaction_id else None
+            )
+            if bank_txn and bank_txn.is_paid:
+                return existing.id, False
             updated = False
-            if abs(existing.amount - total) > Decimal('0.01'):
+            amount_changed = abs(existing.amount - total) > Decimal('0.01')
+            date_changed = existing.date != payment_date
+            if amount_changed or date_changed:
                 existing.amount = total
                 existing.date = payment_date
                 existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 updated = True
                 # Also update the linked bank transaction amount/date if present
-                if existing.bank_transaction_id:
-                    bank_txn = family_query(Transaction).filter_by(
-                        id=existing.bank_transaction_id
-                    ).first()
-                    if bank_txn and not bank_txn.is_paid:
-                        bank_txn.amount = -abs(total)
-                        bank_txn.transaction_date = payment_date
-                        bank_txn.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-                        db.session.add(bank_txn)
+                if bank_txn:
+                    bank_txn.amount = -abs(total)
+                    bank_txn.transaction_date = payment_date
+                    bank_txn.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    db.session.add(bank_txn)
             if not existing.is_fixed:
                 existing.is_fixed = True  # Lock existing records that weren't previously locked
                 updated = True
@@ -1316,20 +1403,26 @@ class ExpenseSyncService:
         Trips created here are identified by a sentinel prefix in journey_description:
           "Expense #<id>: <description>"
         """
+        sentinel = f"Expense #{exp.id}: "
+        existing_trips = family_query(Trip).filter(
+            Trip.journey_description.like(sentinel + '%')
+        ).all()
+        existing = existing_trips[0] if existing_trips else None
+        for duplicate in existing_trips[1:]:
+            db.session.delete(duplicate)
+
         if not exp.vehicle_registration:
+            for trip in existing_trips:
+                db.session.delete(trip)
             return
 
         vehicle = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
         if not vehicle:
+            for trip in existing_trips:
+                db.session.delete(trip)
             return
 
-        sentinel = f"Expense #{exp.id}: "
         journey_desc = f"{sentinel}{exp.description or 'Fuel'}"
-
-        existing = family_query(Trip).filter(
-            Trip.vehicle_id == vehicle.id,
-            Trip.journey_description.like(sentinel + '%')
-        ).first()
 
         miles = int(exp.covered_miles) if exp.covered_miles else 0
 
@@ -1337,6 +1430,7 @@ class ExpenseSyncService:
         trip_cost, gallons_used, approx_mpg = VehicleService.calculate_trip_cost(vehicle.id, miles, exp.date)
 
         if existing:
+            existing.vehicle_id = vehicle.id
             existing.date = exp.date
             existing.month = exp.date.strftime('%Y-%m')
             existing.week = f"{exp.date.isocalendar()[1]:02d}-{exp.date.year}"
@@ -1373,18 +1467,10 @@ class ExpenseSyncService:
         """
         Delete the auto-created Trip row for a Fuel expense (identified by sentinel prefix).
         """
-        if not exp.vehicle_registration:
-            return
-
-        vehicle = family_query(Vehicle).filter_by(registration=exp.vehicle_registration).first()
-        if not vehicle:
-            return
-
         sentinel = f"Expense #{exp.id}: "
-        trip = family_query(Trip).filter(
-            Trip.vehicle_id == vehicle.id,
+        trips = family_query(Trip).filter(
             Trip.journey_description.like(sentinel + '%')
-        ).first()
+        ).all()
 
-        if trip:
+        for trip in trips:
             db.session.delete(trip)
