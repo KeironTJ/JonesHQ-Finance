@@ -264,7 +264,10 @@ database name.
   reimbursement tests passed**. Regressions verify unpaid totals and account
   balances after edits/removal, deletion of an emptied claim, atomic rejection
   of paid-claim mutations, private claim suffix allocation, and the user-facing
-  route warning. CI validation is pending.
+  route warning. The expanded local finance regression set passed **129 tests**.
+  Both the full SQLite pytest and PostgreSQL 17 application/migration jobs passed
+  for `db1def9` in
+  [CI run 43109989183](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43109989183).
 - Fuel-vehicle update follow-up: **73 focused expense, reimbursement, and
   credit-card tests passed**. The route regression covers clearing a private
   vehicle from a shared fuel expense and removing its generated trip. Both CI
