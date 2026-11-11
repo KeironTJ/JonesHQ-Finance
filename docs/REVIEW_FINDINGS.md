@@ -149,10 +149,11 @@ first, then extract a cohesive lifecycle as a unit.
 
 Before this change, expense tests covered basic CRUD, linked-delete ordering,
 a credit-card purchase refresh and one folded-payslip flow. New lifecycle tests
-now cover cutoff ranges, partial claim reconciliation, same-period idempotence
-and multi-period changes. Broader reimbursement update/deletion and full
-fuel-trip coverage remain open. The PostgreSQL CI selection now includes the
-focused reimbursement lifecycle and folded-payslip tests.
+now cover cutoff ranges, partial claim reconciliation, same-period idempotence,
+multi-period changes, sequential claims against folded payslips and multiple
+reimbursement groups. Broader reimbursement update/deletion and full fuel-trip
+coverage remain open. The PostgreSQL CI selection now includes the focused
+reimbursement lifecycle and folded-payslip tests.
 
 The lifecycle review found a concrete partial-claim defect: after creating
 the partial reimbursement, the service called `_create_period_reimbursement`
@@ -164,11 +165,18 @@ logs a failure if that non-blocking correction cannot complete. Regression
 tests reproduce the stale amount, verify same-period idempotence, and verify
 partial claims crossing periods remove/update the appropriate full claims.
 
-**Next follow-up:** map the expense lifecycle and its transaction boundaries,
-then establish regression coverage before considering an extraction. Cover period
-and cutoff behavior, additional partial-claim cases, folded-payslip paid/unpaid
-transitions, card payoff generation, fuel-trip create/update/delete,
-household/privacy scope, and commit/rollback boundaries.
+Folded-payslip regressions then found that partial claims could leave the
+original folded reimbursement total and expense-to-income links in place. The
+fold reconciliation now clears links for expenses moved to partial claims and
+resets the folded total when no eligible expenses remain. Tests cover repeated
+partial claims and verify that subsequently marking the payslip paid does not
+re-mark partially claimed expenses as reimbursed.
+
+**Next follow-up:** map the remaining expense update/deletion and fuel-trip
+lifecycle paths and their transaction boundaries before considering an
+extraction. Cover reimbursement edits/deletes, card payoff generation,
+fuel-trip create/update/delete, household/privacy scope, and commit/rollback
+boundaries.
 
 **Acceptance:** each extraction has unchanged financial results, household and
 privacy scoping, and regression coverage for all existing callers; do not add
@@ -212,6 +220,10 @@ database name.
   3 skipped**, 15 warnings). The SQLite and PostgreSQL jobs, including the new
   lifecycle and folded-payslip regressions, passed in
   [CI run 43001275033](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43001275033).
+- Folded reimbursement follow-up: the full local suite passed (**1,734 passed,
+  3 skipped**, 15 warnings). Both the full pytest and PostgreSQL jobs passed for
+  `49dbe11` in
+  [CI run 43052164225](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43052164225).
 - Before the payment-sync extraction (`0904366`): local full suite
   **1,726 passed, 3 skipped**,
   with 15 warnings. The two jobs in the [latest CI run](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/42924793110)
