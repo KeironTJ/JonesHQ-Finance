@@ -18,6 +18,10 @@ def _login(client, user_id):
     login_client(client, user_id)
 
 
+def _fail_statement_refresh(*_args, **_kwargs):
+    raise RuntimeError('cleanup failed')
+
+
 def _create_reimbursement_fixture(family, expense_dates_and_amounts):
     account = Account(
         name='Current Account', account_type='Current', family_id=family.id,
@@ -113,7 +117,10 @@ def test_expense_mileage_route_loads_empty_state(app, family, user):
 
 
 def test_delete_expense_with_linked_transaction(app, family, user):
-    account = Account(name='Current Account', account_type='Current', family_id=family.id)
+    account = Account(
+        name='Current Account', account_type='Current', family_id=family.id,
+        balance=Decimal('-18.00'),
+    )
     category = Category(name='Travel', category_type='Expense', family_id=family.id)
     db.session.add_all([account, category])
     db.session.flush()
@@ -139,6 +146,7 @@ def test_delete_expense_with_linked_transaction(app, family, user):
     db.session.commit()
     expense_id = expense.id
     transaction_id = transaction.id
+    account_id = account.id
     client = app.test_client()
     _login(client, user.id)
 
@@ -151,6 +159,157 @@ def test_delete_expense_with_linked_transaction(app, family, user):
     assert b'Expense deleted' in response.data
     assert db.session.get(Expense, expense_id) is None
     assert Transaction.query.filter_by(id=transaction_id).first() is None
+    assert db.session.get(Account, account_id).balance == Decimal('0')
+
+
+def test_delete_expense_cleans_linked_transaction_on_private_account(
+    app, family, user,
+):
+    from models.trips import Trip
+    from models.users import User
+    from models.vehicles import Vehicle
+
+    other_member = User(
+        email='other@example.com', name='Other Member',
+        family_id=family.id, role='member',
+    )
+    other_member.set_password('TestPass1!')
+    db.session.add(other_member)
+    db.session.flush()
+    account = Account(
+        name='Private Account', account_type='Current', family_id=family.id,
+        owner_id=other_member.id, balance=Decimal('-18.00'),
+    )
+    vehicle = Vehicle(
+        family_id=family.id, name='Private Car', make='Test', model='Car',
+        registration='ZZ11ZZZ', owner_id=other_member.id,
+    )
+    category = Category(name='Travel', category_type='Expense', family_id=family.id)
+    db.session.add_all([account, vehicle, category])
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=Decimal('-18.00'), transaction_date=date(2026, 4, 15),
+    )
+    db.session.add(transaction)
+    db.session.flush()
+    expense = Expense(
+        family_id=family.id, date=date(2026, 4, 15),
+        description='Client fuel', expense_type='Fuel',
+        cost=Decimal('18.00'), total_cost=Decimal('18.00'),
+        account_id=account.id, bank_transaction_id=transaction.id,
+        vehicle_registration=vehicle.registration, covered_miles=5,
+    )
+    db.session.add(expense)
+    db.session.flush()
+    trip = Trip(
+        family_id=family.id, vehicle_id=vehicle.id,
+        date=expense.date, total_miles=5,
+        journey_description=f'Expense #{expense.id}: Client fuel',
+    )
+    db.session.add(trip)
+    db.session.commit()
+    expense_id = expense.id
+    transaction_id = transaction.id
+    account_id = account.id
+    trip_id = trip.id
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        f'/finance/expenses/delete/{expense_id}',
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b'Expense deleted' in response.data
+    assert db.session.get(Expense, expense_id) is None
+    assert Transaction.query.filter_by(id=transaction_id).first() is None
+    assert db.session.get(Account, account_id).balance == Decimal('0')
+    assert Trip.query.filter_by(id=trip_id).first() is None
+
+
+def test_delete_expense_keeps_expense_when_linked_cleanup_fails(
+    app, family, user, monkeypatch,
+):
+    account = Account(name='Current Account', account_type='Current', family_id=family.id)
+    category = Category(name='Travel', category_type='Expense', family_id=family.id)
+    db.session.add_all([account, category])
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=Decimal('-18.00'), transaction_date=date(2026, 4, 15),
+    )
+    db.session.add(transaction)
+    db.session.flush()
+    expense = Expense(
+        family_id=family.id, date=date(2026, 4, 15),
+        description='Client travel', expense_type='Mileage',
+        cost=Decimal('18.00'), total_cost=Decimal('18.00'),
+        bank_transaction_id=transaction.id,
+    )
+    db.session.add(expense)
+    db.session.commit()
+    expense_id = expense.id
+    transaction_id = transaction.id
+    monkeypatch.setattr(
+        'services.finance.credit_card_statement_service.CreditCardStatementService.refresh_after_changes',
+        _fail_statement_refresh,
+    )
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        f'/finance/expenses/delete/{expense_id}',
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b'Error deleting expense' in response.data
+    assert db.session.get(Expense, expense_id) is not None
+    assert db.session.get(Transaction, transaction_id) is not None
+
+
+def test_bulk_delete_keeps_expense_when_linked_cleanup_fails(
+    app, family, user, monkeypatch,
+):
+    account = Account(name='Current Account', account_type='Current', family_id=family.id)
+    category = Category(name='Travel', category_type='Expense', family_id=family.id)
+    db.session.add_all([account, category])
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        amount=Decimal('-18.00'), transaction_date=date(2026, 4, 15),
+    )
+    db.session.add(transaction)
+    db.session.flush()
+    expense = Expense(
+        family_id=family.id, date=date(2026, 4, 15),
+        description='Client travel', expense_type='Mileage',
+        cost=Decimal('18.00'), total_cost=Decimal('18.00'),
+        bank_transaction_id=transaction.id,
+    )
+    db.session.add(expense)
+    db.session.commit()
+    expense_id = expense.id
+    transaction_id = transaction.id
+    monkeypatch.setattr(
+        'services.finance.credit_card_statement_service.CreditCardStatementService.refresh_after_changes',
+        _fail_statement_refresh,
+    )
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        '/finance/expenses/bulk-delete-expenses',
+        data={'expense_ids': str(expense_id)},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b'Error deleting expenses' in response.data
+    assert db.session.get(Expense, expense_id) is not None
+    assert db.session.get(Transaction, transaction_id) is not None
 
 
 def test_update_expense_reconciles_old_and_new_periods(

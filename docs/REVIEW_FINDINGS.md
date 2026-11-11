@@ -172,10 +172,31 @@ resets the folded total when no eligible expenses remain. Tests cover repeated
 partial claims and verify that subsequently marking the payslip paid does not
 re-mark partially claimed expenses as reimbursed.
 
-**Next follow-up:** map the remaining expense update/deletion and fuel-trip
-lifecycle paths and their transaction boundaries before considering an
-extraction. Broader reimbursement update/delete edge cases, household/privacy
-scope, and explicit commit/rollback boundaries remain to be reviewed.
+The delete/privacy follow-up reproduced a failure path where both single and
+bulk delete routes logged linked-cleanup exceptions but continued deleting the
+expense. Cleanup also committed independently before expense deletion, so the
+two operations did not share a rollback boundary; fuel-trip cleanup failures
+were swallowed inside the cleanup service. Both routes now stage linked
+transaction, statement, fuel-trip, and expense changes in one transaction and
+commit only after all steps succeed. The cleanup service and expense deletion
+methods retain their existing commit-by-default behavior for other callers.
+Balances are recalculated before that commit so the recalculated state persists.
+Late cleanup-failure regressions for both routes verify that the expense and
+linked transaction remain intact after rollback. Cleanup queries include
+private children within the current family: a visible expense may link to a
+transaction private through its account or a generated trip private through its
+vehicle. A regression covers deletion of the linked transaction from another
+member's private account without exposing it.
+
+Partial-reimbursement aggregation already uses household- and visibility-
+scoped `family_query` calls. A regression now verifies that an expense private
+to another household member and an expense in another household are excluded
+from both the claim amount and claim-group updates.
+
+**Remaining review:** continue with concrete uncovered expense-update and
+reimbursement cases; the deletion transaction boundary and partial-claim
+privacy path are covered. Defer service extraction until a cohesive boundary
+and unchanged financial behavior can be demonstrated.
 
 The lifecycle follow-up now captures the expense's old reimbursement period
 before an edit and reconciles both old and new periods. Single and bulk deletion
@@ -224,6 +245,12 @@ database name.
 
 ## Validation for This Pass
 
+- Expense delete-boundary/privacy follow-up: **28 focused route, service, and
+  reimbursement tests passed**; the credit-card service suite passed **44
+  tests**. Pylance found all 16 call sites compatible with the preserved
+  commit-by-default service signatures. A full local suite attempt was not
+  counted as passing: it encountered `no such table` errors across unrelated
+  later tests after an earlier failure; targeted tests passed in isolation.
 - Partial reimbursement follow-up: a regression reproduced the stale full-period
   amount before the fix. The focused expense/reimbursement/card/transaction
   tests passed (**72 passed**); the full local suite passed (**1,732 passed,

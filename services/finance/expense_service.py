@@ -105,10 +105,11 @@ class ExpenseService:
         return expense
 
     @staticmethod
-    def delete_expense(expense_id):
+    def delete_expense(expense_id, *, commit=True):
         expense = family_get_or_404(Expense, expense_id)
         db.session.delete(expense)
-        db.session.commit()
+        if commit:
+            db.session.commit()
 
     @staticmethod
     def set_period(expense_id, period_value):
@@ -145,12 +146,13 @@ class ExpenseService:
 
 
     @staticmethod
-    def bulk_delete_expenses(expense_ids):
+    def bulk_delete_expenses(expense_ids, *, commit=True):
         deleted = 0
         for expense_id in expense_ids:
             expense = family_query(Expense).filter_by(id=expense_id).first()
             if expense:
                 db.session.delete(expense)
                 deleted += 1
-        db.session.commit()
+        if commit:
+            db.session.commit()
         return deleted

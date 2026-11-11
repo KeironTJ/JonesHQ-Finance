@@ -441,7 +441,7 @@ class ExpenseSyncService:
             raise
 
     @staticmethod
-    def bulk_delete_linked_transactions(expense_ids=None):
+    def bulk_delete_linked_transactions(expense_ids=None, *, commit=True):
         """Delete linked bank and credit-card transactions for the given expenses.
         Also deletes auto-created trip rows for Fuel expenses.
 
@@ -464,11 +464,8 @@ class ExpenseSyncService:
         fuel_trips_deleted = 0
         for exp in all_expenses:
             if exp.expense_type == 'Fuel':
-                try:
-                    ExpenseSyncService.delete_fuel_trip_for_expense(exp)
-                    fuel_trips_deleted += 1
-                except Exception:
-                    current_app.logger.exception(f"Error deleting fuel trip for expense {exp.id}")
+                ExpenseSyncService.delete_fuel_trip_for_expense(exp)
+                fuel_trips_deleted += 1
 
         bank_txn_ids = set()
         cc_txn_ids = set()
@@ -483,13 +480,17 @@ class ExpenseSyncService:
 
         # Inspect and collect affected accounts/cards
         if bank_txn_ids:
-            txns = family_query(Transaction).filter(Transaction.id.in_(list(bank_txn_ids))).all()
+            txns = family_query(Transaction, include_private=True).filter(
+                Transaction.id.in_(list(bank_txn_ids))
+            ).all()
             for t in txns:
                 if t.account_id:
                     accounts_to_recalc.add(t.account_id)
 
         if cc_txn_ids:
-            ccs = family_query(CreditCardTransaction).filter(CreditCardTransaction.id.in_(list(cc_txn_ids))).all()
+            ccs = family_query(CreditCardTransaction, include_private=True).filter(
+                CreditCardTransaction.id.in_(list(cc_txn_ids))
+            ).all()
             for c in ccs:
                 if c.credit_card_id:
                     cards_to_recalc.add(c.credit_card_id)
@@ -513,16 +514,19 @@ class ExpenseSyncService:
 
         # Delete credit card transactions
         if cc_txn_ids:
-            family_query(CreditCardTransaction).filter(CreditCardTransaction.id.in_(list(cc_txn_ids))).delete(synchronize_session=False)
+            family_query(CreditCardTransaction, include_private=True).filter(
+                CreditCardTransaction.id.in_(list(cc_txn_ids))
+            ).delete(synchronize_session=False)
             summary['deleted_cc_txns'] = len(cc_txn_ids)
 
         # Delete bank transactions
         if bank_txn_ids:
-            family_query(Transaction).filter(Transaction.id.in_(list(bank_txn_ids))).delete(synchronize_session=False)
+            family_query(Transaction, include_private=True).filter(
+                Transaction.id.in_(list(bank_txn_ids))
+            ).delete(synchronize_session=False)
             summary['deleted_bank_txns'] = len(bank_txn_ids)
 
         CreditCardStatementService.refresh_after_changes(cards_to_recalc)
-        db.session.commit()
 
         # Recalculate balances
         for account_id in accounts_to_recalc:
@@ -532,6 +536,9 @@ class ExpenseSyncService:
         for card_id in cards_to_recalc:
             if card_id:
                 CreditCardTransaction.recalculate_card_balance(card_id)
+
+        if commit:
+            db.session.commit()
 
         return summary
 
@@ -1468,7 +1475,7 @@ class ExpenseSyncService:
         Delete the auto-created Trip row for a Fuel expense (identified by sentinel prefix).
         """
         sentinel = f"Expense #{exp.id}: "
-        trips = family_query(Trip).filter(
+        trips = family_query(Trip, include_private=True).filter(
             Trip.journey_description.like(sentinel + '%')
         ).all()
 

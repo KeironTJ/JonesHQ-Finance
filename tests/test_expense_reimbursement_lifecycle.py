@@ -116,6 +116,56 @@ def test_partial_reimbursement_reconciles_each_affected_period(app, family, monk
     assert may_reimbursement.amount == Decimal('30.00')
 
 
+def test_partial_reimbursement_excludes_other_members_private_and_foreign_expenses(
+    app, family, user, monkeypatch,
+):
+    from models.family import Family
+    from models.users import User
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    monkeypatch.setattr('utils.db_helpers.get_current_user_id', lambda: user.id)
+    group, expenses = _create_reimbursement_fixtures(
+        family, monkeypatch, [(date(2026, 4, 10), Decimal('10.00'))],
+    )
+    other_member = User(
+        email='other@example.com', name='Other Member',
+        family_id=family.id, role='member',
+    )
+    other_member.set_password('TestPass1!')
+    other_family = Family(name='Other Family')
+    db.session.add_all([other_member, other_family])
+    db.session.flush()
+    private_expense = Expense(
+        family_id=family.id, date=date(2026, 4, 12),
+        description='Private expense', expense_type='Travel',
+        cost=Decimal('100.00'), total_cost=Decimal('100.00'),
+        reimbursement_group_id=group.id, owner_id=other_member.id,
+    )
+    foreign_group = ExpenseReimbursementGroup(
+        family_id=other_family.id, name='Foreign', mode='separate',
+        is_default=True,
+    )
+    db.session.add(foreign_group)
+    db.session.flush()
+    foreign_expense = Expense(
+        family_id=other_family.id, date=date(2026, 4, 13),
+        description='Foreign expense', expense_type='Travel',
+        cost=Decimal('200.00'), total_cost=Decimal('200.00'),
+        reimbursement_group_id=foreign_group.id,
+    )
+    db.session.add_all([private_expense, foreign_expense])
+    db.session.commit()
+
+    result = ExpenseSyncService.create_partial_reimbursement(
+        date(2026, 4, 1), date(2026, 4, 30), date(2026, 5, 1),
+    )
+
+    assert result[1] == Decimal('10.00')
+    assert expenses[0].claim_group == result[2]
+    assert private_expense.claim_group is None
+    assert foreign_expense.claim_group is None
+
+
 def test_partial_reimbursement_updates_folded_payslip_and_unlinks_claimed_expense(
     app, family, monkeypatch,
 ):

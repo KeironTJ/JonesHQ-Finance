@@ -743,15 +743,11 @@ def delete_expense(expense_id):
     try:
         expense = family_get_or_404(Expense, expense_id)
         period_key = ExpenseSyncService.get_period_key_for_expense(expense)
-        # Delete linked bank/CC transactions first
-        try:
-            ExpenseSyncService.bulk_delete_linked_transactions(expense_ids=[expense.id])
-        except Exception:
-            current_app.logger.exception(f'Error deleting linked transactions for expense {expense_id}')
-        # Delete the auto-created trip row for fuel expenses
-        if expense.expense_type == 'Fuel':
-            ExpenseSyncService.delete_fuel_trip_for_expense(expense)
-        ExpenseService.delete_expense(expense_id)
+        ExpenseSyncService.bulk_delete_linked_transactions(
+            expense_ids=[expense.id], commit=False,
+        )
+        ExpenseService.delete_expense(expense_id, commit=False)
+        db.session.commit()
         try:
             ExpenseSyncService.reconcile_periods([period_key])
         except Exception:
@@ -807,13 +803,14 @@ def bulk_delete_expenses():
             for expense in family_query(Expense).filter(Expense.id.in_(expense_ids)).all()
         ]
 
-        # First remove any linked transactions for these expenses
-        try:
-            ExpenseSyncService.bulk_delete_linked_transactions(expense_ids=expense_ids)
-        except Exception as e:
-            current_app.logger.exception('Error deleting linked transactions before expense delete')
+        ExpenseSyncService.bulk_delete_linked_transactions(
+            expense_ids=expense_ids, commit=False,
+        )
 
-        deleted_count = ExpenseService.bulk_delete_expenses(expense_ids)
+        deleted_count = ExpenseService.bulk_delete_expenses(
+            expense_ids, commit=False,
+        )
+        db.session.commit()
         try:
             ExpenseSyncService.reconcile_periods(period_keys)
         except Exception:
