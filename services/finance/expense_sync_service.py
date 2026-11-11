@@ -1411,7 +1411,7 @@ class ExpenseSyncService:
           "Expense #<id>: <description>"
         """
         sentinel = f"Expense #{exp.id}: "
-        existing_trips = family_query(Trip).filter(
+        existing_trips = family_query(Trip, include_private=True).filter(
             Trip.journey_description.like(sentinel + '%')
         ).all()
         existing = existing_trips[0] if existing_trips else None

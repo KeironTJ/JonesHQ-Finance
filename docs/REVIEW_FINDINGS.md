@@ -193,10 +193,24 @@ scoped `family_query` calls. A regression now verifies that an expense private
 to another household member and an expense in another household are excluded
 from both the claim amount and claim-group updates.
 
-**Remaining review:** continue with concrete uncovered expense-update and
-reimbursement cases; the deletion transaction boundary and partial-claim
-privacy path are covered. Defer service extraction until a cohesive boundary
-and unchanged financial behavior can be demonstrated.
+Expense update also treated an explicitly blank vehicle registration as
+"unchanged," despite the edit form offering a blank selection. This prevented
+removing a vehicle from a fuel expense and left its generated trip in place.
+The update now clears the registration when the submitted field is blank, and
+trip reconciliation includes private child trips within the same household so
+the stale generated row can be removed without exposing it. A route regression
+clears a private vehicle from a shared fuel expense and verifies both the
+registration and generated trip are removed.
+
+**Remaining review:** investigate whether date or amount edits can invalidate
+or deleting an expense can leave an existing partial reimbursement transaction
+stale. `reconcile_periods` only rebuilds full-period claims, while partial
+transactions use a distinct payment type; expense update/delete and set-period
+routes do not currently reconcile those partial transactions. Before changing
+that behavior, choose whether those operations should update unpaid partial
+claims or block edits/deletion until the expense is unclaimed. Defer service
+extraction until a cohesive boundary and unchanged financial behavior can be
+demonstrated.
 
 The lifecycle follow-up now captures the expense's old reimbursement period
 before an edit and reconciles both old and new periods. Single and bulk deletion
@@ -245,6 +259,9 @@ database name.
 
 ## Validation for This Pass
 
+- Fuel-vehicle update follow-up: **73 focused expense, reimbursement, and
+  credit-card tests passed**. The route regression covers clearing a private
+  vehicle from a shared fuel expense and removing its generated trip.
 - Expense delete-boundary/privacy follow-up: **28 focused route, service, and
   reimbursement tests passed**; the credit-card service suite passed **44
   tests**. Pylance found all 16 call sites compatible with the preserved

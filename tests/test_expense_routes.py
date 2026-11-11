@@ -345,6 +345,69 @@ def test_update_expense_reconciles_old_and_new_periods(
     ]
 
 
+def test_update_expense_clears_vehicle_and_generated_fuel_trip(
+    app, family, user, monkeypatch,
+):
+    from models.trips import Trip
+    from models.users import User
+    from models.vehicles import Vehicle
+
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    group, expenses = _create_reimbursement_fixture(
+        family, [(date(2026, 4, 20), Decimal('10.00'))],
+    )
+    other_member = User(
+        email='other@example.com', name='Other Member',
+        family_id=family.id, role='member',
+    )
+    other_member.set_password('TestPass1!')
+    db.session.add(other_member)
+    db.session.flush()
+    vehicle = Vehicle(
+        family_id=family.id, name='Family Car', make='Test', model='Car',
+        registration='AB12CDE', owner_id=other_member.id,
+    )
+    db.session.add(vehicle)
+    db.session.flush()
+    expense = expenses[0]
+    expense.vehicle_registration = vehicle.registration
+    trip = Trip(
+        family_id=family.id, vehicle_id=vehicle.id, date=expense.date,
+        total_miles=5,
+        journey_description=f'Expense #{expense.id}: {expense.description}',
+    )
+    db.session.add(trip)
+    db.session.commit()
+    trip_id = trip.id
+
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post(
+        f'/finance/expenses/update/{expense.id}',
+        data={
+            'date': '2026-04-20',
+            'description': expense.description,
+            'expense_type': 'Fuel',
+            'credit_card_id': '',
+            'account_id': '',
+            'covered_miles': '5',
+            'rate_per_mile': '',
+            'days': '1',
+            'total_cost': '10.00',
+            'vehicle_registration': '',
+            'paid_for': '',
+            'submitted': '',
+            'reimbursed': '',
+            'reimbursement_group_id': str(group.id),
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert db.session.get(Expense, expense.id).vehicle_registration is None
+    assert db.session.get(Trip, trip_id) is None
+
+
 def test_delete_expense_reconciles_remaining_period_amount(
     app, family, user, monkeypatch,
 ):

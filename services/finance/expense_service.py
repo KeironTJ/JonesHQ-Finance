@@ -92,7 +92,8 @@ class ExpenseService:
         if data.get('total_cost'):
             expense.cost = Decimal(data['total_cost'])
             expense.total_cost = Decimal(data['total_cost'])
-        expense.vehicle_registration = data.get('vehicle_registration') or expense.vehicle_registration
+        if 'vehicle_registration' in data:
+            expense.vehicle_registration = data.get('vehicle_registration') or None
         expense.paid_for = data.get('paid_for') == 'on'
         expense.submitted = data.get('submitted') == 'on'
         expense.reimbursed = data.get('reimbursed') == 'on'
