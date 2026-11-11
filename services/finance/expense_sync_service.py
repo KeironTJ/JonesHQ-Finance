@@ -227,20 +227,27 @@ class ExpenseSyncService:
             results = {}
             for period_key in periods_to_process:
                 for group in groups:
-                    if group.mode == 'folded':
-                        result = ExpenseSyncService._fold_group_period(group, period_key)
-                    else:
-                        result = ExpenseSyncService._create_period_reimbursement(period_key, group)
-                    if result:
-                        ref_id, changed = result
-                        if changed:
-                            results[f'{group.id}:{period_key}'] = ref_id
+                    results.update(
+                        ExpenseSyncService._reconcile_group_period(period_key, group)
+                    )
 
             db.session.commit()
             return results
         except Exception:
             db.session.rollback()
             raise
+
+    @staticmethod
+    def _reconcile_group_period(period_key, group):
+        if group.mode == 'folded':
+            result = ExpenseSyncService._fold_group_period(group, period_key)
+        else:
+            result = ExpenseSyncService._create_period_reimbursement(period_key, group)
+        if result:
+            ref_id, changed = result
+            if changed:
+                return {f'{group.id}:{period_key}': ref_id}
+        return {}
 
     
     @staticmethod
@@ -498,6 +505,14 @@ class ExpenseSyncService:
             if not total or total <= 0:
                 return None
 
+            groups_by_period = {}
+            for exp in unclaimed:
+                period_key = ExpenseSyncService.get_period_key_for_expense(exp)
+                if period_key and exp.reimbursement_group_id:
+                    groups_by_period.setdefault(period_key, set()).add(
+                        exp.reimbursement_group_id
+                    )
+
             if reimbursement_date is None:
                 reimbursement_date = ExpenseSyncService._on_or_next_working_day(to_date)
 
@@ -574,15 +589,33 @@ class ExpenseSyncService:
             Transaction.recalculate_account_balance(account.id)
             db.session.commit()
 
-            # After committing the partial, re-sync the base period reimbursement so it
-            # is updated to exclude the expenses now assigned to the partial group.
+            # Reconcile every affected period so full claims exclude expenses
+            # assigned to this partial reimbursement.
             try:
-                ExpenseSyncService._create_period_reimbursement(base_period)
+                all_group_ids = {
+                    group_id for group_ids in groups_by_period.values()
+                    for group_id in group_ids
+                }
+                groups = {
+                    group.id: group
+                    for group in family_query(ExpenseReimbursementGroup).filter(
+                        ExpenseReimbursementGroup.id.in_(all_group_ids)
+                    ).all()
+                }
+                for period_key, group_ids in sorted(groups_by_period.items()):
+                    for group_id in group_ids:
+                        group = groups.get(group_id)
+                        if group:
+                            ExpenseSyncService._reconcile_group_period(
+                                period_key, group,
+                            )
                 db.session.commit()
             except Exception:
                 db.session.rollback()
-                # Non-fatal — the partial was created successfully; the base period
-                # reimbursement will be corrected on the next full sync.
+                current_app.logger.exception(
+                    'Partial reimbursement created, but affected periods could not '
+                    'be reconciled; a later reimbursement sync will correct them.'
+                )
 
             return partial_txn.id, total, claim_group
 

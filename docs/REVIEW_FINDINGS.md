@@ -147,18 +147,28 @@ risk changing financial semantics or commit ownership. Keep its distinct
 purchase-vs-reimbursement behavior, map the workflow and transaction boundaries
 first, then extract a cohesive lifecycle as a unit.
 
-Expense tests cover basic CRUD, linked-delete ordering, a credit-card purchase
-refresh and one folded-payslip flow; they do not systematically cover period
-boundaries, partial-claim reconciliation, reimbursement updates/deletion, or
-the full fuel-trip path. The PostgreSQL CI selection includes
-`test_credit_card_service.py` and `test_expense_service.py`, but not the focused
-folded-reimbursement regression.
+Before this change, expense tests covered basic CRUD, linked-delete ordering,
+a credit-card purchase refresh and one folded-payslip flow. New lifecycle tests
+now cover cutoff ranges, partial claim reconciliation, same-period idempotence
+and multi-period changes. Broader reimbursement update/deletion and full
+fuel-trip coverage remain open. The PostgreSQL CI selection now includes the
+focused reimbursement lifecycle and folded-payslip tests.
+
+The lifecycle review found a concrete partial-claim defect: after creating
+the partial reimbursement, the service called `_create_period_reimbursement`
+without its required reimbursement-group argument. The resulting `TypeError`
+was swallowed as a non-fatal follow-up failure, leaving the full-period
+reimbursement at its pre-partial amount. The follow-up now reruns the normal
+reconciliation for each affected expense period (including folded groups), and
+logs a failure if that non-blocking correction cannot complete. Regression
+tests reproduce the stale amount, verify same-period idempotence, and verify
+partial claims crossing periods remove/update the appropriate full claims.
 
 **Next follow-up:** map the expense lifecycle and its transaction boundaries,
 then establish regression coverage before considering an extraction. Cover period
-and cutoff behavior, partial claims, folded-payslip paid/unpaid transitions,
-card payoff generation, fuel-trip create/update/delete, household/privacy scope,
-and commit/rollback boundaries. Add relevant lifecycle tests to PostgreSQL CI.
+and cutoff behavior, additional partial-claim cases, folded-payslip paid/unpaid
+transitions, card payoff generation, fuel-trip create/update/delete,
+household/privacy scope, and commit/rollback boundaries.
 
 **Acceptance:** each extraction has unchanged financial results, household and
 privacy scoping, and regression coverage for all existing callers; do not add
@@ -196,7 +206,13 @@ database name.
 
 ## Validation for This Pass
 
-- Current checkout `0904366`: local full suite **1,726 passed, 3 skipped**,
+- Partial reimbursement follow-up: a regression reproduced the stale full-period
+  amount before the fix. The focused expense/reimbursement/card/transaction
+  tests passed (**72 passed**); the full local suite passed (**1,732 passed,
+  3 skipped**, 15 warnings). The PostgreSQL job now includes the new lifecycle
+  and folded-payslip regressions; its result will be available from CI after push.
+- Before the payment-sync extraction (`0904366`): local full suite
+  **1,726 passed, 3 skipped**,
   with 15 warnings. The two jobs in the [latest CI run](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/42924793110)
   (SQLite full suite and PostgreSQL 17 application/migration regressions)
   both passed. The operator reports production is running the latest updates
