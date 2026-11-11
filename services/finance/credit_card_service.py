@@ -15,6 +15,7 @@ from models.transactions import Transaction
 from models.vendors import Vendor
 from services.finance.payday_service import PaydayService
 from services.finance.credit_card_statement_service import CreditCardStatementService
+from services.finance.credit_card_payment_sync_service import CreditCardPaymentSyncService
 from services.finance.balance_service import BalanceService
 from services.finance.credit_card_helpers import (
     get_or_create_card_vendor,
@@ -280,7 +281,7 @@ class CreditCardService:
         transaction.is_fixed = data.get('txn_fixed') == '1'
         transaction.is_paid = data.get('txn_paid') == '1'
         if transaction.bank_transaction_id:
-            CreditCardService.sync_payment_to_bank_transaction(transaction)
+            CreditCardPaymentSyncService.sync_payment_to_bank_transaction(transaction)
         CreditCardStatementService.refresh_after_changes(
             [transaction.credit_card_id], preserve_ids=[transaction.id],
         )
@@ -444,155 +445,3 @@ class CreditCardService:
         BalanceService.recalculate(account_ids=[account_id], commit=False)
         db.session.commit()
         return transactions
-
-    
-    
-
-    
-    
-    
-    
-
-    
-    
-    @staticmethod
-    def sync_bank_transaction_to_payment(bank_txn):
-        """
-        Sync edits from a bank Transaction to its linked CC Payment transaction.
-
-        Called from the transaction-edit blueprint whenever a bank Transaction that
-        has a credit_card_id is saved.  Keeps the two records in step for date, amount,
-        and paid status.
-
-        Locking behaviour: when synced, the CC payment is always marked is_fixed=True
-        (regardless of the bank transaction's is_fixed value) because a real bank
-        transaction is now linked — it should not be overwritten by regeneration.
-
-        Does nothing (returns None) if:
-          - bank_txn has no credit_card_id
-          - no matching CC payment is found
-          - the CC payment is already marked is_paid (historical record — do not touch)
-
-        Args:
-            bank_txn: Transaction instance whose credit_card_id links it to a CC payment.
-
-        Returns:
-            CreditCardTransaction — the updated payment, or None if no action taken.
-
-        Side effects:
-            Flushes the session and refreshes the card's future statements/payments.
-            Does NOT commit — the caller's transaction boundary handles that.
-        """
-        if not bank_txn.credit_card_id:
-            return None
-        
-        # Find linked credit card payment
-        cc_payment = family_query(CreditCardTransaction).filter_by(
-            credit_card_id=bank_txn.credit_card_id,
-            bank_transaction_id=bank_txn.id
-        ).first()
-        
-        if not cc_payment:
-            return None
-        
-        # Only sync if not paid (avoid changing historical data)
-        if cc_payment.is_paid:
-            return None
-
-        card = family_get(CreditCard, cc_payment.credit_card_id)
-        if card:
-            cc_payment.vendor_id = get_or_create_payment_vendor(
-                card, bank_txn.account_id
-            ).id
-        
-        # Sync date
-        if bank_txn.transaction_date != cc_payment.date:
-            cc_payment.date = bank_txn.transaction_date
-            cc_payment.day_name = bank_txn.transaction_date.strftime('%A')
-            cc_payment.week = f"{bank_txn.transaction_date.isocalendar()[1]:02d}-{bank_txn.transaction_date.year}"
-            cc_payment.month = bank_txn.transaction_date.strftime('%Y-%m')
-        
-        # Sync amount (bank expense = credit card payment)
-        if bank_txn.amount != cc_payment.amount:
-            cc_payment.amount = abs(float(bank_txn.amount))
-        
-        # Sync paid status; always lock the CC payment since it has a real bank transaction
-        cc_payment.is_paid = bank_txn.is_paid
-        cc_payment.is_fixed = True  # Bank transaction is linked — protect from regen
-        
-        db.session.flush()
-        
-        # Recalculate credit card balance
-        CreditCardStatementService.refresh_after_changes(
-            [cc_payment.credit_card_id], preserve_ids=[cc_payment.id],
-        )
-        
-        return cc_payment
-
-    @staticmethod
-    def sync_payment_to_bank_transaction(cc_payment):
-        """
-        Sync edits from a CC Payment transaction to its linked bank Transaction.
-
-        Called from the credit-card-transaction-edit blueprint whenever a CC Payment
-        that has a bank_transaction_id is saved.  Mirrors date, amount, paid status,
-        and is_fixed onto the bank record.
-
-        Does nothing (returns None) if:
-          - cc_payment has no bank_transaction_id
-          - the linked bank transaction no longer exists
-          - the bank transaction is already marked is_paid (historical — do not touch)
-
-        Args:
-            cc_payment: CreditCardTransaction instance whose bank_transaction_id links
-                        it to a bank Transaction.
-
-        Returns:
-            Transaction — the updated bank record, or None if no action taken.
-
-        Side effects:
-            Flushes the session.  Calls recalculate_account_balance() on the bank account.
-            Does NOT commit — the caller's transaction boundary handles that.
-        """
-        if not cc_payment.bank_transaction_id:
-            return None
-        
-        # Find linked bank transaction
-        bank_txn = family_get(Transaction, cc_payment.bank_transaction_id)
-        
-        if not bank_txn:
-            return None
-        
-        # Only sync if not paid (avoid changing historical data)
-        if bank_txn.is_paid:
-            return None
-
-        card = family_get(CreditCard, cc_payment.credit_card_id)
-        if card:
-            bank_txn.vendor_id = get_or_create_payment_vendor(
-                card, bank_txn.account_id
-            ).id
-        
-        # Sync date
-        if cc_payment.date != bank_txn.transaction_date:
-            bank_txn.transaction_date = cc_payment.date
-            bank_txn.year_month = cc_payment.date.strftime('%Y-%m')
-            bank_txn.week_year = f"{cc_payment.date.isocalendar()[1]:02d}-{cc_payment.date.year}"
-            bank_txn.day_name = cc_payment.date.strftime('%a')
-        
-        # Sync amount (credit card payment = bank expense)
-        if -abs(float(cc_payment.amount)) != bank_txn.amount:
-            bank_txn.amount = -abs(float(cc_payment.amount))
-        
-        # Sync paid status
-        bank_txn.is_paid = cc_payment.is_paid
-        bank_txn.is_fixed = cc_payment.is_fixed
-        bank_txn.updated_at = datetime.now()
-        
-        db.session.flush()
-        
-        # Recalculate bank account balance
-        if bank_txn.account_id:
-            BalanceService.recalculate(account_ids=[bank_txn.account_id], commit=False)
-        
-        return bank_txn

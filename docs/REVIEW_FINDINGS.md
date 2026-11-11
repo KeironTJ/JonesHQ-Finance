@@ -1,6 +1,6 @@
 # Review Findings
 
-Reviewed: 22 October 2026.
+Reviewed: 11 November 2026.
 
 This is an actionable record for the cleanup and behavior review, not a claim
 that every application path has been audited. Resolve confirmed issues in the
@@ -95,9 +95,9 @@ redacted, and remote targets are rejected.
 
 ### F-007: Large financial services have mixed responsibilities
 
-**Priority:** Low (maintainability). **Status:** In progress; income forecast
-and credit-card statement lifecycle extracted and validated; payment/bank sync
-and expense service boundaries remain.
+**Priority:** Low (maintainability). **Status:** In progress; income forecast,
+credit-card statement lifecycle and card-payment/bank synchronization extracted
+and validated. Expense workflow boundaries remain.
 
 `income_service.py` (previously about 1,600 lines), `credit_card_service.py`
 (previously about 1,400) and `expense_sync_service.py` (about 1,350) contain multiple
@@ -129,10 +129,36 @@ so the statement service and card CRUD/sync service do not depend on each other.
 Regression tests cover generated amounts, payment links, replacing unlocked
 chains, preserving locked statements and all-card aggregation.
 
-**Next follow-up:** review whether card-payment/bank-transaction synchronization
-(`sync_*`, called from the transaction and credit-card edit routes) forms an
-independent service boundary. Then review `ExpenseSyncService`, retaining its
-distinct purchase-vs-reimbursement semantics.
+The card-payment/bank-transaction sync pair has moved to
+[CreditCardPaymentSyncService](../services/finance/credit_card_payment_sync_service.py).
+The transaction and card services call it directly; the synchronization methods
+do not commit, preserving the existing caller-owned transaction boundary.
+Focused tests cover both directions' date, amount and status propagation,
+bank/card refresh behavior, missing and already-paid links, and the no-commit
+contract.
+
+`ExpenseSyncService` is not one extraction-sized responsibility. Its immediate
+expense reconciliation dispatches to bank, card-purchase or fuel-trip writes;
+the separate reimbursement lifecycle handles period grouping, partial claims,
+folded recurring-income payslips, and later card payoffs. Those paths share date
+and claim helpers, and callers span the expense routes, `ExpenseService`,
+`IncomeService` and forecast services. Splitting methods mechanically would
+risk changing financial semantics or commit ownership. Keep its distinct
+purchase-vs-reimbursement behavior, map the workflow and transaction boundaries
+first, then extract a cohesive lifecycle as a unit.
+
+Expense tests cover basic CRUD, linked-delete ordering, a credit-card purchase
+refresh and one folded-payslip flow; they do not systematically cover period
+boundaries, partial-claim reconciliation, reimbursement updates/deletion, or
+the full fuel-trip path. The PostgreSQL CI selection includes
+`test_credit_card_service.py` and `test_expense_service.py`, but not the focused
+folded-reimbursement regression.
+
+**Next follow-up:** map the expense lifecycle and its transaction boundaries,
+then establish regression coverage before considering an extraction. Cover period
+and cutoff behavior, partial claims, folded-payslip paid/unpaid transitions,
+card payoff generation, fuel-trip create/update/delete, household/privacy scope,
+and commit/rollback boundaries. Add relevant lifecycle tests to PostgreSQL CI.
 
 **Acceptance:** each extraction has unchanged financial results, household and
 privacy scoping, and regression coverage for all existing callers; do not add
@@ -140,8 +166,9 @@ compatibility wrappers that only preserve a retired API.
 
 ### F-008: Private startup probe failed its proxy guard
 
-**Priority:** High (update reliability). **Status:** Resolved in code; awaiting
-the operator's next production update.
+**Priority:** High (update reliability). **Status:** Deployed; the operator
+reports the latest updates are running without identified issues (11 November
+2026).
 
 Three production updates passed tests and migrations but failed the private
 probe and automatically recovered to the prior code and a new database each
@@ -161,14 +188,20 @@ directory log rather than depending on transient-unit journal retention.
 Delayed-listener regressions verify successful startup without recovery,
 bounded failure, retained diagnostics, and the real proxy guard accepting the
 loopback probe. Existing proxy tests continue to reject non-loopback, untrusted
-direct clients. The focused updater/recovery/proxy suite passes (**53 passed**).
-See the [runbook](../deployment/README.md#installing-a-fix-to-the-updater-itself)
-for adopting the fixed script without losing the currently serving rollback
-commit. The runbook's ad-hoc backup command now reads the configured active
-database instead of assuming the original pre-recovery database name.
+direct clients. The focused updater/recovery/proxy suite passed (**53 passed**);
+the operator now confirms the latest production update is running without
+issues identified so far. The runbook's ad-hoc backup command reads the
+configured active database instead of assuming the original pre-recovery
+database name.
 
 ## Validation for This Pass
 
+- Current checkout `0904366`: local full suite **1,726 passed, 3 skipped**,
+  with 15 warnings. The two jobs in the [latest CI run](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/42924793110)
+  (SQLite full suite and PostgreSQL 17 application/migration regressions)
+  both passed. The operator reports production is running the latest updates
+  without identified issues so far; production health was not independently
+  queried during this review.
 - Private probe readiness: **44 updater/recovery tests passed, 1 skipped**
   locally on Windows; Bash syntax and diff whitespace checks passed. The skip
   is the real Unix-socket/curl regression. Both CI jobs passed for `665f176` in

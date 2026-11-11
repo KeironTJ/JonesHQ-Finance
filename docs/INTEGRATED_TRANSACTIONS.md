@@ -12,17 +12,19 @@ belongs in domain services, not in a database-wide cascade assumption.
 `CreditCardTransaction.bank_transaction_id` points to the bank-side
 `Transaction` for a card payment. The linked bank row records its
 `credit_card_id`; the card transaction is the durable link back to that row.
-When a payment is edited or deleted, `CreditCardService` synchronizes or clears
-the link and recalculates the affected card/account balances. Deletion behavior
-is implemented in service logic; do not assume deleting either row always
-triggers a database cascade.
+When a payment is edited or deleted, `CreditCardPaymentSyncService` synchronizes
+or clears the link and recalculates the affected card/account balances.
+Deletion behavior is implemented in service logic; do not assume deleting
+either row always triggers a database cascade.
 
 Relevant service methods include:
 
 - `CreditCardStatementService.generate_payment_transaction()` to create a card payment
   and its bank-side transaction.
-- `CreditCardService.sync_bank_transaction_to_payment()` to propagate bank-side
-  edits to a linked card payment.
+- `CreditCardPaymentSyncService.sync_bank_transaction_to_payment()` to propagate
+  bank-side edits to a linked card payment.
+- `CreditCardPaymentSyncService.sync_payment_to_bank_transaction()` to propagate
+  card-payment edits to its linked bank transaction.
 - `CreditCardService.update_payment_transaction()` to update a card payment
   and its linked bank-side transaction.
 

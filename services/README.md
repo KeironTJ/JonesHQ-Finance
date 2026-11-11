@@ -156,7 +156,10 @@ actual payslip records.
 
 `finance/credit_card_statement_service.py` owns card interest calculation,
 statement/payment generation, and future-chain regeneration.
-`CreditCardService` handles card records, transactions, and payment/bank sync.
+`CreditCardService` handles card records and transactions;
+`finance/credit_card_payment_sync_service.py` synchronizes linked card payments
+and bank transactions without committing, leaving transaction ownership to the
+calling service.
 The shared vendor lookup helpers live in `finance/credit_card_helpers.py`.
 Transaction mutations call `CreditCardStatementService.refresh_after_changes`
 once per affected card/batch, using the household's `default_generation_years`

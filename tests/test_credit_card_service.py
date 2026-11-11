@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import event
 from werkzeug.datastructures import MultiDict
 
 from extensions import db
@@ -23,7 +24,9 @@ from models.expenses import Expense
 from models.family import Family
 from models.settings import Settings
 from services.finance.credit_card_service import CreditCardService
+from services.finance.credit_card_payment_sync_service import CreditCardPaymentSyncService
 from services.finance.credit_card_statement_service import CreditCardStatementService
+from services.finance.balance_service import BalanceService
 from services.finance import credit_card_statement_service
 
 
@@ -461,7 +464,7 @@ def test_editing_bank_payment_refreshes_later_payments_without_replacing_overrid
     payment = _forecast_payments(card)[0]
     bank = payment.bank_transaction
     bank.amount = Decimal('-40')
-    CreditCardService.sync_bank_transaction_to_payment(bank)
+    CreditCardPaymentSyncService.sync_bank_transaction_to_payment(bank)
     db.session.commit()
     assert payment.is_fixed is True
     assert payment.amount == 40
@@ -471,6 +474,194 @@ def test_editing_bank_payment_refreshes_later_payments_without_replacing_overrid
     assert payment.is_paid is True
     assert payment.is_fixed is True
     assert card.current_balance == 40
+
+
+def test_bank_payment_sync_updates_card_payment_without_committing(
+    app, card, family_id, patch_family, monkeypatch,
+):
+    account = Account(
+        family_id=family_id, name='Payment Account', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    category = Category(
+        family_id=family_id, name='Card Payment', head_budget='Credit Cards',
+        sub_budget=card.card_name, category_type='expense',
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    bank = Transaction(
+        family_id=family_id, account_id=account.id, category_id=category.id,
+        credit_card_id=card.id, amount=Decimal('-100'),
+        transaction_date=date(2026, 1, 15), is_paid=False,
+    )
+    db.session.add(bank)
+    db.session.flush()
+    payment = CreditCardTransaction(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 15),
+        item='Payment', transaction_type='Payment', amount=Decimal('100'),
+        is_paid=False, is_fixed=False, bank_transaction_id=bank.id,
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    refreshed = []
+    monkeypatch.setattr(
+        CreditCardStatementService, 'refresh_after_changes',
+        lambda card_ids, preserve_ids=(): refreshed.append(
+            (list(card_ids), list(preserve_ids))
+        ),
+    )
+    commits = []
+    session = db.session()
+
+    def record_commit(_session):
+        commits.append(True)
+
+    event.listen(session, 'after_commit', record_commit)
+    try:
+        bank.amount = Decimal('-42.50')
+        bank.transaction_date = date(2026, 2, 15)
+        bank.is_paid = True
+        result = CreditCardPaymentSyncService.sync_bank_transaction_to_payment(bank)
+        assert result is payment
+        assert not commits
+    finally:
+        event.remove(session, 'after_commit', record_commit)
+
+    assert payment.amount == Decimal('42.50')
+    assert payment.date == date(2026, 2, 15)
+    assert payment.day_name == 'Sunday'
+    assert payment.week == '07-2026'
+    assert payment.month == '2026-02'
+    assert payment.is_paid is True
+    assert payment.is_fixed is True
+    assert payment.vendor.name == account.name
+    assert refreshed == [([card.id], [payment.id])]
+    db.session.commit()
+
+
+def test_card_payment_sync_updates_bank_transaction_without_committing(
+    app, card, family_id, patch_family, monkeypatch,
+):
+    account = Account(
+        family_id=family_id, name='Payment Account', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    category = Category(
+        family_id=family_id, name='Card Payment', head_budget='Credit Cards',
+        sub_budget=card.card_name, category_type='expense',
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    bank = Transaction(
+        family_id=family_id, account_id=account.id, category_id=category.id,
+        credit_card_id=card.id, amount=Decimal('-100'),
+        transaction_date=date(2026, 1, 15), is_paid=False, is_fixed=True,
+    )
+    db.session.add(bank)
+    db.session.flush()
+    payment = CreditCardTransaction(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 15),
+        item='Payment', transaction_type='Payment', amount=Decimal('100'),
+        is_paid=False, is_fixed=False, bank_transaction_id=bank.id,
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    recalculations = []
+    monkeypatch.setattr(
+        BalanceService, 'recalculate',
+        lambda **kwargs: recalculations.append(kwargs),
+    )
+    commits = []
+    session = db.session()
+
+    def record_commit(_session):
+        commits.append(True)
+
+    event.listen(session, 'after_commit', record_commit)
+    try:
+        payment.amount = Decimal('125.50')
+        payment.date = date(2026, 3, 7)
+        payment.is_paid = True
+        payment.is_fixed = False
+        result = CreditCardPaymentSyncService.sync_payment_to_bank_transaction(payment)
+        assert result is bank
+        assert not commits
+    finally:
+        event.remove(session, 'after_commit', record_commit)
+
+    assert bank.amount == Decimal('-125.50')
+    assert bank.transaction_date == date(2026, 3, 7)
+    assert bank.year_month == '2026-03'
+    assert bank.week_year == '10-2026'
+    assert bank.day_name == 'Sat'
+    assert bank.is_paid is True
+    assert bank.is_fixed is False
+    assert bank.vendor.name == account.name
+    assert recalculations == [{'account_ids': [account.id], 'commit': False}]
+    db.session.commit()
+
+
+def test_card_payment_sync_ignores_missing_and_paid_links(
+    app, card, family_id, patch_family, monkeypatch,
+):
+    account = Account(
+        family_id=family_id, name='Payment Account', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    category = Category(
+        family_id=family_id, name='Card Payment', head_budget='Credit Cards',
+        sub_budget=card.card_name, category_type='expense',
+    )
+    db.session.add_all([account, category])
+    db.session.flush()
+    paid_bank = Transaction(
+        family_id=family_id, account_id=account.id, category_id=category.id,
+        credit_card_id=card.id, amount=Decimal('-100'),
+        transaction_date=date(2026, 1, 15), is_paid=True,
+    )
+    orphan_bank = Transaction(
+        family_id=family_id, account_id=account.id, category_id=category.id,
+        credit_card_id=card.id, amount=Decimal('-50'),
+        transaction_date=date(2026, 1, 16), is_paid=False,
+    )
+    db.session.add_all([paid_bank, orphan_bank])
+    db.session.flush()
+    paid_payment = CreditCardTransaction(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 15),
+        item='Paid payment', transaction_type='Payment', amount=Decimal('100'),
+        is_paid=True, is_fixed=True, bank_transaction_id=paid_bank.id,
+    )
+    db.session.add(paid_payment)
+    db.session.commit()
+
+    refreshed = []
+    recalculated = []
+    monkeypatch.setattr(
+        CreditCardStatementService, 'refresh_after_changes',
+        lambda *args, **kwargs: refreshed.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        BalanceService, 'recalculate',
+        lambda **kwargs: recalculated.append(kwargs),
+    )
+
+    assert CreditCardPaymentSyncService.sync_bank_transaction_to_payment(orphan_bank) is None
+    assert CreditCardPaymentSyncService.sync_bank_transaction_to_payment(paid_bank) is None
+    unlinked_payment = CreditCardTransaction(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 17),
+        item='Unlinked payment', transaction_type='Payment', amount=Decimal('25'),
+    )
+    missing_bank_payment = CreditCardTransaction(
+        family_id=family_id, credit_card_id=card.id, date=date(2026, 1, 18),
+        item='Missing bank payment', transaction_type='Payment',
+        amount=Decimal('30'), bank_transaction_id=999999,
+    )
+    assert CreditCardPaymentSyncService.sync_payment_to_bank_transaction(unlinked_payment) is None
+    assert CreditCardPaymentSyncService.sync_payment_to_bank_transaction(missing_bank_payment) is None
+    assert refreshed == []
+    assert recalculated == []
 
 
 def test_expense_purchase_changes_refresh_forecasts(auto_forecast_card, family_id):

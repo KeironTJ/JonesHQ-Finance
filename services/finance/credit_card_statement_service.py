@@ -445,7 +445,7 @@ class CreditCardStatementService:
 
             # Link them together - bank txn is auto-generated, CC payment stays unlocked
             # so regeneration can still clean it up if needed.
-            # It will be locked via sync_bank_transaction_to_payment when the user marks it paid/fixed.
+            # Bank edits lock it through CreditCardPaymentSyncService.
             transaction.bank_transaction_id = bank_txn.id
 
         # Recalculate balances

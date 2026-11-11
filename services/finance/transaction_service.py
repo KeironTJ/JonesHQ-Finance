@@ -15,6 +15,7 @@ from models.credit_cards import CreditCard
 from models.loans import Loan
 from services.finance.payday_service import PaydayService
 from services.finance.credit_card_statement_service import CreditCardStatementService
+from services.finance.credit_card_payment_sync_service import CreditCardPaymentSyncService
 from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
 
@@ -283,8 +284,7 @@ class TransactionService:
                 linked_transaction.updated_at = datetime.now()
 
         if transaction.credit_card_id:
-            from services.finance.credit_card_service import CreditCardService
-            CreditCardService.sync_bank_transaction_to_payment(transaction)
+            CreditCardPaymentSyncService.sync_bank_transaction_to_payment(transaction)
         db.session.commit()
         return transaction, old_account_id, linked_account_id
 
