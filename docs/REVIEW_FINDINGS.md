@@ -202,15 +202,16 @@ the stale generated row can be removed without exposing it. A route regression
 clears a private vehicle from a shared fuel expense and verifies both the
 registration and generated trip are removed.
 
-**Remaining review:** investigate whether date or amount edits can invalidate
-or deleting an expense can leave an existing partial reimbursement transaction
-stale. `reconcile_periods` only rebuilds full-period claims, while partial
-transactions use a distinct payment type; expense update/delete and set-period
-routes do not currently reconcile those partial transactions. Before changing
-that behavior, choose whether those operations should update unpaid partial
-claims or block edits/deletion until the expense is unclaimed. Defer service
-extraction until a cohesive boundary and unchanged financial behavior can be
-demonstrated.
+Partial reimbursement transactions use a distinct payment type, so the normal
+period reconciliation does not refresh them. Expense updates now recalculate
+the total of an affected unpaid partial claim, and period changes plus single
+and bulk deletion do the same after removing an expense from the claim. An
+unpaid partial transaction is removed when its last expense is removed, with
+its account balance recalculated in the same transaction. Changes that would
+alter a paid partial claim are rejected before expense mutations; bulk deletes
+validate every claim before deleting any selected expense. Regressions cover
+amount edits, unclaiming, single deletion, deletion of the last claim expense,
+paid-claim protection, and the route warning.
 
 The lifecycle follow-up now captures the expense's old reimbursement period
 before an edit and reconciles both old and new periods. Single and bulk deletion
@@ -259,6 +260,11 @@ database name.
 
 ## Validation for This Pass
 
+- Partial-claim mutation follow-up: **35 focused expense, route, and
+  reimbursement tests passed**. Regressions verify unpaid totals and account
+  balances after edits/removal, deletion of an emptied claim, atomic rejection
+  of paid-claim mutations, private claim suffix allocation, and the user-facing
+  route warning. CI validation is pending.
 - Fuel-vehicle update follow-up: **73 focused expense, reimbursement, and
   credit-card tests passed**. The route regression covers clearing a private
   vehicle from a shared fuel expense and removing its generated trip. Both CI

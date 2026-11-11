@@ -345,6 +345,39 @@ def test_update_expense_reconciles_old_and_new_periods(
     ]
 
 
+def test_update_expense_warns_and_preserves_paid_partial_claim(
+    app, family, user, monkeypatch,
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    _group, expenses = _create_reimbursement_fixture(
+        family, [(date(2026, 4, 20), Decimal('10.00'))],
+    )
+    transaction_id, _, _ = ExpenseSyncService.create_partial_reimbursement(
+        date(2026, 4, 1), date(2026, 4, 30), date(2026, 5, 1),
+    )
+    transaction = db.session.get(Transaction, transaction_id)
+    transaction.is_paid = True
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+
+    response = client.post(
+        f'/finance/expenses/update/{expenses[0].id}',
+        data={
+            'date': '2026-04-20',
+            'description': 'Changed expense',
+            'expense_type': 'Fuel',
+            'total_cost': '25.00',
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b'already paid' in response.data
+    assert db.session.get(Expense, expenses[0].id).total_cost == Decimal('10.00')
+    assert db.session.get(Transaction, transaction_id).amount == Decimal('10.00')
+
+
 def test_update_expense_clears_vehicle_and_generated_fuel_trip(
     app, family, user, monkeypatch,
 ):

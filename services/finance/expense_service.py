@@ -73,8 +73,22 @@ class ExpenseService:
 
         expense = family_get_or_404(Expense, expense_id)
         old_period = ExpenseSyncService.get_period_key_for_expense(expense)
-        if data.get('date'):
-            expense.date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+        old_claim_group = expense.claim_group
+        requested_date = (
+            datetime.strptime(data['date'], '%Y-%m-%d').date()
+            if data.get('date') else expense.date
+        )
+        requested_total = (
+            Decimal(data['total_cost'])
+            if data.get('total_cost') else expense.total_cost
+        )
+        if (
+            old_claim_group and '-P' in old_claim_group
+            and (requested_date != expense.date or requested_total != expense.total_cost)
+        ):
+            ExpenseSyncService.assert_partial_claims_unpaid([old_claim_group])
+
+        expense.date = requested_date
         new_period = ExpenseSyncService.get_period_key_for_expense(expense)
         for field, value in ExpenseService._date_fields(expense.date).items():
             setattr(expense, field, value)
@@ -102,13 +116,24 @@ class ExpenseService:
         expense.owner_id = db_helpers.get_current_user_id() if data.get('visibility') == 'private' else None
 
         expense.payday_period = ExpenseSyncService.get_period_key_for_expense(expense) if expense.date else None
+        if old_claim_group and '-P' in old_claim_group:
+            ExpenseSyncService.reconcile_partial_reimbursements(
+                [old_claim_group], commit=False,
+            )
         db.session.commit()
         return expense
 
     @staticmethod
     def delete_expense(expense_id, *, commit=True):
+        from services.finance.expense_sync_service import ExpenseSyncService
+
         expense = family_get_or_404(Expense, expense_id)
+        claim_group = expense.claim_group
+        ExpenseSyncService.assert_partial_claims_unpaid([claim_group])
         db.session.delete(expense)
+        ExpenseSyncService.reconcile_partial_reimbursements(
+            [claim_group], commit=False,
+        )
         if commit:
             db.session.commit()
 
@@ -120,7 +145,6 @@ class ExpenseService:
         to being derived from the expense date. Otherwise it must be 'YYYY-MM'.
         Raises ValueError if the expense's current period is already settled/locked.
         """
-        from models.transactions import Transaction
         from services.finance.expense_sync_service import ExpenseSyncService
 
         expense = family_get_or_404(Expense, expense_id)
@@ -128,7 +152,10 @@ class ExpenseService:
         current_key = expense.claim_group or ExpenseSyncService.get_period_key_for_expense(expense)
         locked = bool(expense.reimbursed)
         if not locked and current_key:
-            txn = family_query(Transaction).filter(Transaction.claim_group == current_key).first()
+            from models.transactions import Transaction
+            txn = family_query(Transaction, include_private=True).filter(
+                Transaction.claim_group == current_key
+            ).first()
             if txn and txn.is_paid:
                 locked = True
         if locked:
@@ -142,18 +169,31 @@ class ExpenseService:
                 raise ValueError('Invalid period format — expected YYYY-MM.')
             expense.claim_group = period_value
 
+        if current_key and '-P' in current_key:
+            ExpenseSyncService.reconcile_partial_reimbursements(
+                [current_key], commit=False,
+            )
         db.session.commit()
         return expense
 
 
     @staticmethod
     def bulk_delete_expenses(expense_ids, *, commit=True):
-        deleted = 0
+        from services.finance.expense_sync_service import ExpenseSyncService
+
+        expenses = []
         for expense_id in expense_ids:
             expense = family_query(Expense).filter_by(id=expense_id).first()
             if expense:
-                db.session.delete(expense)
-                deleted += 1
+                expenses.append(expense)
+
+        claim_groups = {expense.claim_group for expense in expenses if expense.claim_group}
+        ExpenseSyncService.assert_partial_claims_unpaid(claim_groups)
+        for expense in expenses:
+            db.session.delete(expense)
+        ExpenseSyncService.reconcile_partial_reimbursements(
+            claim_groups, commit=False,
+        )
         if commit:
             db.session.commit()
-        return deleted
+        return len(expenses)

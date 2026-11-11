@@ -709,6 +709,9 @@ def update_expense(expense_id):
             current_app.logger.exception(f'Sync failed after update for expense {expense.id}')
             flash('Expense updated but syncing linked transactions failed — check the server log.', 'warning')
         flash('Expense updated', 'success')
+    except ValueError as e:
+        db.session.rollback()
+        flash(str(e), 'warning')
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error updating expense')
@@ -759,6 +762,9 @@ def delete_expense(expense_id):
                 'warning',
             )
         flash('Expense deleted', 'success')
+    except ValueError as e:
+        db.session.rollback()
+        flash(str(e), 'warning')
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error deleting expense')
@@ -822,6 +828,9 @@ def bulk_delete_expenses():
                 'warning',
             )
         flash(f'Deleted {deleted_count} expense(s).', 'success')
+    except ValueError as e:
+        db.session.rollback()
+        flash(str(e), 'warning')
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception('Error deleting expenses')

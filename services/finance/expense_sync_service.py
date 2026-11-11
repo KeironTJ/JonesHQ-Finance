@@ -250,6 +250,68 @@ class ExpenseSyncService:
             )
 
     @staticmethod
+    def assert_partial_claims_unpaid(claim_groups):
+        for claim_group in {key for key in claim_groups if key and '-P' in key}:
+            transaction = family_query(Transaction, include_private=True).filter_by(
+                payment_type='Expense Partial Reimbursement',
+                claim_group=claim_group,
+            ).first()
+            if transaction and transaction.is_paid:
+                raise ValueError(
+                    'This partial reimbursement is already paid; its expenses '
+                    'can no longer be changed.'
+                )
+
+    @staticmethod
+    def reconcile_partial_reimbursements(claim_groups, *, commit=True):
+        account_ids = set()
+        try:
+            for claim_group in sorted(
+                {key for key in claim_groups if key and '-P' in key}
+            ):
+                transactions = family_query(
+                    Transaction, include_private=True,
+                ).filter_by(
+                    payment_type='Expense Partial Reimbursement',
+                    claim_group=claim_group,
+                ).all()
+                if not transactions:
+                    continue
+                if len(transactions) != 1:
+                    raise ValueError(
+                        f'Multiple partial reimbursements use claim group {claim_group}.'
+                    )
+
+                transaction = transactions[0]
+                if transaction.is_paid:
+                    continue
+
+                expenses = family_query(Expense, include_private=True).filter_by(
+                    claim_group=claim_group,
+                ).all()
+                if not expenses:
+                    if transaction.account_id:
+                        account_ids.add(transaction.account_id)
+                    db.session.delete(transaction)
+                    continue
+
+                transaction.amount = sum(
+                    (expense.total_cost or Decimal('0') for expense in expenses),
+                    Decimal('0'),
+                )
+                if transaction.account_id:
+                    account_ids.add(transaction.account_id)
+
+            for account_id in account_ids:
+                Transaction.recalculate_account_balance(account_id)
+            if commit:
+                db.session.commit()
+        except Exception:
+            if commit:
+                db.session.rollback()
+            raise
+
+    @staticmethod
     def _reconcile_group_period(period_key, group):
         if group.mode == 'folded':
             result = ExpenseSyncService._fold_group_period(group, period_key)
@@ -611,7 +673,7 @@ class ExpenseSyncService:
             # used for this base period on the expenses table.  This is reliable even
             # when the reimbursement date falls in a different calendar month.
             existing_partial_count = (
-                family_query(Expense)
+                family_query(Expense, include_private=True)
                 .filter(Expense.claim_group.like(f'{base_period}-P%'))
                 .with_entities(Expense.claim_group)
                 .distinct()
