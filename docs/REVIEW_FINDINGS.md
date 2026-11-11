@@ -174,9 +174,19 @@ re-mark partially claimed expenses as reimbursed.
 
 **Next follow-up:** map the remaining expense update/deletion and fuel-trip
 lifecycle paths and their transaction boundaries before considering an
-extraction. Cover reimbursement edits/deletes, card payoff generation,
-fuel-trip create/update/delete, household/privacy scope, and commit/rollback
-boundaries.
+extraction. Broader reimbursement update/delete edge cases, household/privacy
+scope, and explicit commit/rollback boundaries remain to be reviewed.
+
+The lifecycle follow-up now captures the expense's old reimbursement period
+before an edit and reconciles both old and new periods. Single and bulk deletion
+reconcile affected reimbursement totals, including removing an unpaid
+reimbursement when its last expense is deleted. Card payoff reconciliation
+updates linked payment amount/date and account balance, and removes stale unpaid
+payoffs after their reimbursement or card expenses disappear while preserving
+paid transactions. Fuel-expense reconciliation updates an existing generated
+trip when its date, vehicle, or mileage changes, and removes stale generated
+trips when the expense no longer has a valid vehicle or is no longer a fuel
+expense.
 
 **Acceptance:** each extraction has unchanged financial results, household and
 privacy scoping, and regression coverage for all existing callers; do not add
@@ -224,6 +234,11 @@ database name.
   3 skipped**, 15 warnings). Both the full pytest and PostgreSQL jobs passed for
   `49dbe11` in
   [CI run 43052164225](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43052164225).
+- Expense edit/delete and generated-payment/fuel-trip follow-up: focused lifecycle
+  and route tests passed (**25 passed**); the full local suite passed (**1,741
+  passed, 3 skipped**, 15 warnings). Both the full pytest and PostgreSQL jobs
+  passed for `77e8804` in
+  [CI run 43059918420](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43059918420).
 - Before the payment-sync extraction (`0904366`): local full suite
   **1,726 passed, 3 skipped**,
   with 15 warnings. The two jobs in the [latest CI run](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/42924793110)
