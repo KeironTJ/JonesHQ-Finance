@@ -1055,13 +1055,18 @@ class ExpenseSyncService:
             exp for exp in all_period_expenses
             if exp.claim_group is None or exp.claim_group == period_key
         ]
-        if not expenses:
-            return None
 
         total = sum(exp.total_cost for exp in expenses if exp.total_cost) or Decimal('0')
         changed = (income.expense_reimbursement_total or Decimal('0')) != total
 
         income.expense_reimbursement_total = total
+        included_ids = {expense.id for expense in expenses}
+        for exp in all_period_expenses:
+            if exp.id not in included_ids and exp.income_id == income.id:
+                exp.income_id = None
+                exp.reimbursed = False
+                db.session.add(exp)
+
         for exp in expenses:
             if exp.claim_group is None:
                 exp.claim_group = period_key
