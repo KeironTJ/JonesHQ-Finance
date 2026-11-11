@@ -209,8 +209,9 @@ database name.
 - Partial reimbursement follow-up: a regression reproduced the stale full-period
   amount before the fix. The focused expense/reimbursement/card/transaction
   tests passed (**72 passed**); the full local suite passed (**1,732 passed,
-  3 skipped**, 15 warnings). The PostgreSQL job now includes the new lifecycle
-  and folded-payslip regressions; its result will be available from CI after push.
+  3 skipped**, 15 warnings). The SQLite and PostgreSQL jobs, including the new
+  lifecycle and folded-payslip regressions, passed in
+  [CI run 43001275033](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43001275033).
 - Before the payment-sync extraction (`0904366`): local full suite
   **1,726 passed, 3 skipped**,
   with 15 warnings. The two jobs in the [latest CI run](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/42924793110)
