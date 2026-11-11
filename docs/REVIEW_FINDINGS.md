@@ -251,6 +251,10 @@ database name.
   commit-by-default service signatures. A full local suite attempt was not
   counted as passing: it encountered `no such table` errors across unrelated
   later tests after an earlier failure; targeted tests passed in isolation.
+  Both CI jobs passed for `ff95b23` in
+  [run 43106362538](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43106362538):
+  the full SQLite suite reported **1,746 passed, 3 skipped**, and the PostgreSQL
+  17 application/migration regressions passed.
 - Partial reimbursement follow-up: a regression reproduced the stale full-period
   amount before the fix. The focused expense/reimbursement/card/transaction
   tests passed (**72 passed**); the full local suite passed (**1,732 passed,
