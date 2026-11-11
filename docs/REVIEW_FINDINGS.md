@@ -261,7 +261,9 @@ database name.
 
 - Fuel-vehicle update follow-up: **73 focused expense, reimbursement, and
   credit-card tests passed**. The route regression covers clearing a private
-  vehicle from a shared fuel expense and removing its generated trip.
+  vehicle from a shared fuel expense and removing its generated trip. Both CI
+  jobs passed for `f44e70c` in
+  [run 43107874926](https://github.com/KeironTJ/JonesHQ-Finance/actions/runs/43107874926).
 - Expense delete-boundary/privacy follow-up: **28 focused route, service, and
   reimbursement tests passed**; the credit-card service suite passed **44
   tests**. Pylance found all 16 call sites compatible with the preserved
