@@ -99,7 +99,7 @@
                             </td>
                             <td class="text-end">
                                 <button class="btn btn-sm btn-outline-primary edit-group-btn"
-                                    data-id="{{ g.id }}" data-name="{{ g.name }}" data-mode="{{ g.mode }}"
+                                    data-action-url="{{ url_for('expenses.update_group', group_id=g.id) }}" data-name="{{ g.name }}" data-mode="{{ g.mode }}"
                                     data-income="{{ g.recurring_income_id or '' }}"
                                     {% if g.is_default %}disabled title="The default group's mode can't be changed"{% endif %}>
                                     <i class="bi bi-pencil"></i>
@@ -172,8 +172,7 @@ function toggleIncomeField(prefix) {
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.edit-group-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            const id = this.dataset.id;
-            document.getElementById('editGroupForm').action = `/expenses/groups/${id}/update`;
+            document.getElementById('editGroupForm').action = this.dataset.actionUrl;
             document.getElementById('edit_group_name').value = this.dataset.name;
             document.getElementById('edit_group_mode').value = this.dataset.mode;
             document.getElementById('edit_group_income').value = this.dataset.income || '';

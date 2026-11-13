@@ -78,7 +78,7 @@
                         <td data-label="Tank Size" class="vehicle-card-detail vehicle-card-tank">{{ vehicle.tank_size }} gal</td>
                         <td data-label="Fuel Type" class="vehicle-card-desktop-detail">{{ vehicle.fuel_type }}</td>
                         <td data-label="Actions" class="vehicle-card-actions">
-                            <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }}, {{ vehicle.is_private|lower }})">
+                            <button class="btn btn-sm btn-outline-primary" data-action-url="{{ url_for('vehicles.update_vehicle', vehicle_id=vehicle.id) }}" onclick="editVehicle(this.dataset.actionUrl, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }}, {{ vehicle.is_private|lower }})">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;" onsubmit="return confirm('Delete {{ vehicle.name }}? This will delete all fuel and trip records!');">
@@ -138,7 +138,7 @@
                                 <td data-label="Tank Size" class="vehicle-card-detail vehicle-card-tank">{{ vehicle.tank_size }} gal</td>
                                 <td data-label="Fuel Type" class="vehicle-card-desktop-detail">{{ vehicle.fuel_type }}</td>
                                 <td data-label="Actions" class="vehicle-card-actions">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }}, {{ vehicle.is_private|lower }})">
+                                    <button class="btn btn-sm btn-outline-primary" data-action-url="{{ url_for('vehicles.update_vehicle', vehicle_id=vehicle.id) }}" onclick="editVehicle(this.dataset.actionUrl, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }}, {{ vehicle.is_private|lower }})">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;" onsubmit="return confirm('Delete {{ vehicle.name }}? This will delete all fuel and trip records!');">
@@ -350,8 +350,8 @@ function setVehicleCardExpanded(row, expanded) {
     toggle.querySelector('i').classList.toggle('bi-chevron-down', !expanded);
 }
 
-function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct, is_private) {
-    document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
+function editVehicle(actionUrl, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct, is_private) {
+    document.getElementById('editVehicleForm').action = actionUrl;
     document.getElementById('edit_vehicle_name').value = name;
     document.getElementById('edit_vehicle_registration').value = registration;
     document.getElementById('edit_vehicle_make').value = make;

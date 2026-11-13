@@ -460,6 +460,7 @@
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#linkPlanModal"
                                                 data-txn-id="{{ transaction.id }}"
+                                                data-action-url="{{ url_for('plans.link_transaction', transaction_id=transaction.id) }}"
                                                 data-txn-label="{{ (transaction.item or transaction.description or 'Transaction') | e }}"
                                                 data-txn-date="{{ transaction.transaction_date.strftime('%d %b %Y') if transaction.transaction_date else '' }}"
                                                 data-txn-amount="{{ transaction.amount | abs }}"
@@ -475,6 +476,7 @@
                                                     data-bs-toggle="modal" 
                                                     data-bs-target="#editTransactionModal"
                                                     data-txn-id="{{ transaction.id }}"
+                                                    data-action-url="{{ url_for('transactions.edit', id=transaction.id) }}"
                                                     data-txn-date="{{ transaction.transaction_date.strftime('%Y-%m-%d') if transaction.transaction_date else '' }}"
                                                     data-txn-amount="{{ transaction.amount }}"
                                                     data-txn-description="{{ transaction.description }}"
@@ -883,10 +885,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         linkPlanModal.addEventListener('show.bs.modal', function (event) {
             const button = event.relatedTarget;
-            const transactionId = button.dataset.txnId;
             const currentPlanId = button.dataset.planId || '';
             const currentItemId = button.dataset.planItemId || '';
-            form.action = `/plans/transactions/${transactionId}/link`;
+            form.action = button.dataset.actionUrl;
             document.getElementById('linkPlanTransactionSummary').textContent = `${button.dataset.txnDate} · ${button.dataset.txnLabel} · £${parseFloat(button.dataset.txnAmount).toFixed(2)}`;
             if (planSelect) planSelect.value = currentPlanId;
             if (itemSearch) itemSearch.value = '';
@@ -925,7 +926,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (editTransactionModal) {
         editTransactionModal.addEventListener('show.bs.modal', function (event) {
             const button = event.relatedTarget;
-            const txnId = button.getAttribute('data-txn-id');
             const txnDate = button.getAttribute('data-txn-date');
             const txnAmount = button.getAttribute('data-txn-amount');
             const txnDescription = button.getAttribute('data-txn-description');
@@ -941,7 +941,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Set form action dynamically
             const form = document.getElementById('editTransactionForm');
-            form.action = `/transactions/${txnId}/edit`;
+            form.action = button.dataset.actionUrl;
             
             // Populate amount with sign toggle
             const amt = parseFloat(txnAmount);

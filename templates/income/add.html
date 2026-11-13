@@ -212,10 +212,11 @@
         }
         
         // Call API
-        fetch('/finance/income/calculate-preview', {
+        fetch({{ url_for('income.calculate_preview') | tojson }}, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}',
             },
             body: JSON.stringify(formData)
         })

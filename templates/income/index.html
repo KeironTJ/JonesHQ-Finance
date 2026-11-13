@@ -276,6 +276,7 @@
                                     <td class="text-nowrap">
                                         <button class="btn btn-sm {% if income.is_paid %}btn-success{% else %}btn-outline-secondary{% endif %} toggle-paid me-1"
                                                 data-id="{{ income.id }}"
+                                                data-action-url="{{ url_for('income.toggle_paid', id=income.id) }}"
                                                 title="{{ 'Mark unpaid' if income.is_paid else 'Mark paid' }}">
                                             <i class="bi bi-{% if income.is_paid %}check-circle-fill{% else %}circle{% endif %}"></i>
                                         </button>
@@ -514,8 +515,7 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootst
 // Toggle paid
 document.querySelectorAll('.toggle-paid').forEach(btn => {
     btn.addEventListener('click', function () {
-        const id = this.dataset.id;
-        fetch(`/income/toggle/${id}/paid`, {
+        fetch(this.dataset.actionUrl, {
             method: 'POST',
             headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
         })

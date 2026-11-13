@@ -360,17 +360,17 @@
                             <td>{{ e.days or 1 }}</td>
                             <td>£{{ "%.2f"|format((e.total_cost or e.cost or 0) ) }}</td>
                             <td class="text-center">
-                                <button class="btn btn-sm toggle-flag p-0 border-0 bg-transparent {% if e.paid_for %}text-success{% else %}text-secondary{% endif %}" data-id="{{ e.id }}" data-field="paid_for" title="{% if e.paid_for %}Paid{% else %}Not paid{% endif %}">
+                                <button class="btn btn-sm toggle-flag p-0 border-0 bg-transparent {% if e.paid_for %}text-success{% else %}text-secondary{% endif %}" data-action-url="{{ url_for('expenses.toggle_expense_flag', expense_id=e.id, field='paid_for') }}" data-field="paid_for" title="{% if e.paid_for %}Paid{% else %}Not paid{% endif %}">
                                     <i class="bi {% if e.paid_for %}bi-check-circle-fill{% else %}bi-circle{% endif %} fs-5"></i>
                                 </button>
                             </td>
                             <td class="text-center">
-                                <button class="btn btn-sm toggle-flag p-0 border-0 bg-transparent {% if e.submitted %}text-success{% else %}text-secondary{% endif %}" data-id="{{ e.id }}" data-field="submitted" title="{% if e.submitted %}Submitted{% else %}Not submitted{% endif %}">
+                                <button class="btn btn-sm toggle-flag p-0 border-0 bg-transparent {% if e.submitted %}text-success{% else %}text-secondary{% endif %}" data-action-url="{{ url_for('expenses.toggle_expense_flag', expense_id=e.id, field='submitted') }}" data-field="submitted" title="{% if e.submitted %}Submitted{% else %}Not submitted{% endif %}">
                                     <i class="bi {% if e.submitted %}bi-check-circle-fill{% else %}bi-circle{% endif %} fs-5"></i>
                                 </button>
                             </td>
                             <td class="text-center">
-                                <button class="btn btn-sm toggle-flag p-0 border-0 bg-transparent {% if e.reimbursed %}text-success{% else %}text-secondary{% endif %}" data-id="{{ e.id }}" data-field="reimbursed" title="{% if e.reimbursed %}Reimbursed{% else %}Not reimbursed{% endif %}">
+                                <button class="btn btn-sm toggle-flag p-0 border-0 bg-transparent {% if e.reimbursed %}text-success{% else %}text-secondary{% endif %}" data-action-url="{{ url_for('expenses.toggle_expense_flag', expense_id=e.id, field='reimbursed') }}" data-field="reimbursed" title="{% if e.reimbursed %}Reimbursed{% else %}Not reimbursed{% endif %}">
                                     <i class="bi {% if e.reimbursed %}bi-check-circle-fill{% else %}bi-circle{% endif %} fs-5"></i>
                                 </button>
                             </td>
@@ -410,6 +410,7 @@
                                 <button class="btn btn-sm btn-outline-primary edit-expense-btn" 
                                     title="Edit"
                                     data-id="{{ e.id }}"
+                                    data-action-url="{{ url_for('expenses.update_expense', expense_id=e.id) }}"
                                     data-date="{{ e.date.strftime('%Y-%m-%d') if e.date else '' }}"
                                     data-description="{{ e.description or '' }}"
                                     data-type="{{ e.expense_type or '' }}"
@@ -776,7 +777,7 @@ document.addEventListener('DOMContentLoaded', function(){
             const groupId = this.dataset.group;
             const isPrivate = this.dataset.private === 'true';
             
-            document.getElementById('editExpenseForm').action = `/expenses/update/${id}`;
+            document.getElementById('editExpenseForm').action = this.dataset.actionUrl;
             document.getElementById('edit_expense_id').value = id;
             document.getElementById('edit_date').value = date;
             document.getElementById('edit_description').value = description;
@@ -815,9 +816,8 @@ document.addEventListener('DOMContentLoaded', function(){
     // Toggle flags
     document.querySelectorAll('.toggle-flag').forEach(btn => {
         btn.addEventListener('click', function(e){
-            const id = this.dataset.id;
             const field = this.dataset.field;
-            fetch(`/expenses/toggle/${id}/${field}`, {
+            fetch(this.dataset.actionUrl, {
                 method: 'POST', 
                 headers: {
                     'Content-Type': 'application/json',

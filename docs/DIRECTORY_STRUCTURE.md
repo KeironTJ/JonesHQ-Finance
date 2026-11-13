@@ -32,6 +32,8 @@ template. Existing URLs are unchanged; Python imports
 use the owning package directly, with no forwarding packages at the old paths.
 Templates retain their existing feature folders and shared base/design system.
 Household Hub owns `templates/household/` and uses the same shell and themes.
+Generate internal URLs with `url_for`, including JavaScript form actions and
+requests, so module and deployment prefixes are respected.
 
 ### `/models/`
 SQLAlchemy database models

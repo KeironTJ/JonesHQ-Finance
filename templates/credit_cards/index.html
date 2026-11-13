@@ -107,7 +107,8 @@
                                         <i class="bi bi-pencil"></i>
                                     </a>
                                     <button type="button" class="btn btn-outline-danger"
-                                            onclick="confirmDelete({{ card.id }}, '{{ card.card_name }}')" title="Delete">
+                                            data-name="{{ card.card_name }}" data-action-url="{{ url_for('credit_cards.delete', id=card.id) }}"
+                                            onclick="confirmDelete(this)" title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
@@ -177,7 +178,8 @@
                                         <i class="bi bi-pencil"></i>
                                     </a>
                                     <button type="button" class="btn btn-outline-danger"
-                                            onclick="confirmDelete({{ card.id }}, '{{ card.card_name }}')" title="Delete">
+                                            data-name="{{ card.card_name }}" data-action-url="{{ url_for('credit_cards.delete', id=card.id) }}"
+                                            onclick="confirmDelete(this)" title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
@@ -260,9 +262,9 @@
 </div>
 
 <script>
-function confirmDelete(id, name) {
-    document.getElementById('cardName').textContent = name;
-    document.getElementById('deleteForm').action = `/credit-cards/${id}/delete`;
+function confirmDelete(button) {
+    document.getElementById('cardName').textContent = button.dataset.name;
+    document.getElementById('deleteForm').action = button.dataset.actionUrl;
     new bootstrap.Modal(document.getElementById('deleteModal')).show();
 }
 

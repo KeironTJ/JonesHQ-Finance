@@ -1,6 +1,7 @@
 from tests.auth_helpers import login_client
 from decimal import Decimal
 from datetime import date
+from html.parser import HTMLParser
 import pytest
 from sqlalchemy import event
 
@@ -97,6 +98,61 @@ def test_transaction_row_actions_omit_lock_control(app, family, user, is_paid):
     assert ('title="Edit Transaction"' in html) is not is_paid
     assert ('title="Mark as Paid"' in html) is not is_paid
     assert ('title="Delete"' in html) is not is_paid
+
+
+@pytest.mark.parametrize('script_name', ['', '/mounted'])
+def test_transaction_modal_actions_use_registered_urls(app, family, user, script_name):
+    account = Account(family_id=family.id, name='Current', account_type='Joint', balance=0, is_active=True)
+    category = Category(family_id=family.id, name='General', category_type='expense')
+    plan = Plan(family_id=family.id, title='Birthday')
+    item = PlanItem(family_id=family.id, plan=plan, title='Books')
+    db.session.add_all([account, category, plan, item])
+    db.session.flush()
+    transaction = Transaction(
+        family_id=family.id, account_id=account.id, category_id=category.id,
+        transaction_date=date.today(), amount=-25, is_paid=False,
+    )
+    db.session.add(transaction)
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    environ = {'SCRIPT_NAME': script_name}
+
+    response = client.get('/finance/transactions?payday_period=&is_paid=', environ_overrides=environ)
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+
+    class ModalButtonParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.buttons = {}
+
+        def handle_starttag(self, tag, attrs):
+            attributes = dict(attrs)
+            if tag == 'button' and attributes.get('data-bs-target') in ('#editTransactionModal', '#linkPlanModal'):
+                self.buttons[attributes['data-bs-target']] = attributes
+
+    parser = ModalButtonParser()
+    parser.feed(html)
+    edit_url = parser.buttons['#editTransactionModal']['data-action-url']
+    link_url = parser.buttons['#linkPlanModal']['data-action-url']
+    assert edit_url == f'{script_name}/finance/transactions/{transaction.id}/edit'
+    assert link_url == f'{script_name}/finance/plans/transactions/{transaction.id}/link'
+    assert html.count('form.action = button.dataset.actionUrl;') == 2
+
+    response = client.post(edit_url[len(script_name):], environ_overrides=environ, data={
+        'account_id': str(account.id), 'category_id': str(category.id),
+        'amount': '-30', 'transaction_date': date.today().isoformat(),
+        'description': 'Updated in modal',
+    })
+    assert response.status_code == 302
+    assert db.session.get(Transaction, transaction.id).description == 'Updated in modal'
+
+    response = client.post(link_url[len(script_name):], environ_overrides=environ, data={
+        'plan_item_id': str(item.id),
+    })
+    assert response.status_code == 302
+    assert db.session.get(PlanItem, item.id).transaction_id == transaction.id
 
 
 def test_consolidated_index_renders_responsive_filters(app, family, user):

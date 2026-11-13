@@ -280,6 +280,7 @@
                                 <button class="btn btn-outline-secondary edit-fuel-btn"
                                         title="Edit"
                                         data-id="{{ fuel.id }}"
+                                        data-action-url="{{ url_for('vehicles.update_fuel', fuel_id=fuel.id) }}"
                                         data-date="{{ fuel.date.isoformat() }}"
                                         data-vehicle-id="{{ fuel.vehicle_id }}"
                                         data-price-per-litre="{{ fuel.price_per_litre }}"
@@ -483,7 +484,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.querySelectorAll('.edit-fuel-btn').forEach(button => {
         button.addEventListener('click', function() {
-            const id = this.dataset.id;
             const date = this.dataset.date;
             const vehicleId = this.dataset.vehicleId;
             const pricePerLitre = this.dataset.pricePerLitre;
@@ -493,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const isPartial = this.dataset.isPartial === 'true';
 
-            document.getElementById('editFuelForm').action = `/vehicles/fuel/update/${id}`;
+            document.getElementById('editFuelForm').action = this.dataset.actionUrl;
             document.getElementById('edit_date').value = date;
             document.getElementById('edit_vehicle_id').value = vehicleId;
             document.getElementById('edit_price_per_litre').value = pricePerLitre;

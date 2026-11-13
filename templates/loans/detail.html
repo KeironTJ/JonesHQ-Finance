@@ -345,6 +345,7 @@
                                 <button class="btn btn-sm btn-outline-primary toggle-paid" 
                                         data-loan-id="{{ loan.id }}"
                                         data-payment-id="{{ payment.id }}"
+                                        data-action-url="{{ url_for('loans.toggle_payment_paid', id=loan.id, payment_id=payment.id) }}"
                                         data-is-paid="{{ payment.is_paid|lower }}"
                                         title="Toggle paid status">
                                     <i class="bi bi-check-circle"></i>
@@ -504,14 +505,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle toggle paid status
     document.querySelectorAll('.toggle-paid').forEach(button => {
         button.addEventListener('click', function() {
-            const loanId = this.dataset.loanId;
-            const paymentId = this.dataset.paymentId;
-            const isPaid = this.dataset.isPaid === 'true';
-            
-            fetch(`/loans/${loanId}/payment/${paymentId}/toggle-paid`, {
+            fetch(this.dataset.actionUrl, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
                 }
             })
             .then(response => response.json())

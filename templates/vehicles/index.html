@@ -150,7 +150,8 @@
                                             </li>
                                             <li>
                                                 <button class="dropdown-item" type="button"
-                                                        onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                                        data-action-url="{{ url_for('vehicles.update_vehicle', vehicle_id=vehicle.id) }}"
+                                                        onclick="editVehicle(this.dataset.actionUrl, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
                                                     <i class="bi bi-pencil me-2" aria-hidden="true"></i>Edit Vehicle
                                                 </button>
                                             </li>
@@ -399,7 +400,8 @@
                                             <td data-label="Fuel" class="vehicle-card-desktop-detail">{{ vehicle.fuel_type }}</td>
                                             <td data-label="Actions" class="vehicle-card-actions">
                                                 <button class="btn btn-sm btn-outline-primary"
-                                                        onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                                        data-action-url="{{ url_for('vehicles.update_vehicle', vehicle_id=vehicle.id) }}"
+                                                        onclick="editVehicle(this.dataset.actionUrl, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
                                                     <i class="bi bi-pencil"></i> Edit
                                                 </button>
                                                 <form method="POST" action="{{ url_for('vehicles.delete_vehicle', vehicle_id=vehicle.id) }}" style="display:inline;"
@@ -458,7 +460,8 @@
                                                 <td data-label="Fuel" class="vehicle-card-desktop-detail">{{ vehicle.fuel_type }}</td>
                                                 <td data-label="Actions" class="vehicle-card-actions">
                                                     <button class="btn btn-sm btn-outline-secondary"
-                                                            onclick="editVehicle({{ vehicle.id }}, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
+                                                            data-action-url="{{ url_for('vehicles.update_vehicle', vehicle_id=vehicle.id) }}"
+                                                            onclick="editVehicle(this.dataset.actionUrl, '{{ vehicle.name }}', '{{ vehicle.registration }}', '{{ vehicle.make }}', '{{ vehicle.model }}', {{ vehicle.year or 'null' }}, {{ vehicle.tank_size }}, '{{ vehicle.fuel_type }}', {{ vehicle.is_active|lower }}, {{ vehicle.fuel_account_id or 'null' }}, {{ vehicle.refuel_threshold_pct or 95 }})">
                                                         <i class="bi bi-pencil"></i> Edit
                                                     </button>
                                                 </td>
@@ -746,8 +749,8 @@ function ovCalcGallons() {
     }
 }
 
-function editVehicle(id, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct) {
-    document.getElementById('editVehicleForm').action = `/vehicles/update/${id}`;
+function editVehicle(actionUrl, name, registration, make, model, year, tank_size, fuel_type, is_active, fuel_account_id, refuel_threshold_pct) {
+    document.getElementById('editVehicleForm').action = actionUrl;
     document.getElementById('edit_vehicle_name').value = name;
     document.getElementById('edit_vehicle_registration').value = registration;
     document.getElementById('edit_vehicle_make').value = make;
