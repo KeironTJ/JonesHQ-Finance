@@ -110,18 +110,6 @@
                                     value="{{ transaction.transaction_date.strftime('%Y-%m-%d') if transaction else (today.strftime('%Y-%m-%d') if today else '') }}" required>
                             </div>
 
-                            {% if not transaction %}
-                            <div class="col-md-6 mb-3">
-                                <label for="weekend_adjustment" class="form-label">Weekend &amp; bank holiday handling</label>
-                                <select class="form-select" id="weekend_adjustment" name="weekend_adjustment">
-                                    {% for value, label in [('none', 'Keep scheduled date'), ('next', 'Move to next working day'), ('previous', 'Move to previous working day')] %}
-                                    <option value="{{ value }}" {% if request.form.get('weekend_adjustment', 'none') == value %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                                <small class="form-text text-muted">Applies to every transaction created. Working days exclude weekends and England &amp; Wales bank holidays. Recurrence stays anchored to the original date.</small>
-                            </div>
-                            {% endif %}
-
                             <!-- Payment Type -->
                             <div class="col-md-6 mb-3">
                                 <label for="payment_type" class="form-label">Payment Type</label>
@@ -188,10 +176,23 @@
 
                         {% if can_access_section('plans') %}
                         <div class="card mb-3 form-subsection transaction-plan-link-section">
-                            <div class="card-header">
-                                <h5 class="mb-0"><i class="bi bi-journal-check me-2"></i>Plan link</h5>
+                            <div class="card-header p-0">
+                                <button class="btn btn-link w-100 text-start text-decoration-none text-body p-3"
+                                        type="button" data-bs-toggle="collapse" data-bs-target="#planLinkCollapse"
+                                        aria-expanded="{{ 'true' if current_plan_item else 'false' }}"
+                                        aria-controls="planLinkCollapse">
+                                    <span class="d-flex justify-content-between align-items-center gap-3">
+                                        <span>
+                                            <strong><i class="bi bi-journal-check me-2"></i>Plan link</strong>
+                                            <small class="d-block text-muted">Connect this transaction to a plan item.</small>
+                                        </span>
+                                        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                                    </span>
+                                </button>
                             </div>
-                            <div class="card-body">
+                            <div id="planLinkCollapse"
+                                 class="collapse{% if current_plan_item %} show{% endif %}">
+                                <div class="card-body">
                                 {% if plans %}
                                 <div class="btn-group plan-link-mode mb-3" role="group" aria-label="Plan item choice">
                                     <input class="btn-check" type="radio" id="planModeExisting" name="plan_mode_display" value="existing" checked>
@@ -228,6 +229,7 @@
                                 <p class="text-muted mb-2">There are no open plans yet.</p>
                                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('plans.index') }}"><i class="bi bi-plus-lg"></i> Create a plan</a>
                                 {% endif %}
+                                </div>
                             </div>
                         </div>
                         {% endif %}
@@ -235,21 +237,44 @@
                         {% if not transaction %}
                         <!-- Recurring Transaction Options (only for new transactions) -->
                         <div class="card mb-3 form-subsection">
-                            <div class="card-header">
-                                <h5 class="mb-0">
-                                    <i class="bi bi-calendar-repeat me-2"></i>Recurring Transaction Options
-                                </h5>
+                            <div class="card-header p-0">
+                                <button class="btn btn-link w-100 text-start text-decoration-none text-body p-3"
+                                        type="button" data-bs-toggle="collapse" data-bs-target="#transactionSeriesCollapse"
+                                        aria-expanded="{{ 'true' if request.form.get('is_recurring') == 'on' else 'false' }}"
+                                        aria-controls="transactionSeriesCollapse">
+                                    <span class="d-flex justify-content-between align-items-center gap-3">
+                                        <span>
+                                            <strong><i class="bi bi-calendar-repeat me-2"></i>Create a Transaction Series</strong>
+                                            <small class="d-block text-muted">Create a finite batch on a schedule.</small>
+                                        </span>
+                                        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                                    </span>
+                                </button>
                             </div>
-                            <div class="card-body">
+                            <div id="transactionSeriesCollapse"
+                                 class="collapse{% if request.form.get('is_recurring') == 'on' %} show{% endif %}">
+                                <div class="card-body">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="is_recurring" name="is_recurring">
+                                    <input class="form-check-input" type="checkbox" id="is_recurring" name="is_recurring"
+                                           {% if request.form.get('is_recurring') == 'on' %}checked{% endif %}>
                                     <label class="form-check-label" for="is_recurring">
                                         <strong>Create Multiple Transactions</strong>
-                                        <small class="d-block text-muted">Useful for recreating regular payments (e.g., monthly bills)</small>
+                                        <small class="d-block text-muted">Create a finite batch of transactions in one go.</small>
                                     </label>
                                 </div>
+
+                                <div class="mb-3">
+                                    <span class="text-muted">Need an ongoing rule that keeps future payments forecast?</span>
+                                    <a href="{{ url_for('transactions.create_recurring_payment') }}"
+                                       target="_blank" rel="noopener">
+                                        Set up a recurring payment
+                                        <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                                        <span class="visually-hidden">(opens in a new tab)</span>
+                                    </a>
+                                </div>
                                 
-                                <div id="recurring_options" style="display: none;">
+                                <div id="recurring_options"
+                                     style="display: {{ 'block' if request.form.get('is_recurring') == 'on' else 'none' }};">
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
                                             <label for="frequency" class="form-label">Frequency</label>
@@ -266,11 +291,24 @@
                                             <small class="text-muted">How many to create</small>
                                         </div>
                                     </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="weekend_adjustment" class="form-label">Weekend &amp; bank holiday handling</label>
+                                            <select class="form-select" id="weekend_adjustment" name="weekend_adjustment">
+                                                {% for value, label in [('none', 'Keep scheduled date'), ('next', 'Move to next working day'), ('previous', 'Move to previous working day')] %}
+                                                <option value="{{ value }}" {% if request.form.get('weekend_adjustment', 'none') == value %}selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <small class="form-text text-muted">Applies to each date in this batch. Working days exclude weekends and England &amp; Wales bank holidays; each date stays anchored to the original schedule.</small>
+                                        </div>
+                                    </div>
                                     
                                     <div class="alert alert-info" id="recurring_preview">
                                         <i class="bi bi-info-circle me-2"></i>
                                         <span id="preview_text">Will create <strong>12</strong> monthly transactions starting from selected date</span>
                                     </div>
+                                </div>
                                 </div>
                             </div>
                         </div>
@@ -482,19 +520,23 @@ if (planItemSelect && newPlanItemTitle) {
     // Recurring transaction toggle
     const isRecurringCheckbox = document.getElementById('is_recurring');
     if (isRecurringCheckbox) {
+        const recurringOptions = document.getElementById('recurring_options');
+        const submitText = document.getElementById('submit-text');
+        const weekendAdjustment = document.getElementById('weekend_adjustment');
+
+        function updateRecurringOptions() {
+            recurringOptions.style.display = isRecurringCheckbox.checked ? 'block' : 'none';
+            weekendAdjustment.disabled = !isRecurringCheckbox.checked;
+            submitText.textContent = isRecurringCheckbox.checked
+                ? 'Save Transactions'
+                : 'Save Transaction(s)';
+            if (isRecurringCheckbox.checked) updateRecurringPreview();
+        }
+
         isRecurringCheckbox.addEventListener('change', function() {
-            const recurringOptions = document.getElementById('recurring_options');
-            const submitText = document.getElementById('submit-text');
-            
-            if (this.checked) {
-                recurringOptions.style.display = 'block';
-                submitText.textContent = 'Save Transactions';
-                updateRecurringPreview();
-            } else {
-                recurringOptions.style.display = 'none';
-                submitText.textContent = 'Save Transaction(s)';
-            }
+            updateRecurringOptions();
         });
+        updateRecurringOptions();
         
         // Update recurring preview
         document.getElementById('frequency').addEventListener('change', updateRecurringPreview);

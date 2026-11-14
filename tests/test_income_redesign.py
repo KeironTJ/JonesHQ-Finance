@@ -155,7 +155,12 @@ def test_forecast_years_setting_extends_and_shortens(scoped):
 
     IncomeForecastService.set_forecast_years(8)
     IncomeForecastService.refresh_all_forecasts()
-    assert _future(recurring)[-1].pay_date >= date.today() + relativedelta(years=8, months=-1)
+    forecast_end = IncomeForecastService.forecast_horizon()
+    expected_dates = income_schedule.pay_dates(
+        recurring, date.today() + timedelta(days=1), forecast_end
+    )
+    assert _future(recurring)[-1].pay_date == expected_dates[-1]
+    assert _future(recurring)[-1].pay_date <= forecast_end
     assert IncomeForecastService.forecast_years() == 8
 
 

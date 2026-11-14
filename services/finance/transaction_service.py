@@ -167,13 +167,16 @@ class TransactionService:
             raise ValueError('Number of occurrences must be at least 1')
 
         frequency = data.get('frequency', 'monthly')
-        # Retain support for callers using the former checkbox API.
-        default_adjustment = (
-            'previous' if data.get('adjust_working_days') == 'on' else 'none'
-        )
-        weekend_adjustment = PaydayService.validate_weekend_adjustment(
-            data.get('weekend_adjustment', default_adjustment)
-        )
+        if is_recurring:
+            # Retain support for callers using the former checkbox API.
+            default_adjustment = (
+                'previous' if data.get('adjust_working_days') == 'on' else 'none'
+            )
+            weekend_adjustment = PaydayService.validate_weekend_adjustment(
+                data.get('weekend_adjustment', default_adjustment)
+            )
+        else:
+            weekend_adjustment = 'none'
         transactions = []
         amount = float(data['amount'])
 

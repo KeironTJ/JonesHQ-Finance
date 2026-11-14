@@ -50,7 +50,7 @@ def test_weekend_handling_for_single_and_batch_transactions(
         'day_name': 'Sat',
         'week_year': '05-2026',
     })
-    dates = expected if recurring else expected[:1]
+    dates = expected if recurring else [date(2026, 1, 31)]
     assert [txn.transaction_date for txn in transactions] == dates
     assert seen_dates == dates
     assert all(txn.year_month == txn.transaction_date.strftime('%Y-%m')
@@ -78,6 +78,7 @@ def test_transaction_handling_excludes_bank_holidays(
         'account_id': str(account.id), 'amount': '-10',
         'category_id': str(category.id),
         'transaction_date': '2026-12-25', 'weekend_adjustment': policy,
+        'is_recurring': 'on', 'occurrences': '1',
     })[0]
     assert transaction.transaction_date == expected
 
@@ -89,9 +90,29 @@ def test_invalid_weekend_handling_rejects_transaction_without_writing(
     with pytest.raises(ValueError, match='valid weekend'):
         TransactionService.create_transactions({
             'amount': '-10', 'transaction_date': '2026-12-25',
-            'weekend_adjustment': 'invalid',
+            'is_recurring': 'on', 'weekend_adjustment': 'invalid',
         })
     assert Transaction.query.count() == 0
+
+
+def test_single_transaction_ignores_batch_weekend_adjustment(
+    app, family, monkeypatch
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint', balance=0,
+    )
+    category = Category(family_id=family.id, name='Bills', category_type='expense')
+    db.session.add_all([account, category])
+    db.session.commit()
+    transaction = TransactionService.create_transactions({
+        'account_id': str(account.id),
+        'category_id': str(category.id),
+        'amount': '-10',
+        'transaction_date': '2026-12-25',
+        'weekend_adjustment': 'next',
+    })[0]
+    assert transaction.transaction_date == date(2026, 12, 25)
 
 
 def test_create_recurring_transactions_assigns_family_and_derives_fields(

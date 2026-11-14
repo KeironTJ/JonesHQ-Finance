@@ -210,9 +210,30 @@ def test_create_transaction_route_applies_weekend_choice(app, family, user):
     response = client.get('/finance/transactions/create')
     assert b'name="weekend_adjustment"' in response.data
     assert b'value="none" selected' in response.data
+    html = response.get_data(as_text=True)
+    assert html.count('name="weekend_adjustment"') == 1
+    series_section = html.index('Create a Transaction Series')
+    assert 'Create a finite batch on a schedule.' in html
+    assert 'Connect this transaction to a plan item.' in html
+    assert 'data-bs-target="#planLinkCollapse"' in html
+    assert 'data-bs-target="#transactionSeriesCollapse"' in html
+    assert 'aria-controls="planLinkCollapse"' in html
+    assert 'aria-controls="transactionSeriesCollapse"' in html
+    options_section = html.index('<div id="recurring_options"')
+    frequency_field = html.index('for="frequency"', options_section)
+    weekend_setting = html.index('name="weekend_adjustment"', options_section)
+    recurring_payment_link = html.index(
+        'href="/finance/transactions/recurring-payments/create"'
+    )
+    assert series_section < options_section < frequency_field < weekend_setting
+    options_tag = html[options_section:html.index('>', options_section) + 1]
+    assert 'display: none' in options_tag
+    assert recurring_payment_link >= 0
+    assert b'target="_blank" rel="noopener"' in response.data
     response = client.post('/finance/transactions/create', data={
         'account_id': str(account.id), 'category_id': str(category.id),
         'amount': '-10', 'transaction_date': '2026-12-25',
+        'is_recurring': 'on', 'occurrences': '1', 'frequency': 'monthly',
         'weekend_adjustment': 'next',
         'year_month': '2026-12', 'day_name': 'Fri',
     })
@@ -220,6 +241,25 @@ def test_create_transaction_route_applies_weekend_choice(app, family, user):
     transaction = Transaction.query.one()
     assert transaction.transaction_date == date(2026, 12, 29)
     assert transaction.day_name == 'Tue'
+
+
+def test_create_single_transaction_does_not_adjust_its_date(app, family, user):
+    account = Account(
+        family_id=family.id, name='Current', account_type='Joint',
+        balance=0, is_active=True,
+    )
+    category = Category(family_id=family.id, name='Bills', category_type='expense')
+    db.session.add_all([account, category])
+    db.session.commit()
+    client = app.test_client()
+    _login(client, user.id)
+    response = client.post('/finance/transactions/create', data={
+        'account_id': str(account.id), 'category_id': str(category.id),
+        'amount': '-10', 'transaction_date': '2026-12-25',
+        'weekend_adjustment': 'next',
+    })
+    assert response.status_code == 302
+    assert Transaction.query.one().transaction_date == date(2026, 12, 25)
 
 
 def test_transaction_routes_create_edit_delete(app, family, user):
