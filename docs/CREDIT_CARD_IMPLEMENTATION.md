@@ -140,7 +140,7 @@ recalculation implementation is in
   are added, edited, deleted, locked/unlocked or marked paid/unpaid. Recurring
   additions refresh once for the batch; balance transfers refresh both cards.
 - Linked bank-payment edits, expense purchases/reimbursement payments and
-  card-funded subscriptions also refresh the affected cards.
+  card-funded recurring payments also refresh the affected cards.
 - Automatic refresh uses `default_generation_years` (10 years by default) and
   a 14-day payment offset, starting today. It requires an active card with a
   statement day. Cards without a statement day can still record transactions.
@@ -231,7 +231,7 @@ Later refreshes retain that statement and payment and adjust subsequent payments
 - bank_transaction_id (NEW - links to bank payment)
 - statement_id (links a generated payment to its statement-interest transaction)
 - linked_cc_transaction_id (links the other side of a balance transfer)
-- subscription_id (links a generated subscription transaction)
+- recurring_payment_id (links a generated recurring payment transaction)
 ```
 
 ### Credit Card Promotions Table (NEW)

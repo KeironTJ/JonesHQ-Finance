@@ -126,7 +126,7 @@ def test_create_recurring_transactions_assigns_family_and_derives_fields(
         'vendor_id': '',
         'amount': '-25.50',
         'transaction_date': '2026-01-31',
-        'description': 'Subscription',
+        'description': 'RecurringPayment',
         'item': 'Monthly plan',
         'assigned_to': 'Household',
         'payment_type': 'Direct Debit',

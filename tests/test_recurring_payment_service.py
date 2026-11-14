@@ -15,10 +15,10 @@ from models.accounts import Account
 from models.categories import Category
 from models.credit_card_transactions import CreditCardTransaction
 from models.credit_cards import CreditCard
-from models.subscriptions import Subscription, SubscriptionPriceChange
+from models.recurring_payments import RecurringPayment, RecurringPaymentPriceChange
 from models.transactions import Transaction
 from models.users import User
-from services.finance.subscription_service import SubscriptionService
+from services.finance.recurring_payment_service import RecurringPaymentService
 from utils.db_helpers import family_query
 
 
@@ -59,13 +59,13 @@ def _bank_form(account, category, *, amount='12.99', end_date='', horizon='1'):
 
 
 @pytest.fixture
-def fixed_subscription_today(monkeypatch):
+def fixed_recurring_payment_today(monkeypatch):
     class FixedDate(date):
         @classmethod
         def today(cls):
             return date(2026, 1, 1)
 
-    monkeypatch.setattr('services.finance.subscription_service.date', FixedDate)
+    monkeypatch.setattr('services.finance.recurring_payment_service.date', FixedDate)
     return FixedDate.today()
 
 
@@ -75,12 +75,12 @@ def fixed_subscription_today(monkeypatch):
     ('next', [date(2026, 2, 2), date(2026, 3, 2), date(2026, 3, 31)]),
     ('previous', [date(2026, 1, 30), date(2026, 2, 27), date(2026, 3, 31)]),
 ])
-def test_subscription_adjusted_dates_and_metadata(
-    app, family, monkeypatch, fixed_subscription_today, target_type, policy, expected
+def test_recurring_payment_adjusted_dates_and_metadata(
+    app, family, monkeypatch, fixed_recurring_payment_today, target_type, policy, expected
 ):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.finance.subscription_service.PaydayService.get_period_for_date',
+        'services.finance.recurring_payment_service.PaydayService.get_period_for_date',
         lambda value: value.strftime('%Y-%m'),
     )
     account, category = _add_bank_target(family)
@@ -97,12 +97,12 @@ def test_subscription_adjusted_dates_and_metadata(
         'target_type': target_type, 'credit_card_id': str(card.id),
     }.items():
         form[key] = value
-    subscription = SubscriptionService.create(form)
+    recurring_payment = RecurringPaymentService.create(form)
     db.session.commit()
-    assert subscription.weekend_adjustment == policy
+    assert recurring_payment.weekend_adjustment == policy
     model = Transaction if target_type == 'bank' else CreditCardTransaction
     date_attr = 'transaction_date' if target_type == 'bank' else 'date'
-    entries = model.query.filter_by(subscription_id=subscription.id).order_by(
+    entries = model.query.filter_by(recurring_payment_id=recurring_payment.id).order_by(
         getattr(model, date_attr)
     ).all()
     assert [getattr(entry, date_attr) for entry in entries] == expected
@@ -114,12 +114,12 @@ def test_subscription_adjusted_dates_and_metadata(
         else:
             assert entry.month == expected_date.strftime('%Y-%m')
             assert entry.day_name == expected_date.strftime('%A')
-    SubscriptionService.sync_pending(subscription, today=fixed_subscription_today)
+    RecurringPaymentService.sync_pending(recurring_payment, today=fixed_recurring_payment_today)
     db.session.flush()
-    assert model.query.filter_by(subscription_id=subscription.id).count() == 3
-    preview = SubscriptionService.apply_price_change(subscription.id, {
+    assert model.query.filter_by(recurring_payment_id=recurring_payment.id).count() == 3
+    preview = RecurringPaymentService.apply_price_change(recurring_payment.id, {
         'amount': '20', 'effective_date': '2026-02-01', 'note': 'Upgrade',
-    }, today=fixed_subscription_today)
+    }, today=fixed_recurring_payment_today)
     assert [change['date'] for change in preview['changes']] == [
         charge_date for charge_date in expected if charge_date >= date(2026, 2, 1)
     ]
@@ -133,8 +133,8 @@ def test_subscription_adjusted_dates_and_metadata(
 
 
 @pytest.mark.parametrize('target_type', ['bank', 'credit_card'])
-def test_changing_subscription_policy_preserves_paid_fixed_occurrences(
-    app, family, monkeypatch, fixed_subscription_today, target_type
+def test_changing_recurring_payment_policy_preserves_paid_fixed_occurrences(
+    app, family, monkeypatch, fixed_recurring_payment_today, target_type
 ):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     account, category = _add_bank_target(family)
@@ -151,11 +151,11 @@ def test_changing_subscription_policy_preserves_paid_fixed_occurrences(
         'target_type': target_type, 'credit_card_id': str(card.id),
     }.items():
         form[key] = value
-    subscription = SubscriptionService.create(form)
+    recurring_payment = RecurringPaymentService.create(form)
     db.session.flush()
     model = Transaction if target_type == 'bank' else CreditCardTransaction
     date_attr = 'transaction_date' if target_type == 'bank' else 'date'
-    entries = model.query.filter_by(subscription_id=subscription.id).order_by(
+    entries = model.query.filter_by(recurring_payment_id=recurring_payment.id).order_by(
         getattr(model, date_attr)
     ).all()
     entries[0].is_paid = True
@@ -163,12 +163,12 @@ def test_changing_subscription_policy_preserves_paid_fixed_occurrences(
     protected_ids = [entries[0].id, entries[1].id]
     db.session.commit()
     form['weekend_adjustment'] = 'next'
-    SubscriptionService.update(subscription.id, form)
+    RecurringPaymentService.update(recurring_payment.id, form)
     db.session.commit()
     for _ in range(2):
-        SubscriptionService.sync_pending(subscription, today=fixed_subscription_today)
+        RecurringPaymentService.sync_pending(recurring_payment, today=fixed_recurring_payment_today)
         db.session.flush()
-    updated = model.query.filter_by(subscription_id=subscription.id).order_by(
+    updated = model.query.filter_by(recurring_payment_id=recurring_payment.id).order_by(
         getattr(model, date_attr)
     ).all()
     assert [getattr(entry, date_attr) for entry in updated] == [
@@ -177,9 +177,9 @@ def test_changing_subscription_policy_preserves_paid_fixed_occurrences(
     ]
     assert [updated[0].id, updated[1].id] == protected_ids
     assert updated[0].is_paid and updated[1].is_fixed
-    preview = SubscriptionService.preview_price_change(subscription.id, {
+    preview = RecurringPaymentService.preview_price_change(recurring_payment.id, {
         'amount': '20', 'effective_date': '2026-01-31', 'note': 'Upgrade',
-    }, today=fixed_subscription_today)
+    }, today=fixed_recurring_payment_today)
     assert [change['date'] for change in preview['changes']] == [
         date(2026, 3, 31), date(2026, 4, 30), date(2026, 6, 1),
     ]
@@ -192,16 +192,16 @@ def test_changing_subscription_policy_preserves_paid_fixed_occurrences(
     ('previous', date(2026, 12, 24), [date(2026, 12, 24)]),
     ('none', date(2026, 12, 25), [date(2026, 12, 25)]),
 ])
-def test_subscription_holiday_and_today_boundaries(app, policy, today, expected):
-    subscription = Subscription(
+def test_recurring_payment_holiday_and_today_boundaries(app, policy, today, expected):
+    recurring_payment = RecurringPayment(
         name='Holiday charge', amount=-10, frequency='monthly',
         start_date=date(2026, 12, 25), end_date=date(2026, 12, 25),
         horizon_years=1, weekend_adjustment=policy,
     )
-    assert list(SubscriptionService._scheduled_dates(subscription, today)) == expected
+    assert list(RecurringPaymentService._scheduled_dates(recurring_payment, today)) == expected
 
 
-def test_subscription_invalid_policy_preserves_form_selection(
+def test_recurring_payment_invalid_policy_preserves_form_selection(
     app, family, user, monkeypatch
 ):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
@@ -210,17 +210,17 @@ def test_subscription_invalid_policy_preserves_form_selection(
     login_client(client, user.id)
     form = _bank_form(account, category)
     form['weekend_adjustment'] = 'invalid'
-    response = client.post('/finance/transactions/subscriptions/create', data=form)
+    response = client.post('/finance/transactions/recurring-payments/create', data=form)
     assert response.status_code == 200
     assert b'Select a valid weekend' in response.data
-    assert Subscription.query.count() == 0
+    assert RecurringPayment.query.count() == 0
     form['weekend_adjustment'] = 'next'
     form['name'] = ''
-    response = client.post('/finance/transactions/subscriptions/create', data=form)
+    response = client.post('/finance/transactions/recurring-payments/create', data=form)
     assert b'value="next" selected' in response.data
 
 
-def test_subscription_adjustment_migration_preserves_existing_rules(monkeypatch):
+def test_recurring_payment_adjustment_migration_preserves_existing_rules(monkeypatch):
     migration = import_module(
         'migrations.versions.d8e2f4a6b0c9_add_subscription_weekend_adjustment'
     )
@@ -251,42 +251,42 @@ def test_subscription_adjustment_migration_preserves_existing_rules(monkeypatch)
         engine.dispose()
 
 
-def test_subscription_form_saves_and_restores_adjustment(app, family, user, monkeypatch):
+def test_recurring_payment_form_saves_and_restores_adjustment(app, family, user, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     account, category = _add_bank_target(family)
     client = app.test_client()
     login_client(client, user.id)
     form = _bank_form(account, category)
     form['weekend_adjustment'] = 'next'
-    response = client.post('/finance/transactions/subscriptions/create', data=form)
+    response = client.post('/finance/transactions/recurring-payments/create', data=form)
     assert response.status_code == 302
-    subscription = Subscription.query.one()
-    response = client.get(f'/finance/transactions/subscriptions/{subscription.id}/edit')
+    recurring_payment = RecurringPayment.query.one()
+    response = client.get(f'/finance/transactions/recurring-payments/{recurring_payment.id}/edit')
     assert b'value="next" selected' in response.data
     form['weekend_adjustment'] = 'previous'
     response = client.post(
-        f'/finance/transactions/subscriptions/{subscription.id}/edit', data=form
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/edit', data=form
     )
     assert response.status_code == 302
-    assert subscription.weekend_adjustment == 'previous'
+    assert recurring_payment.weekend_adjustment == 'previous'
 
 
-def test_subscription_updates_and_cancellation_leave_paid_bank_entries_untouched(
+def test_recurring_payment_updates_and_cancellation_leave_paid_bank_entries_untouched(
     app, family, monkeypatch
 ):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.finance.subscription_service.PaydayService.get_period_for_date',
+        'services.finance.recurring_payment_service.PaydayService.get_period_for_date',
         lambda txn_date: txn_date.strftime('%Y-%m'),
     )
     account, category = _add_bank_target(family)
     end_date = (date.today() + relativedelta(months=2)).isoformat()
 
-    subscription = SubscriptionService.create(
+    recurring_payment = RecurringPaymentService.create(
         _bank_form(account, category, end_date=end_date)
     )
     db.session.flush()
-    entries = Transaction.query.filter_by(subscription_id=subscription.id).order_by(
+    entries = Transaction.query.filter_by(recurring_payment_id=recurring_payment.id).order_by(
         Transaction.transaction_date
     ).all()
     assert len(entries) == 3
@@ -298,8 +298,8 @@ def test_subscription_updates_and_cancellation_leave_paid_bank_entries_untouched
     db.session.flush()
 
     updated_end_date = (date.today() + relativedelta(months=3)).isoformat()
-    SubscriptionService.update(
-        subscription.id,
+    RecurringPaymentService.update(
+        recurring_payment.id,
         _bank_form(
             account, category, amount='18.50', end_date=updated_end_date
         ),
@@ -309,13 +309,13 @@ def test_subscription_updates_and_cancellation_leave_paid_bank_entries_untouched
     assert paid_entry.is_paid is True
     assert paid_entry.amount == paid_amount
     pending = Transaction.query.filter_by(
-        subscription_id=subscription.id, is_paid=False
+        recurring_payment_id=recurring_payment.id, is_paid=False
     ).all()
     assert len(pending) == 3
     assert all(entry.amount == Decimal('-12.99') for entry in pending)
-    assert subscription.amount == Decimal('-12.99')
-    SubscriptionService.apply_price_change(
-        subscription.id,
+    assert recurring_payment.amount == Decimal('-12.99')
+    RecurringPaymentService.apply_price_change(
+        recurring_payment.id,
         {
             'amount': '18.50',
             'effective_date': date.today().isoformat(),
@@ -324,41 +324,41 @@ def test_subscription_updates_and_cancellation_leave_paid_bank_entries_untouched
     )
     db.session.flush()
     assert all(entry.amount == Decimal('-18.50') for entry in pending)
-    summary = SubscriptionService.get_summary(subscription)
+    summary = RecurringPaymentService.get_summary(recurring_payment)
     assert summary['annual_cost'] == Decimal('222.00')
     assert summary['paid_count'] == 1
     assert summary['pending_count'] == 3
     assert summary['last_paid_amount'] == Decimal('12.99')
     assert summary['amount_changed'] is True
 
-    SubscriptionService.set_active(subscription.id, False)
+    RecurringPaymentService.set_active(recurring_payment.id, False)
     paused_end_date = (date.today() + relativedelta(months=4)).isoformat()
-    SubscriptionService.update(
-        subscription.id,
+    RecurringPaymentService.update(
+        recurring_payment.id,
         _bank_form(
             account, category, amount='21.00', end_date=paused_end_date
         ),
     )
     pending = Transaction.query.filter_by(
-        subscription_id=subscription.id, is_paid=False
+        recurring_payment_id=recurring_payment.id, is_paid=False
     ).all()
     assert len(pending) == 3
     assert all(entry.amount == Decimal('-18.50') for entry in pending)
 
-    SubscriptionService.cancel(subscription.id)
+    RecurringPaymentService.cancel(recurring_payment.id)
     db.session.flush()
     assert Transaction.query.filter_by(
-        subscription_id=subscription.id, is_paid=False
+        recurring_payment_id=recurring_payment.id, is_paid=False
     ).count() == 0
     assert Transaction.query.filter_by(
-        subscription_id=subscription.id, is_paid=True
+        recurring_payment_id=recurring_payment.id, is_paid=True
     ).count() == 1
 
 
 def test_five_year_horizon_bounds_monthly_schedule(app, family, monkeypatch):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     account, category = _add_bank_target(family)
-    subscription = Subscription(
+    recurring_payment = RecurringPayment(
         family_id=family.id,
         name='Stream service',
         amount=Decimal('-12.99'),
@@ -370,7 +370,7 @@ def test_five_year_horizon_bounds_monthly_schedule(app, family, monkeypatch):
     )
 
     scheduled = list(
-        SubscriptionService._scheduled_dates(subscription, date.today())
+        RecurringPaymentService._scheduled_dates(recurring_payment, date.today())
     )
     horizon_end = date.today() + relativedelta(years=5)
     assert scheduled[0] == date.today()
@@ -384,11 +384,11 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
     today = date.today()
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.finance.subscription_service.PaydayService.get_period_for_date',
+        'services.finance.recurring_payment_service.PaydayService.get_period_for_date',
         lambda txn_date: txn_date.strftime('%Y-%m'),
     )
     account, category = _add_bank_target(family)
-    subscription = SubscriptionService.create(
+    recurring_payment = RecurringPaymentService.create(
         _bank_form(
             account,
             category,
@@ -396,7 +396,7 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
         )
     )
     entries = Transaction.query.filter_by(
-        subscription_id=subscription.id
+        recurring_payment_id=recurring_payment.id
     ).order_by(Transaction.transaction_date).all()
     assert len(entries) == 5
     entries[0].is_paid = True
@@ -408,8 +408,8 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
         'effective_date': (today + relativedelta(months=2)).isoformat(),
         'note': 'Premium plan',
     })
-    preview = SubscriptionService.preview_price_change(
-        subscription.id, first_change, today
+    preview = RecurringPaymentService.preview_price_change(
+        recurring_payment.id, first_change, today
     )
     assert [change['date'] for change in preview['changes']] == [
         today + relativedelta(months=2),
@@ -418,10 +418,10 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
     assert preview['existing_count'] == 2
     assert preview['new_count'] == 0
     assert all(change['old_amount'] == Decimal('12.99') for change in preview['changes'])
-    assert SubscriptionPriceChange.query.count() == 0
+    assert RecurringPaymentPriceChange.query.count() == 0
     with pytest.raises(ValueError, match='today or a future date'):
-        SubscriptionService.preview_price_change(
-            subscription.id,
+        RecurringPaymentService.preview_price_change(
+            recurring_payment.id,
             {
                 'amount': '18.50',
                 'effective_date': (today - relativedelta(days=1)).isoformat(),
@@ -430,8 +430,8 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
             today,
         )
     with pytest.raises(ValueError, match='reason for the price change'):
-        SubscriptionService.preview_price_change(
-            subscription.id,
+        RecurringPaymentService.preview_price_change(
+            recurring_payment.id,
             {
                 'amount': '18.50',
                 'effective_date': today.isoformat(),
@@ -440,7 +440,7 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
             today,
         )
 
-    SubscriptionService.apply_price_change(subscription.id, first_change, today)
+    RecurringPaymentService.apply_price_change(recurring_payment.id, first_change, today)
     db.session.flush()
     assert entries[0].amount == Decimal('-12.99')
     assert entries[0].is_paid
@@ -455,15 +455,15 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
         'effective_date': (today + relativedelta(months=4)).isoformat(),
         'note': 'Annual increase',
     })
-    SubscriptionService.apply_price_change(subscription.id, later_change, today)
+    RecurringPaymentService.apply_price_change(recurring_payment.id, later_change, today)
     db.session.flush()
     assert entries[2].amount == Decimal('-18.50')
     assert entries[4].amount == Decimal('-20.00')
-    later_price = SubscriptionPriceChange.query.filter_by(
+    later_price = RecurringPaymentPriceChange.query.filter_by(
         effective_date=today + relativedelta(months=4)
     ).one()
-    SubscriptionService.apply_price_change(
-        subscription.id,
+    RecurringPaymentService.apply_price_change(
+        recurring_payment.id,
         {
             'amount': '21.00',
             'effective_date': (today + relativedelta(months=4)).isoformat(),
@@ -475,14 +475,14 @@ def test_dated_price_change_previews_and_updates_only_future_unfixed_charges(
     db.session.flush()
     assert entries[2].amount == Decimal('-18.50')
     assert entries[4].amount == Decimal('-21.00')
-    assert SubscriptionPriceChange.query.count() == 2
+    assert RecurringPaymentPriceChange.query.count() == 2
     assert later_price.note == 'Corrected increase'
-    assert SubscriptionService._amount_for_date(
-        subscription, today + relativedelta(months=3)
+    assert RecurringPaymentService._amount_for_date(
+        recurring_payment, today + relativedelta(months=3)
     ) == Decimal('-18.50')
     with pytest.raises(ValueError, match='already scheduled'):
-        SubscriptionService.preview_price_change(
-            subscription.id, later_change, today
+        RecurringPaymentService.preview_price_change(
+            recurring_payment.id, later_change, today
         )
 
 
@@ -492,19 +492,19 @@ def test_moving_a_scheduled_price_change_previews_charges_that_revert(
     today = date.today()
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
     monkeypatch.setattr(
-        'services.finance.subscription_service.PaydayService.get_period_for_date',
+        'services.finance.recurring_payment_service.PaydayService.get_period_for_date',
         lambda txn_date: txn_date.strftime('%Y-%m'),
     )
     account, category = _add_bank_target(family)
-    subscription = SubscriptionService.create(
+    recurring_payment = RecurringPaymentService.create(
         _bank_form(
             account,
             category,
             end_date=(today + relativedelta(months=4)).isoformat(),
         )
     )
-    price_change = SubscriptionService.apply_price_change(
-        subscription.id,
+    price_change = RecurringPaymentService.apply_price_change(
+        recurring_payment.id,
         {
             'amount': '18.50',
             'effective_date': (today + relativedelta(months=1)).isoformat(),
@@ -514,8 +514,8 @@ def test_moving_a_scheduled_price_change_previews_charges_that_revert(
     )['change']
     db.session.flush()
 
-    preview = SubscriptionService.preview_price_change(
-        subscription.id,
+    preview = RecurringPaymentService.preview_price_change(
+        recurring_payment.id,
         {
             'amount': '18.50',
             'effective_date': (today + relativedelta(months=3)).isoformat(),
@@ -531,8 +531,8 @@ def test_moving_a_scheduled_price_change_previews_charges_that_revert(
     assert all(change['old_amount'] == Decimal('18.50') for change in preview['changes'])
     assert all(change['new_amount'] == Decimal('12.99') for change in preview['changes'])
 
-    SubscriptionService.apply_price_change(
-        subscription.id,
+    RecurringPaymentService.apply_price_change(
+        recurring_payment.id,
         {
             'amount': '18.50',
             'effective_date': (today + relativedelta(months=3)).isoformat(),
@@ -543,7 +543,7 @@ def test_moving_a_scheduled_price_change_previews_charges_that_revert(
     )
     db.session.flush()
     entries = Transaction.query.filter_by(
-        subscription_id=subscription.id
+        recurring_payment_id=recurring_payment.id
     ).order_by(Transaction.transaction_date).all()
     assert [entry.amount for entry in entries] == [
         Decimal('-12.99'),
@@ -554,7 +554,7 @@ def test_moving_a_scheduled_price_change_previews_charges_that_revert(
     ]
 
 
-def test_subscription_visibility_tracks_private_target_owner(
+def test_recurring_payment_visibility_tracks_private_target_owner(
     app, family, user, monkeypatch
 ):
     other_user = User(
@@ -577,13 +577,13 @@ def test_subscription_visibility_tracks_private_target_owner(
         lambda: active_user_id['value'],
     )
     monkeypatch.setattr(
-        'services.finance.subscription_service.PaydayService.get_period_for_date',
+        'services.finance.recurring_payment_service.PaydayService.get_period_for_date',
         lambda txn_date: txn_date.strftime('%Y-%m'),
     )
-    subscription = SubscriptionService.create(_bank_form(account, category))
+    recurring_payment = RecurringPaymentService.create(_bank_form(account, category))
     db.session.flush()
-    SubscriptionService.apply_price_change(
-        subscription.id,
+    RecurringPaymentService.apply_price_change(
+        recurring_payment.id,
         {
             'amount': '15.99',
             'effective_date': date.today().isoformat(),
@@ -592,47 +592,47 @@ def test_subscription_visibility_tracks_private_target_owner(
     )
     db.session.flush()
 
-    assert family_query(Subscription).filter_by(id=subscription.id).count() == 1
-    assert family_query(SubscriptionPriceChange).filter_by(
-        subscription_id=subscription.id
+    assert family_query(RecurringPayment).filter_by(id=recurring_payment.id).count() == 1
+    assert family_query(RecurringPaymentPriceChange).filter_by(
+        recurring_payment_id=recurring_payment.id
     ).count() == 1
     active_user_id['value'] = other_user.id
-    assert family_query(Subscription).filter_by(id=subscription.id).count() == 0
-    assert family_query(SubscriptionPriceChange).filter_by(
-        subscription_id=subscription.id
+    assert family_query(RecurringPayment).filter_by(id=recurring_payment.id).count() == 0
+    assert family_query(RecurringPaymentPriceChange).filter_by(
+        recurring_payment_id=recurring_payment.id
     ).count() == 0
 
     account.owner_id = other_user.id
     db.session.flush()
-    assert family_query(Subscription).filter_by(id=subscription.id).count() == 1
-    assert family_query(SubscriptionPriceChange).filter_by(
-        subscription_id=subscription.id
+    assert family_query(RecurringPayment).filter_by(id=recurring_payment.id).count() == 1
+    assert family_query(RecurringPaymentPriceChange).filter_by(
+        recurring_payment_id=recurring_payment.id
     ).count() == 1
 
 
-def test_subscription_templates_compile(app):
-    app.jinja_env.get_template('transactions/subscriptions.html')
-    app.jinja_env.get_template('transactions/subscription_form.html')
-    app.jinja_env.get_template('transactions/subscription_price_change.html')
-    app.jinja_env.get_template('transactions/_subscription_price_history.html')
+def test_recurring_payment_templates_compile(app):
+    app.jinja_env.get_template('transactions/recurring_payments.html')
+    app.jinja_env.get_template('transactions/recurring_payment_form.html')
+    app.jinja_env.get_template('transactions/recurring_payment_price_change.html')
+    app.jinja_env.get_template('transactions/_recurring_payment_price_history.html')
     app.jinja_env.get_template('transactions/transactions.html')
     app.jinja_env.get_template('credit_cards/detail.html')
 
 
-def test_subscription_routes_create_and_list_rule(app, family, user):
+def test_recurring_payment_routes_create_and_list_rule(app, family, user):
     account, category = _add_bank_target(family)
     client = app.test_client()
     login_client(client, user.id)
 
-    response = client.get('/finance/transactions/subscriptions')
+    response = client.get('/finance/transactions/recurring-payments')
     assert response.status_code == 200
-    response = client.get('/finance/transactions/subscriptions/create')
+    response = client.get('/finance/transactions/recurring-payments/create')
     assert response.status_code == 200
     assert b"openQuickAddVendor('vendor_id')" in response.data
     assert b'id="quickAddVendorModal"' in response.data
     assert b'js/quick_add_vendor.js' in response.data
     vendor_response = client.post(
-        '/finance/vendors/quick-add', json={'name': 'Subscription vendor'}
+        '/finance/vendors/quick-add', json={'name': 'RecurringPayment vendor'}
     )
     assert vendor_response.status_code == 201
     vendor_id = vendor_response.get_json()['id']
@@ -643,28 +643,28 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     )
     form['vendor_id'] = str(vendor_id)
     response = client.post(
-        '/finance/transactions/subscriptions/create',
+        '/finance/transactions/recurring-payments/create',
         data=form,
         follow_redirects=True,
     )
 
     assert response.status_code == 200
     assert b'Stream service' in response.data
-    assert Subscription.query.count() == 1
+    assert RecurringPayment.query.count() == 1
     assert Transaction.query.filter_by(is_paid=False).count() == 3
-    subscription = Subscription.query.first()
-    assert subscription.vendor_id == vendor_id
+    recurring_payment = RecurringPayment.query.first()
+    assert recurring_payment.vendor_id == vendor_id
     assert all(
         transaction.vendor_id == vendor_id
         for transaction in Transaction.query.filter_by(
-            subscription_id=subscription.id
+            recurring_payment_id=recurring_payment.id
         ).all()
     )
-    response = client.get(f'/finance/transactions/subscriptions/{subscription.id}/edit')
+    response = client.get(f'/finance/transactions/recurring-payments/{recurring_payment.id}/edit')
     assert response.status_code == 200
     assert b'No dated price changes yet.' in response.data
     empty_change_response = client.get(
-        f'/finance/transactions/subscriptions/{subscription.id}/price-change'
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/price-change'
     )
     assert b'No dated price changes yet.' in empty_change_response.data
     assert b'id="amount" type="number" class="form-control" readonly' in response.data
@@ -678,7 +678,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
         'note': 'Price increase',
     })
     response = client.post(
-        f'/finance/transactions/subscriptions/{subscription.id}/price-change',
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/price-change',
         data=price_change,
     )
     assert response.status_code == 200
@@ -686,27 +686,27 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     assert b'Confirm price change' in response.data
     assert b'price-preview-mobile' in response.data
     assert b'<strong>Reason:</strong> Price increase' in response.data
-    assert SubscriptionPriceChange.query.count() == 0
+    assert RecurringPaymentPriceChange.query.count() == 0
     altered_price_change = MultiDict(price_change)
     altered_price_change['amount'] = '25.00'
     altered_price_change['confirm_change'] = '1'
     response = client.post(
-        f'/finance/transactions/subscriptions/{subscription.id}/price-change',
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/price-change',
         data=altered_price_change,
     )
     assert b'Review the price change preview before confirming' in response.data
-    assert SubscriptionPriceChange.query.count() == 0
+    assert RecurringPaymentPriceChange.query.count() == 0
     price_change['confirm_change'] = '1'
     response = client.post(
-        f'/finance/transactions/subscriptions/{subscription.id}/price-change',
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/price-change',
         data=price_change,
         follow_redirects=True,
     )
     assert response.status_code == 200
     assert b'Reason: Price increase' in response.data
-    assert SubscriptionPriceChange.query.count() == 1
+    assert RecurringPaymentPriceChange.query.count() == 1
     edit_response = client.get(
-        f'/finance/transactions/subscriptions/{subscription.id}/edit'
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/edit'
     )
     assert b'Price history' in edit_response.data
     assert b'<th scope="col">Reason</th>' in edit_response.data
@@ -714,7 +714,7 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     assert b'd-md-none' in edit_response.data
     assert b'Schedule a price change' in edit_response.data
     change_response = client.get(
-        f'/finance/transactions/subscriptions/{subscription.id}/price-change'
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/price-change'
     )
     assert b'<th scope="col">Reason</th>' in change_response.data
     assert b'Price increase' in change_response.data
@@ -722,27 +722,27 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     assert b'price-history-mobile' in change_response.data
     assert b'aria-label="Edit price change"' in change_response.data
     for history_response in (edit_response, change_response):
-        assert b'css/subscription_price_history.css' in history_response.data
-    history_start = b'<section class="card subscription-price-history"'
+        assert b'css/recurring_payment_price_history.css' in history_response.data
+    history_start = b'<section class="card recurring_payment-price-history"'
     edit_history = edit_response.data.split(history_start, 1)[1].split(b'</section>', 1)[0]
     change_history = change_response.data.split(history_start, 1)[1].split(b'</section>', 1)[0]
     assert edit_history == change_history
-    subscriptions_response = client.get('/finance/transactions/subscriptions')
-    assert b'd-xl-none' in subscriptions_response.data
-    assert b'subscription-mobile-actions' in subscriptions_response.data
-    assert b'bi-currency-exchange' in subscriptions_response.data
-    assert b'aria-label="Edit subscription"' in subscriptions_response.data
-    assert b'aria-label="Pause subscription"' in subscriptions_response.data
-    assert b'aria-label="Cancel subscription"' in subscriptions_response.data
+    recurring_payments_response = client.get('/finance/transactions/recurring-payments')
+    assert b'd-xl-none' in recurring_payments_response.data
+    assert b'recurring_payment-mobile-actions' in recurring_payments_response.data
+    assert b'bi-currency-exchange' in recurring_payments_response.data
+    assert b'aria-label="Edit recurring payment"' in recurring_payments_response.data
+    assert b'aria-label="Pause recurring payment"' in recurring_payments_response.data
+    assert b'aria-label="Cancel recurring payment"' in recurring_payments_response.data
     assert all(
         transaction.amount == Decimal('-15.99')
         for transaction in Transaction.query.filter_by(
-            subscription_id=subscription.id
+            recurring_payment_id=recurring_payment.id
         ).all()
     )
-    price_change_record = SubscriptionPriceChange.query.one()
+    price_change_record = RecurringPaymentPriceChange.query.one()
     edit_path = (
-        f'/finance/transactions/subscriptions/{subscription.id}/price-change/'
+        f'/finance/transactions/recurring-payments/{recurring_payment.id}/price-change/'
         f'{price_change_record.id}'
     )
     response = client.get(edit_path)
@@ -758,12 +758,12 @@ def test_subscription_routes_create_and_list_rule(app, family, user):
     correction['confirm_change'] = '1'
     response = client.post(edit_path, data=correction, follow_redirects=True)
     assert response.status_code == 200
-    assert SubscriptionPriceChange.query.count() == 1
+    assert RecurringPaymentPriceChange.query.count() == 1
     assert price_change_record.amount == Decimal('-14.99')
     assert price_change_record.note == 'Corrected price'
 
 
-def test_credit_card_subscription_removes_only_pending_entries(
+def test_credit_card_recurring_payment_removes_only_pending_entries(
     app, family, monkeypatch
 ):
     monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
@@ -786,7 +786,7 @@ def test_credit_card_subscription_removes_only_pending_entries(
     db.session.add_all([category, card])
     db.session.commit()
 
-    subscription = SubscriptionService.create(MultiDict({
+    recurring_payment = RecurringPaymentService.create(MultiDict({
         'name': 'Stream service',
         'amount': '12.99',
         'target_type': 'credit_card',
@@ -801,15 +801,15 @@ def test_credit_card_subscription_removes_only_pending_entries(
     }))
     db.session.flush()
     entries = CreditCardTransaction.query.filter_by(
-        subscription_id=subscription.id
+        recurring_payment_id=recurring_payment.id
     ).order_by(CreditCardTransaction.date).all()
     assert len(entries) == 3
     assert all(entry.amount == Decimal('-12.99') for entry in entries)
 
     entries[0].is_paid = True
     db.session.flush()
-    SubscriptionService.apply_price_change(
-        subscription.id,
+    RecurringPaymentService.apply_price_change(
+        recurring_payment.id,
         {
             'amount': '15.99',
             'effective_date': (
@@ -822,11 +822,11 @@ def test_credit_card_subscription_removes_only_pending_entries(
     assert entries[0].amount == Decimal('-12.99')
     assert entries[1].amount == Decimal('-15.99')
     assert entries[2].amount == Decimal('-15.99')
-    SubscriptionService.cancel(subscription.id)
+    RecurringPaymentService.cancel(recurring_payment.id)
     db.session.flush()
     assert CreditCardTransaction.query.filter_by(
-        subscription_id=subscription.id, is_paid=False
+        recurring_payment_id=recurring_payment.id, is_paid=False
     ).count() == 0
     assert CreditCardTransaction.query.filter_by(
-        subscription_id=subscription.id, is_paid=True
+        recurring_payment_id=recurring_payment.id, is_paid=True
     ).count() == 1

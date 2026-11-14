@@ -50,7 +50,7 @@ flask db upgrade
 
 This is an actively developed finance application with authentication,
 households, transaction and account management, income and expenses, credit
-cards, loans, mortgages, pensions, vehicles, childcare, subscriptions, planning,
+cards, loans, mortgages, pensions, vehicles, childcare, recurring payments, planning,
 and net-worth views. The exact routes and workflows are maintained in the
 registered blueprints and their templates; this guide intentionally avoids a
 stale route or database-table inventory.

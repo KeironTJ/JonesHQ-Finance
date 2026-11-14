@@ -2,7 +2,7 @@
     ('Day to day', [
         ('accounts.index', 'Accounts', 'wallet2', 'accounts', true),
         ('transactions.index', 'Transactions', 'arrow-left-right', 'transactions', true),
-        ('transactions.subscriptions', 'Recurring bills', 'arrow-repeat', 'transactions', false),
+        ('transactions.recurring_payments', 'Recurring Payments', 'arrow-repeat', 'transactions', false),
         ('expenses.index', 'Work expenses', 'receipt', 'expenses', false)
     ]),
     ('Build your future', [
@@ -33,7 +33,7 @@
     {% for endpoint, title, icon, section, exact in links %}
         {% set active = none %}
         {% if endpoint == 'transactions.index' %}
-            {% set active = request.blueprint == 'transactions' and not request.path.startswith('/finance/transactions/subscriptions') and request.endpoint != 'transactions.consolidated' %}
+            {% set active = request.blueprint == 'transactions' and not request.path.startswith('/finance/transactions/recurring-payments') and request.endpoint != 'transactions.consolidated' %}
         {% endif %}
         {{ nav_link(endpoint, title, icon, section, exact, active_override=false if settings_area else active) }}
     {% endfor %}

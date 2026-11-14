@@ -33,7 +33,7 @@ NAME_COLUMNS = {
 ID_FIELDS = (
     'id', 'account_id', 'category_id', 'vendor_id', 'credit_card_id', 'card_id', 'loan_id',
     'vehicle_id', 'pension_id', 'plan_id', 'plan_item_id', 'item_id', 'child_id',
-    'subscription_id', 'income_id', 'recurring_income_id', 'expense_id', 'transaction_id',
+    'recurring_payment_id', 'income_id', 'recurring_income_id', 'expense_id', 'transaction_id',
     'deposit_account_id', 'default_payment_account_id', 'fuel_account_id', 'property_id',
     'mortgage_id', 'mortgage_product_id', 'reimbursement_group_id', 'activity_type_id',
     'default_account_id', 'default_category_id', 'parent_id', 'group_id', 'member_id',
@@ -44,10 +44,10 @@ SKIP_ENDPOINT_PREFIXES = ('static', 'admin.', 'auth.', 'onboarding.')
 # Satisfy table CHECK constraints the generic seeder cannot infer.
 TABLE_OVERRIDES = {
     'reward_points': {'kind': 'earned', 'points': 1},
-    'subscriptions': {'amount': Decimal('-1'), 'account_id': FOREIGN_ID, 'credit_card_id': None},
-    'subscription_price_changes': {
+    'recurring_payments': {'amount': Decimal('-1'), 'account_id': FOREIGN_ID, 'credit_card_id': None},
+    'recurring_payment_price_changes': {
         'amount': Decimal('-1'),
-        'subscription_id': FOREIGN_ID,
+        'recurring_payment_id': FOREIGN_ID,
     },
 }
 

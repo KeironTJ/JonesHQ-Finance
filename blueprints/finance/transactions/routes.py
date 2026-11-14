@@ -30,10 +30,10 @@ from models.loans import Loan
 from models.settings import Settings
 from models.users import User
 from models.plans import Plan, PlanItem
-from models.subscriptions import Subscription, SubscriptionPriceChange
+from models.recurring_payments import RecurringPayment, RecurringPaymentPriceChange
 from services.finance.payday_service import PaydayService
 from services.finance.balance_service import BalanceService
-from services.finance.subscription_service import SubscriptionService
+from services.finance.recurring_payment_service import RecurringPaymentService
 from services.finance.transaction_service import TransactionService
 from services.planning.plan_link_service import PlanLinkService
 from extensions import db
@@ -47,7 +47,7 @@ def get_assigned_people_options():
     return get_assignment_options()
 
 
-def _subscription_form_options():
+def _recurring_payment_form_options():
     return {
         'accounts': family_query(Account).filter_by(is_active=True).order_by(Account.name).all(),
         'credit_cards': family_query(CreditCard).filter_by(is_active=True).order_by(
@@ -69,120 +69,120 @@ def _price_change_preview_hash(values, change_id):
     ]).encode()).hexdigest()
 
 
-@transactions_bp.route('/transactions/subscriptions')
-def subscriptions():
-    """List active and paused subscription rules and keep their forecast populated."""
-    subscriptions = family_query(Subscription).order_by(
-        Subscription.is_active.desc(), Subscription.name
+@transactions_bp.route('/transactions/recurring-payments')
+def recurring_payments():
+    """List active and paused recurring payment rules and keep their forecast populated."""
+    recurring_payments = family_query(RecurringPayment).order_by(
+        RecurringPayment.is_active.desc(), RecurringPayment.name
     ).all()
-    for subscription in subscriptions:
-        if subscription.is_active:
-            SubscriptionService.sync_pending(subscription)
+    for recurring_payment in recurring_payments:
+        if recurring_payment.is_active:
+            RecurringPaymentService.sync_pending(recurring_payment)
     db.session.commit()
 
     summaries = {
-        subscription.id: SubscriptionService.get_summary(subscription)
-        for subscription in subscriptions
+        recurring_payment.id: RecurringPaymentService.get_summary(recurring_payment)
+        for recurring_payment in recurring_payments
     }
     return render_template(
-        'transactions/subscriptions.html',
-        subscriptions=subscriptions,
+        'transactions/recurring_payments.html',
+        recurring_payments=recurring_payments,
         summaries=summaries,
         today=date.today(),
     )
 
 
-@transactions_bp.route('/transactions/subscriptions/create', methods=['GET', 'POST'])
-def create_subscription():
+@transactions_bp.route('/transactions/recurring-payments/create', methods=['GET', 'POST'])
+def create_recurring_payment():
     if request.method == 'POST':
         try:
-            SubscriptionService.create(request.form)
+            RecurringPaymentService.create(request.form)
             db.session.commit()
             flash(
-                'Subscription created with pending transactions through its planning horizon.',
+                'Recurring payment created with pending transactions through its planning horizon.',
                 'success',
             )
-            return redirect(url_for('transactions.subscriptions'))
+            return redirect(url_for('transactions.recurring_payments'))
         except (ValueError, TypeError) as error:
             db.session.rollback()
-            flash(f'Unable to create subscription: {error}', 'danger')
+            flash(f'Unable to create recurring payment: {error}', 'danger')
     return render_template(
-        'transactions/subscription_form.html',
-        subscription=None,
+        'transactions/recurring_payment_form.html',
+        recurring_payment=None,
         target_type='bank',
         today=date.today(),
-        **_subscription_form_options(),
+        **_recurring_payment_form_options(),
     )
 
 
-@transactions_bp.route('/transactions/subscriptions/<int:id>/edit', methods=['GET', 'POST'])
-def edit_subscription(id):
-    subscription = family_get_or_404(Subscription, id)
-    history = family_query(SubscriptionPriceChange).filter_by(
-        subscription_id=subscription.id
+@transactions_bp.route('/transactions/recurring-payments/<int:id>/edit', methods=['GET', 'POST'])
+def edit_recurring_payment(id):
+    recurring_payment = family_get_or_404(RecurringPayment, id)
+    history = family_query(RecurringPaymentPriceChange).filter_by(
+        recurring_payment_id=recurring_payment.id
     ).order_by(
-        SubscriptionPriceChange.effective_date,
-        SubscriptionPriceChange.id,
+        RecurringPaymentPriceChange.effective_date,
+        RecurringPaymentPriceChange.id,
     ).all()
     if request.method == 'POST':
         try:
-            SubscriptionService.update(id, request.form)
+            RecurringPaymentService.update(id, request.form)
             db.session.commit()
             flash(
-                'Subscription updated. Paid transactions were left unchanged.',
+                'Recurring payment updated. Paid transactions were left unchanged.',
                 'success',
             )
-            return redirect(url_for('transactions.subscriptions'))
+            return redirect(url_for('transactions.recurring_payments'))
         except (ValueError, TypeError) as error:
             db.session.rollback()
-            flash(f'Unable to update subscription: {error}', 'danger')
+            flash(f'Unable to update recurring payment: {error}', 'danger')
     return render_template(
-        'transactions/subscription_form.html',
-        subscription=subscription,
+        'transactions/recurring_payment_form.html',
+        recurring_payment=recurring_payment,
         price_history=history,
-        target_type='credit_card' if subscription.credit_card_id else 'bank',
+        target_type='credit_card' if recurring_payment.credit_card_id else 'bank',
         today=date.today(),
         current_amount=abs(
-            SubscriptionService._amount_for_date(subscription, date.today())
+            RecurringPaymentService._amount_for_date(recurring_payment, date.today())
         ),
-        **_subscription_form_options(),
+        **_recurring_payment_form_options(),
     )
 
 
 @transactions_bp.route(
-    '/transactions/subscriptions/<int:id>/price-change',
+    '/transactions/recurring-payments/<int:id>/price-change',
     defaults={'change_id': None},
     methods=['GET', 'POST'],
 )
 @transactions_bp.route(
-    '/transactions/subscriptions/<int:id>/price-change/<int:change_id>',
+    '/transactions/recurring-payments/<int:id>/price-change/<int:change_id>',
     methods=['GET', 'POST'],
 )
-def change_subscription_price(id, change_id):
-    subscription = family_get_or_404(Subscription, id)
+def change_recurring_payment_price(id, change_id):
+    recurring_payment = family_get_or_404(RecurringPayment, id)
     editing_price_change = (
-        family_get_or_404(SubscriptionPriceChange, change_id)
+        family_get_or_404(RecurringPaymentPriceChange, change_id)
         if change_id is not None
         else None
     )
     if (
         editing_price_change
-        and editing_price_change.subscription_id != subscription.id
+        and editing_price_change.recurring_payment_id != recurring_payment.id
     ):
         abort(404)
-    history = family_query(SubscriptionPriceChange).filter_by(
-        subscription_id=subscription.id
+    history = family_query(RecurringPaymentPriceChange).filter_by(
+        recurring_payment_id=recurring_payment.id
     ).order_by(
-        SubscriptionPriceChange.effective_date,
-        SubscriptionPriceChange.id,
+        RecurringPaymentPriceChange.effective_date,
+        RecurringPaymentPriceChange.id,
     ).all()
     if request.method == 'POST':
         try:
             if request.form.get('confirm_change') == '1':
                 preview_hash = session.get(
-                    'subscription_price_previews', {}
+                    'recurring_payment_price_previews', {}
                 ).get(str(id))
-                preview = SubscriptionService.preview_price_change(
+                preview = RecurringPaymentService.preview_price_change(
                     id, request.form, change_id=change_id
                 )
                 submitted_hash = _price_change_preview_hash(
@@ -192,10 +192,10 @@ def change_subscription_price(id, change_id):
                     preview_hash, submitted_hash
                 ):
                     raise ValueError('Review the price change preview before confirming')
-                previews = session.get('subscription_price_previews', {})
+                previews = session.get('recurring_payment_price_previews', {})
                 previews.pop(str(id), None)
-                session['subscription_price_previews'] = previews
-                SubscriptionService.apply_price_change(
+                session['recurring_payment_price_previews'] = previews
+                RecurringPaymentService.apply_price_change(
                     id, request.form, change_id=change_id
                 )
                 db.session.commit()
@@ -203,18 +203,18 @@ def change_subscription_price(id, change_id):
                     'Price change saved. Future unpaid charges affected by the updated date and amount were refreshed; paid charges were left unchanged.',
                     'success',
                 )
-                return redirect(url_for('transactions.subscriptions'))
-            preview = SubscriptionService.preview_price_change(
+                return redirect(url_for('transactions.recurring_payments'))
+            preview = RecurringPaymentService.preview_price_change(
                 id, request.form, change_id=change_id
             )
-            previews = session.get('subscription_price_previews', {})
+            previews = session.get('recurring_payment_price_previews', {})
             previews[str(id)] = _price_change_preview_hash(
                 preview['values'], change_id
             )
-            session['subscription_price_previews'] = previews
+            session['recurring_payment_price_previews'] = previews
             return render_template(
-                'transactions/subscription_price_change.html',
-                subscription=subscription,
+                'transactions/recurring_payment_price_change.html',
+                recurring_payment=recurring_payment,
                 price_history=history,
                 preview=preview,
                 editing_price_change=editing_price_change,
@@ -222,47 +222,67 @@ def change_subscription_price(id, change_id):
             )
         except (ValueError, TypeError) as error:
             db.session.rollback()
-            flash(f'Unable to change subscription price: {error}', 'danger')
+            flash(f'Unable to change recurring payment price: {error}', 'danger')
         except SQLAlchemyError:
             db.session.rollback()
-            current_app.logger.exception('Unable to save subscription price change')
-            flash('Unable to save the subscription price change. Please try again.', 'danger')
+            current_app.logger.exception('Unable to save recurring payment price change')
+            flash('Unable to save the recurring payment price change. Please try again.', 'danger')
     return render_template(
-        'transactions/subscription_price_change.html',
-        subscription=subscription,
+        'transactions/recurring_payment_price_change.html',
+        recurring_payment=recurring_payment,
         price_history=history,
         preview=None,
         editing_price_change=editing_price_change,
         today=date.today(),
         current_amount=abs(
-            SubscriptionService._amount_for_date(subscription, date.today())
+            RecurringPaymentService._amount_for_date(recurring_payment, date.today())
         ),
     )
 
 
-@transactions_bp.route('/transactions/subscriptions/<int:id>/toggle', methods=['POST'])
-def toggle_subscription(id):
-    subscription = family_get_or_404(Subscription, id)
-    SubscriptionService.set_active(id, not subscription.is_active)
+@transactions_bp.route('/transactions/recurring-payments/<int:id>/toggle', methods=['POST'])
+def toggle_recurring_payment(id):
+    recurring_payment = family_get_or_404(RecurringPayment, id)
+    RecurringPaymentService.set_active(id, not recurring_payment.is_active)
     db.session.commit()
     flash(
-        'Subscription resumed and its forecast refreshed.'
-        if subscription.is_active
-        else 'Subscription paused. Existing pending transactions were kept.',
+        'Recurring payment resumed and its forecast refreshed.'
+        if recurring_payment.is_active
+        else 'Recurring payment paused. Existing pending transactions were kept.',
         'success',
     )
-    return redirect(url_for('transactions.subscriptions'))
+    return redirect(url_for('transactions.recurring_payments'))
 
 
-@transactions_bp.route('/transactions/subscriptions/<int:id>/cancel', methods=['POST'])
-def cancel_subscription(id):
-    SubscriptionService.cancel(id)
+@transactions_bp.route('/transactions/recurring-payments/<int:id>/cancel', methods=['POST'])
+def cancel_recurring_payment(id):
+    RecurringPaymentService.cancel(id)
     db.session.commit()
     flash(
-        'Subscription cancelled. Remaining pending transactions were deleted; paid transactions were kept.',
+        'Recurring payment cancelled. Remaining pending transactions were deleted; paid transactions were kept.',
         'success',
     )
-    return redirect(url_for('transactions.subscriptions'))
+    return redirect(url_for('transactions.recurring_payments'))
+
+
+@transactions_bp.route(
+    '/transactions/subscriptions',
+    defaults={'legacy_path': ''},
+    methods=['GET', 'POST'],
+)
+@transactions_bp.route(
+    '/transactions/subscriptions/<path:legacy_path>',
+    methods=['GET', 'POST'],
+)
+def legacy_subscription_urls(legacy_path):
+    new_path = request.path.replace(
+        '/transactions/subscriptions',
+        '/transactions/recurring-payments',
+        1,
+    )
+    if request.query_string:
+        new_path = f'{new_path}?{request.query_string.decode()}'
+    return redirect(new_path, code=308)
 
 
 @transactions_bp.route('/transactions')

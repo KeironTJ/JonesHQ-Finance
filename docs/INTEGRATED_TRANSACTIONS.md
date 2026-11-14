@@ -4,7 +4,7 @@
 
 Bank transactions are the shared ledger for account activity. Related workflows
 create and maintain linked rows for credit-card payments, loan payments,
-account transfers, subscriptions, expenses, income, and childcare. Coordination
+account transfers, recurring payments, expenses, income, and childcare. Coordination
 belongs in domain services, not in a database-wide cascade assumption.
 
 ## Credit-Card Payments
@@ -46,8 +46,8 @@ current route list.
   rows use claim-group and reimbursement-group fields.
 - **Income:** income services can maintain a deposit transaction. Folded expense
   reimbursement totals are incorporated into the income transaction.
-- **Subscriptions:** generated pending transactions reference their source
-  through `subscription_id`. Paid/fixed entries are treated differently from
+- **Recurring payments:** generated pending transactions reference their source
+  through `recurring_payment_id`. Paid/fixed entries are treated differently from
   replaceable forecasts.
 - **Childcare:** monthly childcare summaries can link to their account
   transaction.
@@ -58,11 +58,11 @@ and should be updated through their owning service.
 ## Transaction Fields and Household Scope
 
 `Transaction` contains the account, category, vendor, amount, date, paid/fixed
-and forecast flags, optional card/loan/subscription references, optional
+and forecast flags, optional card/loan/recurring-payment references, optional
 transfer counterpart, expense-claim metadata, and derived period fields such as
 `year_month` and `payday_period`. `CreditCardTransaction` stores its card,
 classification, amount/date, balance, paid/fixed state, bank-payment link,
-statement/transfer links, and subscription reference.
+statement/transfer links, and recurring-payment reference.
 
 Application queries and submitted foreign keys must be family-scoped using
 `family_query()` / `family_get()` / `family_get_or_404()`. Keep

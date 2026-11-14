@@ -146,11 +146,11 @@ def test_module_navigation_permissions_follow_selected_household(app, user):
     client = app.test_client()
     login_client(client, user.id)
     client.post('/central/family/select', data={'family_id': second_family.id})
-    for path in ('/finance/accounts', '/finance/transactions/subscriptions', '/finance/settings/overview'):
+    for path in ('/finance/accounts', '/finance/transactions/recurring-payments', '/finance/settings/overview'):
         html = client.get(path).get_data(as_text=True)
         sidebar = NavigationParser()
         sidebar.feed(html)
         hrefs = {link['href'] for link in sidebar.links}
-        assert {'/finance/accounts', '/finance/transactions', '/finance/transactions/subscriptions'} <= hrefs
+        assert {'/finance/accounts', '/finance/transactions', '/finance/transactions/recurring-payments'} <= hrefs
         assert not {'/finance/income', '/finance/vendors/', '/finance/settings', '/central/family/'} & hrefs
         assert len([link for link in sidebar.links if link.get('aria-current') == 'page']) == 1

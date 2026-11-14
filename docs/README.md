@@ -17,7 +17,7 @@
 - [Monthly Balance Cache](MONTHLY_BALANCE_CACHE.md) - Actual and projected account balances
 - [Pension Projections](PENSION_PROJECTIONS.md) - Pension forecast workflows
 - [Retirement Planning](RETIREMENT_PLANNING.md) - Retirement and net-worth planning
-- [Subscriptions](SUBSCRIPTIONS.md) - Recurring bank and credit-card charges
+- [Recurring Payments](RECURRING_PAYMENTS.md) - Recurring bank and credit-card charges
 
 ## Implementation and Operations
 

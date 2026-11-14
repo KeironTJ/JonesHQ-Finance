@@ -38,7 +38,7 @@ requests, so module and deployment prefixes are respected.
 ### `/models/`
 SQLAlchemy database models
 - `accounts.py` - Account model
-- `subscriptions.py` - Managed recurring bank and credit-card charges
+- `recurring_payments.py` - Managed recurring bank and credit-card charges
 - `balances.py` - Balance history
 - `budgets.py` - Budget model
 - `categories.py` - Category model
@@ -87,7 +87,7 @@ SQLAlchemy database models
 ### `/services/`
 Domain-oriented business logic layer. See [`services/README.md`](../services/README.md)
 for the package map and compatibility-import policy.
-- `finance/` - Accounts, categories, transactions, subscriptions, payday, balances, income, vendors, credit cards, and expenses
+- `finance/` - Accounts, categories, transactions, recurring payments, payday, balances, income, vendors, credit cards, and expenses
 - `household/` - Family, managed-child access, calendar, meal/activity planning, tasks and childcare workflows
 - `household/planner_helpers.py` - Shared week/month date periods and navigation
 - `planning/` - Loans, mortgages, and pensions
@@ -163,7 +163,7 @@ Documentation
 - `RETIREMENT_PLANNING.md` - Retirement planning
 - `SECURITY.md` - Security guidelines
 - `SECURITY_HARDENING.md` - Security controls and hardening
-- `SUBSCRIPTIONS.md` - Subscription workflows
+- `RECURRING_PAYMENTS.md` - Recurring payment workflows
 - `TRANSACTION_EDITING.md` - Transaction editing guide
 - `VENDOR_SYSTEM.md` - Vendor system documentation
 - `DIRECTORY_STRUCTURE.md` - This file

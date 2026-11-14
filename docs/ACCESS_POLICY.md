@@ -24,7 +24,7 @@ back to Central Hub; explicit protected links are denied.
 
 Owners can recover their own revoked module access through Central settings.
 Core appearance and sign-in security remain available without Finance.
-These grants are **not subscription or billing entitlements**. A future billing
+These grants are **not recurring-payment or billing entitlements**. A future billing
 layer must compose with membership and account restrictions, not replace them.
 
 ## Managed child accounts

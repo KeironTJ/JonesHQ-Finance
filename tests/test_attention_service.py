@@ -10,7 +10,7 @@ from models.family import Family
 from models.mortgage import MortgageProduct
 from models.plans import Plan
 from models.property import Property
-from models.subscriptions import Subscription
+from models.recurring_payments import RecurringPayment
 from models.transactions import Transaction
 from models.users import User
 from services.analytics.attention_service import AttentionService
@@ -142,10 +142,10 @@ def test_attention_excludes_inaccessible_sections(app, family, user, monkeypatch
     assert AttentionService.get_data(TODAY)['items'] == []
 
 
-def test_attention_includes_next_active_subscription_charge(app, family, user, monkeypatch):
+def test_attention_includes_next_active_recurring_payment_charge(app, family, user, monkeypatch):
     _scope(monkeypatch, family, user)
-    account, _, _, _, _, _ = _records(family.id, 'Subscription target')
-    subscription = Subscription(
+    account, _, _, _, _, _ = _records(family.id, 'Recurring payment target')
+    recurring_payment = RecurringPayment(
         family_id=family.id,
         name='Streaming',
         amount=-12.99,
@@ -155,30 +155,42 @@ def test_attention_includes_next_active_subscription_charge(app, family, user, m
         account_id=account.id,
         is_active=True,
     )
-    db.session.add(subscription)
+    db.session.add(recurring_payment)
     db.session.commit()
 
     result = AttentionService.get_data(TODAY)
-    item = next(item for item in result['items'] if item['kind'] == 'subscription')
+    item = next(item for item in result['items'] if item['kind'] == 'recurring_payment')
     assert item['title'] == 'Streaming'
     assert item['due_date'] == TODAY + timedelta(days=10)
-    assert item['endpoint'] == 'transactions.edit_subscription'
-    assert item['params'] == {'id': subscription.id}
-    assert item['context'] == 'Subscription target / £12.99'
+    assert item['endpoint'] == 'transactions.edit_recurring_payment'
+    assert item['params'] == {'id': recurring_payment.id}
+    assert item['context'] == 'Recurring payment target / £12.99'
+    due_key = f'subscription:{recurring_payment.id}:{item["due_date"].isoformat()}'
+    user.preferences = {
+        'dashboard.attention_snoozes': {
+            due_key: (TODAY + timedelta(days=5)).isoformat(),
+        },
+    }
+    db.session.commit()
+    item = next(
+        entry for entry in AttentionService.get_data(TODAY)['items']
+        if entry['kind'] == 'recurring_payment'
+    )
+    assert item['snoozed_until'] == TODAY + timedelta(days=5)
 
-    subscription.is_active = False
+    recurring_payment.is_active = False
     db.session.commit()
     assert not any(
-        item['kind'] == 'subscription'
+        item['kind'] == 'recurring_payment'
         for item in AttentionService.get_data(TODAY)['items']
     )
 
 
-def test_attention_uses_adjusted_subscription_charge_date(app, family, user, monkeypatch):
+def test_attention_uses_adjusted_recurring_payment_charge_date(app, family, user, monkeypatch):
     _scope(monkeypatch, family, user)
-    account, _, _, _, _, _ = _records(family.id, 'Subscription target')
-    db.session.add(Subscription(
-        family_id=family.id, name='Weekend subscription', amount=-10,
+    account, _, _, _, _, _ = _records(family.id, 'Recurring payment target')
+    db.session.add(RecurringPayment(
+        family_id=family.id, name='Weekend payment', amount=-10,
         frequency='monthly', start_date=date(2026, 10, 31),
         weekend_adjustment='next', horizon_years=1,
         account_id=account.id, is_active=True,
@@ -186,7 +198,7 @@ def test_attention_uses_adjusted_subscription_charge_date(app, family, user, mon
     db.session.commit()
     item = next(
         item for item in AttentionService.get_data(TODAY)['items']
-        if item['kind'] == 'subscription'
+        if item['kind'] == 'recurring_payment'
     )
     assert item['due_date'] == date(2026, 11, 2)
 
@@ -367,7 +379,7 @@ def test_attention_queue_paginates_filters_and_clamps_after_removal(
         'plan': 24,
         'credit_card': 1,
         'mortgage': 1,
-        'subscription': 0,
+        'recurring_payment': 0,
     }
     past = AttentionService.get_queue({'attention_timing': 'past'}, TODAY)
     assert [item['kind'] for item in past['items']] == ['transaction']

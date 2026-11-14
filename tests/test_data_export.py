@@ -14,7 +14,7 @@ from models.income import Income
 from models.loan_term_changes import LoanTermChange
 from models.loans import Loan
 from models.plans import Plan, PlanItem
-from models.subscriptions import Subscription, SubscriptionPriceChange
+from models.recurring_payments import RecurringPayment, RecurringPaymentPriceChange
 from models.transactions import Transaction
 from models.users import SecurityEvent, User, UserSession
 from services.platform.data_export_service import DataExportService, EXPORTS
@@ -116,7 +116,7 @@ def test_export_keeps_private_and_foreign_records_out_even_for_admin(app, user, 
     assert 'Foreign account' not in response.get_data(as_text=True)
 
 
-def test_export_includes_dated_subscription_prices(app, user, family):
+def test_export_includes_dated_recurring_payment_prices(app, user, family):
     account = Account(
         family_id=family.id, name='Shared account', account_type='Current',
     )
@@ -125,15 +125,15 @@ def test_export_includes_dated_subscription_prices(app, user, family):
     )
     db.session.add_all([account, category])
     db.session.flush()
-    subscription = Subscription(
+    recurring_payment = RecurringPayment(
         family_id=family.id, name='Streaming service', amount=Decimal('-12.99'),
         frequency='monthly', start_date=date(2026, 1, 1), horizon_years=1,
         account_id=account.id, category_id=category.id,
     )
-    db.session.add(subscription)
+    db.session.add(recurring_payment)
     db.session.flush()
-    db.session.add(SubscriptionPriceChange(
-        family_id=family.id, subscription_id=subscription.id,
+    db.session.add(RecurringPaymentPriceChange(
+        family_id=family.id, recurring_payment_id=recurring_payment.id,
         amount=Decimal('-15.99'), effective_date=date(2026, 7, 1),
         note='Annual price increase',
     ))
@@ -143,10 +143,10 @@ def test_export_includes_dated_subscription_prices(app, user, family):
 
     assert response.status_code == 200
     data = response.get_json()['data']
-    assert data['subscriptions'][0]['amount'] == '-12.99'
-    assert data['subscription_price_changes'][0] == {
+    assert data['recurring_payments'][0]['amount'] == '-12.99'
+    assert data['recurring_payment_price_changes'][0] == {
         'id': 1,
-        'subscription_id': subscription.id,
+        'recurring_payment_id': recurring_payment.id,
         'amount': '-15.99',
         'effective_date': '2026-07-01',
         'note': 'Annual price increase',

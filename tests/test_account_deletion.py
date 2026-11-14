@@ -12,7 +12,7 @@ from models import (
     Account, Balance, Category, CreditCard, CreditCardPromotion, CreditCardTransaction,
     Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, IncomeChange, Loan,
     LoanPayment, LoanTermChange, MonthlyAccountBalance, Pension, PensionSnapshot,
-    Plan, PlanItem, RecurringIncome, SecurityEvent, Subscription, Transaction, Trip,
+    Plan, PlanItem, RecurringIncome, SecurityEvent, RecurringPayment, Transaction, Trip,
     TripSchedule, TripTemplate, User, UserRecoveryCode, UserSession, Vehicle,
 )
 from models.expense_calendar import ExpenseCalendarEntry
@@ -132,7 +132,7 @@ def make_domains(owner, family_id, prefix):
                     schedule_id=schedule.id, scheduled_date=TODAY)),
         (PlanItem, dict(plan_id=plan.id, title=prefix, transaction_id=transaction.id)),
         (ExpenseCalendarEntry, dict(expense_id=expense.id, date=TODAY, description=prefix)),
-        (Subscription, dict(account_id=account.id, name=prefix, amount=-10, start_date=TODAY)),
+        (RecurringPayment, dict(account_id=account.id, name=prefix, amount=-10, start_date=TODAY)),
     ):
         add(model, family_id=family_id, **values)
     return dict(account=account, card=card, loan=loan, pension=pension, vehicle=vehicle, plan=plan,
@@ -202,7 +202,7 @@ def test_deletion_removes_private_domains_but_preserves_shared_and_other_househo
             assert row_exists(model, retained[key].id)
     for model in (
         Balance, MonthlyAccountBalance, CreditCardPromotion, LoanPayment, LoanTermChange,
-        PensionSnapshot, Trip, FuelRecord, PlanItem, ExpenseCalendarEntry, Subscription,
+        PensionSnapshot, Trip, FuelRecord, PlanItem, ExpenseCalendarEntry, RecurringPayment,
     ):
         assert db.session.execute(select(db.func.count()).select_from(model)).scalar() == 3
     db.session.expire_all()
@@ -369,9 +369,9 @@ def test_private_transaction_cycles_and_sources_delete_without_fk_violations(app
     own['cc_transaction'].statement_id = own['cc_transaction'].id
     own['transaction'].linked_transaction_id = own['transaction'].id
     user.default_account_id = own['account'].id
-    subscription = Subscription.query.filter_by(account_id=own['account'].id).one()
-    subscription.account_id = None
-    subscription.credit_card_id = own['card'].id
+    recurring_payment = RecurringPayment.query.filter_by(account_id=own['account'].id).one()
+    recurring_payment.account_id = None
+    recurring_payment.credit_card_id = own['card'].id
     db.session.commit()
     user_id = user.id
     response = sign_in(app, user).post('/central/account/security/delete', data=VALID_DATA)

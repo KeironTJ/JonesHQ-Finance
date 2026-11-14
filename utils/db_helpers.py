@@ -183,7 +183,7 @@ def _apply_visibility(model, query):
         ).correlate(model).exists()
         conditions.append(or_(model.visibility == 'shared', creator_visible))
 
-    if getattr(model, '__tablename__', None) == 'subscriptions':
+    if getattr(model, '__tablename__', None) == 'recurring_payments':
         from models.accounts import Account
         from models.credit_cards import CreditCard
 
@@ -212,37 +212,37 @@ def _apply_visibility(model, query):
             )
         )
 
-    if getattr(model, '__tablename__', None) == 'subscription_price_changes':
+    if getattr(model, '__tablename__', None) == 'recurring_payment_price_changes':
         from models.accounts import Account
         from models.credit_cards import CreditCard
-        from models.subscriptions import Subscription
+        from models.recurring_payments import RecurringPayment
 
         account_owner_id = (
             Account.query.with_entities(Account.owner_id)
-            .filter(Account.id == Subscription.account_id)
-            .correlate(Subscription)
+            .filter(Account.id == RecurringPayment.account_id)
+            .correlate(RecurringPayment)
             .scalar_subquery()
         )
         card_owner_id = (
             CreditCard.query.with_entities(CreditCard.owner_id)
-            .filter(CreditCard.id == Subscription.credit_card_id)
-            .correlate(Subscription)
+            .filter(CreditCard.id == RecurringPayment.credit_card_id)
+            .correlate(RecurringPayment)
             .scalar_subquery()
         )
-        visible_subscription = Subscription.query.filter(
-            Subscription.id == model.subscription_id,
+        visible_recurring_payment = RecurringPayment.query.filter(
+            RecurringPayment.id == model.recurring_payment_id,
             or_(
                 and_(
-                    Subscription.account_id.is_not(None),
+                    RecurringPayment.account_id.is_not(None),
                     or_(account_owner_id.is_(None), account_owner_id == uid),
                 ),
                 and_(
-                    Subscription.credit_card_id.is_not(None),
+                    RecurringPayment.credit_card_id.is_not(None),
                     or_(card_owner_id.is_(None), card_owner_id == uid),
                 ),
             ),
         ).correlate(model).exists()
-        conditions.append(visible_subscription)
+        conditions.append(visible_recurring_payment)
 
     entry = _inherited_visibility_models().get(model)
     if entry:

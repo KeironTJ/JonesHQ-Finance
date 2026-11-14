@@ -9,7 +9,7 @@ from models import (
     Account, Balance, CreditCard, CreditCardPromotion, CreditCardTransaction,
     Expense, Family, FamilyInvite, FuelRecord, HouseholdInvite, Income, IncomeChange, Loan,
     LoanPayment, LoanTermChange, MonthlyAccountBalance, Pension, PensionSnapshot,
-    Plan, PlanItem, RecurringIncome, Subscription, Transaction, Trip, TripSchedule, TripTemplate,
+    Plan, PlanItem, RecurringIncome, RecurringPayment, Transaction, Trip, TripSchedule, TripTemplate,
     User, UserRecoveryCode, UserSession, Vehicle,
 )
 from models.family import HouseholdMembership
@@ -31,8 +31,8 @@ DOMAIN_CHILDREN = (
     (Transaction, Account, 'account_id'),
     (CreditCardPromotion, CreditCard, 'credit_card_id'),
     (CreditCardTransaction, CreditCard, 'credit_card_id'),
-    (Subscription, Account, 'account_id'),
-    (Subscription, CreditCard, 'credit_card_id'),
+    (RecurringPayment, Account, 'account_id'),
+    (RecurringPayment, CreditCard, 'credit_card_id'),
     (LoanPayment, Loan, 'loan_id'),
     (LoanTermChange, Loan, 'loan_id'),
     (IncomeChange, RecurringIncome, 'recurring_income_id'),
@@ -51,7 +51,7 @@ DELETE_ORDER = (
     CalendarEvent,
     ExpenseCalendarEntry, PlanItem, Trip, TripSchedule, TripTemplate, FuelRecord, LoanTermChange, LoanPayment,
     PensionSnapshot, CreditCardPromotion, Expense, Income, IncomeChange, CreditCardTransaction, Balance,
-    MonthlyAccountBalance, Transaction, Subscription,
+    MonthlyAccountBalance, Transaction, RecurringPayment,
     RecurringIncome, Plan, Vehicle, Pension, Loan, CreditCard, Account,
     FamilyInvite, UserSession, UserRecoveryCode, PasskeyChallenge, UserPasskey,
     HouseholdMembership, User,

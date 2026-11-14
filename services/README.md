@@ -5,7 +5,7 @@ domain package rather than maintaining top-level redirect modules.
 
 ## Domains
 
-- `finance/` - accounts, categories, transactions, subscriptions, payday periods,
+- `finance/` - accounts, categories, transactions, recurring payments, payday periods,
   balances, income, vendors, credit cards, expenses, Finance settings
   (`SettingsService`) and Finance defaults (`FinancePreferenceService`)
 - `household/` - household memberships, family and childcare workflows
@@ -164,7 +164,7 @@ The shared vendor lookup helpers live in `finance/credit_card_helpers.py`.
 Transaction mutations call `CreditCardStatementService.refresh_after_changes`
 once per affected card/batch, using the household's `default_generation_years`
 (default 10) and a 14-day payment offset. Card edits, linked bank payments,
-expense sync and card subscriptions use the same path. It flushes without
+expense sync and recurring-payment charges use the same path. It flushes without
 committing; the enclosing write owns the commit/rollback. Only future unpaid,
 unlocked statement chains are replaced: a paid/locked statement, card payment or
 bank debit protects the whole chain. Account and card balances are refreshed,

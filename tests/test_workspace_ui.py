@@ -51,7 +51,7 @@ class QuickNavigationParser(HTMLParser):
 
 @pytest.mark.parametrize('path', [
     '/central/', '/finance/dashboard', '/finance/accounts', '/finance/transactions', '/finance/transactions/create',
-    '/finance/transactions/subscriptions', '/finance/transactions/consolidated',
+    '/finance/transactions/recurring-payments', '/finance/transactions/consolidated',
     '/finance/income', '/finance/credit-cards', '/finance/loans/', '/finance/mortgage', '/finance/pensions',
     '/finance/networth', '/finance/vehicles', '/finance/childcare', '/finance/plans', '/finance/expenses',
     '/finance/categories/', '/finance/vendors/', '/central/family/', '/central/preferences', '/finance/settings',
@@ -88,7 +88,7 @@ def test_navigation_search_source_respects_member_permissions(app, user):
     parser = NavigationParser()
     parser.feed(client.get('/finance/accounts').get_data(as_text=True))
     hrefs = {link['href'] for link in parser.links}
-    assert {'/finance/accounts', '/finance/transactions', '/finance/transactions/subscriptions'} <= hrefs
+    assert {'/finance/accounts', '/finance/transactions', '/finance/transactions/recurring-payments'} <= hrefs
     assert not {'/finance/settings', '/central/family/', '/finance/income', '/finance/credit-cards', '/site-admin/'} & hrefs
     assert '/central/settings' in hrefs
 
@@ -268,7 +268,7 @@ def test_shared_metric_escapes_content_and_preserves_values(app):
 
 @pytest.mark.parametrize('path, active_href', [
     ('/finance/transactions/create', '/finance/transactions'),
-    ('/finance/transactions/subscriptions', '/finance/transactions/subscriptions'),
+    ('/finance/transactions/recurring-payments', '/finance/transactions/recurring-payments'),
     ('/finance/transactions/consolidated', '/finance/transactions/consolidated'),
 ])
 def test_transaction_navigation_selects_only_the_relevant_page(app, user, path, active_href):
@@ -278,6 +278,16 @@ def test_transaction_navigation_selects_only_the_relevant_page(app, user, path, 
     parser.feed(client.get(path).get_data(as_text=True))
     active = [link['href'] for link in parser.links if link.get('aria-current') == 'page']
     assert active == [active_href]
+
+
+def test_legacy_subscription_page_redirects_to_recurring_payments(app, user):
+    client = app.test_client()
+    login_client(client, user.id)
+    response = client.get('/finance/transactions/subscriptions?filter=active')
+    assert response.status_code == 308
+    assert response.location == (
+        '/finance/transactions/recurring-payments?filter=active'
+    )
 
 
 def test_shared_analytics_payload_cannot_end_script_tag(app):

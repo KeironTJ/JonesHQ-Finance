@@ -8,7 +8,7 @@ from models.accounts import Account
 from models.categories import Category
 from models.credit_card_transactions import CreditCardTransaction
 from models.credit_cards import CreditCard
-from models.subscriptions import Subscription, SubscriptionPriceChange
+from models.recurring_payments import RecurringPayment, RecurringPaymentPriceChange
 from models.transactions import Transaction
 from models.vendors import Vendor
 from services.finance.payday_service import PaydayService
@@ -17,7 +17,7 @@ from utils import db_helpers
 from utils.db_helpers import family_get, family_get_or_404, family_query
 
 
-class SubscriptionService:
+class RecurringPaymentService:
     FREQUENCIES = {
         'weekly': relativedelta(weeks=1),
         '4weekly': relativedelta(weeks=4),
@@ -34,16 +34,16 @@ class SubscriptionService:
     }
 
     @staticmethod
-    def get_summary(subscription):
-        if subscription.account_id:
+    def get_summary(recurring_payment):
+        if recurring_payment.account_id:
             date_attribute = 'transaction_date'
             transactions = family_query(Transaction).filter_by(
-                subscription_id=subscription.id
+                recurring_payment_id=recurring_payment.id
             ).order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
         else:
             date_attribute = 'date'
             transactions = family_query(CreditCardTransaction).filter_by(
-                subscription_id=subscription.id
+                recurring_payment_id=recurring_payment.id
             ).order_by(CreditCardTransaction.date.desc(), CreditCardTransaction.id.desc()).all()
 
         paid_transactions = [
@@ -53,12 +53,12 @@ class SubscriptionService:
             transaction for transaction in transactions if not transaction.is_paid
         ]
         latest_paid = paid_transactions[0] if paid_transactions else None
-        current_amount = SubscriptionService._amount_for_date(
-            subscription, date.today()
+        current_amount = RecurringPaymentService._amount_for_date(
+            recurring_payment, date.today()
         )
         effective_price_change = max(
             (
-                change for change in subscription.price_changes
+                change for change in recurring_payment.price_changes
                 if change.effective_date <= date.today()
             ),
             key=lambda change: (change.effective_date, change.id),
@@ -66,7 +66,7 @@ class SubscriptionService:
         )
         upcoming_price_change = min(
             (
-                change for change in subscription.price_changes
+                change for change in recurring_payment.price_changes
                 if change.effective_date > date.today()
             ),
             key=lambda change: (change.effective_date, change.id),
@@ -74,7 +74,7 @@ class SubscriptionService:
         )
         annual_cost = (
             abs(current_amount)
-            * SubscriptionService.ANNUAL_OCCURRENCES[subscription.frequency]
+            * RecurringPaymentService.ANNUAL_OCCURRENCES[recurring_payment.frequency]
         )
         return {
             'pending_count': len(pending_transactions),
@@ -101,14 +101,14 @@ class SubscriptionService:
 
     @staticmethod
     def _amount_for_date(
-        subscription,
+        recurring_payment,
         charge_date,
         excluded_change_id=None,
         change_override=None,
     ):
         changes = [
             (change.effective_date, change.id, change.amount)
-            for change in subscription.price_changes
+            for change in recurring_payment.price_changes
             if change.id != excluded_change_id
         ]
         if change_override:
@@ -120,7 +120,7 @@ class SubscriptionService:
         applicable = [
             change for change in changes if change[0] <= charge_date
         ]
-        return max(applicable, default=(None, None, subscription.amount))[2]
+        return max(applicable, default=(None, None, recurring_payment.amount))[2]
 
     @staticmethod
     def _parse_price_change(data):
@@ -152,44 +152,44 @@ class SubscriptionService:
         }
 
     @staticmethod
-    def preview_price_change(subscription_id, data, today=None, change_id=None):
-        subscription = family_get_or_404(Subscription, subscription_id)
-        values = SubscriptionService._parse_price_change(data)
+    def preview_price_change(recurring_payment_id, data, today=None, change_id=None):
+        recurring_payment = family_get_or_404(RecurringPayment, recurring_payment_id)
+        values = RecurringPaymentService._parse_price_change(data)
         today = today or date.today()
         if values['effective_date'] < today:
             raise ValueError('The effective date must be today or a future date')
-        if values['effective_date'] < subscription.start_date:
-            raise ValueError('The effective date cannot be before the subscription start date')
-        if subscription.end_date and values['effective_date'] > subscription.end_date:
-            raise ValueError('The effective date cannot be after the subscription end date')
+        if values['effective_date'] < recurring_payment.start_date:
+            raise ValueError('The effective date cannot be before the recurring payment start date')
+        if recurring_payment.end_date and values['effective_date'] > recurring_payment.end_date:
+            raise ValueError('The effective date cannot be after the recurring payment end date')
         existing_change = (
-            family_get_or_404(SubscriptionPriceChange, change_id)
+            family_get_or_404(RecurringPaymentPriceChange, change_id)
             if change_id is not None
             else None
         )
-        if existing_change and existing_change.subscription_id != subscription.id:
-            raise ValueError('Select a price change for this subscription')
+        if existing_change and existing_change.recurring_payment_id != recurring_payment.id:
+            raise ValueError('Select a price change for this recurring payment')
         if existing_change and existing_change.effective_date < today:
             raise ValueError('Past price changes cannot be edited')
-        duplicate_query = family_query(SubscriptionPriceChange).filter_by(
-            subscription_id=subscription.id,
+        duplicate_query = family_query(RecurringPaymentPriceChange).filter_by(
+            recurring_payment_id=recurring_payment.id,
             effective_date=values['effective_date'],
         )
         if existing_change:
             duplicate_query = duplicate_query.filter(
-                SubscriptionPriceChange.id != existing_change.id
+                RecurringPaymentPriceChange.id != existing_change.id
             )
         if duplicate_query.first():
             raise ValueError('A price change is already scheduled for that date')
 
-        if subscription.account_id:
+        if recurring_payment.account_id:
             transactions = family_query(Transaction).filter_by(
-                subscription_id=subscription.id
+                recurring_payment_id=recurring_payment.id
             ).all()
             date_attribute = 'transaction_date'
         else:
             transactions = family_query(CreditCardTransaction).filter_by(
-                subscription_id=subscription.id
+                recurring_payment_id=recurring_payment.id
             ).all()
             date_attribute = 'date'
 
@@ -203,9 +203,9 @@ class SubscriptionService:
             for transaction in transactions
             if not transaction.is_paid and not transaction.is_fixed
         }
-        if subscription.is_active:
-            eligible_dates = set(SubscriptionService._scheduled_dates(
-                subscription, today, paid_or_fixed_dates
+        if recurring_payment.is_active:
+            eligible_dates = set(RecurringPaymentService._scheduled_dates(
+                recurring_payment, today, paid_or_fixed_dates
             ))
         else:
             eligible_dates = set(pending_by_date)
@@ -229,11 +229,11 @@ class SubscriptionService:
             old_amount = abs(
                 pending_by_date[charge_date].amount
                 if charge_date in pending_by_date
-                else SubscriptionService._amount_for_date(subscription, charge_date)
+                else RecurringPaymentService._amount_for_date(recurring_payment, charge_date)
             )
             new_amount = abs(
-                SubscriptionService._amount_for_date(
-                    subscription,
+                RecurringPaymentService._amount_for_date(
+                    recurring_payment,
                     charge_date,
                     excluded_change_id=(
                         existing_change.id if existing_change else None
@@ -248,7 +248,7 @@ class SubscriptionService:
                     'new_amount': new_amount,
                 })
         return {
-            'subscription': subscription,
+            'recurring_payment': recurring_payment,
             'existing_change': existing_change,
             'values': values,
             'changes': changes,
@@ -261,17 +261,17 @@ class SubscriptionService:
         }
 
     @staticmethod
-    def apply_price_change(subscription_id, data, today=None, change_id=None):
-        preview = SubscriptionService.preview_price_change(
-            subscription_id, data, today, change_id
+    def apply_price_change(recurring_payment_id, data, today=None, change_id=None):
+        preview = RecurringPaymentService.preview_price_change(
+            recurring_payment_id, data, today, change_id
         )
-        subscription = preview['subscription']
+        recurring_payment = preview['recurring_payment']
         values = preview['values']
         change = preview['existing_change']
         if change is None:
-            change = SubscriptionPriceChange(
-                family_id=subscription.family_id,
-                subscription_id=subscription.id,
+            change = RecurringPaymentPriceChange(
+                family_id=recurring_payment.family_id,
+                recurring_payment_id=recurring_payment.id,
                 amount=values['amount'],
                 effective_date=values['effective_date'],
                 note=values['note'] or None,
@@ -282,8 +282,8 @@ class SubscriptionService:
             change.effective_date = values['effective_date']
             change.note = values['note'] or None
         db.session.flush()
-        db.session.expire(subscription, ['price_changes'])
-        SubscriptionService.sync_pending(subscription, today=today)
+        db.session.expire(recurring_payment, ['price_changes'])
+        RecurringPaymentService.sync_pending(recurring_payment, today=today)
         preview['change'] = change
         return preview
 
@@ -291,18 +291,18 @@ class SubscriptionService:
     def _parse_data(data):
         name = (data.get('name') or '').strip()
         if not name:
-            raise ValueError('Subscription name is required')
+            raise ValueError('Recurring payment name is required')
 
         try:
             amount = Decimal(str(data.get('amount', '')).strip())
         except (InvalidOperation, ValueError):
-            raise ValueError('Enter a valid subscription amount') from None
+            raise ValueError('Enter a valid recurring payment amount') from None
         if not amount.is_finite() or amount <= 0:
-            raise ValueError('Subscription amount must be greater than zero')
+            raise ValueError('Recurring payment amount must be greater than zero')
 
         frequency = data.get('frequency')
-        if frequency not in SubscriptionService.FREQUENCIES:
-            raise ValueError('Select a valid subscription frequency')
+        if frequency not in RecurringPaymentService.FREQUENCIES:
+            raise ValueError('Select a valid recurring payment frequency')
         weekend_adjustment = PaydayService.validate_weekend_adjustment(
             data.get('weekend_adjustment', 'none')
         )
@@ -315,7 +315,7 @@ class SubscriptionService:
                 else None
             )
         except ValueError:
-            raise ValueError('Enter valid subscription dates') from None
+            raise ValueError('Enter valid recurring payment dates') from None
         if end_date and end_date < start_date:
             raise ValueError('End date cannot be before the start date')
 
@@ -366,8 +366,8 @@ class SubscriptionService:
 
     @staticmethod
     def create(data):
-        values = SubscriptionService._parse_data(data)
-        subscription = Subscription(
+        values = RecurringPaymentService._parse_data(data)
+        recurring_payment = RecurringPayment(
             family_id=db_helpers.get_family_id(),
             name=values['name'],
             amount=values['amount'],
@@ -381,54 +381,54 @@ class SubscriptionService:
             category_id=values['category'].id if values['category'] else None,
             vendor_id=values['vendor'].id if values['vendor'] else None,
         )
-        db.session.add(subscription)
+        db.session.add(recurring_payment)
         db.session.flush()
-        SubscriptionService.sync_pending(subscription, values)
-        return subscription
+        RecurringPaymentService.sync_pending(recurring_payment, values)
+        return recurring_payment
 
     @staticmethod
-    def update(subscription_id, data):
-        subscription = family_get_or_404(Subscription, subscription_id)
-        values = SubscriptionService._parse_data(data)
-        values['amount'] = subscription.amount
+    def update(recurring_payment_id, data):
+        recurring_payment = family_get_or_404(RecurringPayment, recurring_payment_id)
+        values = RecurringPaymentService._parse_data(data)
+        values['amount'] = recurring_payment.amount
         new_account_id = values['account'].id if values['account'] else None
         new_card_id = values['credit_card'].id if values['credit_card'] else None
         if (
-            subscription.account_id != new_account_id
-            or subscription.credit_card_id != new_card_id
+            recurring_payment.account_id != new_account_id
+            or recurring_payment.credit_card_id != new_card_id
         ):
-            SubscriptionService._remove_pending(subscription)
-        subscription.name = values['name']
-        subscription.amount = values['amount']
-        subscription.frequency = values['frequency']
-        subscription.weekend_adjustment = values['weekend_adjustment']
-        subscription.start_date = values['start_date']
-        subscription.end_date = values['end_date']
-        subscription.horizon_years = values['horizon_years']
-        subscription.account_id = values['account'].id if values['account'] else None
-        subscription.credit_card_id = (
+            RecurringPaymentService._remove_pending(recurring_payment)
+        recurring_payment.name = values['name']
+        recurring_payment.amount = values['amount']
+        recurring_payment.frequency = values['frequency']
+        recurring_payment.weekend_adjustment = values['weekend_adjustment']
+        recurring_payment.start_date = values['start_date']
+        recurring_payment.end_date = values['end_date']
+        recurring_payment.horizon_years = values['horizon_years']
+        recurring_payment.account_id = values['account'].id if values['account'] else None
+        recurring_payment.credit_card_id = (
             values['credit_card'].id if values['credit_card'] else None
         )
-        subscription.category_id = values['category'].id if values['category'] else None
-        subscription.vendor_id = values['vendor'].id if values['vendor'] else None
-        SubscriptionService.sync_pending(subscription, values)
-        return subscription
+        recurring_payment.category_id = values['category'].id if values['category'] else None
+        recurring_payment.vendor_id = values['vendor'].id if values['vendor'] else None
+        RecurringPaymentService.sync_pending(recurring_payment, values)
+        return recurring_payment
 
     @staticmethod
-    def _scheduled_dates(subscription, today, protected_dates=()):
-        horizon_end = today + relativedelta(years=subscription.horizon_years)
+    def _scheduled_dates(recurring_payment, today, protected_dates=()):
+        horizon_end = today + relativedelta(years=recurring_payment.horizon_years)
         last_date = min(
-            (d for d in (horizon_end, subscription.end_date) if d is not None),
+            (d for d in (horizon_end, recurring_payment.end_date) if d is not None),
             default=horizon_end,
         )
-        interval = SubscriptionService.FREQUENCIES[subscription.frequency]
+        interval = RecurringPaymentService.FREQUENCIES[recurring_payment.frequency]
         occurrence = 0
         while True:
-            planned_date = subscription.start_date + occurrence * interval
+            planned_date = recurring_payment.start_date + occurrence * interval
             if planned_date > last_date:
                 break
             adjusted_date = PaydayService.adjust_transaction_date(
-                planned_date, subscription.weekend_adjustment or 'none'
+                planned_date, recurring_payment.weekend_adjustment or 'none'
             )
             # A paid/fixed occurrence stays protected even after changing policy.
             protected = protected_dates and any(
@@ -441,69 +441,69 @@ class SubscriptionService:
             occurrence += 1
 
     @staticmethod
-    def sync_pending(subscription, values=None, today=None):
+    def sync_pending(recurring_payment, values=None, today=None):
         today = today or date.today()
         values = values or {
-            'account': subscription.account,
-            'credit_card': subscription.credit_card,
-            'category': subscription.category,
-            'vendor': subscription.vendor,
-            'amount': subscription.amount,
+            'account': recurring_payment.account,
+            'credit_card': recurring_payment.credit_card,
+            'category': recurring_payment.category,
+            'vendor': recurring_payment.vendor,
+            'amount': recurring_payment.amount,
         }
-        if subscription.account_id:
+        if recurring_payment.account_id:
             transactions = family_query(Transaction).filter_by(
-                subscription_id=subscription.id,
-                account_id=subscription.account_id,
+                recurring_payment_id=recurring_payment.id,
+                account_id=recurring_payment.account_id,
                 is_paid=False,
             ).all()
-            SubscriptionService._sync_bank_transactions(
-                subscription,
+            RecurringPaymentService._sync_bank_transactions(
+                recurring_payment,
                 transactions,
                 values,
                 today,
-                create_missing=subscription.is_active,
+                create_missing=recurring_payment.is_active,
             )
-            Transaction.recalculate_account_balance(subscription.account_id)
+            Transaction.recalculate_account_balance(recurring_payment.account_id)
         else:
             transactions = family_query(CreditCardTransaction).filter_by(
-                subscription_id=subscription.id,
-                credit_card_id=subscription.credit_card_id,
+                recurring_payment_id=recurring_payment.id,
+                credit_card_id=recurring_payment.credit_card_id,
                 is_paid=False,
             ).all()
-            SubscriptionService._sync_card_transactions(
-                subscription,
+            RecurringPaymentService._sync_card_transactions(
+                recurring_payment,
                 transactions,
                 values,
                 today,
-                create_missing=subscription.is_active,
+                create_missing=recurring_payment.is_active,
             )
-            CreditCardStatementService.refresh_after_changes([subscription.credit_card_id])
+            CreditCardStatementService.refresh_after_changes([recurring_payment.credit_card_id])
 
     @staticmethod
     def _sync_bank_transactions(
-        subscription, transactions, values, today, create_missing
+        recurring_payment, transactions, values, today, create_missing
     ):
         paid_dates = {
             transaction.transaction_date
             for transaction in family_query(Transaction).filter_by(
-                subscription_id=subscription.id,
-                account_id=subscription.account_id,
+                recurring_payment_id=recurring_payment.id,
+                account_id=recurring_payment.account_id,
             ).filter(
                 db.or_(Transaction.is_paid.is_(True), Transaction.is_fixed.is_(True))
             ).all()
         }
-        dates = set(SubscriptionService._scheduled_dates(
-            subscription, today, paid_dates
+        dates = set(RecurringPaymentService._scheduled_dates(
+            recurring_payment, today, paid_dates
         ))
         pending_by_date = {}
         for transaction in transactions:
             if transaction.transaction_date < today:
                 if not transaction.is_fixed:
-                    transaction.category_id = subscription.category_id
-                    transaction.vendor_id = subscription.vendor_id
-                    transaction.description = subscription.name
-                    transaction.amount = SubscriptionService._amount_for_date(
-                        subscription, transaction.transaction_date
+                    transaction.category_id = recurring_payment.category_id
+                    transaction.vendor_id = recurring_payment.vendor_id
+                    transaction.description = recurring_payment.name
+                    transaction.amount = RecurringPaymentService._amount_for_date(
+                        recurring_payment, transaction.transaction_date
                     )
                 continue
             if transaction.transaction_date in pending_by_date:
@@ -527,23 +527,23 @@ class SubscriptionService:
                 if not create_missing:
                     continue
                 transaction = Transaction(
-                    family_id=subscription.family_id,
-                    subscription_id=subscription.id,
-                    account_id=subscription.account_id,
+                    family_id=recurring_payment.family_id,
+                    recurring_payment_id=recurring_payment.id,
+                    account_id=recurring_payment.account_id,
                     transaction_date=transaction_date,
-                    amount=SubscriptionService._amount_for_date(
-                        subscription, transaction_date
+                    amount=RecurringPaymentService._amount_for_date(
+                        recurring_payment, transaction_date
                     ),
                     is_paid=False,
                 )
                 db.session.add(transaction)
             elif transaction.is_fixed:
                 continue
-            transaction.category_id = subscription.category_id
-            transaction.vendor_id = subscription.vendor_id
-            transaction.description = subscription.name
-            transaction.amount = SubscriptionService._amount_for_date(
-                subscription, transaction_date
+            transaction.category_id = recurring_payment.category_id
+            transaction.vendor_id = recurring_payment.vendor_id
+            transaction.description = recurring_payment.name
+            transaction.amount = RecurringPaymentService._amount_for_date(
+                recurring_payment, transaction_date
             )
             transaction.is_paid = False
             transaction.year_month = transaction_date.strftime('%Y-%m')
@@ -557,13 +557,13 @@ class SubscriptionService:
 
     @staticmethod
     def _sync_card_transactions(
-        subscription, transactions, values, today, create_missing
+        recurring_payment, transactions, values, today, create_missing
     ):
         paid_dates = {
             transaction.date
             for transaction in family_query(CreditCardTransaction).filter_by(
-                subscription_id=subscription.id,
-                credit_card_id=subscription.credit_card_id,
+                recurring_payment_id=recurring_payment.id,
+                credit_card_id=recurring_payment.credit_card_id,
             ).filter(
                 db.or_(
                     CreditCardTransaction.is_paid.is_(True),
@@ -571,8 +571,8 @@ class SubscriptionService:
                 )
             ).all()
         }
-        dates = set(SubscriptionService._scheduled_dates(
-            subscription, today, paid_dates
+        dates = set(RecurringPaymentService._scheduled_dates(
+            recurring_payment, today, paid_dates
         ))
         pending_by_date = {}
         for transaction in transactions:
@@ -580,13 +580,13 @@ class SubscriptionService:
                 if not transaction.is_fixed:
                     category = values['category']
                     vendor = values['vendor']
-                    transaction.category_id = subscription.category_id
-                    transaction.vendor_id = subscription.vendor_id
+                    transaction.category_id = recurring_payment.category_id
+                    transaction.vendor_id = recurring_payment.vendor_id
                     transaction.head_budget = category.head_budget if category else None
                     transaction.sub_budget = category.sub_budget if category else None
-                    transaction.item = subscription.name
-                    transaction.amount = SubscriptionService._amount_for_date(
-                        subscription, transaction.date
+                    transaction.item = recurring_payment.name
+                    transaction.amount = RecurringPaymentService._amount_for_date(
+                        recurring_payment, transaction.date
                     )
                 continue
             if transaction.date in pending_by_date:
@@ -612,12 +612,12 @@ class SubscriptionService:
                 if not create_missing:
                     continue
                 transaction = CreditCardTransaction(
-                    family_id=subscription.family_id,
-                    subscription_id=subscription.id,
-                    credit_card_id=subscription.credit_card_id,
+                    family_id=recurring_payment.family_id,
+                    recurring_payment_id=recurring_payment.id,
+                    credit_card_id=recurring_payment.credit_card_id,
                     date=transaction_date,
-                    amount=SubscriptionService._amount_for_date(
-                        subscription, transaction_date
+                    amount=RecurringPaymentService._amount_for_date(
+                        recurring_payment, transaction_date
                     ),
                     transaction_type='Purchase',
                     is_paid=False,
@@ -625,8 +625,8 @@ class SubscriptionService:
                 db.session.add(transaction)
             elif transaction.is_fixed:
                 continue
-            transaction.category_id = subscription.category_id
-            transaction.vendor_id = subscription.vendor_id
+            transaction.category_id = recurring_payment.category_id
+            transaction.vendor_id = recurring_payment.vendor_id
             transaction.date = transaction_date
             transaction.day_name = transaction_date.strftime('%A')
             transaction.week = (
@@ -635,36 +635,36 @@ class SubscriptionService:
             transaction.month = transaction_date.strftime('%Y-%m')
             transaction.head_budget = category.head_budget if category else None
             transaction.sub_budget = category.sub_budget if category else None
-            transaction.item = subscription.name
+            transaction.item = recurring_payment.name
             transaction.vendor_id = vendor.id if vendor else None
-            transaction.amount = SubscriptionService._amount_for_date(
-                subscription, transaction_date
+            transaction.amount = RecurringPaymentService._amount_for_date(
+                recurring_payment, transaction_date
             )
             transaction.transaction_type = 'Purchase'
             transaction.is_paid = False
 
     @staticmethod
-    def set_active(subscription_id, is_active):
-        subscription = family_get_or_404(Subscription, subscription_id)
-        subscription.is_active = is_active
+    def set_active(recurring_payment_id, is_active):
+        recurring_payment = family_get_or_404(RecurringPayment, recurring_payment_id)
+        recurring_payment.is_active = is_active
         if is_active:
-            SubscriptionService.sync_pending(subscription)
-        return subscription
+            RecurringPaymentService.sync_pending(recurring_payment)
+        return recurring_payment
 
     @staticmethod
-    def _remove_pending(subscription):
+    def _remove_pending(recurring_payment):
         pending_bank = family_query(Transaction).filter_by(
-            subscription_id=subscription.id, is_paid=False
+            recurring_payment_id=recurring_payment.id, is_paid=False
         ).all()
         pending_card = family_query(CreditCardTransaction).filter_by(
-            subscription_id=subscription.id, is_paid=False
+            recurring_payment_id=recurring_payment.id, is_paid=False
         ).all()
         account_ids = {transaction.account_id for transaction in pending_bank}
         card_ids = {transaction.credit_card_id for transaction in pending_card}
-        if subscription.account_id:
-            account_ids.add(subscription.account_id)
-        if subscription.credit_card_id:
-            card_ids.add(subscription.credit_card_id)
+        if recurring_payment.account_id:
+            account_ids.add(recurring_payment.account_id)
+        if recurring_payment.credit_card_id:
+            card_ids.add(recurring_payment.credit_card_id)
         for transaction in pending_bank + pending_card:
             db.session.delete(transaction)
         for account_id in account_ids:
@@ -675,8 +675,8 @@ class SubscriptionService:
                 CreditCardStatementService.refresh_after_changes([card_id])
 
     @staticmethod
-    def cancel(subscription_id):
-        subscription = family_get_or_404(Subscription, subscription_id)
-        SubscriptionService._remove_pending(subscription)
-        subscription.is_active = False
-        return subscription
+    def cancel(recurring_payment_id):
+        recurring_payment = family_get_or_404(RecurringPayment, recurring_payment_id)
+        RecurringPaymentService._remove_pending(recurring_payment)
+        recurring_payment.is_active = False
+        return recurring_payment

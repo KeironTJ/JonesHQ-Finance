@@ -413,7 +413,7 @@ Linked rows may be absent when the user lacks access. It is not a restorable
 database backup or a guaranteed point-in-time snapshot; avoid concurrent edits
 while downloading.
 
-Supported source data covers accounts and balances, transactions/subscriptions/
+Supported source data covers accounts and balances, transactions/recurring payments/
 planned transactions, categories/budgets, vendors/types, credit cards and
 promotions/transactions, loans/payments/term changes, income and recurring income,
 pensions/snapshots, properties/mortgages and their snapshots/payments,
@@ -442,7 +442,7 @@ submission. Only the signed-in user can delete their account.
 The operation deletes the user, all their sessions/recovery codes and their
 privately owned accounts, cards, income/recurring income, expenses, loans,
 pensions, vehicles and plans. Domain children are deleted with their parent,
-including private account/card transactions, subscriptions, balances, payments,
+including private account/card transactions, recurring payments, balances, payments,
 snapshots, fuel records, trips and plan items. Records still owned in former
 households are included, even after household membership has been removed.
 

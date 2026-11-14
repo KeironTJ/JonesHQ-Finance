@@ -23,8 +23,8 @@ blueprint; reusable transaction operations live in
 | `/finance/transactions/save-filter-preference` | POST | Save the user's filter-panel preference |
 | `/finance/transactions/consolidated` | GET | Review bank, card, and loan activity together |
 
-The subscription-management routes are also part of the transactions blueprint;
-see [Subscriptions](SUBSCRIPTIONS.md).
+The recurring-payment management routes are also part of the transactions blueprint;
+see [Recurring Payments](RECURRING_PAYMENTS.md).
 
 ## Weekend and bank holiday handling
 
@@ -37,7 +37,7 @@ Calendar fields are recalculated from the adjusted date when it moves, even if
 the form auto-filled them from the original date. A manual payday-period override
 is still respected. This is a creation-time option, not a stored rule for
 individual transactions; existing transactions are not moved automatically.
-Subscriptions save the option for future generation and editing.
+Recurring payments save the option for future generation and editing.
 
 ## Balance and Linked Records
 

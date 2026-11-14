@@ -6,8 +6,8 @@ from models import (
     CreditCardTransaction, Expense, Income, IncomeChange, Loan, LoanPayment, LoanTermChange,
     Mortgage, MortgagePayment, MortgageProduct, MortgageSnapshot, Pension,
     PensionSnapshot, Plan, PlanItem, PlannedTransaction, Property,
-    PropertyValuationSnapshot, RecurringIncome, Subscription,
-    SubscriptionPriceChange, Transaction,
+    PropertyValuationSnapshot, RecurringIncome, RecurringPayment,
+    RecurringPaymentPriceChange, Transaction,
     Trip, TripSchedule, Vehicle, Vendor, VendorType, FuelRecord,
 )
 from models.childcare import Child, ChildActivityType, ChildcareRecord, DailyChildcareActivity
@@ -21,9 +21,9 @@ EXPORTS = {
         (Balance, 'id account_id balance balance_date'),
     ),
     'transactions': (
-        (Transaction, 'id account_id category_id vendor_id amount transaction_date description item assigned_to payment_type running_balance is_paid is_fixed credit_card_id loan_id linked_transaction_id subscription_id year_month week_year day_name payday_period is_forecasted claim_group reimbursement_group_id'),
-        (Subscription, 'id name amount frequency weekend_adjustment start_date end_date horizon_years account_id credit_card_id category_id vendor_id is_active'),
-        (SubscriptionPriceChange, 'id subscription_id amount effective_date note'),
+        (Transaction, 'id account_id category_id vendor_id amount transaction_date description item assigned_to payment_type running_balance is_paid is_fixed credit_card_id loan_id linked_transaction_id recurring_payment_id year_month week_year day_name payday_period is_forecasted claim_group reimbursement_group_id'),
+        (RecurringPayment, 'id name amount frequency weekend_adjustment start_date end_date horizon_years account_id credit_card_id category_id vendor_id is_active'),
+        (RecurringPaymentPriceChange, 'id recurring_payment_id amount effective_date note'),
         (PlannedTransaction, 'id category_id amount planned_date description is_recurring frequency'),
     ),
     'categories': (
@@ -37,7 +37,7 @@ EXPORTS = {
     'credit_cards': (
         (CreditCard, 'id card_name annual_apr monthly_apr purchase_0_percent_until balance_transfer_0_percent_until min_payment_percent set_payment statement_date default_transfer_fee_percent credit_limit current_balance available_credit default_payment_account_id owner_id start_date is_active'),
         (CreditCardPromotion, 'id credit_card_id promotion_type apr_rate start_date end_date notes'),
-        (CreditCardTransaction, 'id credit_card_id category_id vendor_id date day_name week month head_budget sub_budget item assigned_to transaction_type amount applied_apr is_promotional_rate is_paid is_fixed balance credit_available bank_transaction_id statement_id linked_cc_transaction_id subscription_id'),
+        (CreditCardTransaction, 'id credit_card_id category_id vendor_id date day_name week month head_budget sub_budget item assigned_to transaction_type amount applied_apr is_promotional_rate is_paid is_fixed balance credit_available bank_transaction_id statement_id linked_cc_transaction_id recurring_payment_id'),
     ),
     'loans': (
         (Loan, 'id name loan_value principal current_balance annual_apr monthly_apr monthly_payment calculated_payment start_date end_date term_months default_payment_account_id weekend_adjustment owner_id is_active'),

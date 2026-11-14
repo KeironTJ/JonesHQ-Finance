@@ -1,4 +1,4 @@
-<section class="card subscription-price-history" aria-labelledby="price-history-title">
+<section class="card recurring_payment-price-history" aria-labelledby="price-history-title">
     <div class="card-header">
         <h2 id="price-history-title" class="h5 mb-0">Price history</h2>
     </div>
@@ -14,9 +14,9 @@
             </thead>
             <tbody>
                 <tr>
-                    <td>£{{ "%.2f"|format(subscription.amount|abs) }}</td>
-                    <td>From {{ subscription.start_date.strftime('%d %b %Y') }}</td>
-                    <td>Original subscription price</td>
+                    <td>£{{ "%.2f"|format(recurring_payment.amount|abs) }}</td>
+                    <td>From {{ recurring_payment.start_date.strftime('%d %b %Y') }}</td>
+                    <td>Original recurring payment price</td>
                     <td></td>
                 </tr>
                 {% for change in price_history %}
@@ -26,7 +26,7 @@
                     <td>{{ change.note or 'No reason recorded' }}</td>
                     <td class="text-end">
                         {% if change.effective_date >= today %}
-                        <a href="{{ url_for('transactions.change_subscription_price', id=subscription.id, change_id=change.id) }}"
+                        <a href="{{ url_for('transactions.change_recurring_payment_price', id=recurring_payment.id, change_id=change.id) }}"
                            class="btn btn-sm btn-outline-secondary">Edit</a>
                         {% endif %}
                     </td>
@@ -42,13 +42,13 @@
     <div class="list-group list-group-flush d-md-none price-history-mobile">
         <div class="list-group-item">
             <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-                <span class="price-history-amount">£{{ "%.2f"|format(subscription.amount|abs) }}</span>
+                <span class="price-history-amount">£{{ "%.2f"|format(recurring_payment.amount|abs) }}</span>
                 <span class="badge text-bg-secondary">Starting price</span>
             </div>
-            <div class="small text-body-secondary">From {{ subscription.start_date.strftime('%d %b %Y') }}</div>
+            <div class="small text-body-secondary">From {{ recurring_payment.start_date.strftime('%d %b %Y') }}</div>
             <div class="price-history-reason small">
                 <div class="text-body-secondary">Reason</div>
-                Original subscription price
+                Original recurring payment price
             </div>
         </div>
         {% for change in price_history %}
@@ -59,7 +59,7 @@
                     <div class="small text-body-secondary">Effective {{ change.effective_date.strftime('%d %b %Y') }}</div>
                 </div>
                 {% if change.effective_date >= today %}
-                <a href="{{ url_for('transactions.change_subscription_price', id=subscription.id, change_id=change.id) }}"
+                <a href="{{ url_for('transactions.change_recurring_payment_price', id=recurring_payment.id, change_id=change.id) }}"
                    class="btn btn-outline-secondary price-history-edit"
                    title="Edit price change" aria-label="Edit price change">
                     <i class="bi bi-pencil-square" aria-hidden="true"></i>

@@ -225,7 +225,7 @@ Main transaction table combining data from JOINTACCOUNT and SECONDBANKACCOUNT sh
 - `is_fixed`, `is_forecasted`: Lock and forecast flags
 - `credit_card_id`, `loan_id`: Optional related finance records
 - `linked_transaction_id`: Paired account-to-account transfer
-- `subscription_id`: Source recurring subscription, if generated
+- `recurring_payment_id`: Source recurring payment, if generated
 - `claim_group`, `reimbursement_group_id`: Expense reimbursement tracking
 - `payday_period`: Assigned payday period
 - `year_month`: For reporting (2026-01)
@@ -279,7 +279,7 @@ From your CREDIT CARD TRANSACTIONS sheet
 - `credit_available`: Available credit after transaction
 - `bank_transaction_id`: Linked bank-side payment, when applicable
 - `statement_id`, `linked_cc_transaction_id`: Statement and paired balance-transfer links
-- `subscription_id`: Source subscription for generated card charges
+- `recurring_payment_id`: Source recurring payment for generated card charges
 - `is_paid`, `is_fixed`: Reconciliation and regeneration controls
 - `applied_apr`, `is_promotional_rate`: Interest audit fields
 
@@ -573,29 +573,29 @@ Historical account balances
 - `balance`: Balance amount
 - `balance_date`: Date of balance
 
-### 22. **Subscription** (subscriptions.py)
+### 22. **RecurringPayment** (recurring_payments.py)
 Managed recurring bank-account or credit-card charges
 - `family_id`: Family boundary
 - `account_id` or `credit_card_id`: Exactly one charge destination; visibility follows the selected account or card owner
 - `amount`, `frequency`, `start_date`, optional `end_date`: Charge rule
 - `weekend_adjustment`: `none` (default), `next`, or `previous`; working-day adjustments exclude weekends and England & Wales bank holidays
-- `horizon_years`: Per-subscription forecast limit (1–5 years)
+- `horizon_years`: Per-recurring-payment forecast limit (1–5 years)
 - `category_id`, `vendor_id`: Optional classification (category required for bank entries)
 - `is_active`: Whether pending entries continue to be maintained
 
-Generated pending entries reference the subscription from
-`transactions.subscription_id` or
-`credit_card_transactions.subscription_id`. Paid entries are retained when a
-subscription changes or is cancelled.
+Generated pending entries reference the recurring payment from
+`transactions.recurring_payment_id` or
+`credit_card_transactions.recurring_payment_id`. Paid entries are retained when a
+recurring payment changes or is cancelled.
 
-### 23. **SubscriptionPriceChange** (subscriptions.py)
+### 23. **RecurringPaymentPriceChange** (recurring_payments.py)
 Dated charge amounts for upgrades, downgrades, discounts and price increases
-- `family_id`, `subscription_id`: Household scope and parent subscription
+- `family_id`, `recurring_payment_id`: Household scope and parent recurring payment
 - `amount`: New charge amount, stored as a negative expense
-- `effective_date`: Applies to subscription charges on or after this date
+- `effective_date`: Applies to recurring payment charges on or after this date
 - `note`: Optional plan or price-change description
 
-One price change is allowed per subscription per effective date. Forecast
+One price change is allowed per recurring payment per effective date. Forecast
 charges are previewed before a change is confirmed; paid and manually fixed
 entries remain unchanged.
 
@@ -623,7 +623,7 @@ columns, indexes, and constraints.
 | `pensions.py`, `pension_snapshots.py` | `Pension` / `pensions`, `PensionSnapshot` / `pension_snapshots` |
 | `networth.py` | `NetWorth` / `net_worth` |
 | `budgets.py`, `planned.py` | `Budget` / `budgets`, `PlannedTransaction` / `planned_transactions` |
-| `subscriptions.py` | `Subscription` / `subscriptions`, `SubscriptionPriceChange` / `subscription_price_changes` |
+| `recurring_payments.py` | `RecurringPayment` / `recurring_payments`, `RecurringPaymentPriceChange` / `recurring_payment_price_changes` |
 | `property.py`, `property_valuation_snapshot.py` | `Property` / `properties`, `PropertyValuationSnapshot` / `property_valuation_snapshots` |
 | `monthly_account_balance.py` | `MonthlyAccountBalance` / `monthly_account_balances` |
 | `family.py` | `Family` / `families`, `HouseholdMembership` / `household_memberships`, `FamilyInvite` / `family_invites`, `HouseholdInvite` / `household_invites` |

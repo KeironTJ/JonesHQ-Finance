@@ -685,26 +685,26 @@ def test_expense_purchase_changes_refresh_forecasts(auto_forecast_card, family_i
     assert _forecast_payments(card) == []
 
 
-def test_card_subscription_updates_and_cancellation_refresh_payments(auto_forecast_card, monkeypatch):
-    from services.finance.subscription_service import SubscriptionService
+def test_card_recurring_payment_updates_and_cancellation_refresh_payments(auto_forecast_card, monkeypatch):
+    from services.finance.recurring_payment_service import RecurringPaymentService
 
     card = auto_forecast_card
     monkeypatch.setattr(
-        'services.finance.subscription_service.date',
+        'services.finance.recurring_payment_service.date',
         credit_card_statement_service.date,
     )
-    subscription = SubscriptionService.create(MultiDict({
+    recurring_payment = RecurringPaymentService.create(MultiDict({
         'name': 'Streaming', 'amount': '50', 'target_type': 'credit_card',
         'credit_card_id': str(card.id), 'frequency': 'monthly',
         'start_date': '2026-01-02', 'end_date': '2026-03-02', 'horizon_years': '1',
     }))
     db.session.commit()
     assert [payment.amount for payment in _forecast_payments(card)] == [50, 50, 50]
-    subscription.amount = Decimal('-75')
-    SubscriptionService.sync_pending(subscription)
+    recurring_payment.amount = Decimal('-75')
+    RecurringPaymentService.sync_pending(recurring_payment)
     db.session.commit()
     assert [payment.amount for payment in _forecast_payments(card)] == [75, 75, 75]
-    SubscriptionService.cancel(subscription.id)
+    RecurringPaymentService.cancel(recurring_payment.id)
     db.session.commit()
     assert _forecast_payments(card) == []
 

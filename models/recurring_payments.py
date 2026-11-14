@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class Subscription(db.Model):
-    __tablename__ = 'subscriptions'
+class RecurringPayment(db.Model):
+    __tablename__ = 'recurring_payments'
     __table_args__ = (
         db.CheckConstraint('amount < 0', name='ck_subscriptions_expense_amount'),
         db.CheckConstraint(
@@ -50,10 +50,10 @@ class Subscription(db.Model):
     category = db.relationship('Category', foreign_keys=[category_id])
     vendor = db.relationship('Vendor', foreign_keys=[vendor_id])
     price_changes = db.relationship(
-        'SubscriptionPriceChange',
-        back_populates='subscription',
+        'RecurringPaymentPriceChange',
+        back_populates='recurring_payment',
         cascade='all, delete-orphan',
-        order_by='SubscriptionPriceChange.effective_date',
+        order_by='RecurringPaymentPriceChange.effective_date',
     )
 
     @property
@@ -65,15 +65,18 @@ class Subscription(db.Model):
         return 'Unknown'
 
     def __repr__(self):
-        return f'<Subscription {self.name}: {self.frequency}>'
+        return f'<RecurringPayment {self.name}: {self.frequency}>'
 
 
-class SubscriptionPriceChange(db.Model):
-    __tablename__ = 'subscription_price_changes'
+class RecurringPaymentPriceChange(db.Model):
+    __tablename__ = 'recurring_payment_price_changes'
     __table_args__ = (
-        db.CheckConstraint('amount < 0', name='ck_subscription_price_changes_expense_amount'),
+        db.CheckConstraint(
+            'amount < 0',
+            name='ck_subscription_price_changes_expense_amount',
+        ),
         db.UniqueConstraint(
-            'subscription_id',
+            'recurring_payment_id',
             'effective_date',
             name='uq_subscription_price_changes_effective_date',
         ),
@@ -83,8 +86,8 @@ class SubscriptionPriceChange(db.Model):
     family_id = db.Column(
         db.Integer, db.ForeignKey('families.id'), nullable=False, index=True
     )
-    subscription_id = db.Column(
-        db.Integer, db.ForeignKey('subscriptions.id', ondelete='CASCADE'),
+    recurring_payment_id = db.Column(
+        db.Integer, db.ForeignKey('recurring_payments.id', ondelete='CASCADE'),
         nullable=False, index=True,
     )
     amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -94,7 +97,7 @@ class SubscriptionPriceChange(db.Model):
         db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
 
-    subscription = db.relationship('Subscription', back_populates='price_changes')
+    recurring_payment = db.relationship('RecurringPayment', back_populates='price_changes')
 
     def __repr__(self):
-        return f'<SubscriptionPriceChange {self.subscription_id}: {self.effective_date}>'
+        return f'<RecurringPaymentPriceChange {self.recurring_payment_id}: {self.effective_date}>'

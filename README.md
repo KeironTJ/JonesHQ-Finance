@@ -2,7 +2,7 @@
 
 A household finance management web application built with Flask, designed to
 track accounts, transactions, income, expenses, loans, vehicles, childcare,
-pensions, mortgages, subscriptions, and net worth.
+pensions, mortgages, recurring payments, and net worth.
 
 ## Documentation
 
@@ -140,9 +140,9 @@ Existing assignment-label POST URLs remain compatible and return to Finance acce
 - **Net Worth Analysis**: Historical net worth snapshots with trend analysis
 - **Work Expenses**: Track business expenses and mileage reimbursements
 - **Income Tracking**: Detailed payslip tracking with pension contributions
-- **Subscription Tracking**: Manage recurring bank and credit-card charges, review
+- **Recurring Payment Tracking**: Manage recurring bank and credit-card charges, review
   estimated annual costs, compare paid history, and preview dated price changes
-- **Cash-Flow Reminders**: Review upcoming subscription charges and other attention
+- **Cash-Flow Reminders**: Review upcoming recurring payment charges and other attention
   items from the dashboard
 
 ## Setup Instructions

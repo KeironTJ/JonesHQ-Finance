@@ -20,8 +20,8 @@
             <a href="{{ url_for('transactions.create_transfer') }}" class="btn btn-outline-primary">
                 <i class="bi bi-arrow-left-right"></i> <span class="d-none d-sm-inline">Transfer</span>
             </a>
-            <a href="{{ url_for('transactions.subscriptions') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-repeat"></i> <span class="d-none d-sm-inline">Subscriptions</span>
+            <a href="{{ url_for('transactions.recurring_payments') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-repeat"></i> <span class="d-none d-sm-inline">Recurring Payments</span>
             </a>
             <a href="{{ url_for('transactions.create') }}" class="btn btn-primary">
                 <i class="bi bi-plus-lg"></i> Add transaction
@@ -400,10 +400,10 @@
                                     {% if transaction.linked_transaction_id %}
                                         <span class="badge bg-info ms-1" title="Linked Transfer Transaction (ID: {{ transaction.linked_transaction_id }})"><i class="bi bi-arrow-left-right"></i> Transfer</span>
                                     {% endif %}
-                                    {% if transaction.subscription_id %}
+                                    {% if transaction.recurring_payment_id %}
                                         <a class="badge bg-primary-subtle text-primary-emphasis ms-1 text-decoration-none"
-                                           href="{{ url_for('transactions.edit_subscription', id=transaction.subscription_id) }}">
-                                            <i class="bi bi-arrow-repeat"></i> Subscription
+                                           href="{{ url_for('transactions.edit_recurring_payment', id=transaction.recurring_payment_id) }}">
+                                            <i class="bi bi-arrow-repeat"></i> Recurring Payment
                                         </a>
                                     {% endif %}
                                     {% if transaction.description and transaction.item and transaction.description != transaction.item %}

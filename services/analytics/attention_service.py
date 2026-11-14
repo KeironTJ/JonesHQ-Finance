@@ -6,9 +6,9 @@ from models.credit_cards import CreditCard, CreditCardPromotion
 from models.mortgage import MortgageProduct
 from models.plans import Plan
 from models.property import Property
-from models.subscriptions import Subscription
+from models.recurring_payments import RecurringPayment
 from models.transactions import Transaction
-from services.finance.subscription_service import SubscriptionService
+from services.finance.recurring_payment_service import RecurringPaymentService
 from services.platform.preference_service import PreferenceService
 from services.finance.preference_service import FinancePreferenceService
 from utils.permissions import can_access_section
@@ -21,7 +21,7 @@ class AttentionService:
         'plan': ('Plans', 'journal-check'),
         'credit_card': ('Credit cards', 'credit-card'),
         'mortgage': ('Mortgages', 'house-door'),
-        'subscription': ('Subscriptions', 'arrow-repeat'),
+        'recurring_payment': ('Recurring payments', 'arrow-repeat'),
     }
     PAGE_SIZE = 10
 
@@ -38,6 +38,10 @@ class AttentionService:
         def add(kind, record_key, title, message, due_date, endpoint, context='', **params):
             key = f'{kind}:{record_key}:{due_date.isoformat()}'
             snoozed_until = snoozes.get(key)
+            if not snoozed_until and kind == 'recurring_payment':
+                snoozed_until = snoozes.get(
+                    f'subscription:{record_key}:{due_date.isoformat()}'
+                )
             items.append({
                 'key': key,
                 'kind': kind,
@@ -110,19 +114,19 @@ class AttentionService:
                     plan.target_date, 'plans.detail', plan_id=plan.id)
 
         if can_access_section('transactions'):
-            subscriptions = family_query(Subscription).filter_by(is_active=True).all()
-            for subscription in subscriptions:
+            recurring_payments = family_query(RecurringPayment).filter_by(is_active=True).all()
+            for recurring_payment in recurring_payments:
                 if (
-                    subscription.account_id and not subscription.account.is_active
+                    recurring_payment.account_id and not recurring_payment.account.is_active
                 ) or (
-                    subscription.credit_card_id and not subscription.credit_card.is_active
+                    recurring_payment.credit_card_id and not recurring_payment.credit_card.is_active
                 ):
                     continue
                 due_date = next(
                     (
                         scheduled_date
-                        for scheduled_date in SubscriptionService._scheduled_dates(
-                            subscription, today
+                        for scheduled_date in RecurringPaymentService._scheduled_dates(
+                            recurring_payment, today
                         )
                         if scheduled_date <= horizon
                     ),
@@ -130,14 +134,14 @@ class AttentionService:
                 )
                 if due_date:
                     add(
-                        'subscription',
-                        str(subscription.id),
-                        subscription.name,
+                        'recurring_payment',
+                        str(recurring_payment.id),
+                        recurring_payment.name,
                         'Upcoming recurring charge. Review the amount and schedule.',
                         due_date,
-                        'transactions.edit_subscription',
-                        context=f'{subscription.target_name} / £{abs(subscription.amount):,.2f}',
-                        id=subscription.id,
+                        'transactions.edit_recurring_payment',
+                        context=f'{recurring_payment.target_name} / £{abs(recurring_payment.amount):,.2f}',
+                        id=recurring_payment.id,
                     )
 
             accounts = {
