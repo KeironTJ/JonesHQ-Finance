@@ -25,15 +25,15 @@
 <p class="lead text-break">Hi {{ current_user.name }}! Here's {{ today.strftime('%A %d %B') }}.</p>
 <nav class="d-flex flex-wrap gap-2 mb-4" aria-label="My day shortcuts">
     <a class="btn btn-outline-primary" href="{{ url_for('household.calendar') }}"><i class="bi bi-calendar3" aria-hidden="true"></i> Calendar</a>
-    <a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='shop') }}"><i class="bi bi-gift" aria-hidden="true"></i> My rewards</a>
-    <a class="btn btn-outline-primary" href="{{ url_for('household.rewards', view='progress') }}"><i class="bi bi-star" aria-hidden="true"></i> My progress</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.reward_shop') }}"><i class="bi bi-gift" aria-hidden="true"></i> My rewards</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.reward_member', membership_id=viewer_id) }}"><i class="bi bi-star" aria-hidden="true"></i> My progress</a>
 </nav>
 <section class="card mb-4" aria-label="My reward progress"><div class="card-body">
     <div class="day-points"><i class="bi bi-star-fill text-warning" aria-hidden="true"></i> {{ balance }} points ready to use</div>
-    {% if goal %}<h2 class="h5 mt-2 text-break">My goal: {{ goal.title }}</h2><progress value="{{ [balance, goal.points_cost]|min }}" max="{{ goal.points_cost }}" aria-label="Points saved for {{ goal.title }}"></progress><p>{{ [goal.points_cost - balance, 0]|max }} more points to reach your goal.</p>
-    {% else %}<p>Choose something to save for in <a href="{{ url_for('household.rewards', view='shop') }}">My rewards</a>.</p>{% endif %}
+    {% if goal %}<h2 class="h5 mt-2 text-break">My goal: {{ goal.title }}{% if goals|default([])|length > 1 %} <small class="text-muted">and {{ goals|length - 1 }} more</small>{% endif %}</h2><progress value="{{ [balance, goal.points_cost]|min }}" max="{{ goal.points_cost }}" aria-label="Points saved for {{ goal.title }}"></progress><p>{{ [goal.points_cost - balance, 0]|max }} more points to reach your goal.</p>
+    {% else %}<p>Choose something to save for in <a href="{{ url_for('household.reward_shop') }}">My rewards</a>.</p>{% endif %}
     {% if pending_points %}<p>{{ pending_points }} points are held for reward requests until an adult decides.</p>{% endif %}
-    {% if submitted_jobs %}<p class="mb-0">{{ submitted_jobs|length }} job{{ '' if submitted_jobs|length == 1 else 's' }} waiting for an adult. <a href="{{ url_for('household.rewards', view='jobs') }}">See waiting jobs</a>.</p>{% endif %}
+    {% if submitted_jobs %}<p class="mb-0">{{ submitted_jobs|length }} chore{{ '' if submitted_jobs|length == 1 else 's' }} waiting for an adult. <a href="{{ url_for('household.reward_chores') }}">See my chores</a>.</p>{% endif %}
 </div></section>
 <section class="mb-4" aria-labelledby="day-activities-title">
     <h2 class="h4" id="day-activities-title">What's happening today</h2>

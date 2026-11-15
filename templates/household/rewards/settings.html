@@ -1,0 +1,144 @@
+{% extends 'household/rewards/base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% import 'household/rewards/_macros.html' as ui with context %}
+{% block reward_title %}Settings{% endblock %}
+{% block reward_header %}
+{{ page_header('Rewards settings', 'Set up the reward catalogue, your chore library, achievements, and who earns points.', 'Household Hub') }}
+{% endblock %}
+{% block reward_content %}
+<nav class="reward-chips mb-4" aria-label="Settings sections">
+    <a class="btn btn-sm btn-outline-primary" href="#catalogue">Reward catalogue</a>
+    <a class="btn btn-sm btn-outline-primary" href="#library">Chore library</a>
+    <a class="btn btn-sm btn-outline-primary" href="#achievements">Achievements</a>
+    <a class="btn btn-sm btn-outline-primary" href="#people">People &amp; sharing</a>
+</nav>
+
+<section class="card mb-4" id="catalogue" aria-labelledby="catalogue-title"><div class="card-body">
+    <h2 class="h4" id="catalogue-title">Reward catalogue</h2>
+    <p>Rewards are what points can be spent on. Use categories to organise the shop, and limits for rewards that are scarce or shouldn't be requested too often.</p>
+    <details class="card mb-3"{% if not rewards or (failed_action|default('') == 'save-reward' and not submitted.get('reward_id')) %} open{% endif %}>
+        <summary class="card-header">Add a reward</summary>
+        <div class="card-body">{{ ui.reward_form() }}</div>
+    </details>
+    {% for reward in rewards %}
+    <details class="card mb-2" id="reward-{{ reward.id }}"{% if failed_action|default('') == 'save-reward' and submitted.get('reward_id')|string == reward.id|string %} open{% endif %}>
+        <summary class="card-header text-break"><i class="bi bi-{{ reward.icon }}" aria-hidden="true"></i> {{ reward.title }} &mdash; {{ reward.points_cost }} points &middot; {{ categories[reward.category] }}{% if not reward.available %} &middot; taking a break{% endif %}</summary>
+        <div class="card-body">{{ ui.reward_rules(reward) }}{{ ui.reward_form(reward) }}</div>
+    </details>
+    {% else %}<p class="text-muted mb-0">No rewards yet. Add a few small treats and one or two bigger things to save for.</p>{% endfor %}
+</div></section>
+
+<section class="card mb-4" id="library" aria-labelledby="library-title"><div class="card-body">
+    <h2 class="h4" id="library-title">Chore library</h2>
+    <p>Save chores you hand out often. When you add a chore, pick one from the library to fill in the name, notes and points.</p>
+    {% for template in templates %}
+    <details class="card mb-2"{% if failed_action|default('') == 'save-template' and submitted.get('template_id')|string == template.id|string %} open{% endif %}>
+        <summary class="card-header text-break">{{ template.title }} &mdash; {{ template.points }} points</summary>
+        <div class="card-body">
+            {% set values = submitted if failed_action|default('') == 'save-template' and submitted.get('template_id')|string == template.id|string else {} %}
+            <form method="POST" action="{{ url_for('household.reward_action', action='save-template') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="template_id" value="{{ template.id }}">
+                <div class="row g-2">
+                    <div class="col-md-8"><label class="form-label" for="template_title_{{ template.id }}">Chore name</label><input class="form-control" id="template_title_{{ template.id }}" name="title" maxlength="256" value="{{ values.get('title', template.title) }}" required></div>
+                    <div class="col-md-4"><label class="form-label" for="template_points_{{ template.id }}">Points</label><input class="form-control" id="template_points_{{ template.id }}" name="points" type="number" min="1" max="1000" value="{{ values.get('points', template.points) }}" required></div>
+                    <div class="col-12"><label class="form-label" for="template_notes_{{ template.id }}">What needs doing?</label><textarea class="form-control" id="template_notes_{{ template.id }}" name="notes" maxlength="5000" rows="2">{{ values.get('notes', template.notes) }}</textarea></div>
+                </div>
+                <button class="btn btn-primary mt-2" type="submit">Save</button>
+            </form>
+            <form method="POST" action="{{ url_for('household.reward_action', action='delete-template') }}" class="mt-2" onsubmit="return confirm('Remove this chore from the library? Chores already handed out are not affected.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="template_id" value="{{ template.id }}">
+                <button class="btn btn-outline-danger btn-sm" type="submit">Remove from library</button>
+            </form>
+        </div>
+    </details>
+    {% endfor %}
+    {% set values = submitted if failed_action|default('') == 'save-template' and not submitted.get('template_id') else {} %}
+    <details class="card mb-3"{% if values or not templates %} open{% endif %}>
+        <summary class="card-header">Add to the library</summary>
+        <div class="card-body">
+        <form method="POST" action="{{ url_for('household.reward_action', action='save-template') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-2">
+                <div class="col-md-8"><label class="form-label" for="template_title_new">Chore name</label><input class="form-control" id="template_title_new" name="title" maxlength="256" value="{{ values.get('title', '') }}" required></div>
+                <div class="col-md-4"><label class="form-label" for="template_points_new">Points</label><input class="form-control" id="template_points_new" name="points" type="number" min="1" max="1000" value="{{ values.get('points', '10') }}" required></div>
+                <div class="col-12"><label class="form-label" for="template_notes_new">What needs doing?</label><textarea class="form-control" id="template_notes_new" name="notes" maxlength="5000" rows="2">{{ values.get('notes', '') }}</textarea></div>
+            </div>
+            <button class="btn btn-primary mt-2" type="submit">Add to library</button>
+        </form>
+        </div>
+    </details>
+    {% if starters %}
+    <h3 class="h6">Ideas to get started</h3>
+    <div class="d-flex flex-wrap gap-2">
+    {% for title, notes, points in starters %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='save-template') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="title" value="{{ title }}"><input type="hidden" name="notes" value="{{ notes }}"><input type="hidden" name="points" value="{{ points }}"><input type="hidden" name="next" value="{{ url_for('household.reward_settings') }}#library">
+        <button class="btn btn-sm btn-outline-primary" type="submit" title="{{ notes }}"><i class="bi bi-plus" aria-hidden="true"></i> {{ title }} ({{ points }})</button>
+    </form>
+    {% endfor %}
+    </div>
+    {% endif %}
+</div></section>
+
+{% macro achievement_form(achievement=none) -%}
+{% set key = achievement.id if achievement else 'new' %}
+{% set values = submitted if failed_action|default('') == 'save-achievement' and submitted.get('achievement_id', '')|string == (achievement.id|string if achievement else '') else {} %}
+<form method="POST" action="{{ url_for('household.reward_action', action='save-achievement') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if achievement %}<input type="hidden" name="achievement_id" value="{{ achievement.id }}">{% endif %}
+    <div class="row g-2">
+        <div class="col-md-6"><label class="form-label" for="ach_title_{{ key }}">Name</label><input class="form-control" id="ach_title_{{ key }}" name="title" maxlength="64" value="{{ values.get('title', achievement.title if achievement else '') }}" required></div>
+        <div class="col-md-6"><label class="form-label" for="ach_desc_{{ key }}">Description</label><input class="form-control" id="ach_desc_{{ key }}" name="description" maxlength="256" value="{{ values.get('description', achievement.description if achievement else '') }}"></div>
+        <div class="col-md-4"><label class="form-label" for="ach_metric_{{ key }}">Counts</label>
+            <select class="form-select" id="ach_metric_{{ key }}" name="metric">{% for value, label in achievement_metrics.items() %}<option value="{{ value }}"{% if values.get('metric', achievement.metric if achievement else 'chores') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><label class="form-label" for="ach_threshold_{{ key }}">Target</label><input class="form-control" id="ach_threshold_{{ key }}" name="threshold" type="number" min="1" max="100000" value="{{ values.get('threshold', achievement.threshold if achievement else '10') }}" required></div>
+        <div class="col-md-2"><label class="form-label" for="ach_bonus_{{ key }}">Bonus points</label><input class="form-control" id="ach_bonus_{{ key }}" name="bonus_points" type="number" min="0" max="1000" value="{{ values.get('bonus_points', achievement.bonus_points if achievement else '0') }}"></div>
+        <div class="col-md-2"><label class="form-label" for="ach_icon_{{ key }}">Icon</label>
+            <select class="form-select" id="ach_icon_{{ key }}" name="icon">{% for value, label in achievement_icons.items() %}<option value="{{ value }}"{% if values.get('icon', achievement.icon if achievement else 'trophy') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><label class="form-label" for="ach_active_{{ key }}">Status</label>
+            {% set active = values.get('active', 'yes' if not achievement or achievement.active else 'no') %}
+            <select class="form-select" id="ach_active_{{ key }}" name="active"><option value="yes"{% if active == 'yes' %} selected{% endif %}>Active</option><option value="no"{% if active == 'no' %} selected{% endif %}>Paused</option></select></div>
+    </div>
+    <button class="btn btn-primary mt-2" type="submit">Save achievement</button>
+</form>
+{%- endmacro %}
+
+<section class="card mb-4" id="achievements" aria-labelledby="achievements-title"><div class="card-body">
+    <h2 class="h4" id="achievements-title">Achievements</h2>
+    <p>Achievements unlock automatically when someone reaches the target. Add bonus points to make them extra special. Unlocked achievements are kept even if you change or pause them.</p>
+    {% for achievement in achievements %}
+    <details class="card mb-2"{% if failed_action|default('') == 'save-achievement' and submitted.get('achievement_id')|string == achievement.id|string %} open{% endif %}>
+        <summary class="card-header text-break"><i class="bi bi-{{ achievement.icon }}" aria-hidden="true"></i> {{ achievement.title }} &mdash; {{ achievement.threshold }} &times; {{ achievement_metrics[achievement.metric]|lower }}{% if achievement.bonus_points %} &middot; +{{ achievement.bonus_points }} points{% endif %}{% if not achievement.active %} &middot; paused{% endif %}</summary>
+        <div class="card-body">{{ achievement_form(achievement) }}</div>
+    </details>
+    {% endfor %}
+    <details class="card"{% if failed_action|default('') == 'save-achievement' and not submitted.get('achievement_id') %} open{% endif %}>
+        <summary class="card-header">Add an achievement</summary>
+        <div class="card-body">{{ achievement_form() }}</div>
+    </details>
+</div></section>
+
+<section class="card mb-4" id="people" aria-labelledby="people-title"><div class="card-body">
+    <h2 class="h4" id="people-title">People &amp; sharing</h2>
+    <p>Children with Household Hub access always earn points. Adults can opt in too &mdash; their chores and requests are approved by another adult, never themselves.</p>
+    <ul class="list-group mb-4">
+    {% for adult in adults %}
+    <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="text-break"><strong>{{ adult.user.name }}</strong>{% if adult.id == viewer_id %} (you){% endif %}<span class="d-block small text-muted">{{ 'Earns points' if adult.rewards_participant else 'Does not earn points' }}</span></span>
+        {% if adult.id == viewer_id or can_manage_people %}
+        <form method="POST" action="{{ url_for('household.reward_action', action='set-participation') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="membership_id" value="{{ adult.id }}"><input type="hidden" name="enabled" value="{{ 'no' if adult.rewards_participant else 'yes' }}"><input type="hidden" name="next" value="{{ url_for('household.reward_settings') }}#people">
+            <button class="btn btn-sm {{ 'btn-outline-secondary' if adult.rewards_participant else 'btn-outline-primary' }}" type="submit">{{ 'Stop earning points' if adult.rewards_participant else 'Earn points' }}</button>
+        </form>
+        {% endif %}
+    </li>
+    {% else %}<li class="list-group-item text-muted">No adults with Household Hub access.</li>{% endfor %}
+    </ul>
+    <h3 class="h6">Celebration board</h3>
+    <p class="small">When shared, everyone who earns points sees this week's helpers and the points they earned on the overview. When it's off, children only see their own progress.</p>
+    <form method="POST" action="{{ url_for('household.reward_action', action='set-board') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="enabled" value="{{ 'no' if board_enabled else 'yes' }}"><input type="hidden" name="next" value="{{ url_for('household.reward_settings') }}#people">
+        <button class="btn {{ 'btn-outline-secondary' if board_enabled else 'btn-primary' }}" type="submit">{{ 'Stop sharing the board' if board_enabled else 'Share the board with everyone' }}</button>
+    </form>
+</div></section>
+{% endblock %}

@@ -20,7 +20,10 @@ from models.calendar_event import CalendarEvent
 from models.meals import Meal, PlannedMeal
 from models.activities import Activity, ActivityAttendee
 from models.household_tasks import HouseholdTask, TaskList
-from models.rewards import Reward, RewardGoal, RewardJob, RewardPointEntry, RewardRequest
+from models.rewards import (
+    Reward, RewardAchievement, RewardAchievementUnlock, RewardChoreTemplate, RewardGoal, RewardJob,
+    RewardPointEntry, RewardRequest,
+)
 from services.platform.account_deletion_service import AccountDeletionService, OWNED_MODELS
 from services.platform.user_session_service import _now
 from tests.auth_helpers import detach_user_from_households, login_client
@@ -105,6 +108,12 @@ def make_domains(owner, family_id, prefix):
     add(RewardPointEntry, family_id=family_id, request_id=request.id, membership_id=member_id,
         actor_membership_id=member_id, kind='reserved', points=-1, description=prefix, created_at=_now())
     add(RewardGoal, family_id=family_id, membership_id=member_id, reward_id=reward.id)
+    achievement = add(RewardAchievement, family_id=family_id, title=prefix, metric='chores', threshold=1)
+    unlock = add(RewardAchievementUnlock, family_id=family_id, achievement_id=achievement.id,
+                 membership_id=member_id, title=prefix, unlocked_at=_now())
+    add(RewardPointEntry, family_id=family_id, unlock_id=unlock.id, membership_id=member_id,
+        kind='milestone', points=1, description=prefix, created_at=_now())
+    add(RewardChoreTemplate, family_id=family_id, title=prefix, points=1)
     expense = add(Expense, **common, date=TODAY, description=prefix,
                   expense_type='Hotel', cost=10, total_cost=10)
     category = add(Category, family_id=family_id, name='General', category_type='expense')

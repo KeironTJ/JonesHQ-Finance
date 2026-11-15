@@ -185,31 +185,45 @@ and visible incomplete dated tasks also contribute source-linked items.
 ## Rewards (implemented)
 
 - Rewards belongs to Household Hub, never Finance. Any active adult with Hub
-  access can set up shared-task jobs/rewards, review a child's finished work and
-  approve/decline reward requests. This does not require household ownership or
-  designated guardianship. Child status is account-level, not a mutable role.
-- Children have My jobs, My rewards and My progress screens with labelled,
-  large controls. They see only their own reward jobs, goals, balances, requests
-  and point history through scoped helpers; no sibling/guardian visibility
+  access can set up chores (shared tasks with points) and rewards, review
+  finished chores, approve/decline reward requests, mark approved rewards as
+  given and award bonuses/deductions. This does not require household ownership
+  or designated guardianship. Child status is account-level, not a mutable role.
+- Rewards has separate pages: Overview, Chores, Shop, Approvals (adults),
+  Activity, per-person profiles (`/household/rewards/members/<id>`) and Settings
+  (adults). Legacy `?view=` links redirect to the matching page.
+- Managed children always earn points. Adults opt in per membership in Settings
+  (they need Household Hub access); an adult can change their own participation
+  and the household owner can change anyone's. Participation cannot be switched
+  off while that adult has open/submitted chores or pending reward requests.
+- Nobody approves their own chore or reward request, or awards themselves a
+  bonus/deduction: another adult must act. Bulk approve/return/decline applies
+  the same rules and is all-or-nothing.
+- Children see only their own chores, goals, balances, requests, achievements
+  and activity through scoped helpers; the Activity member filter is forced to
+  themselves and other profiles return 403. No sibling/guardian visibility
   override applies to reward progress. The catalogue is household-shared.
-- Rewards opens on a reward-focused Overview for adults and children. Personal
-  milestones use lifetime approved-job awards (first job, 5 jobs, 10 jobs and
-  100 earned points); spending and pending reservations do not remove achievements.
-  Milestones are calculated from the ledger, not separate awards or bonus points.
+- Bonuses record one-off recognition (school, hobby, kindness, etc.) with a
+  required reason. Deductions also need a reason and cannot take a balance below
+  zero. Both appear in the activity timeline with the adult who gave them.
+- Achievements are editable per household (starter set seeded once): approved
+  chores, points earned, best streak of consecutive London days with an approved
+  chore, or bonuses received. Each unlocks once per person and may pay an
+  optional milestone bonus. Spending never removes an achievement.
 - The weekly leaderboard is off by default. Any adult with Household Hub
-  access can enable or disable it for the selected household in Setup & approvals.
-  When enabled, children see active household children's names, weekly earned
-  point totals, weekly approved-job counts, ranks and lifetime milestones only.
+  access can enable or disable it for the selected household in Settings.
+  When enabled, children see participants' names, weekly earned
+  point totals, weekly approved-chore counts, ranks and achievements only.
   Weeks run Monday-Sunday in Europe/London using the award timestamp, not task
   due/completion dates; ties share rank (1, 1, 3). Spending never lowers scores.
   Balances, goals,
   job details, request history and ledger entries keep their existing privacy.
   Disabling sharing immediately restores personal-only child progress. Adults
   can always see the household overview. No cross-household board is available.
-- Adults can add points to an unfinished shared task assigned to an active
-  household child, or create a reward job from Rewards (the same shared-task
-  domain, not a second chore system). Personal tasks cannot earn points.
-  No open-job claiming is implemented; each job has a named child.
+- Adults can add points to an unfinished shared task assigned to a participant,
+  or create a chore from Rewards (the same shared-task domain, not a second
+  chore system), optionally starting from the household chore library.
+  Personal tasks cannot earn points. Each chore has a named person.
 - Completion from either Tasks or Rewards moves the job to waiting for approval.
   An adult approves once or sends it back with a helpful note. Sending back
   reopens the task. Reopening an approved task does not award points again.
@@ -226,8 +240,12 @@ and visible incomplete dated tasks also contribute source-linked items.
   its snapshot cost immediately, approval consumes the reservation, and decline
   with a helpful note returns it once. Double submission is idempotent.
 - Rewards can be paused/edited, not deleted through the UI. Requests retain their
-  original title/cost. Goals reference the current available reward and show
-  spendable points (pending reservations excluded).
+  original title/cost. Optional stock (decremented on request, restored on
+  decline/cancel), a cooldown between requests and a per-person limit per
+  week/month/year/ever control eligibility. A requester can cancel their own
+  pending request for a refund. Approved requests stay "owed" until an adult
+  marks them as given. Each person can save up to five goals; adults can
+  suggest goals for participants. Goals show spendable points.
 - Removing a member or deleting an account detaches membership attribution,
   closes outstanding reward jobs and resolves pending requests; rejoining never
   inherits the departed membership's points. Deleting a task/list closes its
@@ -277,6 +295,6 @@ Cross-household sharing will use invitations to specific items, with acceptance
 and revocation. It must not grant household membership, Finance access or access
 to unrelated records. Children will not administer external sharing.
 
-Behaviour ratings, streaks, cash/pocket-money rewards and external sharing are not available. Existing Finance childcare records are unrelated
+Behaviour ratings, cash/pocket-money payouts and external sharing are not available. Existing Finance childcare records are unrelated
 to managed-child sign-in accounts. The previous JonesHQ hub is a feature
 reference only; its test data, authentication and styling are not being imported.

@@ -1,0 +1,77 @@
+{% extends 'household/rewards/base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% import 'household/rewards/_macros.html' as ui with context %}
+{% block reward_title %}{{ profile.name }}{% endblock %}
+{% block reward_header %}
+{% set person = profile.member %}{% set own = person.id == viewer_id %}
+{% call page_header('My progress' if own else profile.name, ('Child' if person.user.is_managed_child else 'Adult') ~ ' · ' ~ profile.balance ~ ' points to spend', 'Rewards profile') %}
+    {% if is_adult and not own %}<a class="btn btn-primary" href="#give-bonus"><i class="bi bi-award" aria-hidden="true"></i> Bonus or deduction</a>{% endif %}
+    <a class="btn btn-outline-primary" href="{{ url_for('household.reward_activity', member=person.id) if is_adult else url_for('household.reward_activity') }}">Full activity</a>
+{% endcall %}
+{% endblock %}
+{% block reward_content %}
+{% set person = profile.member %}{% set own = person.id == viewer_id %}
+<section class="reward-stats mb-4" aria-label="Points summary">
+    <div class="reward-stat"><strong><i class="bi bi-star-fill text-warning" aria-hidden="true"></i> {{ profile.balance }}</strong><span>points to spend</span></div>
+    <div class="reward-stat"><strong>{{ profile.held }}</strong><span>held for requests</span></div>
+    <div class="reward-stat"><strong>{{ profile.week }}</strong><span>earned this week</span></div>
+    <div class="reward-stat"><strong>{{ profile.month }}</strong><span>earned this month</span></div>
+    <div class="reward-stat"><strong>{{ profile.lifetime }}</strong><span>earned all time</span></div>
+    <div class="reward-stat"><strong><i class="bi bi-fire text-warning" aria-hidden="true"></i> {{ profile.streak }}</strong><span>day streak (best {{ profile.best_streak }})</span></div>
+    <div class="reward-stat"><strong>{{ profile.chores }}</strong><span>chores approved</span></div>
+    <div class="reward-stat"><strong>{{ profile.bonuses }}</strong><span>bonuses received</span></div>
+</section>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <section class="card h-100" aria-labelledby="chart-title"><div class="card-body">
+            <h2 class="h5" id="chart-title">Last 12 weeks</h2>
+            <div class="reward-chart"><canvas id="member-chart" role="img" aria-label="Points earned and spent each week by {{ profile.name }}"></canvas></div>
+            {{ ui.chart_table(chart) }}
+        </div></section>
+    </div>
+    <div class="col-lg-5">
+        <section class="card h-100" aria-labelledby="goals-title"><div class="card-body">
+            <h2 class="h5" id="goals-title">{{ 'Saving for' if own else 'Goals' }}</h2>
+            <p class="small text-muted">{{ profile.open_chores }} chore{{ '' if profile.open_chores == 1 else 's' }} to do{% if profile.waiting_chores %} &middot; {{ profile.waiting_chores }} waiting for approval{% endif %}</p>
+            {% if profile.goals %}{{ ui.goal_list(profile.goals, profile.balance, removable=own or is_adult, member_id=none if own else person.id) }}
+            {% else %}<p class="text-muted">{{ 'Pick something in the shop to save for.' if own else 'No goals chosen yet.' }}</p>{% endif %}
+            {% if own and profile.goals|length < 5 %}<a class="btn btn-outline-primary" href="{{ url_for('household.reward_shop') }}">Choose a goal</a>{% endif %}
+            {% if is_adult and not own and rewards and profile.goals|length < 5 %}
+            {% set chosen = profile.goals|map(attribute='reward')|map(attribute='id')|list %}
+            <form method="POST" action="{{ url_for('household.reward_action', action='goal') }}" class="mt-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add"><input type="hidden" name="membership_id" value="{{ person.id }}"><input type="hidden" name="next" value="{{ request.path }}">
+                <label class="form-label" for="goal_reward">Suggest a goal</label>
+                <div class="d-flex gap-2"><select class="form-select" id="goal_reward" name="reward_id">{% for reward in rewards if reward.id not in chosen %}<option value="{{ reward.id }}">{{ reward.title }} ({{ reward.points_cost }} points)</option>{% endfor %}</select><button class="btn btn-outline-primary" type="submit">Add</button></div>
+            </form>
+            {% endif %}
+        </div></section>
+    </div>
+</div>
+
+{% if profile.owed %}
+<section class="card mb-4" aria-labelledby="owed-title"><div class="card-body">
+    <h2 class="h5" id="owed-title">{{ 'Rewards on the way' if own else 'Rewards to hand over' }}</h2>
+    <ul class="mb-0">{% for item in profile.owed %}<li class="text-break">{{ item.title }} &mdash; approved {{ item.reviewed_at.strftime('%d %b') if item.reviewed_at else '' }}</li>{% endfor %}</ul>
+    {% if is_adult and not own %}<a class="btn btn-sm btn-outline-primary mt-2" href="{{ url_for('household.reward_approvals') }}#owed-title">Mark as given</a>{% endif %}
+</div></section>
+{% endif %}
+
+<section class="mb-4" aria-labelledby="badges-title">
+    <h2 class="h4" id="badges-title">Achievements <span class="badge text-bg-light">{{ profile.unlocked }} / {{ profile.achievements|length }}</span></h2>
+    {{ ui.badges(profile.achievements) }}
+</section>
+
+{% if is_adult and not own %}
+<section class="card mb-4" id="give-bonus" aria-labelledby="bonus-title"><div class="card-body">
+    <h2 class="h5" id="bonus-title">Bonus or deduction for {{ profile.name }}</h2>
+    {{ ui.bonus_form(people, member=person, next=request.path, prefix='member_bonus') }}
+</div></section>
+{% endif %}
+
+<section class="card mb-4" aria-labelledby="recent-title">
+    <div class="card-header d-flex justify-content-between align-items-center"><h2 class="h5 mb-0" id="recent-title">Recent activity</h2><a class="small" href="{{ url_for('household.reward_activity', member=person.id) if is_adult else url_for('household.reward_activity') }}">See all</a></div>
+    {{ ui.timeline(profile.recent, show_member=False) }}
+</section>
+{% endblock %}
+{% block extra_js %}{{ super() }}{{ ui.chart_script('member-chart', chart) }}{% endblock %}

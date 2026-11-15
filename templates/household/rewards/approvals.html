@@ -1,0 +1,124 @@
+{% extends 'household/rewards/base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% import 'household/rewards/_macros.html' as ui with context %}
+{% block reward_title %}Approvals{% endblock %}
+{% block reward_header %}
+{{ page_header('Approvals', 'Check finished chores, decide on reward requests and keep track of rewards you still need to hand over. Any adult can review, but not their own chores or requests.', 'Household Hub') }}
+{% endblock %}
+{% macro select_all(form_id, label) -%}
+<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="{{ form_id }}_all" data-select-all="{{ form_id }}"><label class="form-check-label" for="{{ form_id }}_all">{{ label }}</label></div>
+{%- endmacro %}
+{% block reward_content %}
+<section class="reward-stats mb-4" aria-label="Approval summary">
+    <div class="reward-stat"><strong>{{ submitted_jobs|length }}</strong><span>chores to check</span></div>
+    <div class="reward-stat"><strong>{{ pending|length }}</strong><span>reward requests</span></div>
+    <div class="reward-stat"><strong>{{ owed|length }}</strong><span>rewards to hand over</span></div>
+</section>
+
+<section class="card mb-4" aria-labelledby="chores-title">
+    <div class="card-header"><h2 class="h5 mb-0" id="chores-title">Chores to check</h2></div>
+    <div class="card-body">
+    {% if submitted_jobs %}
+    {% set reviewable = submitted_jobs|rejectattr('membership_id', 'equalto', viewer_id)|list %}
+    {% if reviewable|length > 1 %}{{ select_all('bulk-jobs', 'Select all chores I can review') }}{% endif %}
+    {% for job in submitted_jobs %}
+    {% set own = job.membership_id == viewer_id %}
+    <div class="reward-review-item border-bottom py-3">
+        {% if not own %}<input class="form-check-input" type="checkbox" name="ids" value="{{ job.id }}" form="bulk-jobs" id="job_pick_{{ job.id }}" aria-label="Select {{ job.title }} for {{ job.member.user.name }}">{% endif %}
+        <div class="flex-grow-1 min-w-0">
+            <h3 class="h6 text-break mb-1">{{ job.title }} &mdash; {{ job.points }} points</h3>
+            <p class="small mb-2"><strong>{{ job.member.user.name }}</strong> says this is done{% if job.submitted_at %} &middot; {{ job.submitted_at.strftime('%a %d %b') }}{% endif %} &middot; <a href="{{ url_for('household.task', task_id=job.task_id) }}">View task</a>{% if job.task.period_start %} &middot; Interval {{ job.task.period_start.strftime('%d %b') }} &ndash; {{ job.task.due_date.strftime('%d %b %Y') }}{% endif %}</p>
+            {% if own %}<p class="small text-muted mb-0">This is your chore. Another adult needs to approve it.</p>
+            {% else %}
+            <details><summary class="small">Review individually</summary>
+            <form method="POST" action="{{ url_for('household.reward_action', action='review-job') }}" class="mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="job_id" value="{{ job.id }}">
+                <label class="form-label" for="job_note_{{ job.id }}">Helpful note (required to send back)</label><input class="form-control mb-2" id="job_note_{{ job.id }}" name="note" maxlength="500" value="{{ submitted.get('note', '') if failed_action|default('') == 'review-job' and submitted.get('job_id')|string == job.id|string else '' }}">
+                <div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" name="action" value="approve">Approve points</button><button class="btn btn-outline-secondary" name="action" value="return">Send back to try again</button><button class="btn btn-outline-secondary" name="action" value="close">Close without points</button></div>
+            </form>
+            </details>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% if reviewable %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='bulk-review') }}" id="bulk-jobs" class="mt-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="jobs">
+        <label class="form-label" for="bulk_job_note">Note for the selected chores (required to send back)</label>
+        <input class="form-control mb-2" id="bulk_job_note" name="note" maxlength="500" placeholder="Great work, everyone!">
+        <div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" name="action" value="approve"><i class="bi bi-check2-all" aria-hidden="true"></i> Approve selected</button><button class="btn btn-outline-secondary" name="action" value="return">Send selected back</button></div>
+    </form>
+    {% endif %}
+    {% else %}<p class="mb-0 text-muted">All caught up &mdash; no chores waiting.</p>{% endif %}
+    </div>
+</section>
+
+<section class="card mb-4" aria-labelledby="requests-title">
+    <div class="card-header"><h2 class="h5 mb-0" id="requests-title">Reward requests</h2></div>
+    <div class="card-body">
+    {% if pending %}
+    {% set reviewable = pending|rejectattr('membership_id', 'equalto', viewer_id)|list %}
+    {% if reviewable|length > 1 %}{{ select_all('bulk-requests', 'Select all requests I can review') }}{% endif %}
+    {% for item in pending %}
+    {% set own = item.membership_id == viewer_id %}
+    <div class="reward-review-item border-bottom py-3">
+        {% if not own %}<input class="form-check-input" type="checkbox" name="ids" value="{{ item.id }}" form="bulk-requests" id="request_pick_{{ item.id }}" aria-label="Select {{ item.title }} for {{ item.member.user.name }}">{% endif %}
+        <div class="flex-grow-1 min-w-0">
+            <h3 class="h6 text-break mb-1">{{ item.member.user.name }} asks for {{ item.title }}</h3>
+            <p class="small mb-2">{{ item.points_cost }} points held &middot; asked {{ item.created_at.strftime('%a %d %b') }}. Approve when you can provide the reward.</p>
+            {% if own %}<p class="small text-muted mb-0">This is your request. Another adult needs to approve it.</p>
+            {% else %}
+            <details><summary class="small">Review individually</summary>
+            <form method="POST" action="{{ url_for('household.reward_action', action='review-request') }}" class="mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="request_id" value="{{ item.id }}">
+                <label class="form-label" for="request_note_{{ item.id }}">Helpful note (required to decline)</label><input class="form-control mb-2" id="request_note_{{ item.id }}" name="note" maxlength="500" value="{{ submitted.get('note', '') if failed_action|default('') == 'review-request' and submitted.get('request_id')|string == item.id|string else '' }}">
+                <div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" name="action" value="approve">Approve reward</button><button class="btn btn-outline-secondary" name="action" value="decline">Not this time &mdash; return points</button></div>
+            </form>
+            </details>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% if reviewable %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='bulk-review') }}" id="bulk-requests" class="mt-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="requests">
+        <label class="form-label" for="bulk_request_note">Note for the selected requests (required to decline)</label>
+        <input class="form-control mb-2" id="bulk_request_note" name="note" maxlength="500">
+        <div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" name="action" value="approve"><i class="bi bi-check2-all" aria-hidden="true"></i> Approve selected</button><button class="btn btn-outline-secondary" name="action" value="decline">Decline selected &mdash; return points</button></div>
+    </form>
+    {% endif %}
+    {% else %}<p class="mb-0 text-muted">No reward requests waiting.</p>{% endif %}
+    </div>
+</section>
+
+<section class="card mb-4" aria-labelledby="owed-title">
+    <div class="card-header"><h2 class="h5 mb-0" id="owed-title">Rewards to hand over</h2></div>
+    <div class="card-body">
+    <p class="small text-muted">Approved rewards stay here until you mark them as given, so nothing gets forgotten.</p>
+    {% if owed %}
+    {% if owed|length > 1 %}{{ select_all('bulk-fulfil', 'Select all') }}{% endif %}
+    {% for item in owed %}
+    <div class="reward-review-item border-bottom py-2">
+        <input class="form-check-input" type="checkbox" name="ids" value="{{ item.id }}" form="bulk-fulfil" id="owed_pick_{{ item.id }}">
+        <label class="flex-grow-1 text-break" for="owed_pick_{{ item.id }}"><strong>{{ item.title }}</strong> for {{ item.member.user.name if item.member else 'Former member' }}<span class="d-block small text-muted">Approved {{ item.reviewed_at.strftime('%a %d %b') if item.reviewed_at else '' }}</span></label>
+    </div>
+    {% endfor %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='fulfil') }}" id="bulk-fulfil" class="mt-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-bag-check" aria-hidden="true"></i> Mark selected as given</button>
+    </form>
+    {% else %}<p class="mb-0 text-muted">Nothing to hand over.</p>{% endif %}
+    </div>
+</section>
+{% endblock %}
+{% block extra_js %}{{ super() }}
+<script>
+document.querySelectorAll('[data-select-all]').forEach(function (toggle) {
+    toggle.addEventListener('change', function () {
+        document.querySelectorAll('input[form="' + toggle.dataset.selectAll + '"][name="ids"]').forEach(function (box) {
+            box.checked = toggle.checked;
+        });
+    });
+});
+</script>
+{% endblock %}

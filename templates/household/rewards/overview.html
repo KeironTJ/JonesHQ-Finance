@@ -1,0 +1,113 @@
+{% extends 'household/rewards/base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% import 'household/rewards/_macros.html' as ui with context %}
+{% block reward_title %}Overview{% endblock %}
+{% block reward_header %}
+{% call page_header('My rewards' if child_view else 'Household rewards', 'Do your chores, earn points and save for the things you love.' if child_view else 'Chores earn points, points buy rewards, and every effort gets noticed. Chores are household tasks with points attached.', 'Household Hub') %}
+    {% if is_adult %}
+    <a class="btn btn-primary" href="#give-bonus"><i class="bi bi-award" aria-hidden="true"></i> Give a bonus</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('household.reward_approvals') }}">Approvals{% if approvals_count %} <span class="badge bg-primary">{{ approvals_count }}</span>{% endif %}</a>
+    {% endif %}
+{% endcall %}
+{% endblock %}
+{% block reward_content %}
+{% if personal %}
+<section class="reward-hero mb-4" aria-label="Your reward journey">
+    <div class="row g-4 align-items-center">
+        <div class="col-md-5">
+            <span class="eyebrow">You've earned this</span>
+            <div class="reward-score mt-2">{{ personal.balance }} <span class="h5">points</span></div>
+            <p class="text-muted mt-2 mb-2">Ready to spend on something you love.</p>
+            {% if personal.streak %}<p class="mb-2"><i class="bi bi-fire text-warning" aria-hidden="true"></i> <strong>{{ personal.streak }}-day streak!</strong> Do a chore today to keep it going.</p>{% endif %}
+            {% if personal.held %}<p class="small mb-2">{{ personal.held }} points held for reward requests until an adult decides.</p>{% endif %}
+            <a class="btn btn-primary" href="{{ url_for('household.reward_shop') }}">Explore rewards</a>
+        </div>
+        <div class="col-md-7">
+            {% if personal.goals %}
+            <h2 class="h5">My goals</h2>
+            {{ ui.goal_list(personal.goals[:3], personal.balance) }}
+            {% if personal.goals|length > 3 %}<a href="{{ url_for('household.reward_member', membership_id=viewer_id) }}">See all {{ personal.goals|length }} goals</a>{% endif %}
+            {% else %}
+            <h2 class="h4">What are you looking forward to?</h2>
+            <p>Choose up to 5 rewards to save for. Every approved chore takes you a little closer.</p>
+            <a href="{{ url_for('household.reward_shop') }}">Choose my goals <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if is_adult %}
+<section class="mb-4" aria-labelledby="people-title">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"><h2 class="h4 mb-0" id="people-title">Everyone earning points</h2><a href="{{ url_for('household.reward_activity') }}">All activity</a></div>
+    {% if summaries %}
+    <div class="reward-grid">{% for summary in summaries %}{{ ui.person_card(summary) }}{% endfor %}</div>
+    {% else %}
+    <p>No one earns points yet. Add a child in <a href="{{ url_for('family.index') }}">Household &amp; people</a>, or let adults join in from <a href="{{ url_for('household.reward_settings') }}#people">Settings</a>.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if is_participant %}
+<section class="mb-4" aria-labelledby="next-title">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"><h2 class="h4 mb-0" id="next-title">Your next small win</h2><a href="{{ url_for('household.reward_chores') }}">All my chores{% if earlier_jobs %} ({{ earlier_jobs|length }} earlier){% endif %}</a></div>
+    <div class="reward-grid">{% for job in jobs[:3] %}{% include 'household/_reward_job.html' %}{% else %}<section class="card"><div class="card-body"><h3 class="h5">Room for a new challenge</h3><p class="mb-0">No chores ready right now. {{ 'Ask an adult about your next helping hand.' if child_view else 'Another adult can add one for you.' }}</p></div></section>{% endfor %}</div>
+    {% if submitted_jobs %}<p class="alert alert-info mt-3"><a href="{{ url_for('household.reward_chores') }}">Waiting for approval: {{ submitted_jobs|length }} finished chore{{ '' if submitted_jobs|length == 1 else 's' }}</a>. Points arrive after approval.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if is_adult or board_enabled %}
+<section class="mb-4" aria-label="Weekly household leaderboard">
+    <div class="d-flex align-items-center gap-2 mb-2"><i class="bi bi-trophy text-primary fs-3" aria-hidden="true"></i><h2 class="h4 mb-0">This week's helping hands</h2></div>
+    <p class="text-muted">{{ board_week_start.strftime('%d %b') }} &ndash; {{ board_week_end.strftime('%d %b %Y') }} &middot; A fresh leaderboard every Monday.</p>
+    {% if celebration %}
+    <div class="card overflow-hidden">
+        <table class="table reward-leaderboard">
+            <caption class="visually-hidden">Weekly household leaderboard, ranked by chore points approved this week. Ties share a place.</caption>
+            <thead><tr><th scope="col">Place</th><th scope="col">Helping hand</th><th scope="col" class="text-end">Points</th></tr></thead>
+            <tbody>{% for card in celebration %}
+            <tr{% if card.is_you %} class="is-you"{% endif %}>
+                <td><span class="leader-place" aria-label="Place {{ card.rank }}">#{{ card.rank }}</span>{% if card.rank == 1 and card.week_points %}<i class="bi bi-trophy-fill text-warning d-block" aria-hidden="true"></i>{% endif %}</td>
+                <th scope="row">
+                    <span class="leader-name">{{ card.name }}</span>{% if card.is_you %} <span class="badge bg-primary">You</span>{% endif %}
+                    <span class="d-block small text-muted fw-normal">{{ card.week_jobs }} approved chore{{ '' if card.week_jobs == 1 else 's' }}</span>
+                    {% if card.milestones %}<details><summary>Achievements ({{ card.milestones|length }})</summary>{% for title, description, achieved, icon in card.milestones %}<span class="badge bg-primary mt-1"><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ title }}</span> {% endfor %}</details>{% endif %}
+                </th>
+                <td class="text-end"><span class="leader-points">{{ card.week_points }}</span></td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% else %}<p>No one is earning points yet.</p>{% endif %}
+    <p class="small text-muted mt-2">Chore points approved this week, Monday to Sunday (Europe/London). Ties share a place. Spending points doesn't change your score.{{ ' Children can see names, weekly scores and achievements here.' if board_enabled else ' Only adults can see this leaderboard. Sharing with children is off.' }}</p>
+</section>
+{% endif %}
+
+{% if personal %}
+<section class="mb-4" aria-labelledby="achievements-title">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2"><h2 class="h4 mb-0" id="achievements-title">Look how far you've come</h2><a href="{{ url_for('household.reward_member', membership_id=viewer_id) }}">My progress</a></div>
+    <p class="text-muted">{{ personal.chores }} approved chores &middot; {{ personal.lifetime }} points earned in total &middot; best streak {{ personal.best_streak }} day{{ '' if personal.best_streak == 1 else 's' }}. Spending points never takes away your achievements.</p>
+    {{ ui.badges(personal.achievements[:6]) }}
+</section>
+{% endif %}
+
+<section class="card mb-4" aria-labelledby="recent-title">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"><h2 class="h5 mb-0" id="recent-title">Recent activity</h2><a href="{{ url_for('household.reward_activity') }}">See everything</a></div>
+    {{ ui.timeline(recent, show_member=is_adult) }}
+</section>
+
+{% if is_adult %}
+<section class="card mb-4" id="give-bonus" aria-labelledby="bonus-title"><div class="card-body">
+    <h2 class="h5" id="bonus-title">Give a bonus or deduction</h2>
+    {{ ui.bonus_form(people, next=url_for('household.rewards')) }}
+</div></section>
+{% endif %}
+
+<section class="mb-4" aria-label="Rewards to look forward to">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"><h2 class="h4 mb-0">Something to look forward to</h2><a href="{{ url_for('household.reward_shop') }}">Browse all {{ available_reward_count }} rewards</a></div>
+    <div class="reward-grid">
+    {% for reward in featured_rewards %}
+    <article class="card"><div class="card-body"><i class="bi bi-{{ reward.icon }} reward-icon text-primary" aria-hidden="true"></i><h3 class="h5 text-break">{{ reward.title }}</h3><p class="text-muted text-break">{{ reward.description }}</p><p class="mb-0"><strong>{{ reward.points_cost }} points</strong> &middot; {{ categories[reward.category] }}</p></div></article>
+    {% else %}<section class="card"><div class="card-body"><h3 class="h5">Make room for something special</h3><p>{{ 'An adult can add rewards for you to work towards.' if child_view else 'Add a favourite treat, a family adventure or time doing something they love.' }}</p>{% if is_adult %}<a class="btn btn-primary" href="{{ url_for('household.reward_settings') }}#catalogue">Add your first reward</a>{% endif %}</div></section>{% endfor %}
+    </div>
+</section>
+{% endblock %}

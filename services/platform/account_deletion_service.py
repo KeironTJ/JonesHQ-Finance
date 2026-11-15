@@ -187,6 +187,8 @@ class AccountDeletionService:
                     reward_request.state = 'declined'
                     reward_request.review_note = 'The member left the household.'
                     reward_request.reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    if reward_request.reward is not None and reward_request.reward.stock is not None:
+                        reward_request.reward.stock = min(reward_request.reward.stock + 1, 1000)
                     db.session.add(RewardPointEntry(
                         family_id=family_id, membership_id=None, request_id=reward_request.id,
                         kind='returned', points=reward_request.points_cost,

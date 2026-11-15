@@ -16,7 +16,8 @@ class MyDayService:
         membership = CalendarService.require_access()
         if not current_user.is_managed_child:
             abort(403)
-        rewards = RewardService.page_data('jobs')
+        RewardService.refresh()
+        rewards = RewardService.my_chores(membership)
         today = rewards['today']
         tasks = family_query(HouseholdTask).join(TaskList).filter(
             HouseholdTask.completed.is_(False),
@@ -42,7 +43,7 @@ class MyDayService:
             later_jobs=[job for job in rewards['jobs'] if job.task.due_date is not None and job.task.due_date > today
                         and not (job.task.period_start and job.task.period_start <= today)],
             earlier_jobs=rewards['earlier_jobs'], submitted_jobs=rewards['submitted_jobs'],
-            balance=rewards['balance'], goal=rewards['goal'],
+            balance=rewards['balance'], goal=rewards['goal'], goals=rewards['goals'],
             pending_points=sum(row.points_cost for row in rewards['pending']),
-            calendar_service=CalendarService, child_view=True,
+            calendar_service=CalendarService, child_view=True, viewer_id=membership.id, is_adult=False,
         )

@@ -1,0 +1,84 @@
+{% extends 'household/rewards/base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% import 'household/rewards/_macros.html' as ui with context %}
+{% block reward_title %}Reward shop{% endblock %}
+{% block reward_header %}
+{% call page_header('My rewards' if child_view else 'Reward shop', 'Choose something to save for, then ask for it when you have enough points.' if child_view else 'Everything points can be spent on. Requests hold the points until an adult approves or declines.', 'Household Hub') %}
+    {% if is_adult %}<a class="btn btn-outline-primary" href="{{ url_for('household.reward_settings') }}#catalogue"><i class="bi bi-pencil" aria-hidden="true"></i> Edit rewards</a>{% endif %}
+{% endcall %}
+{% endblock %}
+{% block reward_content %}
+{% if is_participant %}
+<section class="reward-stats mb-4" aria-label="My points">
+    <div class="reward-stat"><strong><i class="bi bi-star-fill text-warning" aria-hidden="true"></i> {{ balance }}</strong><span>points ready to use</span></div>
+    <div class="reward-stat"><strong>{{ pending|sum(attribute='points_cost') }}</strong><span>points held for requests</span></div>
+    <div class="reward-stat"><strong>{{ goals|length }} / {{ max_goals }}</strong><span>goals chosen</span></div>
+</section>
+{% if goals %}
+<section class="card mb-4" aria-labelledby="goals-title"><div class="card-body">
+    <h2 class="h5" id="goals-title">Saving for</h2>
+    {{ ui.goal_list(goals, balance, removable=True) }}
+</div></section>
+{% endif %}
+{% endif %}
+
+<nav class="reward-chips mb-3" aria-label="Reward categories">
+    <a class="btn btn-sm {{ 'btn-primary' if not category else 'btn-outline-primary' }}" href="{{ url_for('household.reward_shop') }}"{% if not category %} aria-current="page"{% endif %}>All</a>
+    {% for value, label in categories.items() if category_counts.get(value) %}
+    <a class="btn btn-sm {{ 'btn-primary' if category == value else 'btn-outline-primary' }}" href="{{ url_for('household.reward_shop', category=value) }}"{% if category == value %} aria-current="page"{% endif %}>{{ label }} <span class="badge text-bg-light">{{ category_counts[value] }}</span></a>
+    {% endfor %}
+</nav>
+
+<div class="reward-grid mb-4">
+{% for reward in rewards %}
+<article class="card"><div class="card-body d-flex flex-column">
+    <div class="d-flex justify-content-between gap-2"><i class="bi bi-{{ reward.icon }} reward-icon text-primary" aria-hidden="true"></i><span class="badge text-bg-light align-self-start">{{ categories[reward.category] }}</span></div>
+    <h3 class="h5 text-break">{{ reward.title }}</h3>
+    {% if reward.description %}<p class="text-break">{{ reward.description }}</p>{% endif %}
+    <p class="mb-1"><strong>{{ reward.points_cost }} points</strong>{% if not reward.available %} &mdash; Taking a break{% endif %}</p>
+    {{ ui.reward_rules(reward) }}
+    <div class="mt-auto">
+    {% if is_participant %}
+    {% set waiting = pending|selectattr('reward_id', 'equalto', reward.id)|list %}
+    {% if waiting %}
+    <p role="status" class="mb-2"><i class="bi bi-hourglass-split" aria-hidden="true"></i> Waiting for an adult</p>
+    <form method="POST" action="{{ url_for('household.reward_action', action='cancel-request') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="request_id" value="{{ waiting[0].id }}"><button class="btn btn-outline-secondary w-100" type="submit">Cancel request</button></form>
+    {% elif not status[reward.id] %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='request') }}" onsubmit="return confirm('Ask for this reward? {{ reward.points_cost }} points will be held until an adult decides.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="reward_id" value="{{ reward.id }}"><input type="hidden" name="request_key" value="{{ request_keys[reward.id] }}">
+        <button class="btn btn-primary w-100" type="submit">Ask for this reward</button>
+    </form>
+    {% elif balance < reward.points_cost and reward.available %}
+    <p class="mb-2">{{ reward.points_cost - balance }} more points &mdash; keep going!</p>
+    <progress value="{{ balance }}" max="{{ reward.points_cost }}" aria-label="Points towards {{ reward.title }}"></progress>
+    {% else %}<p class="mb-2 text-muted">{{ status[reward.id] }}</p>{% endif %}
+    {% if reward.available %}
+    {% set is_goal = reward.id in goal_ids %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='goal') }}" class="mt-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="reward_id" value="{{ reward.id }}"><input type="hidden" name="action" value="{{ 'remove' if is_goal else 'add' }}">
+        <button class="btn btn-outline-primary w-100" type="submit"{% if not is_goal and goals|length >= max_goals %} disabled title="You already have {{ max_goals }} goals"{% endif %}><i class="bi bi-{{ 'bookmark-check-fill' if is_goal else 'bookmark-plus' }}" aria-hidden="true"></i> {{ 'Saving for this' if is_goal else 'Save for this' }}</button>
+    </form>
+    {% endif %}
+    {% elif is_adult %}
+    <a class="btn btn-outline-secondary w-100" href="{{ url_for('household.reward_settings') }}#reward-{{ reward.id }}">Edit</a>
+    {% endif %}
+    </div>
+</div></article>
+{% else %}<p>{{ 'An adult can add rewards here. Come back soon!' if child_view else 'No rewards here yet. Add one in Settings.' }}</p>{% endfor %}
+</div>
+
+{% if is_participant %}
+<section class="card mb-4" aria-labelledby="requests-title">
+    <h2 class="h5 card-header" id="requests-title">My reward requests</h2>
+    <ul class="list-group list-group-flush">
+    {% for item in my_requests %}
+    <li class="list-group-item text-break">
+        <strong>{{ item.title }}</strong> &mdash; {{ item.points_cost }} points
+        <div class="small">{% if item.state == 'pending' %}Waiting for an adult{% elif item.state == 'approved' %}{{ 'Given on ' ~ item.fulfilled_at.strftime('%d %b %Y') if item.fulfilled_at else 'Approved! An adult will hand it over soon.' }}{% else %}Not this time &mdash; points returned{% endif %} &middot; asked {{ item.created_at.strftime('%d %b %Y') }}</div>
+        {% if item.review_note %}<div class="small text-muted">{{ item.review_note }}</div>{% endif %}
+    </li>
+    {% else %}<li class="list-group-item text-muted">No requests yet.</li>{% endfor %}
+    </ul>
+</section>
+{% endif %}
+{% endblock %}

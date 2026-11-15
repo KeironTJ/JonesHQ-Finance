@@ -168,6 +168,22 @@ Migration `c27d3f9b456a` adds five household-scoped tables only:
   to prevent SQLite ID reuse inheriting records. No rewards cross households or
   link to Finance. Named constraints match the models for migration round trips.
 
+Migration `d4b8f2a61c37` expands rewards:
+
+- `families.rewards_defaults_seeded` and `household_memberships.rewards_participant`
+  (adult opt-in; managed children always participate).
+- `household_rewards`: category plus optional checked stock (0–1,000),
+  cooldown days (1–365) and per-person limit with week/month/year/ever period.
+- `reward_requests.fulfilled_at`/`fulfilled_by_membership_id` track handover;
+  existing approved requests are backfilled as given.
+- `reward_points`: new `bonus`/`deduction`/`milestone` kinds, optional
+  recognition `category` and unique `unlock_id` for achievement bonuses.
+- `reward_goals`: several goals per member, unique per member/reward.
+- `reward_achievements`: editable per-household metric/threshold/bonus rules.
+- `reward_achievement_unlocks`: one unlock per achievement/member with title/icon snapshot.
+- `reward_chore_templates`: household chore library (title, notes, 1–1,000 points).
+  Activity is derived from these tables; there is no separate event log.
+
 ## Core Financial Models
 
 ### 1. **Account** (accounts.py)

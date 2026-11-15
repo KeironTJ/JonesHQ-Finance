@@ -14,7 +14,8 @@ from utils.db_helpers import get_current_user_id
 
 # Reviewed child-first order; new household tables must be explicitly included.
 HOUSEHOLD_TABLES = (
-    'reward_points', 'reward_requests', 'reward_goals', 'reward_jobs', 'household_rewards',
+    'reward_points', 'reward_achievement_unlocks', 'reward_achievements', 'reward_chore_templates',
+    'reward_requests', 'reward_goals', 'reward_jobs', 'household_rewards',
     'household_tasks', 'task_lists',
     'activity_attendees', 'activities',
     'planned_meals', 'meals',

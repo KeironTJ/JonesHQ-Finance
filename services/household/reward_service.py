@@ -8,16 +8,73 @@ from sqlalchemy import case, update
 from extensions import db
 from models.family import Family, HouseholdMembership
 from models.household_tasks import HouseholdTask, TaskList
-from models.rewards import Reward, RewardGoal, RewardJob, RewardPointEntry, RewardRequest
+from models.rewards import (
+    Reward, RewardAchievementUnlock, RewardChoreTemplate, RewardGoal, RewardJob, RewardPointEntry, RewardRequest,
+)
 from services.household.calendar_service import CalendarService, LONDON
+from services.platform.module_access_service import ModuleAccessService
 from utils.db_helpers import family_get, family_get_or_404, family_query
 
 
-REWARD_ICONS = {'gift': 'Gift', 'controller': 'Game', 'film': 'Movie', 'cup-hot': 'Treat', 'bicycle': 'Adventure', 'star': 'Star'}
+REWARD_ICONS = {
+    'gift': 'Gift', 'controller': 'Game', 'film': 'Movie', 'cup-hot': 'Treat', 'bicycle': 'Adventure',
+    'star': 'Star', 'phone': 'Screen time', 'cash-coin': 'Money', 'book': 'Book', 'music-note': 'Music',
+    'balloon': 'Party', 'moon-stars': 'Late night', 'basket': 'Shopping', 'puzzle': 'Toy',
+}
+REWARD_CATEGORIES = {
+    'treat': 'Treats', 'screen': 'Screen time', 'outing': 'Days out', 'money': 'Pocket money',
+    'privilege': 'Privileges', 'toy': 'Toys & games', 'other': 'Other',
+}
+RECOGNITION_CATEGORIES = {
+    'school': 'School', 'hobby': 'Hobby or club', 'kindness': 'Kindness', 'helping': 'Helping out',
+    'behaviour': 'Behaviour', 'other': 'Other',
+}
+LIMIT_PERIODS = {'week': 'per week', 'month': 'per month', 'year': 'per year', 'ever': 'in total'}
+MAX_GOALS = 5
+STARTER_CHORES = (
+    ('Make your bed', 'Straighten the covers and plump the pillow.', 5),
+    ('Tidy your bedroom', 'Toys away, clothes in the basket and a clear floor.', 10),
+    ('Set the table', 'Plates, cutlery and drinks ready for everyone.', 5),
+    ('Empty the dishwasher', 'Put everything back where it lives.', 10),
+    ('Feed the pet', 'Fresh food and water.', 5),
+    ('Put laundry away', 'Fold and put away your clean clothes.', 10),
+    ('Homework done', 'Finish homework without a reminder.', 10),
+    ('Reading time', '20 minutes of reading.', 10),
+)
 
 
 def _now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def utc_start(day):
+    """UTC-naive instant for the start of a Europe/London calendar day."""
+    return datetime.combine(day, time.min, tzinfo=LONDON).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def local_date(moment):
+    return moment.replace(tzinfo=timezone.utc).astimezone(LONDON).date()
+
+
+def period_start(period, today):
+    if period == 'week':
+        return today - timedelta(days=today.weekday())
+    if period == 'month':
+        return today.replace(day=1)
+    if period == 'year':
+        return today.replace(month=1, day=1)
+    return None
+
+
+def _ids(data, key):
+    values = data.getlist(key) if hasattr(data, 'getlist') else data.get(key, [])
+    if not isinstance(values, (list, tuple)):
+        raise ValueError('Choose one or more items.')
+    return [value for value in values if value not in ('', None)]
+
+
+def _form_dict(data):
+    return data.to_dict() if hasattr(data, 'to_dict') else dict(data)
 
 
 class RewardService:
@@ -37,21 +94,49 @@ class RewardService:
         return membership
 
     @staticmethod
-    def _child(member_id):
-        member = family_get(HouseholdMembership, member_id)
-        if member is None or not member.user.is_active or not member.user.is_managed_child:
-            raise ValueError('Choose an active child in this household.')
+    def is_participant(member):
+        """Managed children always earn points; adults opt in."""
+        if member is None or not member.user.is_active:
+            return False
+        if member.user.is_managed_child:
+            return True
+        return bool(member.rewards_participant) and ModuleAccessService.can_access(
+            member.user, 'household', member.family_id,
+        )
+
+    @staticmethod
+    def _member(member_id):
+        try:
+            return family_get(HouseholdMembership, member_id) if member_id not in ('', None) else None
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _participant(member_id):
+        member = RewardService._member(member_id)
+        if not RewardService.is_participant(member):
+            raise ValueError('Choose a child or an adult who earns points in this household.')
         return member
 
     @staticmethod
-    def _integer(value, label, maximum):
+    def participants():
+        return [member for member in CalendarService.members() if RewardService.is_participant(member)]
+
+    @staticmethod
+    def _integer(value, label, maximum, minimum=1):
         try:
             number = int(str(value))
         except (ValueError, TypeError) as error:
-            raise ValueError(f'Enter whole {label} between 1 and {maximum}.') from error
-        if not 1 <= number <= maximum:
-            raise ValueError(f'Enter whole {label} between 1 and {maximum}.')
+            raise ValueError(f'Enter whole {label} between {minimum} and {maximum}.') from error
+        if not minimum <= number <= maximum:
+            raise ValueError(f'Enter whole {label} between {minimum} and {maximum}.')
         return number
+
+    @staticmethod
+    def _optional_integer(value, label, maximum, minimum=1):
+        if value in ('', None):
+            return None
+        return RewardService._integer(value, label, maximum, minimum)
 
     @staticmethod
     def _note(data, required=False):
@@ -66,17 +151,19 @@ class RewardService:
             db.func.coalesce(db.func.sum(RewardPointEntry.points), 0),
         ).scalar()
 
+    # ----- Chores -----
+
     @staticmethod
     def configure_task(task, data):
         job = task.reward_job
         if job and job.state == 'closed':
             raw = data.get('reward_points')
-            if raw not in ('', None, '0', 0) and RewardService._integer(raw, 'job points', 1000) != job.points:
-                raise ValueError('Closed jobs cannot earn points again. Create a new task instead.')
+            if raw not in ('', None, '0', 0) and RewardService._integer(raw, 'chore points', 1000) != job.points:
+                raise ValueError('Closed chores cannot earn points again. Create a new task instead.')
             return
         if 'reward_points' not in data:
             if job and task.assigned_membership_id != job.membership_id and job.state != 'closed':
-                raise ValueError('Close the reward job before changing its assignee.')
+                raise ValueError('Close the chore before changing its assignee.')
             if job:
                 job.title = task.title
             return
@@ -84,17 +171,17 @@ class RewardService:
         raw = data.get('reward_points')
         if raw in ('', None, '0', 0) and job is None:
             return
-        points = RewardService._integer(raw, 'job points', 1000)
+        points = RewardService._integer(raw, 'chore points', 1000)
         if task.task_list.visibility != 'shared':
             raise ValueError('Only shared tasks can earn reward points.')
-        member = RewardService._child(task.assigned_membership_id)
+        member = RewardService._participant(task.assigned_membership_id)
         if task.completed and job is None:
-            raise ValueError('Choose an unfinished task for a new reward job.')
+            raise ValueError('Choose an unfinished task for a new chore.')
         if job:
             if member.id != job.membership_id:
-                raise ValueError('Create a new task for a different child.')
+                raise ValueError('Create a new task for a different person.')
             if points != job.points and job.state != 'open':
-                raise ValueError('Points cannot change after submission. Create a new job instead.')
+                raise ValueError('Points cannot change after submission. Create a new chore instead.')
             job.points = points
             job.title = task.title
         else:
@@ -110,19 +197,24 @@ class RewardService:
         mode = data.get('assignment_mode', 'assigned')
         if mode not in ('assigned', 'claim'):
             raise ValueError('Choose automatic assignment or optional claiming.')
-        if hasattr(data, 'getlist'):
-            selected = data.getlist('assigned_membership_ids')
-        else:
-            selected = data.get('assigned_membership_ids', [])
-        if not isinstance(selected, (list, tuple)):
-            raise ValueError('Choose one or more eligible children.')
-        selected = selected or [data.get('assigned_membership_id')]
-        children = {RewardService._child(member_id).id for member_id in selected}
+        selected = _ids(data, 'assigned_membership_ids') or [data.get('assigned_membership_id')]
+        people = {RewardService._participant(member_id).id for member_id in selected}
+        values = _form_dict(data)
+        if data.get('template_id'):
+            template = family_get(RewardChoreTemplate, data.get('template_id'))
+            if template is None:
+                raise ValueError('Choose a chore from your library.')
+            if not (values.get('title') or '').strip():
+                values['title'] = template.title
+            if not (values.get('notes') or '').strip():
+                values['notes'] = template.notes
+            if values.get('reward_points') in ('', None):
+                values['reward_points'] = template.points
         task_list = family_get(TaskList, data.get('list_id')) if data.get('list_id') else None
         if data.get('list_id') and task_list is None:
             raise ValueError('Choose a shared task list in this household.')
         if task_list is None:
-            title = (data.get('list_title') or 'Reward jobs').strip()
+            title = (data.get('list_title') or 'Chores').strip()
             task_list = TaskList(
                 family_id=membership.family_id, creator_membership_id=membership.id,
                 **TaskService._list_values({'title': title, 'visibility': 'shared', 'icon': 'star'}),
@@ -130,21 +222,21 @@ class RewardService:
             db.session.add(task_list)
             db.session.flush()
         if task_list.visibility != 'shared':
-            raise ValueError('Reward jobs need a shared task list.')
+            raise ValueError('Chores need a shared task list.')
         tasks = []
-        for member_id in sorted(children):
-            values = dict(data)
-            values['assigned_membership_id'] = member_id
+        for member_id in sorted(people):
+            member_values = dict(values)
+            member_values['assigned_membership_id'] = member_id
             task = HouseholdTask(
                 family_id=membership.family_id, task_list=task_list,
                 creator_membership_id=membership.id, claim_required=mode == 'claim',
-                **TaskService._task_values(values, task_list),
+                **TaskService._task_values(member_values, task_list),
             )
             db.session.add(task)
-            RewardService.configure_task(task, values)
-            TaskService.configure_recurrence(task, values)
+            RewardService.configure_task(task, member_values)
+            TaskService.configure_recurrence(task, member_values)
             if task.reward_job is None:
-                raise ValueError('Choose points for this reward job.')
+                raise ValueError('Choose points for this chore.')
             tasks.append(task)
         db.session.commit()
         return tasks[0]
@@ -156,13 +248,13 @@ class RewardService:
         RewardService._lock()
         TaskService.refresh_recurring(commit=False)
         job = family_get_or_404(RewardJob, job_id)
-        if not current_user.is_managed_child or job.membership_id != membership.id:
+        if job.membership_id != membership.id:
             abort(403)
         task = job.task
         if job.state != 'open' or task is None or task.expired:
-            raise ValueError('This job is no longer available to claim.')
+            raise ValueError('This chore is no longer available to claim.')
         if not task.claim_required:
-            raise ValueError('This job is already assigned to you.')
+            raise ValueError('This chore is already assigned to you.')
         if task.period_start and task.period_start > datetime.now(LONDON).date():
             raise ValueError('This repeat interval has not started yet.')
         if task.claimed_at is None:
@@ -176,7 +268,7 @@ class RewardService:
         if job is None or job.state in ('approved', 'closed'):
             return
         if completed:
-            RewardService._child(job.membership_id)
+            RewardService._participant(job.membership_id)
             job.state = 'submitted'
             job.submitted_at = _now()
         else:
@@ -188,33 +280,33 @@ class RewardService:
         membership = CalendarService.require_access()
         RewardService._lock()
         job = family_get_or_404(RewardJob, job_id)
-        if not current_user.is_managed_child or job.membership_id != membership.id:
+        if job.membership_id != membership.id:
             abort(403)
         if job.state in ('submitted', 'approved'):
             return job
         if job.state != 'open' or job.task is None:
-            raise ValueError('This job is no longer available.')
+            raise ValueError('This chore is no longer available.')
         from services.household.task_service import TaskService
         TaskService.set_completion(job.task_id, {'action': 'complete'})
         return job
 
     @staticmethod
-    def review_job(job_id, data):
-        membership = RewardService.require_adult()
-        RewardService._lock()
-        job = family_get_or_404(RewardJob, job_id)
-        action = data.get('action')
+    def _review_job(job, action, note, membership):
         if action not in ('approve', 'return', 'close'):
             raise ValueError('Choose approve, send back or close.')
         if action == 'approve' and job.state == 'approved' or action == 'close' and job.state == 'closed':
-            return job
+            return False
         if job.state in ('approved', 'closed') or action != 'close' and job.state != 'submitted':
-            raise ValueError('This job has changed. Refresh and review it again.')
-        job.review_note = RewardService._note(data, required=action == 'return')
+            raise ValueError(f'"{job.title}" has changed. Refresh and review it again.')
+        if action == 'return' and not note:
+            raise ValueError('Add a helpful note of up to 500 characters.')
+        if action == 'approve' and job.membership_id == membership.id:
+            raise ValueError('Another adult needs to approve your own chores.')
+        job.review_note = note
         job.reviewed_at = _now()
         job.reviewer_membership_id = membership.id
         if action == 'approve':
-            RewardService._child(job.membership_id)
+            RewardService._participant(job.membership_id)
             if job.task is None or not job.task.completed or job.task.assigned_membership_id != job.membership_id:
                 raise ValueError('This task has changed. Review it before awarding points.')
             job.state = 'approved'
@@ -223,7 +315,8 @@ class RewardService:
                 actor_membership_id=membership.id, job_id=job.id, kind='earned',
                 points=job.points, description=job.title, created_at=_now(),
             ))
-        elif action == 'return':
+            return True
+        if action == 'return':
             if job.task and job.task.period_start:
                 root = job.task.series or job.task
                 if root.missed_policy == 'skip' and job.task.due_date < datetime.now(LONDON).date():
@@ -240,8 +333,23 @@ class RewardService:
                 job.task.completed = True
                 job.task.completed_at = _now()
                 job.task.completed_by_membership_id = membership.id
+        return False
+
+    @staticmethod
+    def review_job(job_id, data):
+        from services.household.reward_achievement_service import RewardAchievementService
+        membership = RewardService.require_adult()
+        RewardService._lock()
+        job = family_get_or_404(RewardJob, job_id)
+        action = data.get('action')
+        note = RewardService._note(data, required=action == 'return')
+        if RewardService._review_job(job, action, note, membership):
+            db.session.flush()
+            RewardAchievementService.evaluate([job.membership_id])
         db.session.commit()
         return job
+
+    # ----- Reward catalogue and requests -----
 
     @staticmethod
     def save_reward(data, reward_id=None):
@@ -258,19 +366,70 @@ class RewardService:
         available = data.get('available', 'yes')
         if available not in ('yes', 'no'):
             raise ValueError('Choose whether this reward is available.')
+        category = data.get('category') or 'treat'
+        if category not in REWARD_CATEGORIES:
+            raise ValueError('Choose a reward category from the list.')
+        member_limit = RewardService._optional_integer(data.get('member_limit'), 'times per person', 100)
+        limit_period = data.get('limit_period') or None if member_limit else None
+        if member_limit and limit_period not in LIMIT_PERIODS:
+            raise ValueError('Choose how often the per-person limit resets.')
         reward.title = title
         reward.description = description
         reward.points_cost = RewardService._integer(data.get('points_cost'), 'reward points', 10000)
         reward.icon = icon
         reward.available = available == 'yes'
+        reward.category = category
+        reward.stock = RewardService._optional_integer(data.get('stock'), 'items in stock', 1000, minimum=0)
+        reward.cooldown_days = RewardService._optional_integer(data.get('cooldown_days'), 'cooldown days', 365)
+        reward.member_limit = member_limit
+        reward.limit_period = limit_period
         db.session.add(reward)
         db.session.commit()
         return reward
 
     @staticmethod
+    def check_eligibility(reward, member_id, balance=None):
+        """Raise ValueError with a friendly reason when *member_id* cannot request *reward* now."""
+        if not reward.available:
+            raise ValueError('This reward is taking a break. Choose another one.')
+        if reward.stock is not None and reward.stock <= 0:
+            raise ValueError('This reward is out of stock right now.')
+        history = family_query(RewardRequest).filter(
+            RewardRequest.membership_id == member_id, RewardRequest.reward_id == reward.id,
+            RewardRequest.state != 'declined',
+        ).all()
+        if any(row.state == 'pending' for row in history):
+            raise ValueError('You already have a request for this reward waiting for an adult.')
+        today = datetime.now(LONDON).date()
+        if reward.cooldown_days and history:
+            ready = local_date(max(row.created_at for row in history)) + timedelta(days=reward.cooldown_days)
+            if today < ready:
+                raise ValueError(f'You can ask for this again from {ready.strftime("%a %d %b")}.')
+        if reward.member_limit:
+            start = period_start(reward.limit_period, today)
+            used = [row for row in history if start is None or row.created_at >= utc_start(start)]
+            if len(used) >= reward.member_limit:
+                raise ValueError(
+                    f'This reward is limited to {reward.member_limit} {LIMIT_PERIODS[reward.limit_period]} '
+                    'for each person.',
+                )
+        if balance is None:
+            balance = RewardService.balance(member_id)
+        if balance < reward.points_cost:
+            raise ValueError('Keep going! You need more points for this reward.')
+
+    @staticmethod
+    def eligibility(reward, member_id, balance=None):
+        try:
+            RewardService.check_eligibility(reward, member_id, balance)
+        except ValueError as error:
+            return str(error)
+        return None
+
+    @staticmethod
     def request_reward(reward_id, data):
         membership = CalendarService.require_access()
-        if not current_user.is_managed_child:
+        if not RewardService.is_participant(membership):
             abort(403)
         RewardService._lock()
         reward = family_get_or_404(Reward, reward_id)
@@ -283,14 +442,9 @@ class RewardService:
             if existing.reward_id != reward.id:
                 raise ValueError('Refresh the reward page before requesting a different reward.')
             return existing
-        if not reward.available:
-            raise ValueError('This reward is taking a break. Choose another one.')
-        if family_query(RewardRequest).filter_by(
-            membership_id=membership.id, reward_id=reward.id, state='pending',
-        ).first():
-            raise ValueError('You already have a request for this reward waiting for an adult.')
-        if RewardService.balance(membership.id) < reward.points_cost:
-            raise ValueError('Keep going! You need more points for this reward.')
+        RewardService.check_eligibility(reward, membership.id)
+        if reward.stock is not None:
+            reward.stock -= 1
         reward_request = RewardRequest(
             family_id=membership.family_id, membership_id=membership.id, reward_id=reward.id,
             title=reward.title, points_cost=reward.points_cost, request_key=key, created_at=_now(),
@@ -306,48 +460,217 @@ class RewardService:
         return reward_request
 
     @staticmethod
+    def _decline(reward_request, note, actor_id):
+        reward_request.review_note = note
+        reward_request.state = 'declined'
+        reward_request.reviewed_at = _now()
+        reward_request.reviewer_membership_id = actor_id
+        if reward_request.reward is not None and reward_request.reward.stock is not None:
+            reward_request.reward.stock = min(reward_request.reward.stock + 1, 1000)
+        db.session.add(RewardPointEntry(
+            family_id=reward_request.family_id, membership_id=reward_request.membership_id,
+            actor_membership_id=actor_id, request_id=reward_request.id, kind='returned',
+            points=reward_request.points_cost, description=reward_request.title, created_at=_now(),
+        ))
+
+    @staticmethod
+    def _review_request(reward_request, action, note, membership):
+        if action not in ('approve', 'decline'):
+            raise ValueError('Choose approve or decline.')
+        target = 'approved' if action == 'approve' else 'declined'
+        if reward_request.state == target:
+            return
+        if reward_request.state != 'pending':
+            raise ValueError(f'The request for "{reward_request.title}" has already been reviewed.')
+        if reward_request.membership_id is None:
+            raise ValueError('This member has left the household.')
+        if action == 'decline' and not note:
+            raise ValueError('Add a helpful note of up to 500 characters.')
+        if action == 'approve' and reward_request.membership_id == membership.id:
+            raise ValueError('Another adult needs to approve your own reward requests.')
+        if target == 'declined':
+            RewardService._decline(reward_request, note, membership.id)
+            return
+        reward_request.review_note = note
+        reward_request.state = 'approved'
+        reward_request.reviewed_at = _now()
+        reward_request.reviewer_membership_id = membership.id
+
+    @staticmethod
     def review_request(request_id, data):
         membership = RewardService.require_adult()
         RewardService._lock()
         reward_request = family_get_or_404(RewardRequest, request_id)
         action = data.get('action')
-        if action not in ('approve', 'decline'):
-            raise ValueError('Choose approve or decline.')
-        target = 'approved' if action == 'approve' else 'declined'
-        if reward_request.state == target:
-            return reward_request
-        if reward_request.state != 'pending':
-            raise ValueError('This request has already been reviewed.')
-        if reward_request.membership_id is None:
-            raise ValueError('This member has left the household.')
-        reward_request.review_note = RewardService._note(data, required=action == 'decline')
-        reward_request.state = target
-        reward_request.reviewed_at = _now()
-        reward_request.reviewer_membership_id = membership.id
-        if target == 'declined':
-            db.session.add(RewardPointEntry(
-                family_id=membership.family_id, membership_id=reward_request.membership_id,
-                actor_membership_id=membership.id, request_id=reward_request.id, kind='returned',
-                points=reward_request.points_cost, description=reward_request.title, created_at=_now(),
-            ))
+        note = RewardService._note(data, required=action == 'decline')
+        RewardService._review_request(reward_request, action, note, membership)
         db.session.commit()
         return reward_request
 
     @staticmethod
+    def cancel_request(request_id, data):
+        membership = CalendarService.require_access()
+        RewardService._lock()
+        reward_request = family_get_or_404(RewardRequest, request_id)
+        if reward_request.membership_id != membership.id:
+            abort(403)
+        if reward_request.state == 'declined':
+            return reward_request
+        if reward_request.state != 'pending':
+            raise ValueError('An adult has already approved this request.')
+        RewardService._decline(reward_request, 'Cancelled by the requester.', membership.id)
+        db.session.commit()
+        return reward_request
+
+    @staticmethod
+    def bulk_review(data):
+        from services.household.reward_achievement_service import RewardAchievementService
+        membership = RewardService.require_adult()
+        RewardService._lock()
+        kind = data.get('kind')
+        action = data.get('action')
+        if kind not in ('jobs', 'requests'):
+            raise ValueError('Choose chores or reward requests to review.')
+        ids = _ids(data, 'ids')
+        if not ids:
+            raise ValueError('Tick at least one item to review.')
+        note = RewardService._note(data, required=action in ('return', 'decline'))
+        awarded = set()
+        for item_id in ids:
+            if kind == 'jobs':
+                job = family_get_or_404(RewardJob, item_id)
+                if RewardService._review_job(job, action, note, membership):
+                    awarded.add(job.membership_id)
+            else:
+                RewardService._review_request(family_get_or_404(RewardRequest, item_id), action, note, membership)
+        db.session.flush()
+        RewardAchievementService.evaluate(sorted(awarded))
+        db.session.commit()
+        return len(ids)
+
+    @staticmethod
+    def fulfil_requests(data):
+        membership = RewardService.require_adult()
+        RewardService._lock()
+        ids = _ids(data, 'ids') or _ids(data, 'request_id')
+        if not ids:
+            raise ValueError('Tick at least one reward to mark as given.')
+        for item_id in ids:
+            reward_request = family_get_or_404(RewardRequest, item_id)
+            if reward_request.state != 'approved':
+                raise ValueError('Only approved rewards can be marked as given.')
+            if reward_request.fulfilled_at is None:
+                reward_request.fulfilled_at = _now()
+                reward_request.fulfilled_by_membership_id = membership.id
+        db.session.commit()
+        return len(ids)
+
+    # ----- Bonuses, goals and participation -----
+
+    @staticmethod
+    def award_points(data):
+        from services.household.reward_achievement_service import RewardAchievementService
+        membership = RewardService.require_adult()
+        RewardService._lock()
+        kind = data.get('kind') or 'bonus'
+        if kind not in ('bonus', 'deduction'):
+            raise ValueError('Choose a bonus or a deduction.')
+        member = RewardService._participant(data.get('membership_id'))
+        if member.id == membership.id:
+            raise ValueError('Another adult needs to give you bonus points or deductions.')
+        points = RewardService._integer(data.get('points'), 'points', 1000)
+        reason = (data.get('reason') or '').strip()
+        if not reason or len(reason) > 256:
+            raise ValueError('Add a reason of up to 256 characters so everyone knows what it was for.')
+        category = data.get('category') or 'other'
+        if category not in RECOGNITION_CATEGORIES:
+            raise ValueError('Choose a category from the list.')
+        if kind == 'deduction':
+            available = RewardService.balance(member.id)
+            if available < points:
+                raise ValueError(
+                    f'{member.user.name} has {available} points available. Deductions cannot take a balance below zero.',
+                )
+        entry = RewardPointEntry(
+            family_id=membership.family_id, membership_id=member.id, actor_membership_id=membership.id,
+            kind=kind, points=points if kind == 'bonus' else -points, description=reason,
+            category=category, created_at=_now(),
+        )
+        db.session.add(entry)
+        db.session.flush()
+        if kind == 'bonus':
+            RewardAchievementService.evaluate([member.id])
+        db.session.commit()
+        return entry
+
+    @staticmethod
     def set_goal(data):
         membership = CalendarService.require_access()
-        if not current_user.is_managed_child:
+        member = membership
+        target_id = data.get('membership_id')
+        if target_id not in ('', None) and str(target_id) != str(membership.id):
+            RewardService.require_adult()
+            member = RewardService._participant(target_id)
+        elif not RewardService.is_participant(membership):
+            abort(403)
+        member_id = member.id
+        RewardService._lock()
+        action = data.get('action') or 'add'
+        if action not in ('add', 'remove', 'clear'):
+            raise ValueError('Choose whether to add or remove a goal.')
+        goals = family_query(RewardGoal).filter_by(membership_id=member_id).all()
+        if action == 'clear' or not data.get('reward_id'):
+            for goal in goals:
+                db.session.delete(goal)
+            db.session.commit()
+            return
+        reward = family_get_or_404(Reward, data['reward_id'])
+        existing = next((goal for goal in goals if goal.reward_id == reward.id), None)
+        if action == 'remove':
+            if existing:
+                db.session.delete(existing)
+            db.session.commit()
+            return
+        if existing:
+            return
+        if not reward.available:
+            raise ValueError('Choose an available reward for a goal.')
+        stale = [goal for goal in goals if goal.reward_id is None]
+        for goal in stale:
+            db.session.delete(goal)
+        if len(goals) - len(stale) >= MAX_GOALS:
+            raise ValueError(f'Choose up to {MAX_GOALS} goals. Remove one to add another.')
+        db.session.add(RewardGoal(family_id=member.family_id, membership_id=member_id, reward_id=reward.id))
+        db.session.commit()
+
+    @staticmethod
+    def goals(member_id):
+        rows = family_query(RewardGoal).filter_by(membership_id=member_id).order_by(RewardGoal.id).all()
+        return [row.reward for row in rows if row.reward and row.reward.available]
+
+    @staticmethod
+    def set_participation(data):
+        membership = RewardService.require_adult()
+        enabled = data.get('enabled')
+        if enabled not in ('yes', 'no'):
+            raise ValueError('Choose whether this adult earns points.')
+        target = RewardService._member(data.get('membership_id') or membership.id)
+        if target is None or not target.user.is_active or target.user.is_managed_child:
+            raise ValueError('Choose an adult in this household.')
+        if target.id != membership.id and not current_user.is_household_owner:
             abort(403)
         RewardService._lock()
-        reward = family_get_or_404(Reward, data['reward_id']) if data.get('reward_id') else None
-        if reward and not reward.available:
-            raise ValueError('Choose an available reward for your goal.')
-        goal = family_query(RewardGoal).filter_by(membership_id=membership.id).first()
-        if goal is None:
-            goal = RewardGoal(family_id=membership.family_id, membership_id=membership.id)
-            db.session.add(goal)
-        goal.reward_id = reward.id if reward else None
+        if enabled == 'yes' and not ModuleAccessService.can_access(target.user, 'household', target.family_id):
+            raise ValueError(f'Give {target.user.name} Household Hub access first.')
+        if enabled == 'no' and (
+            family_query(RewardJob).filter(
+                RewardJob.membership_id == target.id, RewardJob.state.in_(('open', 'submitted')),
+            ).first() or family_query(RewardRequest).filter_by(membership_id=target.id, state='pending').first()
+        ):
+            raise ValueError('Finish or close their open chores and reward requests first.')
+        target.rewards_participant = enabled == 'yes'
         db.session.commit()
+        return target
 
     @staticmethod
     def set_board(data):
@@ -360,21 +683,51 @@ class RewardService:
         family.rewards_board_enabled = enabled == 'yes'
         db.session.commit()
 
+    # ----- Chore library -----
+
+    @staticmethod
+    def save_template(data, template_id=None):
+        membership = RewardService.require_adult()
+        RewardService._lock()
+        template = family_get_or_404(RewardChoreTemplate, template_id) if template_id else RewardChoreTemplate(
+            family_id=membership.family_id,
+        )
+        title = (data.get('title') or '').strip()
+        notes = (data.get('notes') or '').strip()
+        if not title or len(title) > 256:
+            raise ValueError('Enter a chore name of up to 256 characters.')
+        if len(notes) > 5000:
+            raise ValueError('Use up to 5,000 characters for chore notes.')
+        template.title = title
+        template.notes = notes
+        template.points = RewardService._integer(data.get('points'), 'chore points', 1000)
+        db.session.add(template)
+        db.session.commit()
+        return template
+
+    @staticmethod
+    def delete_template(data):
+        RewardService.require_adult()
+        RewardService._lock()
+        db.session.delete(family_get_or_404(RewardChoreTemplate, data.get('template_id')))
+        db.session.commit()
+
+    # ----- Page data -----
+
     @staticmethod
     def celebration_data(membership):
         family = membership.family
         child = current_user.is_managed_child
-        members = [member for member in CalendarService.members() if member.user.is_managed_child]
+        members = RewardService.participants()
         if child and not family.rewards_board_enabled:
             members = [member for member in members if member.id == membership.id]
         ids = [member.id for member in members]
         today = datetime.now(LONDON).date()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=7)
-        starts_at = datetime.combine(week_start, time.min, tzinfo=LONDON).astimezone(timezone.utc).replace(tzinfo=None)
-        ends_at = datetime.combine(week_end, time.min, tzinfo=LONDON).astimezone(timezone.utc).replace(tzinfo=None)
+        starts_at, ends_at = utc_start(week_start), utc_start(week_end)
         in_week = (RewardPointEntry.created_at >= starts_at) & (RewardPointEntry.created_at < ends_at)
-        # Opt-in sharing exposes earned totals only, never ledger rows or spending.
+        # Opt-in sharing exposes earned totals and achievements only, never ledger rows or spending.
         totals = family_query(RewardPointEntry, include_private=True).filter(
             RewardPointEntry.membership_id.in_(ids), RewardPointEntry.kind == 'earned',
         ).with_entities(
@@ -388,18 +741,17 @@ class RewardService:
             member_id: (int(points), count, int(week_points), int(week_jobs))
             for member_id, points, count, week_points, week_jobs in totals
         }
+        unlocks = {}
+        for unlock in family_query(RewardAchievementUnlock, include_private=True).filter(
+            RewardAchievementUnlock.membership_id.in_(ids),
+        ).order_by(RewardAchievementUnlock.unlocked_at).all() if ids else []:
+            unlocks.setdefault(unlock.membership_id, []).append((unlock.title, '', True, unlock.icon))
         cards = []
         for member in members:
             points, jobs, week_points, week_jobs = earned.get(member.id, (0, 0, 0, 0))
-            milestones = [
-                ('First step', 'Your first approved job', jobs >= 1, 'star'),
-                ('Helping hand', '5 approved jobs', jobs >= 5, 'hand-thumbs-up'),
-                ('Team player', '10 approved jobs', jobs >= 10, 'people'),
-                ('100-point milestone', '100 points earned in total', points >= 100, 'trophy'),
-            ]
             cards.append(dict(
                 name=member.user.name, is_you=member.id == membership.id,
-                earned=points, jobs=jobs, milestones=milestones,
+                earned=points, jobs=jobs, milestones=unlocks.get(member.id, []),
                 week_points=week_points, week_jobs=week_jobs,
             ))
         cards.sort(key=lambda card: (-card['week_points'], card['name'].casefold()))
@@ -412,48 +764,177 @@ class RewardService:
         return family.rewards_board_enabled, cards, week_start, week_end - timedelta(days=1)
 
     @staticmethod
-    def page_data(view):
+    def refresh():
+        """Generate due recurring chores and unlock any newly earned achievements."""
+        from services.household.reward_achievement_service import RewardAchievementService
         from services.household.task_service import TaskService
-        membership = CalendarService.require_access()
-        if view not in ('home', 'jobs', 'shop', 'progress', 'manage'):
-            raise ValueError('Choose overview, jobs, rewards or progress.')
-        child = current_user.is_managed_child
-        if view == 'manage':
-            RewardService.require_adult()
         TaskService.refresh_recurring()
+        RewardAchievementService.refresh()
+
+    @staticmethod
+    def my_chores(membership):
+        """The current member's own chores, balance and goals."""
         today = datetime.now(LONDON).date()
-        jobs = family_query(RewardJob).order_by(RewardJob.id.desc()).all()
-        requests = family_query(RewardRequest).order_by(RewardRequest.id.desc()).all()
-        rewards = family_query(Reward).order_by(Reward.points_cost, Reward.id).all()
-        if child:
-            rewards = [row for row in rewards if row.available]
-        goal = family_query(RewardGoal).filter_by(membership_id=membership.id).first() if child else None
-        balance = RewardService.balance(membership.id) if child else 0
-        active = [job for job in jobs if job.state == 'open' and job.task and job.membership_id]
-        current = [job for job in active if job.task.due_date is None or job.task.due_date >= today]
-        earlier = [job for job in active if job.task.due_date is not None and job.task.due_date < today]
-        board_enabled = membership.family.rewards_board_enabled
-        celebration, week_start, week_end = [], None, None
-        if view == 'home':
-            board_enabled, celebration, week_start, week_end = RewardService.celebration_data(membership)
-        personal = next((card for card in celebration if card['is_you']), None)
-        active_rewards = [reward for reward in rewards if reward.available]
+        jobs = family_query(RewardJob).filter_by(membership_id=membership.id).order_by(RewardJob.id.desc()).all()
+        active = [job for job in jobs if job.state == 'open' and job.task]
+        pending = family_query(RewardRequest).filter_by(membership_id=membership.id, state='pending').all()
+        goals = RewardService.goals(membership.id)
         return dict(
-            board_enabled=board_enabled, celebration=celebration, personal=personal,
-            board_week_start=week_start, board_week_end=week_end,
-            featured_rewards=active_rewards[:3],
-            available_reward_count=len(active_rewards),
-            child_view=child, view=view, jobs=current, earlier_jobs=earlier,
-            submitted_jobs=[job for job in jobs if job.state == 'submitted' and job.task and job.membership_id],
-            job_history=[job for job in jobs if job.state in ('approved', 'closed')],
-            requests=requests, pending=[row for row in requests if row.state == 'pending' and row.membership_id],
-            rewards=rewards, balance=balance, goal=goal.reward if goal and goal.reward and goal.reward.available else None,
-            entries=family_query(RewardPointEntry).order_by(RewardPointEntry.id.desc()).limit(100).all(),
-            members=[member for member in CalendarService.members() if member.user.is_managed_child] if not child else [],
-            lists=family_query(TaskList).filter_by(visibility='shared').order_by(TaskList.title).all() if not child else [],
-            request_keys={row.id: str(uuid4()) for row in rewards},
-            icons=REWARD_ICONS, reward_service=RewardService, today=today,
+            today=today,
+            jobs=[job for job in active if job.task.due_date is None or job.task.due_date >= today],
+            earlier_jobs=[job for job in active if job.task.due_date is not None and job.task.due_date < today],
+            submitted_jobs=[job for job in jobs if job.state == 'submitted' and job.task],
+            balance=RewardService.balance(membership.id), goals=goals, goal=goals[0] if goals else None,
+            pending=pending,
         )
+
+    @staticmethod
+    def common(membership):
+        adult = not current_user.is_managed_child
+        participant = RewardService.is_participant(membership)
+        context = dict(
+            viewer=membership, viewer_id=membership.id, is_adult=adult, child_view=not adult,
+            is_participant=participant, today=datetime.now(LONDON).date(), icons=REWARD_ICONS,
+            categories=REWARD_CATEGORIES, recognition_categories=RECOGNITION_CATEGORIES,
+            limit_periods=LIMIT_PERIODS, reward_service=RewardService, approvals_count=0,
+        )
+        if adult:
+            jobs = family_query(RewardJob).filter(
+                RewardJob.state == 'submitted', RewardJob.membership_id.isnot(None),
+                RewardJob.membership_id != membership.id,
+            ).count()
+            requests = family_query(RewardRequest).filter(
+                RewardRequest.state == 'pending', RewardRequest.membership_id.isnot(None),
+                RewardRequest.membership_id != membership.id,
+            ).count()
+            owed = family_query(RewardRequest).filter(
+                RewardRequest.state == 'approved', RewardRequest.fulfilled_at.is_(None),
+            ).count()
+            context['approvals_count'] = jobs + requests + owed
+        if participant:
+            context.update(RewardService.my_chores(membership))
+            context['request_keys'] = {}
+        return context
+
+    @staticmethod
+    def overview_data():
+        from services.household.reward_activity_service import RewardActivityService
+        membership = CalendarService.require_access()
+        RewardService.refresh()
+        context = RewardService.common(membership)
+        board_enabled, celebration, week_start, week_end = RewardService.celebration_data(membership)
+        people = RewardService.participants() if context['is_adult'] else []
+        summaries = [RewardActivityService.member_summary(member, recent=0) for member in people]
+        rewards = family_query(Reward).filter_by(available=True).order_by(Reward.points_cost, Reward.id).all()
+        context.update(
+            board_enabled=board_enabled, celebration=celebration, board_week_start=week_start,
+            board_week_end=week_end, people=people, summaries=summaries,
+            personal=RewardActivityService.member_summary(membership) if context['is_participant'] else None,
+            featured_rewards=rewards[:3], available_reward_count=len(rewards),
+            recent=RewardActivityService.timeline(limit=8),
+        )
+        return context
+
+    @staticmethod
+    def chores_data():
+        membership = CalendarService.require_access()
+        RewardService.refresh()
+        context = RewardService.common(membership)
+        if context['is_adult']:
+            today = context['today']
+            jobs = family_query(RewardJob).filter(
+                RewardJob.state.in_(('open', 'submitted')), RewardJob.membership_id.isnot(None),
+                RewardJob.task_id.isnot(None),
+            ).order_by(RewardJob.id.desc()).all()
+            open_jobs = [job for job in jobs if job.state == 'open' and job.membership_id != membership.id]
+            context.update(
+                household_jobs=[job for job in open_jobs if job.task.due_date is None or job.task.due_date >= today],
+                household_earlier=[job for job in open_jobs if job.task.due_date is not None and job.task.due_date < today],
+                household_waiting=[job for job in jobs if job.state == 'submitted'],
+                people=RewardService.participants(),
+                lists=family_query(TaskList).filter_by(visibility='shared').order_by(TaskList.title).all(),
+                templates=family_query(RewardChoreTemplate).order_by(RewardChoreTemplate.title).all(),
+            )
+        history = family_query(RewardJob).filter(RewardJob.state.in_(('approved', 'closed'))).order_by(
+            RewardJob.reviewed_at.desc().nullslast(), RewardJob.id.desc(),
+        ).limit(30).all()
+        context['job_history'] = history
+        return context
+
+    @staticmethod
+    def shop_data(category=None):
+        membership = CalendarService.require_access()
+        RewardService.refresh()
+        context = RewardService.common(membership)
+        if category and category not in REWARD_CATEGORIES:
+            raise ValueError('Choose a reward category from the list.')
+        rewards = family_query(Reward).order_by(Reward.points_cost, Reward.id).all()
+        if not context['is_adult']:
+            rewards = [row for row in rewards if row.available]
+        counts = {}
+        for row in rewards:
+            counts[row.category] = counts.get(row.category, 0) + 1
+        if category:
+            rewards = [row for row in rewards if row.category == category]
+        status = {}
+        if context['is_participant']:
+            balance = context['balance']
+            status = {row.id: RewardService.eligibility(row, membership.id, balance) for row in rewards}
+            context['request_keys'] = {row.id: str(uuid4()) for row in rewards}
+            context['my_requests'] = family_query(RewardRequest).filter_by(membership_id=membership.id).order_by(
+                RewardRequest.id.desc(),
+            ).limit(20).all()
+        context.update(
+            rewards=rewards, category=category, category_counts=counts, status=status,
+            goal_ids={row.id for row in context.get('goals', [])}, max_goals=MAX_GOALS,
+        )
+        return context
+
+    @staticmethod
+    def approvals_data():
+        membership = RewardService.require_adult()
+        RewardService.refresh()
+        context = RewardService.common(membership)
+        jobs = family_query(RewardJob).filter(
+            RewardJob.state == 'submitted', RewardJob.membership_id.isnot(None), RewardJob.task_id.isnot(None),
+        ).order_by(RewardJob.submitted_at, RewardJob.id).all()
+        requests = family_query(RewardRequest).filter(
+            RewardRequest.state == 'pending', RewardRequest.membership_id.isnot(None),
+        ).order_by(RewardRequest.created_at, RewardRequest.id).all()
+        owed = family_query(RewardRequest).filter(
+            RewardRequest.state == 'approved', RewardRequest.fulfilled_at.is_(None),
+        ).order_by(RewardRequest.reviewed_at, RewardRequest.id).all()
+        context.update(submitted_jobs=jobs, pending=requests, owed=owed)
+        return context
+
+    @staticmethod
+    def settings_data():
+        from services.household.reward_achievement_service import (
+            ACHIEVEMENT_ICONS, ACHIEVEMENT_METRICS, RewardAchievementService,
+        )
+        membership = RewardService.require_adult()
+        RewardService.refresh()
+        context = RewardService.common(membership)
+        templates = family_query(RewardChoreTemplate).order_by(RewardChoreTemplate.title).all()
+        names = {row.title.casefold() for row in templates}
+        adults = [
+            member for member in CalendarService.members()
+            if not member.user.is_managed_child and ModuleAccessService.can_access(
+                member.user, 'household', member.family_id,
+            )
+        ]
+        context.update(
+            rewards=family_query(Reward).order_by(Reward.points_cost, Reward.id).all(),
+            templates=templates,
+            starters=[row for row in STARTER_CHORES if row[0].casefold() not in names],
+            achievements=RewardAchievementService.all(),
+            achievement_icons=ACHIEVEMENT_ICONS, achievement_metrics=ACHIEVEMENT_METRICS,
+            adults=adults, board_enabled=membership.family.rewards_board_enabled,
+            can_manage_people=current_user.is_household_owner,
+        )
+        return context
+
+    # ----- Lifecycle -----
 
     @staticmethod
     def detach_tasks(tasks):
@@ -475,20 +956,14 @@ class RewardService:
         for reward_request in family_query(RewardRequest, include_private=True).filter_by(
             membership_id=membership.id, state='pending',
         ).all():
-            reward_request.state = 'declined'
-            reward_request.review_note = 'The member left the household.'
-            reward_request.reviewed_at = _now()
-            db.session.add(RewardPointEntry(
-                family_id=membership.family_id, membership_id=membership.id,
-                request_id=reward_request.id, kind='returned', points=reward_request.points_cost,
-                description=reward_request.title, created_at=_now(),
-            ))
+            RewardService._decline(reward_request, 'The member left the household.', None)
         db.session.flush()
         for model, keys in (
             (RewardJob, ('membership_id', 'reviewer_membership_id')),
-            (RewardRequest, ('membership_id', 'reviewer_membership_id')),
+            (RewardRequest, ('membership_id', 'reviewer_membership_id', 'fulfilled_by_membership_id')),
             (RewardPointEntry, ('membership_id', 'actor_membership_id')),
             (RewardGoal, ('membership_id',)),
+            (RewardAchievementUnlock, ('membership_id',)),
         ):
             for key in keys:
                 family_query(model, include_private=True).filter(getattr(model, key) == membership.id).update(

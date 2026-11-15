@@ -51,8 +51,10 @@ MODULE = {
             'tasks', 'create_task_list', 'edit_task_list', 'delete_task_list',
             'create_task', 'task', 'complete_task', 'delete_task',
         )},
-        'household.rewards': 'Rewards',
-        'household.reward_action': 'Rewards',
+        **{f'household.{endpoint}': 'Rewards' for endpoint in (
+            'rewards', 'reward_action', 'reward_chores', 'reward_shop', 'reward_approvals',
+            'reward_activity', 'reward_member', 'reward_settings',
+        )},
     },
     'status': 'available',
     'requires_household': True,

@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% block title %}{% block reward_title %}Rewards{% endblock %} &middot; {{ 'My rewards' if child_view else 'Household rewards' }}{% endblock %}
+{% block extra_css %}
+<style>
+.rewards-page .btn { min-height: 44px; }
+.rewards-page .reward-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; }
+.rewards-page .reward-icon { font-size: 2rem; }
+.rewards-page .reward-job { height: 100%; }
+.rewards-page progress { width: 100%; height: 1.25rem; accent-color: var(--brand); }
+.reward-tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1.5rem; }
+.reward-tabs a { display: inline-flex; align-items: center; gap: .4rem; min-height: 48px; padding: .6rem .9rem; color: var(--text-secondary); text-decoration: none; border-bottom: 3px solid transparent; }
+.reward-tabs a[aria-current] { color: var(--brand); border-bottom-color: var(--brand); font-weight: 650; }
+.reward-hero { padding: clamp(1.25rem, 3vw, 2rem); background: var(--brand-soft); border: 1px solid var(--border-color); border-radius: var(--radius-lg); }
+.reward-score { font-size: clamp(2.25rem, 5vw, 3.25rem); line-height: 1.1; font-weight: 750; color: var(--brand); }
+.reward-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: .75rem; }
+.reward-stat { padding: .9rem 1rem; border-radius: var(--radius-md); background: var(--bg-surface); border: 1px solid var(--border-color); }
+.reward-stat strong { display: block; font-size: 1.4rem; line-height: 1.2; }
+.reward-stat span { font-size: .8rem; color: var(--text-secondary); }
+.reward-person { height: 100%; }
+.reward-avatar { width: 3rem; height: 3rem; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem; flex-shrink: 0; }
+.reward-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: .65rem; }
+.reward-badge { padding: .85rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.reward-badge.earned { background: var(--brand-soft); border-color: var(--brand-border); }
+.reward-badge .bi { color: var(--brand); font-size: 1.4rem; }
+.reward-badge strong, .reward-badge small { display: block; overflow-wrap: anywhere; }
+.reward-badge small { color: var(--text-secondary); }
+.reward-timeline { list-style: none; padding: 0; margin: 0; }
+.reward-timeline li { display: flex; gap: .85rem; padding: .85rem 1rem; border-bottom: 1px solid var(--border-subtle); }
+.reward-timeline li:last-child { border-bottom: 0; }
+.reward-timeline .event-icon { width: 2.25rem; height: 2.25rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--brand-soft); color: var(--brand); flex-shrink: 0; }
+.reward-timeline .event-body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.reward-timeline .event-points { text-align: end; white-space: nowrap; font-weight: 700; }
+.reward-timeline .event-points small { display: block; font-weight: 400; color: var(--text-secondary); }
+.points-up { color: var(--clr-success); }
+.points-down { color: var(--clr-danger); }
+.reward-leaderboard { width: 100%; table-layout: fixed; margin: 0; }
+.reward-leaderboard th:first-child { width: 4rem; }
+.reward-leaderboard th:last-child { width: 5.5rem; }
+.reward-leaderboard td, .reward-leaderboard th { padding: 1rem .75rem; vertical-align: middle; }
+.reward-leaderboard .leader-name { font-weight: 650; overflow-wrap: anywhere; }
+.reward-leaderboard .leader-place { font-size: 1.25rem; font-weight: 750; color: var(--brand); }
+.reward-leaderboard .leader-points { font-size: 1.5rem; font-weight: 750; }
+.reward-leaderboard tr.is-you > * { background: var(--brand-soft); }
+.reward-leaderboard details { font-size: .8rem; margin-top: .5rem; }
+.reward-leaderboard .badge { white-space: normal; }
+.reward-chart { position: relative; height: 260px; }
+.reward-review-item { display: flex; gap: .75rem; align-items: flex-start; }
+.reward-review-item > .form-check-input { width: 1.4rem; height: 1.4rem; margin-top: .2rem; flex-shrink: 0; }
+.reward-chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="rewards-page">
+{% block reward_header %}{% endblock %}
+{% set tabs = [
+    ('household.rewards', 'Overview', 'stars', {}),
+    ('household.reward_chores', 'My chores' if child_view else 'Chores', 'check2-circle', {}),
+    ('household.reward_shop', 'My rewards' if child_view else 'Reward shop', 'gift', {}),
+    ('household.reward_activity', 'Activity', 'clock-history', {}),
+] %}
+{% if is_participant %}{% set tabs = tabs + [('household.reward_member', 'My progress', 'person-badge', {'membership_id': viewer_id})] %}{% endif %}
+{% if is_adult %}{% set tabs = tabs + [('household.reward_approvals', 'Approvals', 'inbox', {}), ('household.reward_settings', 'Settings', 'gear', {})] %}{% endif %}
+<nav class="reward-tabs" aria-label="Rewards pages">
+    {% for endpoint, label, icon, args in tabs %}
+    {% set current = active_page == endpoint and (endpoint != 'household.reward_member' or profile.member.id == viewer_id) %}
+    <a href="{{ url_for(endpoint, **args) }}"{% if current %} aria-current="page"{% endif %}><i class="bi bi-{{ icon }}" aria-hidden="true"></i> {{ label }}{% if endpoint == 'household.reward_approvals' and approvals_count %} <span class="badge bg-primary">{{ approvals_count }}<span class="visually-hidden"> waiting</span></span>{% endif %}</a>
+    {% endfor %}
+</nav>
+{% block reward_content %}{% endblock %}
+</div>
+{% endblock %}

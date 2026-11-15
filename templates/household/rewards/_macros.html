@@ -1,0 +1,177 @@
+{% macro timeline(events, show_member=True, empty='Nothing here yet. Approved chores, rewards and bonuses will appear here.') -%}
+{% if events %}
+<ul class="reward-timeline">
+{% for event in events %}
+<li>
+    <span class="event-icon"><i class="bi bi-{{ event.icon }}" aria-hidden="true"></i></span>
+    <div class="event-body">
+        <strong>{{ event.label }}</strong>{% if event.title %}: {{ event.title }}{% endif %}
+        <div class="small text-muted">
+            {% if show_member %}{% if event.member %}<a href="{{ url_for('household.reward_member', membership_id=event.member_id) }}">{{ event.member.user.name }}</a>{% else %}Former member{% endif %} &middot; {% endif %}{{ event.day.strftime('%a %d %b %Y') }}{% if event.detail %} &middot; {{ event.detail }}{% endif %}
+        </div>
+    </div>
+    {% if event.points %}
+    <div class="event-points {{ 'points-up' if event.points > 0 else 'points-down' }}">{{ '+' if event.points > 0 else '&minus;'|safe }}{{ event.points|abs }}{% if event.balance is not none %}<small>Balance {{ event.balance }}</small>{% endif %}</div>
+    {% endif %}
+</li>
+{% endfor %}
+</ul>
+{% else %}<p class="p-3 mb-0 text-muted">{{ empty }}</p>{% endif %}
+{%- endmacro %}
+
+{% macro bonus_form(people, member=none, next=none, prefix='bonus') -%}
+{% set values = submitted if failed_action|default('') == 'award' else {} %}
+<form method="POST" action="{{ url_for('household.reward_action', action='award') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <div class="row g-2">
+        {% if member %}<input type="hidden" name="membership_id" value="{{ member.id }}">
+        {% else %}
+        <div class="col-sm-6"><label class="form-label" for="{{ prefix }}_member">Who</label>
+            <select class="form-select" id="{{ prefix }}_member" name="membership_id" required>{% for person in people if person.id != viewer_id %}<option value="{{ person.id }}"{% if values.get('membership_id')|string == person.id|string %} selected{% endif %}>{{ person.user.name }}</option>{% else %}<option value="">No one else earns points yet</option>{% endfor %}</select></div>
+        {% endif %}
+        <div class="col-sm-6"><label class="form-label" for="{{ prefix }}_kind">Type</label>
+            <select class="form-select" id="{{ prefix }}_kind" name="kind"><option value="bonus"{% if values.get('kind', 'bonus') == 'bonus' %} selected{% endif %}>Bonus &mdash; add points</option><option value="deduction"{% if values.get('kind') == 'deduction' %} selected{% endif %}>Deduction &mdash; remove points</option></select></div>
+        <div class="col-sm-6"><label class="form-label" for="{{ prefix }}_points">Points</label>
+            <input class="form-control" id="{{ prefix }}_points" name="points" type="number" min="1" max="1000" value="{{ values.get('points', '10') }}" required></div>
+        <div class="col-sm-6"><label class="form-label" for="{{ prefix }}_category">Category</label>
+            <select class="form-select" id="{{ prefix }}_category" name="category">{% for value, label in recognition_categories.items() %}<option value="{{ value }}"{% if values.get('category', 'school') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-12"><label class="form-label" for="{{ prefix }}_reason">What was it for?</label>
+            <input class="form-control" id="{{ prefix }}_reason" name="reason" maxlength="256" placeholder="e.g. Star of the week at school" value="{{ values.get('reason', '') }}" required></div>
+    </div>
+    <p class="form-text">Use bonuses to celebrate one-off moments like a school award or a great match. Deductions can't take a balance below zero.</p>
+    <button class="btn btn-primary" type="submit"><i class="bi bi-award" aria-hidden="true"></i> Record points</button>
+</form>
+{%- endmacro %}
+
+{% macro goal_list(goals, balance, removable=False, member_id=none) -%}
+{% for item in goals %}
+{% set goal = item.reward if item.reward is defined else item %}
+<div class="mb-3">
+    <div class="d-flex justify-content-between gap-2 flex-wrap"><strong class="text-break"><i class="bi bi-{{ goal.icon }}" aria-hidden="true"></i> {{ goal.title }}</strong><span class="text-muted small">{{ [balance, goal.points_cost]|min }} / {{ goal.points_cost }} points</span></div>
+    <progress value="{{ [balance, goal.points_cost]|min }}" max="{{ goal.points_cost }}" aria-label="Points saved for {{ goal.title }}"></progress>
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+        <span class="small">{{ (goal.points_cost - balance) ~ ' more points to go' if balance < goal.points_cost else 'Goal reached!' }}</span>
+        {% if removable %}<form method="POST" action="{{ url_for('household.reward_action', action='goal') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="reward_id" value="{{ goal.id }}"><input type="hidden" name="action" value="remove">{% if member_id %}<input type="hidden" name="membership_id" value="{{ member_id }}"><input type="hidden" name="next" value="{{ request.path }}">{% endif %}<button class="btn btn-sm btn-link" type="submit">Remove goal</button></form>{% endif %}
+    </div>
+</div>
+{% endfor %}
+{%- endmacro %}
+
+{% macro badges(cards) -%}
+<div class="reward-badges">
+{% for card in cards %}
+<div class="reward-badge{{ ' earned' if card.unlocked_at }}">
+    <i class="bi bi-{{ card.icon }}" aria-hidden="true"></i>
+    <strong>{{ card.title }}</strong>
+    {% if card.description %}<small>{{ card.description }}</small>{% endif %}
+    {% if card.unlocked_at %}<span class="small">Unlocked {{ card.unlocked_at.strftime('%d %b %Y') }}</span>
+    {% else %}<progress value="{{ card.progress }}" max="{{ card.threshold }}" aria-label="{{ card.title }} progress"></progress><span class="small">{{ card.progress }} of {{ card.threshold }}</span>{% endif %}
+    {% if card.bonus %}<span class="badge bg-primary mt-1">+{{ card.bonus }} bonus points</span>{% endif %}
+</div>
+{% else %}<p class="text-muted">No achievements set up yet.</p>{% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro person_card(summary) -%}
+<article class="card reward-person"><div class="card-body">
+    <div class="d-flex gap-3 align-items-center mb-3">
+        <span class="reward-avatar" aria-hidden="true">{{ summary.name[:1]|upper }}</span>
+        <div class="min-w-0"><h3 class="h5 mb-0 text-break">{{ summary.name }}</h3><span class="small text-muted">{{ 'Child' if summary.member.user.is_managed_child else 'Adult' }}{% if summary.streak %} &middot; <i class="bi bi-fire text-warning" aria-hidden="true"></i> {{ summary.streak }}-day streak{% endif %}</span></div>
+    </div>
+    <div class="reward-stats mb-3">
+        <div class="reward-stat"><strong>{{ summary.balance }}</strong><span>points to spend</span></div>
+        <div class="reward-stat"><strong>{{ summary.week }}</strong><span>earned this week</span></div>
+    </div>
+    {% if summary.goals %}{% set first = summary.goals[0] %}<p class="small mb-1 text-break">Saving for {{ first.reward.title }}{% if summary.goals|length > 1 %} and {{ summary.goals|length - 1 }} more{% endif %}</p><progress value="{{ first.progress }}" max="{{ first.reward.points_cost }}" aria-label="Progress to {{ first.reward.title }}"></progress>{% endif %}
+    <p class="small mt-2 mb-3">{% if summary.waiting_chores %}{{ summary.waiting_chores }} waiting for approval &middot; {% endif %}{{ summary.open_chores }} chore{{ '' if summary.open_chores == 1 else 's' }} to do{% if summary.owed %} &middot; {{ summary.owed|length }} reward{{ '' if summary.owed|length == 1 else 's' }} to hand over{% endif %}</p>
+    <a class="btn btn-outline-primary w-100" href="{{ url_for('household.reward_member', membership_id=summary.member.id) }}">View profile</a>
+</div></article>
+{%- endmacro %}
+
+{% macro reward_form(reward=none) -%}
+{% set key = reward.id if reward else 'new' %}
+{% set values = submitted if failed_action|default('') == 'save-reward' and submitted.get('reward_id', '')|string == (reward.id|string if reward else '') else {} %}
+<form method="POST" action="{{ url_for('household.reward_action', action='save-reward') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if reward %}<input type="hidden" name="reward_id" value="{{ reward.id }}">{% endif %}
+    <div class="row g-2">
+        <div class="col-md-8"><label class="form-label" for="reward_title_{{ key }}">Reward name</label>
+            <input class="form-control" id="reward_title_{{ key }}" name="title" value="{{ values.get('title', reward.title if reward else '') }}" maxlength="128" required></div>
+        <div class="col-md-4"><label class="form-label" for="reward_cost_{{ key }}">Points needed</label>
+            <input class="form-control" id="reward_cost_{{ key }}" type="number" name="points_cost" min="1" max="10000" value="{{ values.get('points_cost', reward.points_cost if reward else '') }}" required></div>
+        <div class="col-12"><label class="form-label" for="reward_desc_{{ key }}">Description</label>
+            <textarea class="form-control" id="reward_desc_{{ key }}" name="description" maxlength="1000" rows="2">{{ values.get('description', reward.description if reward else '') }}</textarea></div>
+        <div class="col-md-4"><label class="form-label" for="reward_category_{{ key }}">Category</label>
+            <select class="form-select" id="reward_category_{{ key }}" name="category">{% for value, label in categories.items() %}<option value="{{ value }}"{% if values.get('category', reward.category if reward else 'treat') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label" for="reward_icon_{{ key }}">Icon</label>
+            <select class="form-select" id="reward_icon_{{ key }}" name="icon">{% for value, label in icons.items() %}<option value="{{ value }}"{% if values.get('icon', reward.icon if reward else 'gift') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label" for="reward_available_{{ key }}">Availability</label>
+            {% set available = values.get('available', 'yes' if not reward or reward.available else 'no') %}
+            <select class="form-select" id="reward_available_{{ key }}" name="available"><option value="yes"{% if available == 'yes' %} selected{% endif %}>Available</option><option value="no"{% if available == 'no' %} selected{% endif %}>Taking a break</option></select></div>
+    </div>
+    <details class="mt-3"{% if reward and (reward.stock is not none or reward.cooldown_days or reward.member_limit) %} open{% endif %}>
+        <summary>Limits (optional)</summary>
+        <p class="form-text">Leave blank for no limit. Stock goes down with each request and comes back if a request is declined.</p>
+        <div class="row g-2">
+            <div class="col-md-3"><label class="form-label" for="reward_stock_{{ key }}">In stock</label>
+                <input class="form-control" id="reward_stock_{{ key }}" type="number" name="stock" min="0" max="1000" value="{{ values.get('stock', reward.stock if reward and reward.stock is not none else '') }}" placeholder="Unlimited"></div>
+            <div class="col-md-3"><label class="form-label" for="reward_cooldown_{{ key }}">Days between requests</label>
+                <input class="form-control" id="reward_cooldown_{{ key }}" type="number" name="cooldown_days" min="1" max="365" value="{{ values.get('cooldown_days', reward.cooldown_days if reward and reward.cooldown_days else '') }}" placeholder="None"></div>
+            <div class="col-md-3"><label class="form-label" for="reward_limit_{{ key }}">Times per person</label>
+                <input class="form-control" id="reward_limit_{{ key }}" type="number" name="member_limit" min="1" max="100" value="{{ values.get('member_limit', reward.member_limit if reward and reward.member_limit else '') }}" placeholder="No limit"></div>
+            <div class="col-md-3"><label class="form-label" for="reward_period_{{ key }}">Limit resets</label>
+                {% set period = values.get('limit_period', reward.limit_period if reward and reward.limit_period else 'week') %}
+                <select class="form-select" id="reward_period_{{ key }}" name="limit_period">{% for value, label in limit_periods.items() %}<option value="{{ value }}"{% if period == value %} selected{% endif %}>{{ label|capitalize }}</option>{% endfor %}</select></div>
+        </div>
+    </details>
+    <button class="btn btn-primary mt-3" type="submit">Save reward</button>
+</form>
+{%- endmacro %}
+
+{% macro reward_rules(reward) -%}
+{% set rules = [] %}
+{% if reward.stock is not none %}{% set rules = rules + [(reward.stock ~ ' left') if reward.stock else 'Out of stock'] %}{% endif %}
+{% if reward.cooldown_days %}{% set rules = rules + ['Once every ' ~ (reward.cooldown_days ~ ' days' if reward.cooldown_days > 1 else 'day')] %}{% endif %}
+{% if reward.member_limit %}{% set rules = rules + [reward.member_limit ~ '× ' ~ limit_periods[reward.limit_period] ~ ' each'] %}{% endif %}
+{% if rules %}<p class="small text-muted mb-2"><i class="bi bi-info-circle" aria-hidden="true"></i> {{ rules|join(' · ') }}</p>{% endif %}
+{%- endmacro %}
+
+{% macro chart_script(canvas_id, chart) -%}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+<script>
+(function () {
+    const canvas = document.getElementById({{ canvas_id|tojson }});
+    if (!canvas || typeof Chart === 'undefined') return;
+    const data = {{ chart|tojson }};
+    const styles = getComputedStyle(document.documentElement);
+    const colour = (name, fallback) => (styles.getPropertyValue(name) || fallback).trim();
+    const text = colour('--text-secondary', '#53665e');
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [
+                { label: 'Earned', data: data.earned, backgroundColor: colour('--brand', '#176653'), borderRadius: 4 },
+                { label: 'Spent or deducted', data: data.spent, backgroundColor: colour('--clr-warning', '#895b15'), borderRadius: 4 },
+            ],
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: text } } },
+            scales: {
+                x: { ticks: { color: text }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { color: text, precision: 0 }, grid: { color: colour('--border-subtle', '#edf1ec') } },
+            },
+        },
+    });
+})();
+</script>
+{%- endmacro %}
+
+{% macro chart_table(chart) -%}
+<details class="mt-2"><summary class="small">Show chart data as a table</summary>
+<table class="table table-sm mt-2"><caption class="visually-hidden">Points earned and spent each week</caption><thead><tr><th scope="col">Week starting</th><th scope="col" class="text-end">Earned</th><th scope="col" class="text-end">Spent or deducted</th></tr></thead>
+<tbody>{% for label in chart.labels %}<tr><th scope="row">{{ label }}</th><td class="text-end">{{ chart.earned[loop.index0] }}</td><td class="text-end">{{ chart.spent[loop.index0] }}</td></tr>{% endfor %}</tbody></table>
+</details>
+{%- endmacro %}

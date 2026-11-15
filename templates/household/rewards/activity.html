@@ -1,0 +1,48 @@
+{% extends 'household/rewards/base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% import 'household/rewards/_macros.html' as ui with context %}
+{% block reward_title %}Activity{% endblock %}
+{% block reward_header %}
+{{ page_header('My activity' if child_view else 'Activity', 'Every point you have earned and spent, newest first.' if child_view else "Everything that has happened in rewards: chores, requests, bonuses, deductions and achievements, with each person's running balance.", 'Household Hub') }}
+{% endblock %}
+{% block reward_content %}
+<form method="GET" action="{{ url_for('household.reward_activity') }}" class="card mb-4" aria-label="Filter activity"><div class="card-body row g-2 align-items-end">
+    {% if is_adult %}
+    <div class="col-sm-6 col-lg-3"><label class="form-label" for="filter_member">Person</label>
+        <select class="form-select" id="filter_member" name="member"><option value="">Everyone</option>{% for person in people %}<option value="{{ person.id }}"{% if filters.member == person.id %} selected{% endif %}>{{ person.user.name }}</option>{% endfor %}</select></div>
+    {% endif %}
+    <div class="col-sm-6 col-lg-3"><label class="form-label" for="filter_type">Type</label>
+        <select class="form-select" id="filter_type" name="type"><option value="">All activity</option>{% for value, label in activity_types.items() %}<option value="{{ value }}"{% if filters.type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="col-sm-6 col-lg-2"><label class="form-label" for="filter_from">From</label><input class="form-control" type="date" id="filter_from" name="from" value="{{ filters.start.isoformat() if filters.start else '' }}"></div>
+    <div class="col-sm-6 col-lg-2"><label class="form-label" for="filter_to">To</label><input class="form-control" type="date" id="filter_to" name="to" value="{{ filters.end.isoformat() if filters.end else '' }}"></div>
+    <div class="col-lg-2 d-flex gap-2"><button class="btn btn-primary flex-grow-1" type="submit">Filter</button><a class="btn btn-outline-secondary" href="{{ url_for('household.reward_activity') }}" aria-label="Clear filters"><i class="bi bi-x-lg" aria-hidden="true"></i></a></div>
+</div></form>
+
+<section class="reward-stats mb-4" aria-label="Totals for these filters">
+    <div class="reward-stat"><strong class="points-up">+{{ totals.gained }}</strong><span>points gained</span></div>
+    <div class="reward-stat"><strong class="points-down">&minus;{{ totals.spent }}</strong><span>points spent or removed</span></div>
+    <div class="reward-stat"><strong>{{ '+' if totals.net > 0 }}{{ totals.net }}</strong><span>net change</span></div>
+    <div class="reward-stat"><strong>{{ total }}</strong><span>event{{ '' if total == 1 else 's' }}</span></div>
+</section>
+
+<section class="card mb-4" aria-labelledby="chart-title"><div class="card-body">
+    <h2 class="h5" id="chart-title">Last 12 weeks</h2>
+    <div class="reward-chart"><canvas id="activity-chart" role="img" aria-label="Points earned and spent each week for the last 12 weeks"></canvas></div>
+    {{ ui.chart_table(chart) }}
+</div></section>
+
+<section class="card mb-4" aria-labelledby="timeline-title">
+    <h2 class="h5 card-header" id="timeline-title">Timeline</h2>
+    {{ ui.timeline(events, show_member=is_adult and not filters.member, empty='No activity matches these filters.') }}
+</section>
+
+{% if pages > 1 %}
+{% set query = dict(member=filters.member or '', type=filters.type or '', **{'from': filters.start.isoformat() if filters.start else '', 'to': filters.end.isoformat() if filters.end else ''}) %}
+<nav aria-label="Activity pages"><ul class="pagination flex-wrap">
+    <li class="page-item{{ ' disabled' if page == 1 }}"><a class="page-link" href="{{ url_for('household.reward_activity', page=page - 1, **query) }}">Newer</a></li>
+    {% for number in range(1, pages + 1) %}<li class="page-item{{ ' active' if number == page }}"><a class="page-link" href="{{ url_for('household.reward_activity', page=number, **query) }}"{% if number == page %} aria-current="page"{% endif %}>{{ number }}</a></li>{% endfor %}
+    <li class="page-item{{ ' disabled' if page == pages }}"><a class="page-link" href="{{ url_for('household.reward_activity', page=page + 1, **query) }}">Older</a></li>
+</ul></nav>
+{% endif %}
+{% endblock %}
+{% block extra_js %}{{ super() }}{{ ui.chart_script('activity-chart', chart) }}{% endblock %}

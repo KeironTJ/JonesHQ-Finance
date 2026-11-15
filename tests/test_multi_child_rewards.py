@@ -65,10 +65,10 @@ def test_each_child_claims_own_turn_without_reserving_siblings_turn(app, user, p
     child, sibling = children
     first, second = tasks
     html = client_for(app, user).get(f'/household/tasks/{first.id}').get_data(as_text=True)
-    assert f'Waiting for {child.name} to claim this optional job.' in html
+    assert f'Waiting for {child.name} to claim this optional chore.' in html
     client = client_for(app, child)
-    html = client.get('/household/rewards?view=jobs').get_data(as_text=True)
-    assert 'Claim this job' in html
+    html = client.get('/household/rewards/chores').get_data(as_text=True)
+    assert 'Claim this chore' in html
     assert client.post('/household/rewards/actions/submit-job', data={'job_id': first.reward_job.id}).status_code == 200
     assert client.post(f'/household/tasks/{first.id}/completion', data={'action': 'complete'}).status_code == 302
     assert not first.completed and first.claimed_at is None
@@ -98,8 +98,8 @@ def test_future_claims_and_invalid_participants_cannot_create_or_award_work(app,
     clock[0] -= timedelta(days=7)
     assert create_jobs(app, user, [child], mode='claim').status_code == 302
     task = HouseholdTask.query.one()
-    html = client_for(app, child).get('/household/rewards?view=jobs').get_data(as_text=True)
-    assert 'Available from Mon 09 Nov' in html and 'Claim this job' not in html
+    html = client_for(app, child).get('/household/rewards/chores').get_data(as_text=True)
+    assert 'Available from Mon 09 Nov' in html and 'Claim this chore' not in html
     assert client_for(app, child).post('/household/rewards/actions/claim-job', data={'job_id': task.reward_job.id}).status_code == 200
     assert task.claimed_at is None
     count = HouseholdTask.query.count()
@@ -136,7 +136,7 @@ def test_duplicate_selected_children_get_only_one_turn_and_table_is_ranked(app, 
     assert HouseholdTask.query.count() == 1
     html = client_for(app, user).get('/household/rewards').get_data(as_text=True)
     assert 'table reward-leaderboard' in html and '<th scope="col">Place</th>' in html
-    assert html.index('Weekly household leaderboard') < html.index('Little efforts. Proud moments.')
+    assert html.index('Weekly household leaderboard') < html.index('Something to look forward to')
 
 
 def test_root_schedule_page_has_no_edit_form_script_and_stops_only_its_child(app, user, people, clock):

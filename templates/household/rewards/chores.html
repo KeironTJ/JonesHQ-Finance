@@ -1,0 +1,97 @@
+{% extends 'household/rewards/base.html' %}
+{% from 'shared/_ui.html' import page_header %}
+{% import 'household/rewards/_macros.html' as ui with context %}
+{% block reward_title %}Chores{% endblock %}
+{% block reward_header %}
+{% call page_header('My chores' if child_view else 'Chores', 'Chores are household tasks with points attached. When you finish one, an adult checks it and your points arrive.' if child_view else 'Chores are shared household tasks with points attached. Each person gets their own copy, and an adult approves it before the points arrive.', 'Household Hub') %}
+    {% if is_adult %}<a class="btn btn-primary" href="#add-chore"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a chore</a>{% endif %}
+{% endcall %}
+{% endblock %}
+{% block reward_content %}
+{% if is_participant %}
+<section class="mb-4" aria-labelledby="mine-title">
+    <h2 class="h4" id="mine-title">{{ 'Ready to try' if child_view else 'My chores' }}</h2>
+    <div class="reward-grid">{% for job in jobs %}{% include 'household/_reward_job.html' %}{% else %}<p>No chores to do right now. {{ "Ask an adult to add one when you're ready." if child_view else 'Another adult can add one for you.' }}</p>{% endfor %}</div>
+    {% if earlier_jobs %}
+    <details class="card mt-3"><summary class="card-header">Earlier chores ({{ earlier_jobs|length }}) &mdash; check what still needs doing</summary><div class="card-body">
+        <p class="text-muted">Plans change. {{ 'Ask an adult if these are still needed.' if child_view else 'Close any that are no longer needed.' }}</p>
+        <div class="reward-grid">{% for job in earlier_jobs %}{% include 'household/_reward_job.html' %}{% endfor %}</div>
+    </div></details>
+    {% endif %}
+    <h3 class="h5 mt-4">Waiting for approval</h3>
+    {% for job in submitted_jobs %}<div class="card mb-2"><div class="card-body text-break"><i class="bi bi-hourglass-split" aria-hidden="true"></i> {{ job.title }} &mdash; {{ job.points }} points after approval{% if job.task.period_start %}<div class="small text-muted">Interval: {{ job.task.period_start.strftime('%d %b %Y') }} &ndash; {{ job.task.due_date.strftime('%d %b %Y') }}</div>{% endif %}</div></div>{% else %}<p class="text-muted">Nothing waiting. Finished chores appear here until they're checked.</p>{% endfor %}
+</section>
+{% endif %}
+
+{% if is_adult %}
+<section class="mb-4" aria-labelledby="household-title">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="h4 mb-0" id="household-title">{{ "Everyone else's chores" if is_participant else 'Household chores to do' }}</h2>
+        {% if household_waiting %}<a class="btn btn-outline-primary" href="{{ url_for('household.reward_approvals') }}">{{ household_waiting|length }} waiting for approval</a>{% endif %}
+    </div>
+    <div class="reward-grid">{% for job in household_jobs %}{% include 'household/_reward_job.html' %}{% else %}<p>No chores to do right now. Add one below or pick from your chore library.</p>{% endfor %}</div>
+    {% if household_earlier %}
+    <details class="card mt-3"><summary class="card-header">Earlier chores ({{ household_earlier|length }}) &mdash; reschedule or close</summary><div class="card-body">
+        <p class="text-muted">Reschedule one-off tasks or close chores that are no longer needed. Recurring backlog chores keep their original interval dates.</p>
+        <div class="reward-grid">{% for job in household_earlier %}{% include 'household/_reward_job.html' %}{% endfor %}</div>
+    </div></details>
+    {% endif %}
+</section>
+
+<details class="card mb-4" id="add-chore"{% if failed_action|default('') == 'create-job' or not household_jobs %} open{% endif %}>
+    <summary class="card-header">Add a chore</summary>
+    <div class="card-body">
+    <p>Choose one or more people. Each gets their own task, completion and points &mdash; one person finishing never takes the chore away from another.</p>
+    {% set values = submitted if failed_action|default('') == 'create-job' else {} %}
+    <form method="POST" action="{{ url_for('household.reward_action', action='create-job') }}" id="chore-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if templates %}
+        <label class="form-label" for="chore_template">Start from your chore library (optional)</label>
+        <select class="form-select mb-1" id="chore_template" name="template_id">
+            <option value="">Write a new chore</option>
+            {% for template in templates %}<option value="{{ template.id }}" data-title="{{ template.title }}" data-notes="{{ template.notes }}" data-points="{{ template.points }}"{% if values.get('template_id')|string == template.id|string %} selected{% endif %}>{{ template.title }} ({{ template.points }} points)</option>{% endfor %}
+        </select>
+        <p class="form-text"><a href="{{ url_for('household.reward_settings') }}#library">Manage your chore library</a></p>
+        {% else %}<p class="form-text">Tip: save chores you use often in the <a href="{{ url_for('household.reward_settings') }}#library">chore library</a> to add them in one click.</p>{% endif %}
+        <label class="form-label" for="job_title">Chore name</label><input class="form-control mb-2" id="job_title" name="title" maxlength="256" value="{{ values.get('title', '') }}"{% if not templates %} required{% endif %}>
+        <label class="form-label" for="job_notes">What needs doing?</label><textarea class="form-control mb-2" id="job_notes" name="notes" maxlength="5000">{{ values.get('notes', '') }}</textarea>
+        {% set selected_people = submitted.getlist('assigned_membership_ids') if failed_action|default('') == 'create-job' and submitted.getlist is defined else [] %}
+        <fieldset class="mb-3"><legend class="fs-6">Who does this chore?</legend>
+            <div class="d-flex flex-wrap gap-3">{% for member in people %}<div class="form-check"><input class="form-check-input" type="checkbox" name="assigned_membership_ids" id="job_member_{{ member.id }}" value="{{ member.id }}"{% if member.id|string in selected_people|map('string')|list %} checked{% endif %}><label class="form-check-label" for="job_member_{{ member.id }}">{{ member.user.name }}{% if member.id == viewer_id %} (you){% endif %}</label></div>{% else %}<p class="text-muted">Add a child in Household &amp; people, or let adults earn points in <a href="{{ url_for('household.reward_settings') }}#people">Settings</a>.</p>{% endfor %}</div>
+        </fieldset>
+        <label class="form-label" for="job_assignment">How do they get the chore?</label>
+        <select class="form-select mb-2" id="job_assignment" name="assignment_mode"><option value="assigned"{% if values.get('assignment_mode', 'assigned') == 'assigned' %} selected{% endif %}>Assign automatically to each person</option><option value="claim"{% if values.get('assignment_mode') == 'claim' %} selected{% endif %}>Optional &mdash; each person claims their own turn</option></select>
+        <p class="form-text">For repeats, each person gets a fresh turn every interval. Optional chores must be claimed again each time.</p>
+        <label class="form-label" for="job_points">Points per person, per completion after approval</label><input class="form-control mb-2" id="job_points" name="reward_points" type="number" min="1" max="1000" value="{{ values.get('reward_points', '' if templates else '10') }}"{% if not templates %} required{% endif %}>
+        <label class="form-label" for="job_date">Planned date (optional)</label><input class="form-control mb-2" id="job_date" name="due_date" type="date" min="1900-01-01" max="2100-12-31" value="{{ values.get('due_date', '') }}">
+        {% set task = none %}{% with submitted=values %}{% include 'household/_task_recurrence.html' %}{% endwith %}
+        {% set selected_list = values.get('list_id', lists[0].id if lists else '') %}
+        <label class="form-label mt-2" for="job_list">Shared task list</label><select class="form-select mb-2" id="job_list" name="list_id"><option value=""{% if selected_list|string == '' %} selected{% endif %}>Create a new list</option>{% for item in lists %}<option value="{{ item.id }}"{% if selected_list|string == item.id|string %} selected{% endif %}>{{ item.title }}</option>{% endfor %}</select>
+        <label class="form-label" for="job_list_title">New list name (only when creating a list)</label><input class="form-control mb-3" id="job_list_title" name="list_title" maxlength="128" value="{{ values.get('list_title', 'Chores') }}">
+        <button class="btn btn-primary" type="submit">Add chore</button>
+    </form>
+    </div>
+</details>
+{% endif %}
+
+<details class="card mb-3"><summary class="card-header">Recently finished chores ({{ job_history|length }})</summary><ul class="list-group list-group-flush">
+{% for job in job_history %}<li class="list-group-item text-break">{{ job.title }} &mdash; {{ 'Well done! +' ~ job.points ~ ' points' if job.state == 'approved' else 'Not completed in its interval' if job.task and job.task.expired else 'Closed - no points awarded' }}{% if job.membership_id != viewer_id %} ({{ job.member.user.name if job.member else 'Former member' }}){% endif %}{% if job.task and job.task.period_start %}<p class="small text-muted mb-0">Interval: {{ job.task.period_start.strftime('%d %b %Y') }} &ndash; {{ job.task.due_date.strftime('%d %b %Y') }}</p>{% endif %}{% if job.review_note %}<p class="small mb-0">{{ job.review_note }}</p>{% endif %}</li>{% else %}<li class="list-group-item">Finished chores will appear here.</li>{% endfor %}
+</ul></details>
+{% endblock %}
+{% block extra_js %}{{ super() }}
+{% if is_adult %}
+<script>
+(function () {
+    const select = document.getElementById('chore_template');
+    if (!select) return;
+    select.addEventListener('change', function () {
+        const option = select.selectedOptions[0];
+        if (!option || !option.value) return;
+        document.getElementById('job_title').value = option.dataset.title;
+        document.getElementById('job_notes').value = option.dataset.notes;
+        document.getElementById('job_points').value = option.dataset.points;
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

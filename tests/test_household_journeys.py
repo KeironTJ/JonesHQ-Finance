@@ -301,7 +301,7 @@ def test_my_day_rewards_are_own_and_reuse_approval_and_reservation_rules(app, us
         'job_id': current.id, 'return_to': 'my-day',
     })
     assert response.location == '/household/my-day' and current.state == 'submitted'
-    assert b'1 job waiting for an adult' in client.get(response.location).data
+    assert b'1 chore waiting for an adult' in client.get(response.location).data
     assert RewardPointEntry.query.count() == 0
     client_for(app, user).post('/household/rewards/actions/review-job', data={'job_id': current.id, 'action': 'approve'})
     client = client_for(app, child)

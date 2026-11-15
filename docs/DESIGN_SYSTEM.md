@@ -116,10 +116,14 @@ action. Macro values remain autoescaped.
   Lead with the opt-in weekly leaderboard: a ranked table with places, names,
   weekly points, approved jobs and a highlighted current-user row. Ties share a
   place; lifetime milestones expand within each row. Never show sibling balances,
-  goals or spending history. Existing jobs, shop and history remain tabs.
-  Reward job setup uses labelled child checkboxes and distinguishes automatic
-  assignment from optional claiming. Explain that points are per child, per
-  occurrence. Optional job cards show Claim this job before the completion action.
+  goals or spending history. Chores, Shop, Approvals, Activity, member profiles
+  and Settings are separate pages sharing a sub-navigation (with an approvals
+  count badge). Use "chores" in UI copy. Approvals offer per-item review in
+  `<details>` plus select-all bulk actions; activity uses a filterable timeline
+  with running balances and a Chart.js weekly chart with a table fallback.
+  Chore setup uses labelled checkboxes and distinguishes automatic
+  assignment from optional claiming. Explain that points are per person, per
+  occurrence. Optional chore cards show Claim this chore before the completion action.
 - Recurrence controls are shared by task creation/editing and reward-job setup.
   Use explicit Daily/Weekly labels and explain the missed-interval policy.
   Recurring cards and approval/history rows identify their interval dates;

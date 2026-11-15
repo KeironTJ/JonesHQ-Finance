@@ -134,13 +134,18 @@ links detached. Reward-bearing shared tasks call `RewardService` before commit
 for configuration and completion transitions; ordinary task behaviour is unchanged.
 Recurring tasks are not implemented.
 
-`household/reward_service.py` supplies child jobs/rewards/progress and separate
-adult setup/approvals. Jobs reuse shared tasks; personal lists never participate.
+`household/reward_service.py` owns chores, the reward catalogue (stock,
+cooldowns, per-person limits), requests/fulfilment, bulk review, bonuses/
+deductions, goals, adult participation and the chore library, plus page data.
+`household/reward_achievement_service.py` seeds and evaluates editable
+achievements and streaks; `household/reward_activity_service.py` derives the
+filterable activity timeline, running balances, charts and member profiles from
+existing reward tables. Chores reuse shared tasks; personal lists never participate.
 Household row locking covers task writes and reward transitions so concurrent
 reviews, reopen actions and balance checks serialize. Unique ledger constraints
 enforce once-only earnings, request reservation and refund. Reward requests
 snapshot title/cost and reserve spendable points until approved or declined.
-No Finance records, behaviour ratings, streaks or achievements are involved.
+No Finance records or behaviour ratings are involved.
 Earlier unfinished jobs are grouped separately; explicit close completes the
 task without points, retaining history. Membership/task lifecycle helpers close
 outstanding work and detach attribution; account deletion performs the same

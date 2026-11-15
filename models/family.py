@@ -31,6 +31,9 @@ class Family(db.Model):
     rewards_board_enabled = db.Column(
         db.Boolean, nullable=False, default=False, server_default=db.false(),
     )
+    rewards_defaults_seeded = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false(),
+    )
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Relationships
@@ -71,6 +74,10 @@ class HouseholdMembership(db.Model):
     allowed_modules = db.Column(
         db.JSON, nullable=False, default=lambda: ['finance', 'household'],
         server_default='["finance", "household"]',
+    )
+    # Adults opt in to earning reward points; managed children always take part.
+    rewards_participant = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false(),
     )
     created_at = db.Column(
         db.DateTime,
