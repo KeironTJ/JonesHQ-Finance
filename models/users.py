@@ -4,6 +4,7 @@ Simple user authentication for personal use
 """
 import json
 from extensions import db
+from flask import current_app, has_app_context
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone
@@ -102,7 +103,8 @@ class User(UserMixin, db.Model):
     
     def set_password(self, password):
         """Hash and set the user's password"""
-        self.password_hash = generate_password_hash(password)
+        method = current_app.config.get('PASSWORD_HASH_METHOD', 'scrypt') if has_app_context() else 'scrypt'
+        self.password_hash = generate_password_hash(password, method=method)
     
     def check_password(self, password):
         """Check if provided password matches the hash"""

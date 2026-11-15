@@ -50,6 +50,9 @@ class Config:
     REAUTH_WINDOW_MINUTES = int(os.environ.get('REAUTH_WINDOW_MINUTES', '15'))
     SECURITY_EVENT_RETENTION_DAYS = 365
     
+    # Werkzeug hash method for new passwords; existing hashes keep their own method.
+    PASSWORD_HASH_METHOD = 'scrypt'
+
     # CSRF Protection
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = None  # No time limit for small user base
@@ -202,6 +205,8 @@ class TestingConfig(Config):
     SECRET_KEY = 'test-only-secret-key'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
+    # Deliberately weak and fast: tests need valid hashes, not brute-force resistance.
+    PASSWORD_HASH_METHOD = 'pbkdf2:sha256:1'
     RATELIMIT_STORAGE_URI = 'memory://'
     TRUSTED_PROXY_COUNT = 0
     TRUSTED_PROXY_IPS = ''
