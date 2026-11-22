@@ -763,6 +763,64 @@ def test_recurring_payment_routes_create_and_list_rule(app, family, user):
     assert price_change_record.note == 'Corrected price'
 
 
+def test_recurring_payments_can_be_grouped_by_category(
+    app, family, user, monkeypatch
+):
+    monkeypatch.setattr('utils.db_helpers.get_family_id', lambda: family.id)
+    account, category = _add_bank_target(family)
+
+    for name, amount in (
+        ('Streaming service', '12.00'),
+        ('Music service', '5.00'),
+    ):
+        form = _bank_form(account, category, amount=amount)
+        form['name'] = name
+        RecurringPaymentService.create(form)
+    card = CreditCard(
+        family_id=family.id,
+        card_name='Household Card',
+        annual_apr=Decimal('24.00'),
+        monthly_apr=Decimal('2.00'),
+        credit_limit=Decimal('5000.00'),
+        current_balance=Decimal('0.00'),
+        is_active=True,
+    )
+    db.session.add(card)
+    db.session.flush()
+    RecurringPaymentService.create(MultiDict({
+        'name': 'Uncategorised service',
+        'amount': '3.00',
+        'target_type': 'credit_card',
+        'account_id': '',
+        'credit_card_id': str(card.id),
+        'category_id': '',
+        'vendor_id': '',
+        'frequency': 'monthly',
+        'start_date': date.today().isoformat(),
+        'end_date': '',
+        'horizon_years': '1',
+    }))
+    db.session.commit()
+
+    client = app.test_client()
+    login_client(client, user.id)
+    list_response = client.get('/finance/transactions/recurring-payments')
+    assert list_response.status_code == 200
+    assert b'By category' in list_response.data
+    assert b'at current rates' not in list_response.data
+
+    grouped_response = client.get(
+        '/finance/transactions/recurring-payments?group_by=category'
+    )
+    assert grouped_response.status_code == 200
+    assert b'Entertainment \xe2\x80\x94 Streaming' in grouped_response.data
+    assert b'Uncategorized' in grouped_response.data
+    assert grouped_response.data.count(b'2 payments') == 2
+    assert grouped_response.data.count(b'\xc2\xa3204.00 / year at current rates') == 2
+    assert grouped_response.data.count(b'1 payment') == 2
+    assert grouped_response.data.count(b'\xc2\xa336.00 / year at current rates') == 2
+
+
 def test_credit_card_recurring_payment_removes_only_pending_entries(
     app, family, monkeypatch
 ):

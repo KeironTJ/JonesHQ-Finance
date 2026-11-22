@@ -84,10 +84,53 @@ def recurring_payments():
         recurring_payment.id: RecurringPaymentService.get_summary(recurring_payment)
         for recurring_payment in recurring_payments
     }
+    group_by_category = request.args.get('group_by') == 'category'
+    if group_by_category:
+        groups_by_category = {}
+        for recurring_payment in recurring_payments:
+            category = recurring_payment.category
+            category_id = category.id if category else None
+            if category_id not in groups_by_category:
+                if category:
+                    category_label = ' — '.join(
+                        part for part in (
+                            category.head_budget, category.sub_budget
+                        ) if part
+                    ) or category.name
+                else:
+                    category_label = 'Uncategorized'
+                groups_by_category[category_id] = {
+                    'label': category_label,
+                    'payments': [],
+                    'uncategorized': category is None,
+                }
+            groups_by_category[category_id]['payments'].append(recurring_payment)
+
+        payment_groups = sorted(
+            groups_by_category.values(),
+            key=lambda group: (
+                group['uncategorized'],
+                group['label'].casefold(),
+            ),
+        )
+        for group in payment_groups:
+            group['annual_cost'] = sum(
+                summaries[payment.id]['annual_cost']
+                for payment in group['payments']
+            )
+    else:
+        payment_groups = [{
+            'label': None,
+            'payments': recurring_payments,
+            'annual_cost': 0,
+        }]
+
     return render_template(
         'transactions/recurring_payments.html',
         recurring_payments=recurring_payments,
         summaries=summaries,
+        payment_groups=payment_groups,
+        group_by_category=group_by_category,
         today=date.today(),
     )
 

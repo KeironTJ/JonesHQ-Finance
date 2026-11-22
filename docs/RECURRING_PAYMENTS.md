@@ -43,6 +43,10 @@ and retains paid transaction history.
 Open **Banking → Recurring Payments** to create or manage rules. The
 transaction list also links to recurring payment management.
 
+Use **By category** to group payments by their assigned category and see each
+group's payment count and annualised current run rate. Payments without a
+category appear under **Uncategorized**. **List** returns to the default view.
+
 Use **New** beside the vendor selector to quick-add and select a vendor without
 leaving the recurring payment form or losing entered details.
 

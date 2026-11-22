@@ -91,6 +91,17 @@
     </div>
 
     {% if recurring_payments %}
+    <nav class="d-flex justify-content-end mb-3" aria-label="Recurring payment display">
+        <div class="btn-group" role="group" aria-label="Choose recurring payment view">
+            <a href="{{ url_for('transactions.recurring_payments') }}"
+               class="btn btn-sm {{ 'btn-primary' if not group_by_category else 'btn-outline-primary' }}"
+               {% if not group_by_category %}aria-current="page"{% endif %}>List</a>
+            <a href="{{ url_for('transactions.recurring_payments', group_by='category') }}"
+               class="btn btn-sm {{ 'btn-primary' if group_by_category else 'btn-outline-primary' }}"
+               {% if group_by_category %}aria-current="page"{% endif %}>By category</a>
+        </div>
+    </nav>
+
     <div class="table-responsive d-none d-xl-block">
         <table class="table table-hover recurring_payments-table">
             <thead>
@@ -105,7 +116,21 @@
                 </tr>
             </thead>
             <tbody>
-                {% for recurring_payment in recurring_payments %}
+                {% for group in payment_groups %}
+                {% if group.label %}
+                <tr class="table-light">
+                    <td colspan="7">
+                        <div class="d-flex flex-wrap justify-content-between gap-2">
+                            <span role="heading" aria-level="2">{{ group.label }}</span>
+                            <span class="text-body-secondary fw-normal">
+                                {{ group.payments|length }} payment{{ 's' if group.payments|length != 1 else '' }}
+                                · £{{ "%.2f"|format(group.annual_cost) }} / year at current rates
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+                {% for recurring_payment in group.payments %}
                 {% set summary = summaries[recurring_payment.id] %}
                 <tr>
                     <td>
@@ -196,17 +221,35 @@
                     </td>
                 </tr>
                 {% endfor %}
+                {% endfor %}
             </tbody>
         </table>
     </div>
     <div class="d-xl-none d-grid gap-3">
-        {% for recurring_payment in recurring_payments %}
+        {% for group in payment_groups %}
+        {% if group.label %}
+        <section class="d-grid gap-3" aria-label="{{ group.label }}">
+        {% endif %}
+        {% if group.label %}
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+            <h2 class="h5 mb-0">{{ group.label }}</h2>
+            <span class="recurring_payment-detail">
+                {{ group.payments|length }} payment{{ 's' if group.payments|length != 1 else '' }}
+                · £{{ "%.2f"|format(group.annual_cost) }} / year at current rates
+            </span>
+        </div>
+        {% endif %}
+        {% for recurring_payment in group.payments %}
         {% set summary = summaries[recurring_payment.id] %}
         <article class="card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                     <div class="flex-grow-1">
+                        {% if group.label %}
+                        <h3 class="h5 mb-1 text-break">{{ recurring_payment.name }}</h3>
+                        {% else %}
                         <h2 class="h5 mb-1 text-break">{{ recurring_payment.name }}</h2>
+                        {% endif %}
                         {% if recurring_payment.vendor or recurring_payment.category %}
                         <div class="recurring_payment-detail">
                             {% if recurring_payment.vendor %}{{ recurring_payment.vendor.name }}{% endif %}
@@ -281,6 +324,10 @@
                 </form>
             </div>
         </article>
+        {% endfor %}
+        {% if group.label %}
+        </section>
+        {% endif %}
         {% endfor %}
     </div>
     {% else %}
