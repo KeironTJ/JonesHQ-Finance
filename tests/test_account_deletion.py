@@ -19,6 +19,7 @@ from models.expense_calendar import ExpenseCalendarEntry
 from models.calendar_event import CalendarEvent
 from models.meals import Meal, PlannedMeal
 from models.activities import Activity, ActivityAttendee
+from models.forum import ForumAttachment, ForumCategory, ForumMention, ForumNotification, ForumPost, ForumReaction, ForumTopic
 from models.household_tasks import HouseholdTask, TaskList
 from models.rewards import (
     Reward, RewardAchievement, RewardAchievementUnlock, RewardChoreTemplate, RewardGoal, RewardJob,
@@ -97,6 +98,15 @@ def make_domains(owner, family_id, prefix):
         creator_membership_id=creator.id if creator else None,
         assigned_membership_id=creator.id if creator else None)
     member_id = creator.id if creator else None
+    forum_category = add(ForumCategory, family_id=family_id, name=prefix)
+    forum_topic = add(ForumTopic, family_id=family_id, title=prefix, category_id=forum_category.id,
+                      creator_membership_id=member_id)
+    forum_post = add(ForumPost, family_id=family_id, topic_id=forum_topic.id, body=prefix,
+                     creator_membership_id=member_id)
+    add(ForumAttachment, family_id=family_id, post_id=forum_post.id, filename='example.txt', content=b'example')
+    add(ForumReaction, family_id=family_id, post_id=forum_post.id, membership_id=member_id)
+    add(ForumNotification, family_id=family_id, post_id=forum_post.id, membership_id=member_id)
+    add(ForumMention, family_id=family_id, post_id=forum_post.id, membership_id=member_id)
     reward = add(Reward, family_id=family_id, title=prefix, points_cost=1)
     job = add(RewardJob, family_id=family_id, task_id=task.id, title=prefix, points=2,
               membership_id=member_id, reviewer_membership_id=member_id, state='approved')
@@ -193,6 +203,11 @@ def test_deletion_removes_private_domains_but_preserves_shared_and_other_househo
     user, replacement = deletion_user
     own, shared, private, foreign = graph
     user_id = user.id
+    member_id = user.get_active_household_membership().id
+    shared_post = ForumPost.query.filter_by(body='Shared').one()
+    shared_post.body = f'Hello @[Admin]({member_id})'
+    add(ForumMention, family_id=user.family_id, post_id=shared_post.id, membership_id=member_id)
+    db.session.commit()
     client = sign_in(app, user)
     other_client = sign_in(app, user)
     response = client.post('/central/account/security/delete', data=VALID_DATA)
@@ -233,6 +248,13 @@ def test_deletion_removes_private_domains_but_preserves_shared_and_other_househo
     assert SecurityEvent.query.filter_by(event_type='login_success').one().user_id is None
     assert UserRecoveryCode.query.filter_by(user_id=user_id).count() == 0
     assert UserSession.query.filter_by(user_id=user_id).count() == 0
+    removed_post = ForumPost.query.filter_by(body='Own').one()
+    assert removed_post.creator_membership_id is None
+    assert ForumAttachment.query.filter_by(post_id=removed_post.id).count() == 1
+    assert ForumReaction.query.filter_by(post_id=removed_post.id).count() == 0
+    assert ForumNotification.query.filter_by(post_id=removed_post.id).count() == 0
+    assert ForumPost.query.filter_by(id=shared_post.id).one().body == 'Hello @Former member'
+    assert ForumMention.query.filter_by(post_id=shared_post.id, membership_id=member_id).count() == 0
     assert db.session.execute(text('PRAGMA foreign_key_check')).all() == []
     g.pop('_login_user', None)
     assert other_client.get('/central/account/security').status_code == 302

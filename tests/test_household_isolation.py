@@ -43,6 +43,7 @@ ID_FIELDS = (
 SKIP_ENDPOINT_PREFIXES = ('static', 'admin.', 'auth.', 'onboarding.')
 # Satisfy table CHECK constraints the generic seeder cannot infer.
 TABLE_OVERRIDES = {
+    'forum_attachments': {'content': b'household file'},
     'reward_points': {'kind': 'earned', 'points': 1},
     'reward_achievements': {'metric': 'chores'},
     'recurring_payments': {'amount': Decimal('-1'), 'account_id': FOREIGN_ID, 'credit_card_id': None},

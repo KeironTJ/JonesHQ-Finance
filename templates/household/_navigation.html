@@ -4,3 +4,5 @@
 {{ nav_link('household.activity_planner', 'Activity planner', 'people') }}
 {{ nav_link('household.tasks', 'Tasks & lists', 'list-check') }}
 {{ nav_link('household.rewards', 'Rewards', 'gift') }}
+{{ nav_link('household.forum', 'Forum', 'chat-square-text') }}
+{{ nav_link('household.forum_notifications', 'Forum notifications' ~ (' (' ~ forum_unread_count ~ ')' if forum_unread_count else ''), 'bell') }}

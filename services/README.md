@@ -118,6 +118,11 @@ attendance and clears creator/reviewer attribution but preserves activities.
 `household/planner_helpers.py` supplies shared week/month periods and navigation
 for both activity and meal planners.
 
+`household/forum_service.py` handles household-scoped discussions, moderation,
+reactions, file attachments and in-app notifications. It enforces Hub access,
+including for managed children, and does not provide cross-household sharing.
+See the [access policy](../docs/ACCESS_POLICY.md) for retention and file limits.
+
 `household/task_service.py` manages personal/shared lists, member assignments,
 priorities, due dates/times and explicit complete/reopen actions. Scoped helpers
 apply personal-list visibility to task rows and calendar feeds. A child's

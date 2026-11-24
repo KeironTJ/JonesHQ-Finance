@@ -45,6 +45,7 @@ SQLAlchemy database models
 - `calendar_event.py` - Household calendar dates, UTC times, visibility and action permissions
 - `meals.py` - Shared household meal library and multiple planned meals per date/slot
 - `activities.py` - Household activities, child suggestions/reviews and member attendance
+- `forum.py` - Household discussions, attachments, reactions and notifications
 - `household_tasks.py` - Personal/shared task lists, member assignments and completion attribution
 - `rewards.py` - Shared-task chores, reward catalogue/requests, point ledger, goals, achievements and chore library
 - `childcare.py` - Childcare records and related entities

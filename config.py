@@ -33,6 +33,7 @@ class Config:
         'sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'joneshq_finance.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False  # Set to True for SQL query logging during development
+    MAX_CONTENT_LENGTH = 6 * 1024 * 1024
     
     # Session configuration
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)

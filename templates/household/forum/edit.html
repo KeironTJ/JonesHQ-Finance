@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Edit forum post{% endblock %}
+{% block content %}
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.forum_topic', topic_id=post.topic_id) }}">Back to topic</a>
+<h1>Edit post</h1><form class="card" method="post"><div class="card-body"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% if is_first %}<div class="mb-3"><label class="form-label" for="title">Topic title</label><input class="form-control" id="title" name="title" maxlength="200" required value="{{ submitted.get('title', post.topic.title) }}"></div>{% endif %}
+<div class="mb-3"><label class="form-label" for="body">Message</label><textarea class="form-control" id="body" name="body" rows="8" maxlength="10000" required>{{ submitted.get('body', post.body) }}</textarea>{% set mention_input = 'body' %}{% include 'household/forum/_mention_picker.html' %}</div><button class="btn btn-primary">Save changes</button>
+</div></form>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='js/forum_mentions.js') }}"></script>{% endblock %}

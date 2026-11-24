@@ -4,8 +4,18 @@ from flask import Blueprint
 household_bp = Blueprint('household', __name__, url_prefix='/household')
 
 
+@household_bp.app_context_processor
+def forum_navigation():
+    from flask_login import current_user
+    from services.platform.module_access_service import ModuleAccessService
+    if not ModuleAccessService.can_access(current_user, 'household'):
+        return {}
+    from services.household.forum_service import ForumService
+    return {'forum_unread_count': ForumService.unread_count()}
+
+
 def register_blueprints(app):
-    from . import routes, meal_routes, activity_routes, task_routes, reward_routes
+    from . import routes, meal_routes, activity_routes, task_routes, reward_routes, forum_routes
     app.register_blueprint(household_bp)
 
 
@@ -54,6 +64,12 @@ MODULE = {
         **{f'household.{endpoint}': 'Rewards' for endpoint in (
             'rewards', 'reward_action', 'reward_chores', 'reward_shop', 'reward_approvals',
             'reward_activity', 'reward_member', 'reward_settings',
+        )},
+        **{f'household.{endpoint}': 'Forum' for endpoint in (
+            'forum', 'forum_new_topic', 'forum_topic', 'forum_reply', 'forum_edit_post',
+            'forum_delete_post', 'forum_moderate', 'forum_react', 'forum_categories',
+            'forum_delete_category', 'forum_notifications', 'forum_mark_read', 'forum_attachment',
+            'forum_delete_attachment', 'forum_post_link', 'forum_pin_post',
         )},
     },
     'status': 'available',

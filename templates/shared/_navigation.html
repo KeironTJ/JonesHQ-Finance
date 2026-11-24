@@ -32,6 +32,8 @@
             {{ nav_link('household.events', 'Events', 'calendar-event') }}
             {{ nav_link('household.tasks', 'My tasks & lists', 'list-check') }}
             {{ nav_link('household.rewards', 'My rewards', 'gift') }}
+            {{ nav_link('household.forum', 'Forum', 'chat-square-text') }}
+            {{ nav_link('household.forum_notifications', 'Forum notifications' ~ (' (' ~ forum_unread_count ~ ')' if forum_unread_count else ''), 'bell') }}
             {% else %}
             {{ nav_link('central.hub', 'Home', 'house-heart', exact=true) }}
             {% endif %}

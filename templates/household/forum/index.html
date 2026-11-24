@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Household forum{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div><h1>Household forum</h1><p class="text-muted mb-0">A place for your household to share ideas and talk together. Only members with Household Hub access can see this forum.</p></div>
+    <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-secondary" href="{{ url_for('household.forum_notifications') }}"><i class="bi bi-bell" aria-hidden="true"></i> Notifications</a>{% if moderator %}<a class="btn btn-outline-secondary" href="{{ url_for('household.forum_categories') }}">Categories</a>{% endif %}<a class="btn btn-primary" href="{{ url_for('household.forum_new_topic') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i> New topic</a></div>
+</div>
+<form class="card mb-3" method="get"><div class="card-body d-flex gap-2 flex-wrap align-items-end">
+    <div class="flex-grow-1"><label class="form-label" for="forum-search">Search topics and posts</label><input class="form-control" id="forum-search" name="q" value="{{ search }}" maxlength="200"></div>
+    <div><label class="form-label" for="forum-category">Category</label><select class="form-select" id="forum-category" name="category_id"><option value="">All categories</option>{% for category in categories %}<option value="{{ category.id }}" {% if selected_category == category.id|string %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></div>
+    <button class="btn btn-outline-primary" type="submit">Search</button>
+</div></form>
+<section class="card"><div class="card-body">
+    <h2 class="h5">Discussions</h2>
+    <ul class="list-group list-group-flush">
+    {% for topic in topics.items %}
+        <li class="list-group-item px-0 py-3"><div class="d-flex gap-2 align-items-start"><i class="bi bi-chat-dots text-primary" aria-hidden="true"></i><div class="min-w-0"><a class="fw-semibold text-break" href="{{ url_for('household.forum_topic', topic_id=topic.id) }}">{{ topic.title }}</a>{% if topic.pinned %} <span class="badge bg-primary">Pinned</span>{% endif %}{% if topic.locked %} <span class="badge bg-secondary">Locked</span>{% endif %}<div class="small text-muted">{{ topic.category.name if topic.category else 'General' }} &middot; Updated {{ topic.updated_at.strftime('%d %b %Y %H:%M') }} UTC</div></div></div></li>
+    {% else %}<li class="list-group-item px-0 text-muted">No discussions found. Start a topic to get the conversation going.</li>{% endfor %}
+    </ul>
+    {% if topics.pages > 1 %}<nav class="d-flex gap-2 mt-3" aria-label="Discussion pages">{% if topics.has_prev %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('household.forum', page=topics.prev_num, q=search, category_id=selected_category) }}">Previous</a>{% endif %}<span>Page {{ topics.page }} of {{ topics.pages }}</span>{% if topics.has_next %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('household.forum', page=topics.next_num, q=search, category_id=selected_category) }}">Next</a>{% endif %}</nav>{% endif %}
+</div></section>
+{% endblock %}

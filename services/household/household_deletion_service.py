@@ -14,6 +14,7 @@ from utils.db_helpers import get_current_user_id
 
 # Reviewed child-first order; new household tables must be explicitly included.
 HOUSEHOLD_TABLES = (
+    'forum_mentions', 'forum_notifications', 'forum_reactions', 'forum_attachments', 'forum_posts', 'forum_topics', 'forum_categories',
     'reward_points', 'reward_achievement_unlocks', 'reward_achievements', 'reward_chore_templates',
     'reward_requests', 'reward_goals', 'reward_jobs', 'household_rewards',
     'household_tasks', 'task_lists',

@@ -182,6 +182,8 @@ class FamilyService:
         RewardService.detach_membership(membership)
         from services.household.task_service import TaskService
         TaskService.detach_membership(membership)
+        from services.household.forum_service import ForumService
+        ForumService.detach_membership(membership)
         from models.meals import PlannedMeal
         from utils.db_helpers import family_query
         family_query(PlannedMeal).filter_by(creator_membership_id=membership.id).update(

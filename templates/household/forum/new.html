@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}New forum topic{% endblock %}
+{% block content %}
+<a href="{{ url_for('household.forum') }}" class="btn btn-outline-secondary mb-3">Back to forum</a>
+<h1>Start a discussion</h1><p class="text-muted">Your topic will be shared with everyone who has Household Hub access.</p>
+<form class="card" method="post" enctype="multipart/form-data"><div class="card-body">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3"><label class="form-label" for="title">Title</label><input class="form-control" id="title" name="title" maxlength="200" required value="{{ submitted.get('title', '') }}"></div>
+    <div class="mb-3"><label class="form-label" for="category">Category</label><select class="form-select" id="category" name="category_id"><option value="">General</option>{% for category in categories %}<option value="{{ category.id }}" {% if submitted.get('category_id') == category.id|string %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></div>
+    <div class="mb-3"><label class="form-label" for="body">Message</label><textarea class="form-control" id="body" name="body" rows="8" maxlength="10000" required>{{ submitted.get('body', '') }}</textarea>{% set mention_input = 'body' %}{% include 'household/forum/_mention_picker.html' %}</div>
+    <div class="mb-3"><label class="form-label" for="attachment">Attachment (optional)</label><input class="form-control" type="file" id="attachment" name="attachment"><div class="form-text">One image, PDF, text or Office document, up to 5 MB. Files are downloaded, not displayed inline.</div></div>
+    <button class="btn btn-primary" type="submit">Create topic</button>
+</div></form>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='js/forum_mentions.js') }}"></script>{% endblock %}

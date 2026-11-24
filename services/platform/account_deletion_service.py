@@ -202,6 +202,14 @@ class AccountDeletionService:
             db.session.flush()
             from services.household.calendar_service import CalendarService
             CalendarService.remove_membership_grants(plan[HouseholdMembership.__table__])
+            from services.household.forum_service import ForumService
+            ForumService.remove_member_mentions(plan[HouseholdMembership.__table__])
+            from models.forum import ForumNotification, ForumReaction
+            for membership_id, family_id in plan[HouseholdMembership.__table__].items():
+                for model in (ForumNotification, ForumReaction):
+                    db.session.execute(delete(model).where(
+                        model.family_id == family_id, model.membership_id == membership_id,
+                    ))
             counts = {table.name: len(ids) for table, ids in plan.items() if ids}
             # Deletion bypasses domain delete helpers: those can erase linked shared ledger entries.
             db.session.execute(update(HouseholdInvite).where(

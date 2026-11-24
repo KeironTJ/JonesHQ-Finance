@@ -122,6 +122,35 @@ and visible incomplete dated tasks also contribute source-linked items.
   attribution is cleared so a reused membership ID cannot claim old plans.
   There is no private-meal mode, cross-household sharing or Finance integration.
 
+## Household forum (implemented)
+
+- The forum is shared only with members who have Household Hub access in the
+  selected household. Adults and managed children can create topics, reply,
+  edit or delete their own posts, and like posts. No cross-household sharing or
+  messaging is available. Adults with Hub access can moderate posts, manage
+  categories, pin or lock topics, and move or delete discussions.
+- A child's deletion of an opening post with replies removes its content and
+  files but preserves the other members' replies. An adult moderator can remove
+  the entire topic. Locked topics accept no new replies.
+- New topics and replies create in-app notifications for other active members
+  with Hub access. Notifications are household-specific, not emails; the
+  notification page shows the latest 100 and supports marking all as read.
+- Adults can pin individual posts in a topic's pinned-posts section, without
+  changing chronological order or topic pins. Members can type @ and select
+  active household members with Hub access when writing or editing a post.
+  Tags highlight existing notifications; adding a tag in an edit creates or
+  reopens the recipient's notification without duplicates. Self-tags do not
+  notify. Removing a member clears their tags and replaces them with
+  `@Former member`; name changes otherwise update displayed tags.
+- A post may include one image, PDF, text file or common Office document up to
+  5 MiB. Files are stored in the database, downloaded as attachments rather
+  than rendered inline, and require the same household access as the post.
+  The application limits an entire request to 6 MiB. Do not open files from
+  people you do not trust; uploads are not malware-scanned.
+- When a member leaves or deletes their account, posts and attachments remain
+  with attribution removed; their likes and notifications are deleted.
+  Household deletion removes all forum data, including attachments.
+
 ## Household activities (implemented)
 
 - Published activities are shared with the selected household. Adults with

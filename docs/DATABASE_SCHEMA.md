@@ -69,6 +69,17 @@ account-owned records are not household financial data.
   Managed-child accounts cannot access Finance or household administration,
   regardless of grants or household role. See [access policy](ACCESS_POLICY.md).
 
+## Household Forum
+
+- `forum_categories`, `forum_topics`, `forum_posts`, `forum_attachments`,
+  `forum_reactions` and `forum_notifications` belong to one household.
+  Posts and topics retain nullable membership attribution after departure.
+- Attachments are stored as binary data in the database; database backups
+  include them. Reactions and in-app notifications are membership-specific.
+  Migration `4ca8e12f9b31` adds the forum tables and indexes.
+- Migration `91be0a73d426` adds per-post pins, mention-aware notifications and
+  membership-linked `forum_mentions`; departing members' references are cleared.
+
 ## Household Calendar
 
 - `calendar_events` is household-scoped. `creator_membership_id` references the

@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Forum notifications{% endblock %}
+{% block content %}
+<a class="btn btn-outline-secondary mb-3" href="{{ url_for('household.forum') }}">Back to forum</a>
+<div class="d-flex justify-content-between gap-3 flex-wrap"><div><h1>Forum notifications</h1><p class="text-muted">New topics and replies from your household. Showing the latest 100.</p></div><form method="post" action="{{ url_for('household.forum_mark_read') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-secondary">Mark all read</button></form></div>
+<section class="card"><div class="card-body"><ul class="list-group list-group-flush">{% for item in notifications %}<li class="list-group-item"><a href="{{ url_for('household.forum_post_link', post_id=item.post_id) }}">{{ item.post.topic.title }}</a>{% if item.mentioned %} <span class="badge bg-info text-dark">You were tagged</span>{% endif %}{% if not item.read_at %} <span class="badge bg-primary">New</span>{% endif %}<div class="small text-muted">{{ item.created_at.strftime('%d %b %Y %H:%M') }} UTC</div></li>{% else %}<li class="list-group-item text-muted">No notifications yet.</li>{% endfor %}</ul></div></section>
+{% endblock %}
